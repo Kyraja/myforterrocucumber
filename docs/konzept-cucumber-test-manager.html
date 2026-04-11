@@ -1,0 +1,605 @@
+<h1>Konzept: Infosystem "Cucumber Test Manager"</h1>
+
+<p><strong>ESDK-Projekt:</strong> <code>cucumber</code><br/>
+<strong>Arbeitspaket:</strong> (wird vergeben)</p>
+
+<hr/>
+
+<h2>5 Anforderungen und Ziel (Soll-Zustand)</h2>
+
+<p>Es soll ein Infosystem erstellt werden, mit dem Cucumber/Gherkin Feature-Dateien verwaltet, ausgef&uuml;hrt und ausgewertet werden k&ouml;nnen. Die Feature-Dateien werden vom &quot;Cucumbergenerator&quot; (Web-Tool) erzeugt und als <code>.feature</code>-Dateien auf dem Server im Verzeichnis <code>$MANDANT/ow1/cucumber/features/&lt;arbeitspaket&gt;/</code> abgelegt.</p>
+
+<p>Das Infosystem soll folgende Kernfunktionen bieten:</p>
+
+<ul>
+<li><strong>Verwaltung:</strong> Feature-Dateien vom Filesystem einlesen, nach Tags/Ordnern filtern, anzeigen</li>
+<li><strong>Konzeptimport:</strong> Reiter zum Hochladen/Importieren von Feature-Dateien in einen gew&auml;hlten Arbeitspaket-Ordner (Reiter erst sichtbar wenn Ordner gew&auml;hlt)</li>
+<li><strong>Ausf&uuml;hrung:</strong> Einzelne oder alle Features manuell ausf&uuml;hren (interner FOP/Java Step-Runner)</li>
+<li><strong>Cron-Anbindung:</strong> Automatische Ausf&uuml;hrung per Cronjob, filterbar nach Tags (z.B. <code>@nightly</code>, <code>@regression</code>)</li>
+<li><strong>Auswertung:</strong> Pro Feature-Datei ein Ergebnis-Datensatz (DB: <code>CUCUMBER_RESULT</code>) mit Testlauf-Historie in der Tabelle und berechneten KPIs im Kopf (durchschnittliche Dauer und Erfolgsquote der letzten X L&auml;ufe, X einstellbar)</li>
+</ul>
+
+<p><strong>Architektur-&Uuml;bersicht:</strong></p>
+
+<pre>
++---------------------------+       +--------------------------------------+
+|  Cucumbergenerator (Web)  | ----&gt; |  .feature Dateien                    |
+|  erzeugt Feature-Files    |       |  Ablage: $MANDANT/ow1/cucumber/     |
++---------------------------+       |          features/&lt;arbeitspaket&gt;/    |
+                                    +------------------+-------------------+
+                                                       |
+                 +-------------------------------------+
+                 v
++------------------------------------------+       +--------------------------+
+|  IS: CUCUMBER_TEST_MANAGER               | ----&gt; | DB: CUCUMBER_RESULT      |
+|  Reiter: Feature-&Uuml;bersicht             |       | 1 Datensatz pro Feature  |
+|  Reiter: Konzeptimport (nach Ordnerwahl)|       | Kopf: KPIs (Avg, Rate)  |
+|  Reiter: Cron-Verwaltung               |       | Tabelle: Testlauf-Hist.  |
++------------------------------------------+       +--------------------------+
+         |
+         v  (Ausf&uuml;hrung)
++------------------------------------------+
+|  FOP/Java Step-Runner                    |
+|  F&uuml;hrt Steps als abas-Operationen aus   |
+|  (Editor &ouml;ffnen, Feld setzen, pr&uuml;fen) |
++------------------------------------------+
+</pre>
+
+<p><strong>Verzeichnisstruktur auf dem Server:</strong></p>
+
+<pre>
+$MANDANT/ow1/cucumber/
+  features/
+    &lt;arbeitspaket-id&gt;/
+      feature1.feature
+      feature2.feature
+    &lt;arbeitspaket-id&gt;/
+      ...
+  screenshots/
+  logs/
+$MANDANT/ow1/CUCUMBER_CONFIG.FOP      (Konfigurations-Include, siehe 6.1.1)
+</pre>
+
+<hr/>
+
+<h2>6 Umsetzungen</h2>
+
+<p>Standardaufbau der Umsetzungspakete:</p>
+
+<ul>
+<li>Variablentabelle</li>
+<li>Aufgaben losgel&ouml;st von Events (ESDK-Setup, Verzeichnisstruktur, Cron-Einrichtung)</li>
+<li>Maskenanpassungen (Infosystem-Masken)</li>
+<li>Programmierung an Maskenevents (EventHandler)</li>
+<li>Umsetzungsbeschreibungen (Datenbank, Runner, Cron, KPI-Berechnung)</li>
+</ul>
+
+<hr/>
+
+<h3>6.1 Variablentabellen</h3>
+
+<p>F&uuml;r die Umsetzung des Konzepts werden die folgenden Variablen ben&ouml;tigt.</p>
+
+<table>
+<tr><th>Vartab</th><th>Varname</th><th>Feldart, Zusatz</th><th>Aufz&auml;hlung DE</th><th>K/T</th><th>Bezeichnung DE</th></tr>
+<tr><td>V 00 01</td><td>ycukeKpiSample</td><td>AZL (Leer, 5, 10, 15, 20, 50)</td><td>Leer / 5 / 10 / 15 / 20 / 50</td><td>K</td><td>KPI Stichprobengr&ouml;&szlig;e</td></tr>
+<tr><td>V 00 01</td><td>ycukeStepTimeout</td><td>GZ</td><td></td><td>K</td><td>Step-Timeout (Sek.)</td></tr>
+<tr><td>V 00 01</td><td>ycukeScenTimeout</td><td>GZ</td><td></td><td>K</td><td>Scenario-Timeout (Sek.)</td></tr>
+<tr><td>V 00 01</td><td>ycukeScreenshot</td><td>AZL (Ja, Nein)</td><td>Ja / Nein</td><td>K</td><td>Screenshot bei Fehler</td></tr>
+<tr><td>V 00 01</td><td>ycukeLogLevel</td><td>AZL (INFO, DEBUG, ERROR)</td><td>INFO / DEBUG / ERROR</td><td>K</td><td>Log-Level</td></tr>
+<tr><td>V 00 01</td><td>ycukeCronEnabled</td><td>AZL (Aktiv, Inaktiv)</td><td>Aktiv / Inaktiv</td><td>K</td><td>Cron-Status</td></tr>
+<tr><td>V 00 01</td><td>ycukeCronSchedule</td><td>T80</td><td></td><td>K</td><td>Cron-Ausdruck (z.B. &quot;0 2 * * *&quot;)</td></tr>
+<tr><td>V 00 01</td><td>ycukeCronTags</td><td>T200</td><td></td><td>K</td><td>Cron Tag-Filter (z.B. &quot;@nightly,@regression&quot;)</td></tr>
+<tr><td>V 00 01</td><td>ycukeCronExclude</td><td>T200</td><td></td><td>K</td><td>Cron Ausschluss-Tags (z.B. &quot;@manual,@wip&quot;)</td></tr>
+<tr><td>V 00 01</td><td>ycukeCronFolders</td><td>T200</td><td></td><td>K</td><td>Cron Ordner-Filter (leer = alle)</td></tr>
+<tr><td>V 00 01</td><td>ycukeCronNotify</td><td>T100</td><td></td><td>K</td><td>Benachrichtigung bei Fehler (E-Mail)</td></tr>
+<tr><td>V 00 01</td><td>ycukeTestPrefix</td><td>T20</td><td></td><td>K</td><td>Testdaten-Pr&auml;fix (z.B. &quot;CUKE_&quot;)</td></tr>
+</table>
+
+<h4>6.1.1 FOP-Konfigurationsdatei (Include)</h4>
+
+<p>Die Konfiguration wird als FOP-Include-Datei bereitgestellt, die von allen Cucumber-FOP-Programmen eingezogen wird. Die Werte sind &uuml;ber das Infosystem (Reiter &quot;Konfiguration&quot;) &auml;nderbar.</p>
+
+<p><strong>Datei:</strong> <code>ow1/CUCUMBER_CONFIG.FOP</code> (Include-FOP)</p>
+
+<pre>
+.formula U|xiKpiSampleSize = 10
+.formula U|xiStepTimeout = 30
+.formula U|xiScenarioTimeout = 300
+.formula U|xsTestPrefix = "CUKE_"
+.formula U|xiScreenshotOnError = 1
+.formula U|xsLogLevel = "INFO"
+.formula U|xiCronEnabled = 1
+.formula U|xsCronSchedule = "0 2 * * *"
+.formula U|xsCronTags = "@nightly,@regression"
+.formula U|xsCronExcludeTags = "@manual,@wip"
+.formula U|xsCronFolders = ""
+.formula U|xsCronNotify = "testteam@firma.de"
+.formula U|xsFeaturePath = "ow1/cucumber/features/"
+.formula U|xsScreenshotPath = "ow1/cucumber/screenshots/"
+.formula U|xsLogPath = "ow1/cucumber/logs/"
+</pre>
+
+<p><strong>Einbindung in anderen FOP-Programmen:</strong></p>
+<pre>.include ow1/CUCUMBER_CONFIG.FOP</pre>
+
+<p><strong>&Auml;nderung &uuml;ber das Infosystem:</strong><br/>
+Im Reiter &quot;Konfiguration&quot; des IS:CUCUMBER_TEST_MANAGER k&ouml;nnen die Werte bearbeitet werden. Beim Speichern wird die FOP-Include-Datei neu geschrieben.</p>
+
+<hr/>
+
+<h3>6.2 Aufgaben losgel&ouml;st von Event</h3>
+
+<table>
+<tr><th>Aufgabe</th></tr>
+<tr><td>ESDK-Arbeitsbereich &quot;cucumber&quot; einrichten</td></tr>
+<tr><td>Verzeichnisstruktur anlegen: <code>ow1/cucumber/features/</code>, <code>ow1/cucumber/screenshots/</code>, <code>ow1/cucumber/logs/</code></td></tr>
+<tr><td>FOP-Konfigurationsdatei <code>ow1/CUCUMBER_CONFIG.FOP</code> erstellen (Include-FOP, siehe 6.1.1)</td></tr>
+<tr><td>Cronjob einrichten: Ruft <code>ow1.CUCUMBER_CRON</code> auf gem&auml;&szlig; konfiguriertem Schedule</td></tr>
+<tr><td>Suchschl&uuml;ssel f&uuml;r DB CUCUMBER_RESULT anlegen: nach <code>resGuid</code> (Prim&auml;r), nach <code>resTags</code>, nach <code>resWorkPkg</code></td></tr>
+<tr><td>Selektionsleiste f&uuml;r IS:CUCUMBER_TEST_MANAGER anlegen</td></tr>
+</table>
+
+<hr/>
+
+<h3>6.3 Maskenanpassungen</h3>
+
+<h4>IS: CUCUMBER_TEST_MANAGER</h4>
+
+<p><strong>Reiter-Struktur:</strong></p>
+
+<table>
+<tr><th>Reiter</th><th>Sichtbarkeit</th><th>Beschreibung</th></tr>
+<tr><td>Feature-&Uuml;bersicht</td><td>Immer</td><td>Hauptansicht mit Feature-Liste, Filter und Ausf&uuml;hrung</td></tr>
+<tr><td>Konzeptimport</td><td>Nur wenn Ordner gew&auml;hlt</td><td>Import von .feature-Dateien in den gew&auml;hlten Ordner</td></tr>
+<tr><td>Cron-Verwaltung</td><td>Immer</td><td>Konfiguration der automatischen Testausf&uuml;hrung</td></tr>
+<tr><td>Konfiguration</td><td>Immer</td><td>Einstellungen (KPI, Timeouts, Pfade)</td></tr>
+</table>
+
+<p><strong>Kopffelder:</strong></p>
+
+<table>
+<tr><th>Feld</th><th>Maske / Infosystem</th><th>K/T</th><th>Reiter / Position</th></tr>
+<tr><td>yisOrdnerAuswahl (Arbeitspaket-Ordner)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Kopf, oben links</td></tr>
+<tr><td>yisTagFilter (Tag-Filter)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Kopf</td></tr>
+<tr><td>yisErgebnisFilter (Alle/Passed/Failed/Nie gelaufen)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Kopf</td></tr>
+<tr><td>yisFeatureVerzeichnis (readonly, zeigt Pfad)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Kopf</td></tr>
+<tr><td>Button: &quot;Verzeichnis scannen&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Kopf, rechts</td></tr>
+<tr><td>Button: &quot;Alle ausf&uuml;hren&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Kopf, rechts</td></tr>
+<tr><td>Button: &quot;Markierte ausf&uuml;hren&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Kopf, rechts</td></tr>
+<tr><td>Button: &quot;Einzeln ausf&uuml;hren&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Kopf, rechts</td></tr>
+</table>
+
+<p><strong>Reiter &quot;Feature-&Uuml;bersicht&quot; &mdash; Tabellenfelder:</strong></p>
+
+<p>Die Tabelle zeigt pro Zeile eine <code>.feature</code>-Datei. Der Verweis auf den zugeh&ouml;rigen <code>CUCUMBER_RESULT</code>-Datensatz (Zusatz-DB) wird in der Spalte <code>yisResultRef</code> als Verweis geladen, sofern bereits ein Datensatz existiert. Beim ersten Testlauf wird der <code>CUCUMBER_RESULT</code>-Datensatz automatisch angelegt.</p>
+
+<table>
+<tr><th>Feld</th><th>Maske / Infosystem</th><th>K/T</th><th>Reiter / Position</th></tr>
+<tr><td>yisCheckbox (Auswahl)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>yisAmpel (Gr&uuml;n/Rot/Grau)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>yisResultRef (Verweis auf CUCUMBER_RESULT)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>yisWorkPkg (Arbeitspaket/Ordner)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>yisFeatureName (1. Zeile: &quot;Feature: ...&quot;)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>yisFeatureDesc (Kommentar/Beschreibung aus Kopf)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>yisDateiname</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>yisTags</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>yisScenarios (Anzahl Scenarios)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>yisStepsGesamt (Gesamtzahl Steps im Feature)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>yisStepsOk (Erfolgreiche Steps beim letzten Lauf)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>yisStepsDisplay (z.B. &quot;18/20 Steps OK&quot;)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>yisPassRate (z.B. &quot;9/10 (90%)&quot;)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>yisAvgDauer</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>yisLetzterLauf (Datum+Ergebnis)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>yisTrend (Pfeil hoch/runter/gleich)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>Button: &quot;Ausf&uuml;hren&quot; (Zeile)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>Button: &quot;Ergebnisse&quot; (Zeile)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>Button: &quot;Datei anzeigen&quot; (Zeile)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+<tr><td>Button: &quot;L&ouml;schen&quot; (Zeile)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Feature-&Uuml;bersicht</td></tr>
+</table>
+
+<p><strong>Reiter &quot;Konzeptimport&quot; &mdash; Felder (nur aktiv wenn yisOrdnerAuswahl gef&uuml;llt):</strong></p>
+
+<table>
+<tr><th>Feld</th><th>Maske / Infosystem</th><th>K/T</th><th>Reiter / Position</th></tr>
+<tr><td>yisZielordner (readonly, aus Ordnerauswahl)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Konzeptimport</td></tr>
+<tr><td>yisImportModus (Datei hochladen / Konzepttext)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Konzeptimport</td></tr>
+<tr><td>yisDateiUpload (Dateiauswahl)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Konzeptimport</td></tr>
+<tr><td>yisKonzeptText (gro&szlig;es Textfeld)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Konzeptimport</td></tr>
+<tr><td>Button: &quot;Importieren&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Konzeptimport</td></tr>
+<tr><td>Button: &quot;Features generieren&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Konzeptimport</td></tr>
+<tr><td>Button: &quot;&Uuml;bernehmen&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Konzeptimport</td></tr>
+</table>
+
+<p><strong>Reiter &quot;Cron-Verwaltung&quot; &mdash; Felder:</strong></p>
+
+<table>
+<tr><th>Feld</th><th>Maske / Infosystem</th><th>K/T</th><th>Reiter / Position</th></tr>
+<tr><td>yisCronStatus (Aktiv/Inaktiv)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Cron-Verwaltung</td></tr>
+<tr><td>yisCronSchedule (Cron-Ausdruck)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Cron-Verwaltung</td></tr>
+<tr><td>yisCronTagFilter</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Cron-Verwaltung</td></tr>
+<tr><td>yisCronExcludeTags</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Cron-Verwaltung</td></tr>
+<tr><td>yisCronFolderFilter</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Cron-Verwaltung</td></tr>
+<tr><td>yisCronLetzterLauf (readonly)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Cron-Verwaltung</td></tr>
+<tr><td>yisCronLetztesErgebnis (readonly)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Cron-Verwaltung</td></tr>
+<tr><td>Button: &quot;Cron jetzt starten&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Cron-Verwaltung</td></tr>
+<tr><td>Button: &quot;Cron-Log anzeigen&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>K</td><td>Cron-Verwaltung</td></tr>
+<tr><td>yisCronHistDatum</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Cron-Verwaltung</td></tr>
+<tr><td>yisCronHistErgebnis</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Cron-Verwaltung</td></tr>
+<tr><td>yisCronHistDauer</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Cron-Verwaltung</td></tr>
+<tr><td>yisCronHistFailed</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>T</td><td>Cron-Verwaltung</td></tr>
+</table>
+
+<h4>DB: CUCUMBER_RESULT</h4>
+
+<table>
+<tr><th>Feld</th><th>Maske / Infosystem</th><th>K/T</th><th>Reiter / Position</th></tr>
+<tr><td>resGuid (eindeutige GUID aus Feature-Tag)</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>Kopf &mdash; Prim&auml;rschl&uuml;ssel</td></tr>
+<tr><td>resFeatureName (&Uuml;berschrift: &quot;Feature: ...&quot;)</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>Kopf</td></tr>
+<tr><td>resFeatureDesc (Beschreibung/Kommentar aus Kopf)</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>Kopf</td></tr>
+<tr><td>resTags (weitere Tags)</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>Kopf</td></tr>
+<tr><td>resFilePath (absoluter Pfad)</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>Kopf</td></tr>
+<tr><td>resWorkPkg (Ordnername)</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>Kopf</td></tr>
+<tr><td>resScenarioCount</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>Kopf</td></tr>
+<tr><td>resStepCount (Gesamtzahl Steps)</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>Kopf</td></tr>
+<tr><td>resStepsPassed (Erfolgreiche Steps letzter Lauf)</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>Kopf</td></tr>
+<tr><td>resStepsDisplay (z.B. &quot;18/20 Steps OK&quot;)</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>Kopf</td></tr>
+<tr><td>resKpiSampleSize (einstellbar)</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>KPI-Bereich</td></tr>
+<tr><td>resKpiAvgDuration (berechnet)</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>KPI-Bereich</td></tr>
+<tr><td>resKpiPassRate (berechnet)</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>KPI-Bereich</td></tr>
+<tr><td>resKpiPassRateDisplay (berechnet)</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>KPI-Bereich</td></tr>
+<tr><td>resKpiTrend (berechnet)</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>KPI-Bereich</td></tr>
+<tr><td>resLastRunDate</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>KPI-Bereich</td></tr>
+<tr><td>resLastRunResult</td><td>DB:CUCUMBER_RESULT</td><td>K</td><td>KPI-Bereich</td></tr>
+<tr><td>runDate</td><td>DB:CUCUMBER_RESULT</td><td>T</td><td>Testlauf-Historie</td></tr>
+<tr><td>runResult (Passed/Failed/Error/Aborted)</td><td>DB:CUCUMBER_RESULT</td><td>T</td><td>Testlauf-Historie</td></tr>
+<tr><td>runDuration (Sekunden)</td><td>DB:CUCUMBER_RESULT</td><td>T</td><td>Testlauf-Historie</td></tr>
+<tr><td>runUser</td><td>DB:CUCUMBER_RESULT</td><td>T</td><td>Testlauf-Historie</td></tr>
+<tr><td>runScenPassed</td><td>DB:CUCUMBER_RESULT</td><td>T</td><td>Testlauf-Historie</td></tr>
+<tr><td>runScenFailed</td><td>DB:CUCUMBER_RESULT</td><td>T</td><td>Testlauf-Historie</td></tr>
+<tr><td>runScenTotal</td><td>DB:CUCUMBER_RESULT</td><td>T</td><td>Testlauf-Historie</td></tr>
+<tr><td>runFailedAt (&quot;Scenario: X / Step Y: Z&quot;)</td><td>DB:CUCUMBER_RESULT</td><td>T</td><td>Testlauf-Historie</td></tr>
+<tr><td>runErrorLog (TextFeld)</td><td>DB:CUCUMBER_RESULT</td><td>T</td><td>Testlauf-Historie</td></tr>
+<tr><td>runStepDetails (JSON TextFeld)</td><td>DB:CUCUMBER_RESULT</td><td>T</td><td>Testlauf-Historie</td></tr>
+</table>
+
+<hr/>
+
+<h3>6.4 Programmierung an Maskenevents</h3>
+
+<h4>IS: CUCUMBER_TEST_MANAGER</h4>
+
+<table>
+<tr><th>Feldname</th><th>Maske / Infosystem</th><th>Maskenevent</th><th>Maskenkommando</th><th>K/T</th><th>Logik</th></tr>
+<tr><td>yisOrdnerAuswahl</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>Feldexit</td><td></td><td>K</td><td>Wenn Ordner gew&auml;hlt: Reiter &quot;Konzeptimport&quot; sichtbar machen. Wenn leer: Reiter ausblenden.</td></tr>
+<tr><td>(Infosystem)</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>Maskeneintritt</td><td></td><td>K</td><td>Feature-Verzeichnis aus Konfiguration laden. Initiales Scannen des Verzeichnisses. Tabelle mit Features bef&uuml;llen.</td></tr>
+<tr><td>Button &quot;Verzeichnis scannen&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>ButtonBefore</td><td>Scannen</td><td>K</td><td>Alle .feature-Dateien rekursiv aus <code>ow1/cucumber/features/</code> lesen. Pro Datei: GUID, &Uuml;berschrift, Beschreibung, Tags, Scenario-/Step-Anzahl parsen. CUCUMBER_RESULT &uuml;ber GUID suchen &mdash; wenn vorhanden: als Verweis laden. Wenn nicht vorhanden: wird erst beim ersten Testlauf angelegt. Tabelle aktualisieren mit KPIs aus CUCUMBER_RESULT.</td></tr>
+<tr><td>Button &quot;Alle ausf&uuml;hren&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>ButtonBefore</td><td>AlleAusfuehren</td><td>K</td><td>Alle aktuell gefilterten Features an <code>ow1.CUCUMBER_RUNNER</code> &uuml;bergeben. Sequentiell ausf&uuml;hren. Nach Abschluss: Tabelle aktualisieren.</td></tr>
+<tr><td>Button &quot;Markierte ausf&uuml;hren&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>ButtonBefore</td><td>MarkierteAusfuehren</td><td>K</td><td>Nur Features mit gesetzter Checkbox an Runner &uuml;bergeben.</td></tr>
+<tr><td>Button &quot;Einzeln ausf&uuml;hren&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>ButtonBefore</td><td>EinzelnAusfuehren</td><td>K</td><td>Aktuell selektierte Tabellenzeile an Runner &uuml;bergeben.</td></tr>
+<tr><td>Button &quot;Importieren&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>ButtonBefore</td><td>Importieren</td><td>K</td><td>.feature-Datei(en) aus yisDateiUpload in Zielordner (yisOrdnerAuswahl) kopieren. CUCUMBER_RESULT anlegen. Tabelle aktualisieren.</td></tr>
+<tr><td>Button &quot;Features generieren&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>ButtonBefore</td><td>Generieren</td><td>K</td><td>Konzepttext aus yisKonzeptText parsen und .feature-Dateien generieren. Vorschau in Tabelle anzeigen.</td></tr>
+<tr><td>Button &quot;&Uuml;bernehmen&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>ButtonBefore</td><td>Uebernehmen</td><td>K</td><td>Generierte .feature-Dateien endg&uuml;ltig in Zielordner speichern. CUCUMBER_RESULT anlegen.</td></tr>
+<tr><td>Button &quot;Cron jetzt starten&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>ButtonBefore</td><td>CronStart</td><td>K</td><td><code>ow1.CUCUMBER_CRON</code> manuell aufrufen mit aktuellen Cron-Filtern.</td></tr>
+<tr><td>Button &quot;L&ouml;schen&quot;</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>ButtonBefore</td><td>Loeschen</td><td>T</td><td>Sicherheitsabfrage anzeigen (&quot;Feature-Datei wirklich l&ouml;schen?&quot;). Bei Ja: .feature-Datei vom Filesystem l&ouml;schen. Falls CUCUMBER_RESULT Datensatz vorhanden: ebenfalls l&ouml;schen. Zeile aus Tabelle entfernen.</td></tr>
+<tr><td>yisTagFilter</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>Feldexit</td><td></td><td>K</td><td>Tabelle nach eingegebenem Tag filtern (Feature-Dateien die diesen Tag enthalten).</td></tr>
+<tr><td>yisErgebnisFilter</td><td>IS:CUCUMBER_TEST_MANAGER</td><td>Feldexit</td><td></td><td>K</td><td>Tabelle nach Ergebnis-Status filtern.</td></tr>
+</table>
+
+<h4>DB: CUCUMBER_RESULT</h4>
+
+<table>
+<tr><th>Feldname</th><th>Maske / Infosystem</th><th>Maskenevent</th><th>Maskenkommando</th><th>K/T</th><th>Logik</th></tr>
+<tr><td>(Datensatz)</td><td>DB:CUCUMBER_RESULT</td><td>Maskeneintritt</td><td>Neu, Kopieren</td><td>K</td><td>resKpiSampleSize mit Standardwert (10) vorbelegen.</td></tr>
+<tr><td>(Datensatz)</td><td>DB:CUCUMBER_RESULT</td><td>VorSpeichern</td><td></td><td>K</td><td>KPI-Berechnung ausf&uuml;hren (siehe 6.5.3).</td></tr>
+</table>
+
+<hr/>
+
+<h3>6.5 Umsetzungsbeschreibungen</h3>
+
+<h4>6.5.1 Datenbank CUCUMBER_RESULT</h4>
+
+<p>1 Datensatz pro Feature-Datei. Suchschl&uuml;ssel = <strong>GUID</strong> (eindeutig, aus dem Tag der Feature-Datei, z.B. <code>@guid-a1b2c3d4</code>).</p>
+
+<ul>
+<li><strong>Kopf:</strong> Feature-Metadaten + berechnete KPI-Felder</li>
+<li><strong>Tabelle:</strong> Testlauf-Historie, jede Zeile = 1 Testlauf, neueste oben</li>
+<li><strong>runStepDetails</strong> enth&auml;lt ein JSON mit den Ergebnissen auf Step-Ebene:</li>
+</ul>
+
+<pre>
+{
+  "scenarios": [
+    {
+      "name": "Neuanlage Artikel",
+      "result": "PASSED",
+      "duration": 4500,
+      "steps": [
+        {
+          "order": 1,
+          "keyword": "Given",
+          "text": "I open an editor \"Artikel\" from table \"2:1\" with command \"NEW\"",
+          "result": "PASSED",
+          "duration": 1200
+        },
+        {
+          "order": 2,
+          "keyword": "Then",
+          "text": "field \"such\" has value \"TEST001\"",
+          "result": "FAILED",
+          "duration": 150,
+          "error": "Expected 'TEST001' but got 'TEST002'"
+        }
+      ]
+    }
+  ]
+}
+</pre>
+
+<h4>6.5.2 FOP/Java Step-Runner</h4>
+
+<p>Der Runner liest die <code>.feature</code>-Datei vom Filesystem, parst sie und f&uuml;hrt die Steps als abas-Operationen aus.</p>
+
+<p><strong>ESDK-Komponenten:</strong></p>
+
+<table>
+<tr><th>Komponente</th><th>Typ</th><th>Aufgabe</th></tr>
+<tr><td><code>ow1.CUCUMBER_RUNNER</code></td><td>FOP</td><td>Hauptprogramm: Liest Feature-Datei, steuert Ablauf, schreibt Ergebnisse in CUCUMBER_RESULT</td></tr>
+<tr><td><code>ow1.CUCUMBER_PARSER</code></td><td>FOP</td><td>Parst .feature-Datei in Strukturen (Feature-Name, Tags, Scenarios, Steps)</td></tr>
+<tr><td><code>ow1.CUCUMBER_ACTIONS</code></td><td>FOP</td><td>Bibliothek: Je ActionType eine Routine</td></tr>
+<tr><td><code>ow1.CUCUMBER_CRON</code></td><td>FOP</td><td>Cron-Hauptprogramm: Filtert Features nach Tags/Ordnern, ruft Runner auf</td></tr>
+<tr><td><code>CucumberTestManagerHandler</code></td><td>Java EH</td><td>EventHandler auf IS:CUCUMBER_TEST_MANAGER</td></tr>
+<tr><td><code>CucumberResultCalcHandler</code></td><td>Java EH</td><td>EventHandler auf DB:CUCUMBER_RESULT (KPI-Berechnung)</td></tr>
+<tr><td><code>CucumberStepRunner</code></td><td>Java</td><td>Kernlogik: F&uuml;hrt einzelne Steps aus, f&auml;ngt Fehler, misst Zeit</td></tr>
+</table>
+
+<p><strong>Action-Type Mapping (Step-Text &rarr; abas-Operation):</strong></p>
+
+<table>
+<tr><th>ActionType</th><th>abas-Operation</th></tr>
+<tr><td><code>editorOeffnen</code></td><td>Editor &ouml;ffnen: <code>Maske.oeffnen(tableRef, command, record)</code></td></tr>
+<tr><td><code>editorOeffnenSuche</code></td><td>Editor &ouml;ffnen mit Suchkriterium</td></tr>
+<tr><td><code>editorOeffnenMenue</code></td><td>Editor &ouml;ffnen &uuml;ber Men&uuml;punkt</td></tr>
+<tr><td><code>feldSetzen</code></td><td>Feldwert setzen: <code>feld.setValue(fieldName, value)</code> ggf. mit Zeilenbezug</td></tr>
+<tr><td><code>feldPruefen</code></td><td>Feldwert pr&uuml;fen: <code>assert(feld.getValue(fieldName) == expectedValue)</code></td></tr>
+<tr><td><code>feldLeer</code></td><td>Pr&uuml;fe ob Feld leer/nicht leer</td></tr>
+<tr><td><code>feldAenderbar</code></td><td>Pr&uuml;fe ob Feld &auml;nderbar/nicht &auml;nderbar</td></tr>
+<tr><td><code>editorSpeichern</code></td><td><code>editor.store()</code></td></tr>
+<tr><td><code>editorSchliessen</code></td><td><code>editor.close()</code></td></tr>
+<tr><td><code>editorWechseln</code></td><td>Zu anderem Editor wechseln</td></tr>
+<tr><td><code>zeileAnlegen</code></td><td>Neue Tabellenzeile anlegen</td></tr>
+<tr><td><code>zeilenAnfuegen</code></td><td>Mehrere Zeilen mit Daten anf&uuml;gen (Data-Table)</td></tr>
+<tr><td><code>buttonDruecken</code></td><td>Button/Schaltfl&auml;che ausf&uuml;hren</td></tr>
+<tr><td><code>subeditorOeffnen</code></td><td>Sub-Editor &ouml;ffnen</td></tr>
+<tr><td><code>infosystemOeffnen</code></td><td>Infosystem aufrufen</td></tr>
+<tr><td><code>tabelleZeilen</code></td><td>Pr&uuml;fe Anzahl Tabellenzeilen</td></tr>
+<tr><td><code>exceptionSpeichern</code></td><td>Pr&uuml;fe ob Exception beim Speichern auftritt</td></tr>
+<tr><td><code>exceptionFeld</code></td><td>Pr&uuml;fe ob Feld-Exception auftritt</td></tr>
+<tr><td><code>dialogBeantworten</code></td><td>Dialog beantworten (Ja/Nein)</td></tr>
+<tr><td><code>freetext</code></td><td>Manueller Step &mdash; wird &uuml;bersprungen (Skipped)</td></tr>
+</table>
+
+<p><strong>Runner-Ablauf:</strong></p>
+
+<pre>
+EINGABE: Pfad zur .feature-Datei
+
+1. Parse .feature-Datei &rarr; Feature-Name, Tags, Background, Scenarios mit Steps
+2. Extrahiere GUID aus Tags &rarr; Finde CUCUMBER_RESULT &uuml;ber resGuid,
+   oder lege neuen Datensatz an (mit GUID, &Uuml;berschrift, Beschreibung)
+3. Erstelle neue Testlauf-Zeile in der Tabelle
+
+FUER JEDES Scenario:
+  scenarioResult = PASSED
+
+  // Background ausf&uuml;hren (Login)
+  WENN testUser gesetzt:
+    login(testUser)
+
+  FUER JEDEN Step IN Scenario:
+    startTime = now()
+    VERSUCHE:
+      Erkenne ActionType aus Step-Text (Pattern-Matching)
+      F&uuml;hre entsprechende abas-Operation aus
+      stepResult = PASSED
+    BEI FEHLER(e):
+      stepResult = FAILED
+      errorMsg = e.message
+      scenarioResult = FAILED
+      runFailedAt = "Scenario: {name} / Step {nr}: {text}"
+      // Restliche Steps dieses Scenarios = SKIPPED
+      ABBRUCH Scenario-Schleife
+    ENDVERSUCH
+
+4. Schreibe Ergebnis in Testlauf-Zeile (runDate, runResult, runDuration, ...)
+5. Speichere CUCUMBER_RESULT &rarr; KPI-Neuberechnung wird ausgel&ouml;st
+</pre>
+
+<h4>6.5.3 KPI-Berechnung (VorSpeichern EventHandler)</h4>
+
+<p>Wird beim Speichern des CUCUMBER_RESULT Datensatzes ausgef&uuml;hrt:</p>
+
+<pre>
+X = resKpiSampleSize (einstellbar, Standard 10)
+letzteXLaeufe = Tabelle sortiert nach runDate DESC, erste X Zeilen
+
+resKpiAvgDuration = DURCHSCHNITT(letzteXLaeufe.runDuration)
+resKpiPassRate    = ANZAHL(letzteXLaeufe WHERE runResult = "Passed") / X
+resKpiPassRateDisplay = "{Passed}/{X} ({PassRate * 100}%)"
+
+// Beispiel: 9 von 10 bestanden &rarr; "9/10 (90%)"
+
+// Trend: Vergleiche aktuelle X L&auml;ufe mit vorherigen X L&auml;ufen
+vorherigeXLaeufe = Tabelle sortiert nach runDate DESC, Zeilen X+1 bis 2X
+WENN vorherigeXLaeufe vorhanden:
+  altPassRate = ANZAHL(vorherigeXLaeufe WHERE runResult = "Passed") / ANZAHL(vorherigeXLaeufe)
+  WENN resKpiPassRate &gt; altPassRate: resKpiTrend = "Besser"
+  WENN resKpiPassRate = altPassRate: resKpiTrend = "Gleich"
+  WENN resKpiPassRate &lt; altPassRate: resKpiTrend = "Schlechter"
+
+resLastRunDate   = letzteXLaeufe[0].runDate
+resLastRunResult = letzteXLaeufe[0].runResult
+</pre>
+
+<h4>6.5.4 Cron-Anbindung (automatische Testausf&uuml;hrung)</h4>
+
+<p>Ein Cronjob ruft regelm&auml;&szlig;ig <code>ow1.CUCUMBER_CRON</code> auf, das Features anhand von Tags filtert und automatisch ausf&uuml;hrt.</p>
+
+<p><strong>Ablauf:</strong></p>
+
+<pre>
+CRONJOB ruft auf: ow1.CUCUMBER_CRON
+
+1. Lese Cron-Konfiguration (Variablen ycukeCron*)
+2. Scanne ow1/cucumber/features/
+   - Filtere .feature-Dateien nach Tags (z.B. @nightly)
+   - Schlie&szlig;e Tags aus (z.B. @manual, @wip)
+   - Optional: Filtere nach Ordnern
+3. FUER JEDES passende Feature:
+   - Rufe ow1.CUCUMBER_RUNNER auf
+   - Ergebnis wird in CUCUMBER_RESULT geschrieben
+4. Schreibe Cron-Zusammenfassung in Cron-Historie-Tabelle des IS
+5. Optional: E-Mail-Benachrichtigung bei Fehlern
+</pre>
+
+<p><strong>Tag-basierte Filterung (Beispiele):</strong></p>
+
+<table>
+<tr><th>Tag</th><th>Verwendung</th></tr>
+<tr><td><code>@nightly</code></td><td>N&auml;chtlicher Regressionslauf</td></tr>
+<tr><td><code>@regression</code></td><td>Regressionstests nach Deployment</td></tr>
+<tr><td><code>@smoke</code></td><td>Schnelle Smoke-Tests (z.B. st&uuml;ndlich)</td></tr>
+<tr><td><code>@manual</code></td><td>Wird vom Cron AUSGESCHLOSSEN</td></tr>
+<tr><td><code>@wip</code></td><td>Work in Progress &mdash; wird vom Cron AUSGESCHLOSSEN</td></tr>
+</table>
+
+<p><strong>Einzelne Features per GUID suchen und ausf&uuml;hren:</strong></p>
+
+<p>Aus anderen abas-Prozessen heraus kann ein einzelnes Feature gezielt &uuml;ber seine GUID angesto&szlig;en werden:</p>
+
+<pre>
+AUFRUF: ow1.CUCUMBER_RUNNER guid=a1b2c3d4-e5f6-...
+
+1. Scanne alle .feature-Dateien
+2. Finde Datei mit dem Tag "@guid-a1b2c3d4-e5f6-..." (eindeutig)
+3. F&uuml;hre nur diese aus
+4. Schreibe Ergebnis in CUCUMBER_RESULT (Suche &uuml;ber resGuid)
+</pre>
+
+<p>Da die GUID eindeutig ist, wird immer genau eine Feature-Datei gefunden und ausgef&uuml;hrt.</p>
+
+<hr/>
+
+<h2>7 Linux-Befehle zum Parsen der Feature-Dateien</h2>
+
+<p>Der Entwickler kann folgende Linux-Befehle verwenden, um Informationen aus den <code>.feature</code>-Dateien auszulesen:</p>
+
+<p><strong>Feature-Name (1. Zeile mit &quot;Feature:&quot;):</strong></p>
+<pre>grep -m1 '^Feature:' /path/to/datei.feature | sed 's/^Feature: *//'</pre>
+
+<p><strong>Beschreibung/Kommentar (Zeilen mit # nach der Feature-Zeile):</strong></p>
+<pre>sed -n '/^Feature:/,/^[[:space:]]*$/{ /^[[:space:]]*#/{ s/^[[:space:]]*# *//; p; } }' /path/to/datei.feature</pre>
+
+<p><strong>Tags (Zeilen die mit @ beginnen, vor Feature:):</strong></p>
+<pre>sed -n '/^@/p; /^Feature:/q' /path/to/datei.feature | tr ' ' '\n' | grep '^@'</pre>
+
+<p><strong>Anzahl Scenarios:</strong></p>
+<pre>grep -c '^[[:space:]]*Scenario:' /path/to/datei.feature</pre>
+
+<p><strong>Anzahl Steps (Given/When/Then/And/But):</strong></p>
+<pre>grep -cE '^[[:space:]]+(Given|When|Then|And|But) ' /path/to/datei.feature</pre>
+
+<p><strong>Background TestUser:</strong></p>
+<pre>grep -oP 'logged in with password "\K[^"]+' /path/to/datei.feature</pre>
+
+<p><strong>Alle Features in einem Verzeichnis mit Name, Tags, Scenario- und Step-Anzahl auflisten:</strong></p>
+<pre>
+for f in /path/to/features/**/*.feature; do
+  name=$(grep -m1 '^Feature:' "$f" | sed 's/^Feature: *//')
+  tags=$(sed -n '/^@/p; /^Feature:/q' "$f" | tr '\n' ' ')
+  scenarios=$(grep -c '^[[:space:]]*Scenario:' "$f")
+  steps=$(grep -cE '^[[:space:]]+(Given|When|Then|And|But) ' "$f")
+  desc=$(sed -n '/^Feature:/,/^[[:space:]]*$/{ /^[[:space:]]*#/{ s/^[[:space:]]*# *//; p; } }' "$f" | head -1)
+  echo "$f | $name | $tags| Scenarios: $scenarios | Steps: $steps | $desc"
+done
+</pre>
+
+<p><strong>Feature-Datei per GUID suchen (eindeutig):</strong></p>
+<pre>grep -rl '@guid-a1b2c3d4-e5f6' /path/to/features/ --include='*.feature'</pre>
+
+<p><strong>GUID aus einer Feature-Datei extrahieren:</strong></p>
+<pre>grep -oP '@guid-[a-f0-9-]+' /path/to/datei.feature | head -1</pre>
+
+<p><strong>Feature-Dateien nach Tag suchen (z.B. @nightly):</strong></p>
+<pre>grep -rlZ '@nightly' /path/to/features/ --include='*.feature' | xargs -0 -I{} basename {}</pre>
+
+<p><strong>Feature-Dateien nach Tag suchen und ausf&uuml;hren (f&uuml;r Cron):</strong></p>
+<pre>
+# Alle Features mit Tag @nightly finden
+grep -rl '@nightly' "$MANDANT/ow1/cucumber/features/" --include='*.feature' | while read f; do
+  guid=$(grep -oP '@guid-[a-f0-9-]+' "$f" | head -1 | sed 's/@guid-//')
+  echo "Running: $f (GUID: $guid)"
+  # Hier FOP-Runner aufrufen mit GUID
+done
+</pre>
+
+<hr/>
+
+<h2>8 Offene Punkte / Entscheidungen</h2>
+
+<table>
+<tr><th>Thema</th><th>Frage</th></tr>
+<tr><td><strong>Step-Erkennung</strong></td><td>Soll der Runner die Steps per Regex aus dem Gherkin-Text erkennen, oder soll der Cucumbergenerator zus&auml;tzlich eine JSON-Datei (.feature.json) neben dem .feature ablegen?</td></tr>
+<tr><td><strong>Mandantenf&auml;higkeit</strong></td><td>Sollen Tests auf verschiedenen Mandanten laufen k&ouml;nnen?</td></tr>
+<tr><td><strong>Parallel-Ausf&uuml;hrung</strong></td><td>K&ouml;nnen mehrere Features gleichzeitig laufen (mehrere FOP-Sessions)?</td></tr>
+<tr><td><strong>Cleanup / Rollback</strong></td><td>Sollen Testdaten nach dem Lauf aufger&auml;umt werden? (z.B. alle Datens&auml;tze mit Pr&auml;fix &quot;CUKE_&quot; l&ouml;schen)</td></tr>
+<tr><td><strong>Tabellen-Limit</strong></td><td>Max. Anzahl Testlauf-Zeilen pro CUCUMBER_RESULT? (Empfehlung: ab 100 Zeilen &auml;lteste archivieren)</td></tr>
+<tr><td><strong>Feature-Versionierung</strong></td><td>Reicht Git-Versionierung, oder soll abas eine eigene Historie f&uuml;hren?</td></tr>
+<tr><td><strong>Mehrere Cron-Schedules</strong></td><td>Sollen mehrere Cron-Konfigurationen m&ouml;glich sein (z.B. st&uuml;ndlich @smoke + n&auml;chtlich @regression)?</td></tr>
+</table>
+
+<hr/>
+
+<h2>Anhang: Unterst&uuml;tzte Gherkin Step-Syntax</h2>
+
+<pre>
+@nightly @regression @AP-2024-001
+Feature: Artikelanlage Customizing
+  # Pr&uuml;ft die kundenspezifische Artikelanlage
+
+  Background:
+    Given I'm logged in with password "testuser"
+
+  Scenario: Neuanlage mit Pflichtfeldern
+    Given I open an editor "Artikel" from table "2:1" with command "NEW" for record ""
+    And I set field "such" to "CUKE_TEST001"
+    And I set field "namebspr" to "Testartikel"
+    And I set fields
+      | such     | CUKE_TEST001 |
+      | namebspr | Testartikel  |
+    And I save the current editor
+    Then field "such" has value "CUKE_TEST001"
+    Then field "name" is not empty
+    Then field "preis" is modifiable
+    Then field "id" is not modifiable
+    And I close the current editor
+
+  Scenario: Tabellenzeilen anlegen
+    Given I open an editor "Auftrag" from table "11:1" with command "NEW" for record ""
+    And I create a new row at the end of the table
+    And I append rows
+      | artikel | menge |
+      | A001    | 10    |
+      | A002    | 20    |
+    Then the table has 3 rows
+    And I press button "Berechnen"
+    And I save the current editor
+    And I close the current editor
+
+  Scenario: Fehlerbehandlung
+    Given I open an editor "Artikel" from table "2:1" with command "NEW" for record ""
+    Then saving throws exception "EX_PFLICHTFELD"
+    Then field "preis" throws exception "EX_FORMAT" with value "abc"
+    And I answer dialog "CONFIRM_DELETE" with "Ja"
+</pre>
