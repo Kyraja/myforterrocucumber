@@ -231,8 +231,8 @@ The generator follows the official Gherkin specification:
 ### Installation
 
 ```bash
-git clone <repository-url>
-cd cucumbergenerator2
+git clone https://github.com/Kyraja/myforterrocucumber.git
+cd myforterrocucumber
 npm install
 ```
 
@@ -283,19 +283,361 @@ All settings are stored in the browser's `localStorage` under the `cucumbergnera
 | Test Depth | Normal or deep (multi-round) generation |
 | Language | DE / EN interface language |
 
-## AI Backend Setup
+## Authentication & AI Integration (Developer Reference)
 
-### MyForterro (Primary)
+### Authentication Architecture
 
-1. Open Settings and enter your Client ID and Application ID
-2. Click "Login" to start the OAuth2 PKCE flow
-3. After redirect, the app stores tokens and refreshes automatically
+The app authenticates against the **MyForterro API** using **OAuth 2.0 Authorization Code + PKCE** (Proof Key for Code Exchange). This is the standard for public clients (SPAs) that cannot store a client secret securely.
 
-### OpenRouter (Alternative)
+#### OAuth2 PKCE Flow
 
-1. Get an API key from [openrouter.ai](https://openrouter.ai)
-2. Enter it in Settings under "OpenRouter"
-3. Select a model from the auto-populated list
+```
+Browser (SPA)                    MyForterro Auth Server
+     |                                    |
+     |  1. Generate code_verifier         |
+     |     + code_challenge (SHA-256)     |
+     |                                    |
+     |  2. Redirect to /connect/authorize |
+     |     ?code_challenge=...            |
+     |     &client_id=...                 |
+     |     &redirect_uri=...              |
+     |     &scope=openid profile email    |
+     |  --------------------------------> |
+     |                                    |
+     |  3. User logs in at MyForterro     |
+     |                                    |
+     |  4. Redirect back with ?code=...   |
+     |  <-------------------------------- |
+     |                                    |
+     |  5. POST /connect/token            |
+     |     code + code_verifier           |
+     |  --------------------------------> |
+     |                                    |
+     |  6. Response: access_token,        |
+     |     refresh_token, id_token        |
+     |  <-------------------------------- |
+     |                                    |
+     |  7. Store tokens in localStorage   |
+     |     Auto-refresh before expiry     |
+```
+
+#### Key Classes and Functions
+
+| File | Function | Purpose |
+|------|----------|---------|
+| `src/lib/pkce.ts` | `generateCodeVerifier()` | Creates a random 86-char URL-safe string |
+| `src/lib/pkce.ts` | `generateCodeChallenge()` | SHA-256 hash of verifier (Web Crypto API) |
+| `src/lib/pkce.ts` | `generateState()` | Random CSRF protection token |
+| `src/lib/myforterroApi.ts` | `initiateLogin()` | Builds authorize URL, stores PKCE data in sessionStorage, redirects browser |
+| `src/lib/myforterroApi.ts` | `hasAuthCallback()` | Checks if URL contains `?code=...&state=...` |
+| `src/lib/myforterroApi.ts` | `handleAuthCallback()` | Exchanges auth code for tokens, validates state, stores tokens |
+| `src/lib/myforterroApi.ts` | `getValidToken()` | Returns cached token or auto-refreshes via refresh_token |
+| `src/lib/myforterroApi.ts` | `refreshAccessToken()` | Exchanges refresh_token for a new access_token |
+| `src/lib/myforterroApi.ts` | `logout()` | Clears all stored tokens (keeps client_id for convenience) |
+| `src/lib/myforterroApi.ts` | `isLoggedIn()` | Checks if an access_token exists in localStorage |
+
+#### Token Storage
+
+Tokens are stored in `localStorage` under the `cucumbergnerator_mft_` prefix:
+
+| Key | Content | Lifetime |
+|-----|---------|----------|
+| `mft_token` | OAuth access_token | ~1 hour (auto-refreshed) |
+| `mft_refresh_token` | OAuth refresh_token | Days/weeks |
+| `mft_token_expiry` | Timestamp (ms) | Updated on each refresh |
+| `mft_id_token` | OpenID Connect JWT | Contains user display name |
+| `mft_client_id` | OAuth client ID | Persistent (pre-fills login form) |
+| `mft_application` | Application ID | Persistent |
+| `mft_tenant_id` | Selected tenant | Persistent |
+
+PKCE ephemeral data (`code_verifier`, `state`) is stored in `sessionStorage` and cleared immediately after the callback.
+
+#### Proxy Configuration
+
+API calls to MyForterro are proxied to avoid CORS issues:
+
+| Local Path | Target |
+|-----------|--------|
+| `/mft-auth/*` | `https://integration-myforterro-core.fcs-dev.eks.forterro.com` |
+| `/mft-api/*` | `https://integration-myforterro-api.fcs-dev.eks.forterro.com` |
+
+- **Development**: Configured in `vite.config.ts` under `server.proxy`
+- **Production**: Handled by `server.cjs` (or the standalone `.exe`)
+
+### AI Generation Pipeline
+
+The AI generation follows a two-step pipeline, orchestrated by `src/lib/generatePackage.ts`:
+
+```
+Requirements Text
+        |
+        v
+  ┌─────────────────────────────┐
+  │  Step 1: Table Identification │
+  │                               │
+  │  1a. Local: scan text for     │
+  │      V/P-notation refs        │
+  │      (e.g. V-03-23, P12:26)  │
+  │                               │
+  │  1b. AI fallback: send text   │
+  │      + table list to LLM     │
+  │      → JSON response with    │
+  │        matched table refs     │
+  └───────────┬───────────────────┘
+              |
+              v
+  ┌─────────────────────────────┐
+  │  Step 2: Gherkin Generation   │
+  │                               │
+  │  Build prompt with:           │
+  │  - System prompt (abas steps) │
+  │  - Field definitions from     │
+  │    identified tables          │
+  │  - Requirements text          │
+  │  - Knowledge base chunks      │
+  │                               │
+  │  → AI returns Gherkin text    │
+  │  → parseGherkin() converts    │
+  │    to FeatureInput            │
+  └───────────────────────────────┘
+```
+
+#### AI Backends
+
+| Backend | Module | When Used |
+|---------|--------|-----------|
+| **MyForterro Agent** | `myforterroApi.ts` → `chatWithAgentSync()` | Primary — when logged in and agent selected |
+| **MyForterro Direct** | `myforterroApi.ts` → `chatCompletion()` | Fallback — when no agent configured |
+| **OpenRouter** | `openrouter.ts` → `openRouterChatCompletion()` | Alternative — when API key configured in settings |
+
+The system automatically falls back: Agent → Direct → OpenRouter.
+
+#### Deep Test Mode
+
+When `testDepth: 'deep'` is enabled, the generator runs multiple conversation rounds (default: up to 5). Each round sends the previously generated Gherkin back to the AI with a prompt asking for additional scenarios covering edge cases, error paths, and boundary conditions. The AI signals completion by responding with a `DONE` marker.
+
+#### Token Usage Tracking
+
+Every AI call records its token consumption via `src/lib/tokenHistory.ts`:
+- Stored per-day in localStorage
+- Visible in the Token History panel (top-right corner)
+- Daily limit with configurable threshold
+- Tracks: model, prompt tokens, completion tokens, purpose, details
+
+### OpenRouter as Alternative Backend
+
+For development or when MyForterro is unavailable:
+
+| File | Function | Purpose |
+|------|----------|---------|
+| `src/lib/openrouter.ts` | `openRouterChatCompletion()` | Send chat completions to OpenRouter API |
+| `src/lib/openrouter.ts` | `listOpenRouterModels()` | Fetch available models for the settings dropdown |
+| `src/lib/settings.ts` | `getOpenRouterKey()` | Read API key from localStorage |
+
+OpenRouter uses the standard OpenAI-compatible `/v1/chat/completions` endpoint with a 120-second timeout.
+
+---
+
+## Deployment for Consultants (Packaged Build)
+
+### Building the Package
+
+```bash
+npm run build          # 1. Build the production bundle into dist/
+npm run build:exe      # 2. Package as standalone Windows .exe (optional)
+```
+
+### What Gets Packaged
+
+The `build:exe` command uses [pkg](https://github.com/vercel/pkg) to bundle `server.cjs` + the `dist/` folder into a single `cucumbergnerator.exe`. The executable contains:
+- A Node.js runtime (Node 18)
+- The production web server (`server.cjs`)
+- All static files from `dist/`
+- Proxy routes for MyForterro API calls
+
+### How Consultants Use It
+
+**Option A: With the .exe**
+
+1. Copy `cucumbergnerator.exe` to any Windows machine
+2. Double-click to start -- a browser window opens automatically at `http://localhost:5173`
+3. Keep the console window open while using the app
+4. Close the console window to stop the server
+
+**Option B: With start.bat (development/shared drive)**
+
+1. Copy the project folder (with `dist/` and `node_modules/`) to a shared drive or USB
+2. Double-click `start.bat`
+3. The script waits 1 second, opens the browser, and starts the PowerShell server
+
+**Option C: Manual start**
+
+```bash
+node server.cjs        # Start the server
+# or
+node server.js         # ESM variant (same functionality)
+```
+
+### Network Requirements
+
+The packaged server proxies API calls to MyForterro:
+- Outbound HTTPS to `integration-myforterro-core.fcs-dev.eks.forterro.com` (auth)
+- Outbound HTTPS to `integration-myforterro-api.fcs-dev.eks.forterro.com` (AI API)
+- No inbound ports required (the server runs on localhost only)
+- If using OpenRouter instead: outbound HTTPS to `openrouter.ai`
+
+---
+
+## User Guide
+
+### 1. First Launch & Login
+
+1. **Start the application** (dev server, .exe, or start.bat)
+2. Click the **gear icon** (Settings) in the top-right corner
+3. **Login to MyForterro:**
+   - Enter your **Client ID** and **Application ID** (provided by your admin)
+   - Click **"Anmelden"** (Login)
+   - You are redirected to the MyForterro login page
+   - After successful login, you are redirected back -- the app shows your name
+   - The session stays active and auto-refreshes; you only need to log in again if the refresh token expires
+4. **Select an AI Model** from the dropdown (e.g. `gpt-4o`, `claude-3.5-sonnet`)
+
+#### Fallback: OpenRouter
+
+If MyForterro is unavailable or you want to use a different model:
+
+1. In Settings, scroll to **"OpenRouter"**
+2. Enter your [OpenRouter API key](https://openrouter.ai/keys)
+3. Click **"Modelle laden"** to populate the model list
+4. Select a model -- the app will automatically use OpenRouter when MyForterro calls fail
+
+### 2. Loading Reference Data (Stammdaten)
+
+Before generating tests, load the abas variable table for field-aware prompts:
+
+1. Switch to the **"Stammdaten"** tab
+2. Click **"CSV hochladen"** and select the exported variable table CSV
+3. The app parses all databases, infosystems, and their fields
+4. Loaded data persists in IndexedDB across sessions
+
+The more field definitions are available, the better the AI can generate accurate field references in the test steps.
+
+### 3. Manual Test Creation (Editor)
+
+For writing individual test scenarios by hand:
+
+1. Switch to the **"Editor"** tab
+2. Enter a **Feature name** (e.g. "Customer Group Field")
+3. Optionally set the **test user**, **database**, and **tags**
+4. Click **"+ Szenario"** to add a scenario
+5. Use the **Step Toolbox** (right panel) to drag building-block steps:
+   - "Editor oeffnen" -- opens an abas mask
+   - "Feld setzen" -- sets a field value
+   - "Feld pruefen" -- asserts a field value
+   - "Editor speichern" -- saves the current record
+   - ... and 16 more action types
+6. Each step auto-generates the correct Gherkin syntax in the **preview pane**
+7. Use **"Kopieren"** (Copy) or **"Download"** to export the `.feature` file
+
+### 4. AI-Powered Single Test Generation
+
+Generate a complete test from a requirements description:
+
+1. In the **Editor** tab, enter a **Feature name**
+2. In the **"Anforderungstext"** (requirements) textarea, paste or type the customization description
+3. The **prompt quality meter** shows a score (0-100) with improvement suggestions
+4. Click **"KI generieren"** (AI Generate)
+5. The two-step pipeline runs:
+   - **Step 1:** Tables are identified (locally via V/P-notation, or via AI)
+   - **Step 2:** Gherkin scenarios are generated using the identified field definitions
+6. The generated scenarios appear in the editor -- review and adjust as needed
+7. The **Token History** (clock icon) shows how many tokens were consumed
+
+#### Deep Test Mode
+
+For more thorough test coverage:
+
+1. In Settings, set **"Testtiefe"** to **"Tief"** (Deep)
+2. The AI runs up to 5 conversation rounds, each adding more scenarios
+3. Covers edge cases, error paths, and boundary conditions automatically
+
+### 5. Batch Generation from DOCX (Concept Import)
+
+Generate tests for an entire customization concept document:
+
+1. Switch to the **"DOCX Import"** tab
+2. Click **"DOCX laden"** and select your requirements document
+3. The parser splits the document into chapters based on headings
+4. A **table of contents** shows which chapters were detected vs. skipped
+5. For each chapter, you can:
+   - **Preview** the extracted requirement text
+   - **Select/deselect** individual chapters
+   - **Choose generation scope:** All chapters, only selected, or only ungenerated
+6. Click **"Alle generieren"** to start batch generation
+7. Progress is shown per-chapter with live status indicators
+8. When complete, use **"Alle herunterladen (ZIP)"** to download all `.feature` files
+
+#### Parse Profiles
+
+Different document formats can be handled by switching the **Parse Profile** in Settings:
+
+- **Standard:** Parses full chapter content
+- **Technical Section:** Only parses content after a "Technische Umsetzung" sub-heading
+- **Content End Marker:** Stops parsing at "Auswirkungen der Customization" tables
+- **Custom:** Define your own heading keywords and step patterns
+
+### 6. Prompt Quality Rating
+
+The app rates requirement text quality on a 0-100 scale:
+
+| Score | Color | Meaning |
+|-------|-------|---------|
+| 80-100 | Green | Good -- detailed process description with field names |
+| 50-79 | Yellow | Acceptable -- could use more specifics |
+| 0-49 | Red | Weak -- too vague for reliable AI generation |
+
+**Improvement tips** are shown below the score, with bad/good examples for each criterion:
+- Text length and structure
+- Field name mentions (e.g. `ykdgruppe`, `kart`)
+- Database/table references (e.g. `V-02-01`)
+- Process step descriptions
+- Expected outcomes / assertions
+
+### 7. File System Explorer
+
+For managing multiple `.feature` files as a project:
+
+1. Click the **folder icon** to open a local directory
+2. The **File Explorer** (left sidebar) shows the directory tree
+3. Features are **auto-saved** (1.5s debounce) when you edit them
+4. Right-click for context menu: create, rename, delete, move files/folders
+5. DOCX imports can write directly into the folder structure
+6. GUIDs in `@`-tags prevent duplicate imports
+
+### 8. FOP Reverse Engineering
+
+Analyze existing FOP customizations and auto-generate tests from them:
+
+1. Switch to the **"Reverse Engineering"** tab
+2. Click **"Ordner oeffnen"** and select a folder containing `.FO1` / `.FO2` files
+3. Upload the `FOP.txt` binding configuration
+4. The app parses all files and builds a **call tree** visualization
+5. Click **"Analyse starten"** to run AI analysis on each FOP:
+   - Technical description (events, data flow, side effects)
+   - Business description (what the customization does in plain language)
+   - Guidelines check (coding quality score A-F)
+6. Results are cached per file hash -- re-analysis only for changed files
+7. From the analysis, generate Cucumber tests covering the FOP's behavior
+
+### 9. Knowledge Base
+
+Build a searchable reference library for better AI context:
+
+1. Go to **Stammdaten** → **"Wissensdatenbank"** tab
+2. Upload reference documents (DOCX, PDF, HTML -- e.g. abas online help)
+3. Documents are chunked and indexed by keywords
+4. During AI generation, relevant chunks are automatically included in the prompt
+5. Enable/disable in Settings under **"Wissensdatenbank verwenden"**
 
 ## Tech Stack
 
