@@ -1,0 +1,307 @@
+..!interpreter english declaration noabbrev
+.. at 2017-06-16, 11:37
+.set trans -
+..========================================================================
+..==  Name              : FOP.PRJM.MATMELDUNG.EV
+..==  Pfad              : allpstart
+..==  Funktion          :
+..==  Erstellungsdatum  : 29.05.2012
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input PRJM.KONFIG.INI  ? _F|defined(U|xydbprojekt)
+..====================================================
+.type text    xtsel xttitel xttext1 xttext2 xtaupos xtaunum xtmenu xytaufrufernr
+.type bool    xbmehr
+.type GD      xdatum
+.type P86:1   xpproject         ? _F|defined(U|xpproject)
+.type P86:1   xpprojekt         ? _F|defined(U|xpprojekt)
+.type P149:3  xpaufgabe         ? _F|defined(U|xpaufgabe)
+.type P3:2    xpaupos           ? _F|defined(U|xpaupos)
+.type GD      xdkonddat         ? _F|defined(U|xdkonddat)
+.type text    xtprojleistkatid  ? _F|defined(U|xtprojleistkatid)
+.type integer   xprocsp ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Pruefung_MM_Aendern -----
+.continue EL001 ? _(M|ablagef)
+.set trans +
+.box Fehler
+Die Materialmeldung befindet sich bereits in der Ablage.
+.set trans -
+.error
+.end 1
+.continue FI001
+!EL001
+.continue EL002 ? _(_(G|evtkommd = G|kaktname12))
+.set trans +
+.box Fehler
+Der Vorgang ist nur im <zeigen> mîglich.
+.set trans -
+.error
+.end 1
+.continue FI002
+!EL002
+.continue EL003 ? _(M|ysperre)
+.set trans +
+.box Fehler
+Die Materialmeldung ist derzeit zur Bearbeitung gesperrt.
+
+gesperrt von: 'M|ysperrzeich', Zeitpunkt der Sperre: 'M|ysperrzp'
+.set trans -
+.error
+.end 1
+.continue FI003
+!EL003
+.select lock add M|id
+.continue EL004 ? _(_(G|mehr))
+.set trans +
+.box Fehler
+Die Materialmeldung kann nicht zur Bearbeitung geladen werden.
+.set trans -
+.error
+.end 1
+!EL004
+!FI003
+!FI002
+!FI001
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskein")
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"
+.continue EL005 ? _(G|evtkommd = G|kaktname13)
+.input "allpstart/CHECK.RECORD.LOCK"
+.continue EL006 ? _(G|mehr)
+.load 9 add M|yleistmeld
+.continue EL007 ? _(G|mehr)
+.copy U|xpproject = 9|yprojekt
+.input "allpstart/FOP.PRJM.UP.PROJECTCLOSINGVARS"
+.continue EL008 ? _(((U|xpproject^ystatusk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefpv))) ; (((U|xpproject^ystatusk = "ABS") ; (U|xpproject^ystatusk = "08") ; (U|xpproject^yablage)) & (F|rec(U|xystclosingvars, ypmkabpruefpv))))
+.set trans +
+.formula U|xttitel = "Achtung"
+.formula U|xttext1 = F|formatstr("Das Projekt {1} ist bereits abgeschlossen.", U|xpproject^such)            ?  F|empty(U|xpproject^ystatusk)
+.formula U|xttext1 = F|formatstr("Das Projekt hat den Status {2}{1}{2}.", U|xpproject^ystatus, G|dblquote)  ? _F|empty(U|xpproject^ystatusk)
+.formula U|xttext2 = F|formatstr("<{1}> nicht mehr erlaubt!", 'G|evtkommd')
+.set trans -
+.box 'U|xttitel'
+'U|xttext1'
+'U|xttext2'
+.error
+.end 1         ? _G|wartung
+!EL008
+!EL007
+.select screen header
+.select screen line
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL009 ? _((_(F|empty(M|ytmmlsposid))) ; (_(F|empty(M|ytmmreposid))))
+.set trans +
+.box ACHTUNG
+Die Materialmeldung ist bereits
+?im Lieferschein 'M|ytmmlsnum' eingetragen  ? _F|empty(M|ytmmlsnum)
+?in der Rechnung 'M|ytmmrenum' eingetragen  ? _F|empty(M|ytmmrenum)
+und darf nicht mehr bearbeitet werden!
+.set trans -
+.error
+.end 1         ? _G|wartung
+!EL009
+.select screen line
+.continue LOOP001
+!ELOP001: ==============================
+!EL006
+!EL005
+.continue
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "buttonvor")
+.continue BRK003 ? _(G|evtvar = "ytbummkorrektur")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.continue
+.continue ESAC002
+!BRK003
+.continue
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK002
+.continue BRK004 ? _(G|evtart = "buttonnach")
+.continue BRK005 ? _(G|evtvar = "ytbummkorrektur")
+.load 5 add F|sysinfo(10)^ykonfigprjm
+.select lock add M|id
+.continue EL010 ? _(G|mehr)
+.select lock line 'M|aktzeile'
+.set trans +
+.menu Korrektur Zuordnung Maschinenzeit
+Lieferscheinposition Ñndern   >>.formula U|xtmenu = "1"
+?Lieferscheinposition entfernen>>.formula U|xtmenu = "2"         ? _F|empty(H|ytmmlsposid)
+Rechnungsposition Ñndern      >>.formula U|xtmenu = "3"
+?Rechnungsposition entfernen   >>.formula U|xtmenu = "4"         ? _F|empty(H|ytmmreposid)
+Teilprojektposition Ñndern    >>.formula U|xtmenu = "5"
+?Teilprojektposition entfernen >>.formula U|xtmenu = "6"         ? _F|empty(H|ytmmtpposid)
+.set trans -
+.continue EL011 ? _(_(G|menue = 0))
+.continue EL012 ? _((U|xtmenu = "1") ; (U|xtmenu = "3") ; (U|xtmenu = "5"))
+.continue EL013 ? _(U|xtmenu = "5")
+.formula U|xtsel = "%,,;ypnum=;yartex=;ymge=;yptext="
+.formula U|xtsel = U|xtsel + ";yteilprojekt=="  + M|yleistmeld^yprojekt^id  ?  5|ypmabrechproj
+.formula U|xtsel = U|xtsel + ";.yteilprojekt==" + M|yleistmeld^yprojekt^id  ? _5|ypmabrechproj
+
+.formula U|xtsel = U|xtsel + ";.ytpverrechanf<>`"
+.formula U|xtsel = U|xtsel + ";.yorig<>`"
+.load 0 group 'U|xydbgrtpposition' 'U|xtsel'
+.continue EL014 ? _(G|mehr)
+.continue EL015 ? _((_(5|ypmabrechproj)) & (0|yteilprojekt^id <> M|yleistmeld^yprojekt^id))
+.set trans +
+.box Fehler
+"Abrechnung auf andere Projekte erlauben" in der ProjectSuite Konfiguration ist nicht gesetzt.
+Alle abzurechnenden Materialmeldungen mÅssen zum Projekt 'F|trim(F|tostring(M|yleistmeld^yprojekt))' gehîren.
+.set trans -
+.error
+.end 1
+!EL015
+.formula H|ytmmtpposid        = 0|id
+.rewrite
+!EL014
+.continue FI013
+!EL013
+.formula U|xtsel = "%,,kopf=;kopf^kunde==" + M|yleistmeld^ykunde^id + ";kovom=;art=;mge=;he=;typ==(" + 'G|ARPOS' + ")"
+.formula U|xtsel = U|xtsel + ";projekt=="  + M|yleistmeld^yprojekt^id       ?  5|ypmabrechproj
+.formula U|xtsel = U|xtsel + ";.projekt==" + M|yleistmeld^yprojekt^id       ? _5|ypmabrechproj
+.formula U|xtsel = U|xtsel + ";.kotyp==(" + 'G|LIKO' + ")"                  ?  U|xtmenu = "1"
+.formula U|xtsel = U|xtsel + ";.kotyp==(" + 'G|REKO' + ")"                  ?  U|xtmenu = "3"
+.load 0 group "3:2" 'U|xtsel'
+.continue EL016 ? _(G|mehr)
+.continue EL017 ? _(((0|kotyp = G|LIKO) & (U|xtmenu = "1")) ; ((0|kotyp = G|REKO) & (U|xtmenu = "3")))
+.continue EL018 ? _((_(5|ypmabrechproj)) & (0|projekt^id <> M|yleistmeld^yprojekt^id))
+.set trans +
+.box Fehler
+"Abrechnung auf andere Projekte erlauben" in der ProjectSuite Konfiguration ist nicht gesetzt.
+Alle abzurechnenden Materialmeldungen mÅssen zum Projekt 'F|trim(F|tostring(M|yleistmeld^yprojekt))' gehîren.
+.set trans -
+.error
+.end 1
+!EL018
+.formula U|xtaupos = ""
+.formula U|xtaunum = ""
+.continue EL019 ? _(_(F|empty(0|orig)))
+.add 0|orig
+.assign U|xbmehr = G|mehr
+!LOOP002: ==============================
+.continue ELOP002 ? _(U|xbmehr)
+.continue EL020 ? _((D|kotyp = G|ABKO) ; (D|kotyp = G|LIKO))
+.continue EL021 ? _(D|kotyp = G|LIKO)
+.add D|orig
+.assign U|xbmehr = G|mehr
+.continue FI021
+!EL021
+.formula U|xtaupos = D|id
+.formula U|xtaunum = D|kopf^nummer
+.assign  U|xbmehr  = G|FALSE
+!FI021
+.continue FI020
+!EL020
+.add D|orig
+.assign U|xbmehr = G|mehr
+!FI020
+.continue LOOP002
+!ELOP002: ==============================
+!EL019
+.formula H|ytmmlsposid = 0|id            ? U|xtmenu = "1"
+.formula H|ytmmlsnum   = 0|kopf^nummer   ? U|xtmenu = "1"
+.formula H|ytmmreposid = 0|id            ? U|xtmenu = "3"
+.formula H|ytmmrenum   = 0|kopf^nummer   ? U|xtmenu = "3"
+.rewrite
+.continue FI017
+!EL017
+.set trans +
+.box Fehler
+?Es sind nur Lieferscheinpositionen erlaubt.    ? U|xtmenu = "1"
+?Es sind nur Rechnungspositionen erlaubt.       ? U|xtmenu = "3"
+.set trans -
+.continue
+!FI017
+!EL016
+!FI013
+.continue FI012
+!EL012
+.formula H|ytmmlsposid = ""      ?  U|xtmenu = "2"
+.formula H|ytmmlsnum   = ""      ?  U|xtmenu = "2"
+.formula H|ytmmreposid = ""      ?  U|xtmenu = "4"
+.formula H|ytmmrenum   = ""      ?  U|xtmenu = "4"
+.formula M|ytmmtpposid        = ""   ? U|xtmenu = "6"
+.rewrite
+!FI012
+!EL011
+.continue FI010
+!EL010
+.set trans +
+.box Fehler
+Die Materialmeldung kann nicht zur Bearbeitung geladen werden.
+.set trans -
+.continue
+!FI010
+.continue
+.continue ESAC003
+!BRK005
+!ESAC003: =====   ENDCASE   =====
+.continue
+.continue ESAC001
+!BRK004
+.continue BRK006 ? _(G|evtart = "feldaus")
+.continue BRK007 ? _(G|evtvar = "yleistmeld")
+.continue EL022 ? _(_(F|empty(M|yleistmeld)))
+.formula M|such     = M|yleistmeld^such
+.formula M|namebspr = M|yleistmeld^namebspr
+!EL022
+.continue ESAC004
+!BRK007
+.continue BRK008 ? _(G|evtvar = "yteil")
+.continue EL023 ? _(_(F|empty(M|yteil)))
+.continue EL024 ? _(F|sysinfo(18)^allpstd)
+.input "is/PREISAUSKUNFT"       ? _F|defined(U|xpaartikel)
+.assign  U|xpprojekt        = M|yleistmeld^yprojekt^id
+.assign  U|xpaufgabe        = M|yleistmeld^yaufgabe^id
+.assign  U|xpaupos          = M|yleistmeld^yaufgabe^yvorpos
+.assign  U|xdkonddat        = M|yleistmeld^yadatum
+.formula U|xtprojleistkatid = M|yleistmeld^yprojekt^yprojleistkatid
+.formula U|xpaartikel = M|yteil^id
+.input "allpstd/FOP.PRJM.UP.ARTPREIS"
+.formula M|ytpreis = U|xylepreis
+.formula M|ytwert  = M|ytpreis * M|ymge
+!EL024
+.copy M|yeinh = M|yteil^le
+!EL023
+.continue ESAC004
+!BRK008
+.continue EL025 ? _((G|evtvar = "ymge") ; (G|evtvar = "ytpreis") ; (G|evtvar = "ytwert") ; (G|evtvar = "yterfwaehr") ; (G|evtvar = "yterfwaehr") ; (G|evtvar = "yterfwaehr") ; (G|evtvar = "yterfwaehr"))
+.copy M|ytiwbu     = G|inland   ? F|empty(M|ytiwbu)
+.copy M|yterfwaehr = G|inland   ? F|empty(M|yterfwaehr)
+.continue EL026 ? _(G|evtvar = "ytwert")
+.formula M|ytpreis = M|ytwert / M|ymge  ? _M|ymge = 0
+.formula M|ytpreis = 0                  ?  M|ymge = 0
+!EL026
+.continue EL027 ? _((_(F|empty(M|yterfwaehr))) & ((G|evtvar = "yterfwaehr") ; (M|ytkurs = 0)))
+.formula U|xdatum = M|yleistmeld^ybuchdat   ? _F|empty(M|yleistmeld^ybuchdat)
+.formula U|xdatum = M|yleistmeld^yadatum    ?  F|empty(M|yleistmeld^ybuchdat)
+.formula U|xdatum = G|datum                 ?  F|empty(U|xdatum)
+.formula M|ytkurs = F|fxrate(M|ytiwbu, U|xdatum, M|yterfwaehr)
+!EL027
+.formula M|ytwert   = M|ytpreis * M|ymge    ? _G|evtvar = "ytwert"
+.formula M|ytbuwert = M|ytwert  * M|ytkurs
+!EL025
+!ESAC004: =====   ENDCASE   =====
+.continue ESAC001
+!BRK006
+!ESAC001: =====   ENDCASE   =====
+.continue

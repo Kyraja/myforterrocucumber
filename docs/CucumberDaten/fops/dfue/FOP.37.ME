@@ -1,0 +1,88 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : FOP.37.ME
+.. Autor          : mh/ok
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : Mask entry shipping order / field exit forwarder: set initial values
+..*****************************************************************************
+.set trans -
+..
+..
+.. event evaluation
+..------------------------- ----------- ---------------------------------------
+.continue CARRIER  ?  G|evtartengl = "SCREEN_ENTER"
+.continue CARRIER  ?  G|evtartengl = "FIELD_EXIT"   &  G|evtvar="spediteur"
+.continue CARRIER  ?  G|evtartengl = "FIELD_EXIT"   &  G|evtvar="kunde"
+.continue CARRIER  ?  G|evtartengl = "FIELD_EXIT"   &  G|evtvar="frachtfueh"
+.continue SEND     ?  G|evtartengl = "FIELD_EXIT"   &  G|evtvar="dfuesenden"
+..------------------------- ----------- ---------------------------------------
+.continue END
+..
+..
+.. Carrier number must not be empty in shipping order:
+.. Transport partner number = forwarder number = carrier number
+!CARRIER
+.continue ECARRY  ?  F|empty(M|spediteur) ; F|empty(M|kunde)
+.load 8 supplier 'M|spediteur^id'
+.continue ECARRY  ? _G|mehr
+.continue ECARRY  ?  F|empty(8|liekunsnr)
+.load 7 supplier '8|liekunsnr^id'
+.continue ECARRY  ? _G|mehr
+.. row has fields "kunlie P0:1.2" and "bemkl GL30"
+.. a row matches, if H|kunlie^id == M|kunde^id
+.. if no row matches a second search is done looking for a match H|kunlie^id == M|kunde^firma^id
+!NCARRY1
+.load 7 line
+.continue ECARRY1  ? _G|mehr
+.continue NCARRY1  ?  7|kunlie^id <> M|kunde^id
+.formula M|frachtfueh = 7|bemkl
+.continue ECARRY
+!ECARRY1
+.continue ECARRY ? M|kunde^gruppe<>2
+.load 7 supplier '8|liekunsnr^id'
+!NCARRY2
+.load 7 line
+.continue ECARRY2  ? _G|mehr
+.continue NCARRY2  ?  7|kunlie^id <> M|kunde^firma^id
+.formula M|frachtfueh = 7|bemkl
+.continue ECARRY
+!ECARRY2
+!ECARRY
+.formula M|frachtfueh = M|spediteur^sucherw  ?  F|empty(M|frachtfueh) & _F|empty(M|spediteur)
+..
+.. Initialize with default values
+.formula M|transnr = "x"          ?  F|empty(M|transnr)
+.formula M|uebdat  = G|datum + 1  ?  F|empty(M|uebdat)
+.formula M|uebzeit = "11:00"      ?  F|empty(M|uebzeit)
+..
+.. If shipping with protocoll format VDA and using external service
+.. provider (ESP) "vorgschl" must be set to 40
+.continue EESP  ?  F|empty(M|kunde)
+.select add kunde
+.type P109:2 xedinachr
+.formula U|xedinachr = "2108"
+.input "DFUE.GET.PROTOK"
+.continue EESP  ?  U|xdfuePROTO<>1 ; _U|xedlabwicklung
+.formula M|vorgschl = "40"
+!EESP
+.continue END
+..
+..
+.. Set new value for send edi message from shipping order into all
+.. packing slips that use this shipping order
+!SEND
+.. Do nothing when creating a new shipping order
+.continue END ? F|empty(M|id)
+.select lock sales 'F|formatstr("$,,;@gruppe=1;@ablageart=(Both);sped={1}", M|id)'
+!NPACK
+.continue EPACK  ? _G|mehr
+.copy H|dfuesenden = M|dfuesenden
+.rewrite
+.select lock sales
+.continue NPACK
+!EPACK
+..
+..*****************************************************************************
+!END
+.continue

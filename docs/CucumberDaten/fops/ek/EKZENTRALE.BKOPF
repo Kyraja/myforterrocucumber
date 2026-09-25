@@ -1,0 +1,132 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EKZENTRALE.BKOPF
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       :
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type realx  xamount     ? _F|defined(U|xamount)
+.type realx  xramount    ? _F|defined(U|xramount)
+.type realx  xbetrag     ? _F|defined(U|xbetrag)
+.type realx  xrkurs      ? _F|defined(U|xrkurs)
+.type ID94:1 xiwbu       ? _F|defined(U|xiwbu)
+.type ID94:1 xland       ? _F|defined(U|xland)
+.type ID94:1 xauswaehr   ? _F|defined(U|xauswaehr)
+.type RP7.6  xrate       ? _F|defined(U|xrate)
+.type IP1    xrundung    ? _F|defined(U|xrundung)
+.type realx  xiwbuamount ? _F|defined(U|xiwbuamount)
+.type text   xselect     ? _F|defined(U|xselect)
+..
+.make screen line +O
+.formula M|tstufe = 0
+.formula M|topen = M|iopen
+.copy M|tfold = G|TRUE
+.formula M|ttyp2a = M|typ2a ? H|typ = G|RAKO & _H|ablagef
+.formula M|ttyp2a = M|typ2b ? H|typ = G|RAKO &  H|ablagef
+.formula M|ttyp2 = M|typ2a ? H|typ = G|ANKO & _H|ablagef
+.formula M|ttyp2 = M|typ2b ? H|typ = G|ANKO &  H|ablagef
+.formula M|ttyp3 = M|typ2a ? H|typ = 3 & _H|ablagef
+.formula M|ttyp3 = M|typ2b ? H|typ = 3 &  H|ablagef
+.formula M|ttyp4 = M|typ2a ? H|typ = 4 & _H|ablagef
+.formula M|ttyp4 = M|typ2b ? H|typ = 4 &  H|ablagef
+.copy M|tlsart = H|lsart ? H|typ = 4
+.formula M|ttyp5 = M|typ2a ? H|typ = 5 & _H|ablagef
+.formula M|ttyp5 = M|typ2b ? H|typ = 5 &  H|ablagef
+.copy M|tvorganga = H|vorganga ? H|typ = 5
+.protection brerelease 'M|aktzeile'   ? H|typ <> 3
+.protection brerelease 'M|aktzeile'   ? H|typ = 3 & H|ablagef
+.formula M|uebertr = H|uebertr
+.copy M|noablage = H|noablage
+.assign M|ttrans = H|id
+.formula M|ttyp4 = M|storno    ? M|ttrans^typ = 4 & (F|equals(H|lsart, "(PackingSlipReversal)") ; F|equals(H|lsart, "(CancelationReturnPackingSlip)"))
+.formula M|ttyp4 = M|storniert ? M|ttrans^typ = 4 & (F|equals(H|lsart, "(PackingSlipCanceled)") ; F|equals(H|lsart, "(CanceledReturnPackingSlip)"))
+.formula M|ttyp5 = M|storno    ? M|ttrans^typ = 5 & (F|equals(H|vorganga, "(CancelationCreditNoteCommercial)") ; F|equals(H|vorganga, "(InvoiceReversal)"))
+.formula M|ttyp5 = M|storniert ? M|ttrans^typ = 5 & (F|equals(H|vorganga, "(CanceledCreditNoteCommercial)") ; F|equals(H|vorganga, "(InvoiceCanceled)"))
+.assign M|stornopartnervorg = H|stornopartnervorg
+.assign P|maskkontextfop = ""
+.assign P|maskkontextfop = "Lieferschein"  ?  F|equals(M|ektyp, "(PackingSlip)")
+.assign P|maskkontextfop = "Ausschreibung" ?  H|typ = G|ANKO
+.assign M|tausschr = H|ausschr             ?  H|typ = G|ANKO
+.copy M|bsart = H|bsart
+.copy M|tkritisch = M|aktkritisch
+.assign M|tterm = M|akttterm
+.formula M|tref = H|frzeich
+.formula M|ebeleg = H|ebeleg ? F|defined(H|ebeleg) & (H|typ = 4 ; H|typ = 5)
+.formula M|tzeich = H|zeich
+.formula M|tbetreff = H|betreff
+.copy M|limahnsperre = H|limahnsperre
+.copy M|tauswaehr = M|auswaehr
+.formula M|tdate = H|vom
+.assign M|tkuli = H|lief^id
+.assign M|treku = H|resteller^id
+.copy M|bruttore = H|brutto
+.. Icon setzen: Originalvorgang
+.formula U|xselect = "$,,;okopf="+M|ttrans^id+";orig<>`;@gruppe=2;@ordnung=kopf;@ablageart=(Both)"
+.load 5 purchasing 'U|xselect'
+.formula M|topen = ""                    ? _G|mehr
+.continue NOTMORE     ? _G|mehr
+.load 5
+..
+!NOTMORE
+.formula M|tdetail = M|detail1
+.formula M|trelease = M|release            ? _H|ablagef
+.formula M|trelease = ""                   ?  H|typ = 5
+.formula M|trelease = ""                   ?  H|typ = 4 & H|aeob
+.formula M|tpost = ""
+.formula M|tpost = M|show                  ? _H|ablagef
+.formula M|tpost = M|post                  ?  H|uebertr
+.formula U|xramount = 0
+.copy M|tpland = H|land
+.assign M|tnpwert = H|sumnetto
+..
+.. Umrechnungen
+.formula U|xrundung = M|auswaehr^nkst
+.assign U|xrkurs = H|kurs
+.copy U|xiwbu = H|iwbu
+.copy U|xland = H|land
+.copy U|xauswaehr = M|auswaehr
+.formula U|xrate = F|fxrate(M|auswaehr,H|budat,H|iwbu)
+..
+!ZEILE
+.select line
+.continue TOTAL ? _G|mehr
+..
+.formula U|xbetrag  = F|round(U|xramount,U|xrundung)
+.formula U|xramount = H|npwert
+..
+.assign U|xiwbuamount = U|xramount / U|xrkurs
+.assign U|xramount    = U|xiwbuamount         ? U|xauswaehr = U|xiwbu & U|xiwbu <> U|xland
+.assign U|xramount    = U|xramount            ? U|xauswaehr = U|xland
+.assign U|xramount    = U|xrate*U|xiwbuamount ? U|xauswaehr<>U|xland & U|xauswaehr<>U|xiwbu
+..
+.formula U|xramount   = U|xbetrag + F|round(U|xramount, U|xrundung)
+.formula U|xramount   = U|xbetrag ? H|typ = 16 ; H|typ = 19 ; H|typ = 8 ; H|typ = 9 ; H|typ = 10
+..
+.. Bruttorechnungen sind bei Endsumme zu ende
+.continue TOTAL ? (H|typ = 16 ; H|typ = 19) & H|kobrutto
+.continue ZEILE
+..
+!TOTAL: Summen
+.formula U|xamount = M|ttrans^sumnetto
+..
+.formula U|xrate       = F|fxrate(M|auswaehr,M|ttrans^budat,M|ttrans^iwbu)
+.formula U|xiwbuamount = U|xamount/U|xrkurs
+.formula U|xamount     = U|xiwbuamount         ? U|xauswaehr = U|xiwbu & U|xiwbu <> U|xland
+.formula U|xamount     = U|xamount             ? U|xauswaehr = U|xland
+.formula U|xamount     = U|xrate*U|xiwbuamount ? U|xauswaehr<>U|xland & U|xauswaehr<>U|xiwbu
+..
+.formula M|teprice = U|xamount
+.formula M|tot2    = M|tot2 + U|xamount    ? M|ttrans^typ = 1
+.formula M|tot     = M|tot2                ? M|ttrans^typ = 1
+.formula M|tot2    = M|tot2 + U|xamount    ? M|ttrans^typ = 2
+.formula M|tot     = M|tot2                ? M|ttrans^typ = 2
+.formula M|tot3    = M|tot3 + U|xamount    ? M|ttrans^typ = 3
+.formula M|tot     = M|tot3                ? M|ttrans^typ = 3
+.formula M|tot4    = M|tot4 + U|xamount    ? M|ttrans^typ = 4
+.formula M|tot     = M|tot4                ? M|ttrans^typ = 4
+.formula M|tot5    = M|tot5 + U|xamount    ? M|ttrans^typ = 5
+.formula M|tot     = M|tot5                ? M|ttrans^typ = 5
+.continue

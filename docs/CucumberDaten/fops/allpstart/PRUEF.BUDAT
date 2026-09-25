@@ -1,0 +1,91 @@
+..!interpreter english declaration noabbrev
+.. at 2017-05-10, 17:07
+.set trans -
+..========================================================================
+..==
+..==  Name              : PRUEF.BUDAT
+..==
+..==  Pfad              : allpstart
+..==
+..==  Funktion          : allgemeine PrÅfroutine fÅr Buchungsdatum
+..==                      Version 2
+..==
+..==  Erstellungsdatum  : 26.04.12
+..==
+..==  Autor             : alltrotec GmbH/CP
+..==
+..==  Menuepunkte       :
+..==
+..==  Maskenprioritaet
+..==  bei EFOP          :
+..==
+..==  Besonderheiten    : Input   xbudat      datum     Buchungsdatum
+..==
+..==                      Output  xbbuchbar   bool      Budat erlaubt ja/nein
+..==                              xbuchtyp    text      Buchungstyp (F oder S)
+..==                              xtfehl      text      Fehlermeldung
+..==                              xgjahr      GJ        GeschÑftsjahr aus Budat
+..==                              xmonat      integer   Periode (Monat) aus Budat
+..==
+..==                      im 9-Puffer wird Termindatensatz geladen
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+..====================================================
+.type bool    xbbuchbar ? _F|defined(U|xbbuchbar)
+.type GD      xbudat    ? _F|defined(U|xbudat)
+.type text    xtfehl    ? _F|defined(U|xtfehl)
+.type text    xtsel1    ? _F|defined(U|xtsel1)
+.type text    xtsel2    ? _F|defined(U|xtsel2)
+.type text    xbuchtyp  ? _F|defined(U|xbuchtyp)
+.type GD8     xd08      ? _F|defined(U|xd08)
+.type GJ      xgjahr    ? _F|defined(U|xgjahr)
+.type integer xmonat    ? _F|defined(U|xmonat)
+..====================================================
+.type integer xprocsp   ? _F|defined(U|xprocsp)
+.set demand -
+.formula U|xbuchtyp  = '1|ybuartk'  ? F|defined(1|ybuartk)
+.formula U|xbuchtyp  = "F"          ? F|empty(U|xbuchtyp)
+.copy    U|xbbuchbar = G|true
+.formula U|xd08      = U|xbudat
+.formula U|xmonat    = F|getfm(U|xd08)
+.formula U|xgjahr    = F|getfy(U|xd08)
+.formula U|xtsel1    = "$,,@filingmode=(Active);@gruppe=1;@rows=(Yes);gj==" + 'F|getfy(U|xbudat)'
+.formula U|xtsel2    = U|xtsel1 + ";adatgmon=" + 'F|fystartdate(U|xgjahr, U|xmonat)' + "!;edatgmon=!" + 'F|fyenddate(U|xgjahr, U|xmonat)'
+.load 8 FiscalYearManagement 'U|xtsel2'
+.continue EL001 ? _(G|mehr)
+.load 8 line '8|selzeile'
+.continue EL002 ? _(U|xbuchtyp = "S")
+.continue EL003 ? _(_(8|koest = "(48)"))
+.formula U|xtsel1 = U|xtsel1 + ";koest=(49)"
+.continue FI003
+!EL003
+.formula U|xtsel1 = U|xtsel1 + ";fbest=(49)"
+!FI003
+.continue FI002
+!EL002
+.formula U|xtsel1 = U|xtsel1 + ";fbest=(49)"
+!FI002
+.formula U|xtsel2 = U|xtsel1 + ";adatgmon=" + 'F|fystartdate(U|xgjahr, U|xmonat)' + "!;edatgmon=!" + 'F|fyenddate(U|xgjahr, U|xmonat)'
+.load 9 FiscalYearManagement 'U|xtsel2'
+.continue EL004 ? _(_(G|mehr))
+.formula U|xtsel2    = U|xtsel1 + ";monname=`"
+.load 9 FiscalYearManagement 'U|xtsel2'
+.continue EL005 ? _(_(G|mehr))
+.copy U|xbbuchbar = G|FALSE
+.set trans +
+.formula xtfehl    = "GeschÑftsjahr ist nicht bebuchbar"
+.set trans -
+!EL005
+!EL004
+.continue FI001
+!EL001
+.set trans +
+.formula U|xtfehl = "GeschÑftsjahr nicht ermittelbar"
+.set trans -
+!FI001
+.load 9
+.continue

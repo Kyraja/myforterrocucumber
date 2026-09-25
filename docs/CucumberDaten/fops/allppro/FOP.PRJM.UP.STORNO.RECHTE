@@ -1,0 +1,80 @@
+..!interpreter english declaration noabbrev
+.. at 2017-03-20, 16:19
+.set trans -
+..========================================================================
+..==  Name              : FOP.PRJM.UP.STORNO.RECHTE
+..==  Pfad              : allppro
+..==  Funktion          : PrÅfung ob das Recht zum Stornieren (allKonfig) besteht
+..==                      PrÅfung ob Storno noch mîglich (WiP Abschluss, Monatsabschluss prÅfen)
+..==
+..==                      Eingabe: xybudat   - Buchungsdatum
+..==                               xyprojekt - Projekt
+..==
+..==                      Ausgabe: xybstorno - Storno mîglich ja/nein
+..==
+..==                      LADE 8 PUFFER wird verwendet
+..==
+..==  Erstellungsdatum  : 07.09.2011
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"  ? _F|defined(U|xydbgrprojekt) ; _F|defined(U|xydbgrwipstat)
+..====================================================
+.type GD        xybudat         ? _F|defined(U|xybudat)
+.type GD        xbudat          ? _F|defined(U|xbudat)
+.type BOOL      xybstorno       ? _F|defined(U|xybstorno)
+.type text      xyprojekt       ? _F|defined(U|xyprojekt)
+.type text      xbuchtyp        ? _F|defined(U|xbuchtyp)
+.type text      xtsel           ? _F|defined(U|xtsel)
+.type INTEGER   xi1             ? _F|defined(U|xi1)
+.type INTEGER   xi2             ? _F|defined(U|xi2)
+.type GD        xd1             ? _F|defined(U|xd1)
+.type integer   xprocsp         ? _F|defined(U|xprocsp)
+..====================================================
+.copy U|xybstorno = G|TRUE
+.continue EL001 ? _(_(F|empty(F|sysinfo(10)^ykonfigprjm^ypmerlstornobuch)))
+.input "allppro/FOP.PRJM.UP.GETPERMISSIONS" ? _F|defined(U|xypermissions)
+.copy U|xybstorno = F|defined(F|map(U|xypermissions, 'F|sysinfo(10)^ykonfigprjm^ypmerlstornobuch^id'))
+!EL001
+.continue EL002 ? _(_(U|xybstorno))
+.set TRANS +
+.box Fehler
+Sie haben keine Berechtigung Buchungen zu stornieren!
+Storno ist nicht mîglich!
+.set TRANS -
+.load 8
+.continue
+!EL002
+.continue EL003 ? _(_(F|empty(U|xybudat)))
+.copy    U|xbudat   = U|xybudat
+.formula U|xbuchtyp = "S"
+.input "allpstart/PRUEF.BUDAT"
+.continue EL004 ? _(_(U|xbbuchbar))
+.set trans +
+.box Hinweis
+Das Datum 'U|xbudat' liegt in einer abgeschlossenen Periode.
+.set trans -
+.error
+.end 1
+!EL004
+!EL003
+.continue EL005 ? _((_(F|empty(U|xybudat))) & (_(F|empty(U|xyprojekt))) & (_(U|xyprojekt = "(0,0,0)")))
+.formula U|xd1   = 'U|xybudat:8'<<6 + "01"
+.formula U|xd1   =  U|xd1 + 31
+.formula U|xd1   = 'U|xd1:8'<<6 + "01"
+.formula U|xd1   =  U|xd1 - 1
+.formula U|xtsel = "$,,yprojekt==" + U|xyprojekt + ";ystichtag==" + U|xd1:8 + ";ybabgeschlossen==1;@filingmode=(Active)"
+.load 8 group 'U|xydbgrwipstat' 'U|xtsel'
+.continue EL006 ? _(G|mehr)
+.set TRANS +
+.box Hinweis
+Das Datum 'U|xybudat' liegt in einer abgeschlossenen WiP-Periode.
+Storno ist nicht mîglich!
+.set TRANS -
+.copy U|xybstorno = G|FALSE
+.load 8
+.continue
+!EL006
+!EL005
+.load 8
+.continue

@@ -1,0 +1,1089 @@
+..!interpreter english
+..@@BEGINHEAD
+..========================================================================
+..==
+..==  Name              : PRUEF.PARTNERINFO
+..==
+..==  Pfad              : dfue
+..==
+..==  Funktion          : in ABAS die Partnerinformationen aus dem EDI-Nachricht prÅfen
+..==
+..==
+..==  Erstellungsdatum  : 01.11.2002
+..==
+..==  Autor             : Ozan Kesim
+..==  Verantwortlicher  : mh
+..==
+..==  Menuepunkte       :
+..==
+..==  Maskenprioritaet
+..==  bei EFOP          :
+..==
+..==  Besonderheiten    :
+..==
+..==  Aenderungshistorie:
+..==
+..#KOR#EDI-MODUL#DATUM#éNDERUNGS-INDEX#MitarbeiterkÅrzel#
+..#KOR#EDL#01.11.2002#0#ok#
+..#KOR#EDL#29.01.2003#1#ok#
+..#KOR#EDL#31.01.2003#2#ok# EDI-Info-Eintrag-Pruefen jetzt als Prozedur
+..#KOR#EDL#07.02.2003#3#ok# Fehlertext wurden standardisiert
+..#KOR#EDL#11.06.2003#4#ok#
+..#KOR#EDL#07.07.2003#5#ok#
+..#KOR#EDL#01.08.2003#6#ok#
+..#KOR#EDL#11.08.2003#7#ok#
+..#KOR#EDL#28.08.2003#8#ok#
+..#KOR#EDL#20.11.2003#9#ok#
+..#KOR#EDL#22.02.2005#10#ok#
+..========================================================================
+..@@ENDHEAD
+..
+.input ARB
+..
+.. variablendefinition
+..@@BEGINVARDEFS
+..====================================================
+.set trans +
+..>> variablendefinition
+..>>
+..**ok,11.06.2003 (xgrpidkundeab ist NEU)
+.type integer xgrpidkundeab
+..**ok,07.07.2003 (xprkunde ist NEU)
+.type text xprkunde
+..
+.. alle variablen mÅssen definiert sein, sonst bricht das programm ab
+.set demand -
+..
+.. ----------------------------------------
+.continue EPROCDEF
+.. procedure definitions
+..
+!PROC001: ----- FEHLER -----
+.. FEHLER
+.formula xbfehler = true
+..
+..**ok,11.06.2003 (Fehlertexte getrennt ausgegeben)
+..
+.output addedto 'xdfehler'
+.input DATEI.F
+?'xtxt1' ? +xtxt1 > 0
+?'xtxt2' ? +xtxt2 > 0
+.output
+..
+.continue 'xprocst.xprocsp'
+..
+!EPROCDEF: ----- end procedure definitions -----
+.. ----------------------------------------
+..
+..>> Init RÅckgabewerte: kein Erfolg der Operation
+.formula xprocreturn = false
+..
+.. >> Initialisieren temporÑre Variablen fÅr Suchergebnisse
+..>> Fehlercode 0
+.formula xedifcode = 0
+..>> max. Fehlercode 5
+.formula xedifcodemax = 5
+..>> Bearbeitungsstatus 2
+.formula xedistatus = 2
+..>> Ident-Nr. Kunde
+.formula xidkundeab = ""
+..>> GLN-Nr. Kunde
+.formula xglkundeab = ""
+..>> Ident-Nr. Kundenkontakt
+.formula xidkundeabs = ""
+..>> GLN-Nr. Kundenkontakt
+.formula xglkundeabs = ""
+..>> Ident-Nr. RechnungsempfÑnger
+.formula xidkundeabr = ""
+..>> GLN-Nr. RechnungsempfÑnger
+.formula xglkundeabr = ""
+..>> Eintrag fÅr EDI-EDL-Meldungen in EDI-Info Kundenkontakt
+..>> aktiv
+.formula xediaktiv = false
+..>> manuell
+.formula xedimanu = false
+..>> automatisch
+.formula xediauto = false
+..
+.. PRöFEN DER PARTNER-INFOS
+.select edifact 'xedinumactinnachr1'
+..
+.. >> Merken Variablen des abas EDI-Datensatzes
+..>> Ident-Nr. Kunde
+.formula xidkundeab = idkundeab
+..>> Lieferanten-Nr bei Kunde
+.formula xidabkunde = idabkunde
+..>> GLN-Nr. Kunde
+.formula xglkundeab = glkundeab
+..>> Ident-Nr. WarenempfÑnger
+.formula xidkundeabs = idkundesab
+..>> GLN-Nr. WarenempfÑnger
+.formula xglkundeabs = glkundesab
+..>> Ident-Nr. RechnungsempfÑnger
+.formula xidkundeabr = idkunderab
+..>> GLN-Nr. RechnungsempfÑnger
+.formula xglkundeabr = glkunderab
+..>> Werk
+.formula xwerk = werk
+..>> Abladestelle
+.formula xablstelle = ablstelle
+..
+.. Validate Buyer/Customer for Credit Notes and ESP withdrawal messages
+.. ESP messages with function 30 and 35 do not create a transaction in abas ERP.
+.. For these messages the buyer/customer is not validated.
+.. Note: A validation of the goods recipient should still be done!
+..
+..
+.continue EL001 ? _(H|funktion="35" ; H|funktion="30")
+.. IF001
+.. do nothing
+..
+.continue FI001
+!EL001
+.reserve
+..
+.. PRöFEN BESTELLER/KUNDE AUS DEM BUY1-Satzart
+.. Suchen mit Kunden-Nr in ABAS
+..
+.continue EL002 ? _(((xidkundeab >> "") << "") <> "")
+.. IF002
+.select customer 'xidkundeab'
+..
+..
+.continue EL003 ? _(mehr)
+.. IF003
+..
+.continue EL004 ? _(gruppe = 2)
+.. IF004
+.formula xidkundeab = firma
+.formula xglkundeab = gln
+.formula xgrpidkundeab = 2
+..
+.continue FI004
+!EL004
+.formula xidkundeab = num
+.formula xglkundeab = gln
+.formula xgrpidkundeab = 1
+..
+!FI004
+..
+.continue FI003
+!EL003
+..>> "Kunde/Kundenkontakt aus BUY1-Segment fÅr Kunde nicht gefunden (Ident-Nr.)"
+.formula xedifcode = 5
+..
+.. Fehlertext
+.formula xtxt1 = "- Kunde/Kundenkontakt-ID aus BUY1-Segment: " + 'xidkundeab' + " nicht gefunden!"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+..
+..**ok,29.01.2003 (.fo xidkundeab = "" hier NEU)
+.formula xidkundeab = ""
+..
+!FI003
+..
+!EL002
+.. FI002
+..
+..
+.continue EL005 ? _(xidkundeab = "")
+.. IF005
+.. Suchen mit Kunden-GLN-Nr
+..
+.continue EL006 ? _(((xglkundeab >> "") << "") <> "")
+.. IF006
+.formula U|xkdsuchschluessel1 = "$,,;@gruppe=1.2;@ablage=(1);@zeilen=(0);gln=" + xglkundeab
+.select customer 'xkdsuchschluessel1'
+..
+..
+.continue EL007 ? _(mehr)
+.. IF007
+..
+.continue EL008 ? _(gruppe = 2)
+.. IF008
+..**ok,22.02.2005 (unten bei gruppe 2 xidkundeab = firma)
+.formula xidkundeab = firma
+.formula xglkundeab = gln
+.formula xgrpidkundeab = 2
+..
+.continue FI008
+!EL008
+.formula xidkundeab = num
+.formula xglkundeab = gln
+.formula xgrpidkundeab = 1
+..
+!FI008
+..
+.continue FI007
+!EL007
+..>> "Kunde/Kundenkontakt aus BUY1 fÅr Kunde nicht gefunden (GLN-Nr.)"
+.formula xedifcode = 4
+..
+.. Fehlertext
+.formula xtxt1 = "- Kunde/Kundenkontakt mit GLN-Nr aus BUY1-Segment: " + 'xglkundeab' + " nicht gefunden!"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+..
+.formula xglkundeab = ""
+..
+!FI007
+..
+!EL006
+.. FI006
+..
+!EL005
+.. FI005
+..
+..
+.continue EL009 ? _(xidkundeab = "")
+.. IF009
+.. Suchen mit Lieferanten-Nr bei Kunde
+..**ok,11.06.2003 (auch mit "Lieferanten-Nr bei Kunde" gesucht)
+..
+..
+.continue EL010 ? _(((xidabkunde >> "") << "") <> "")
+.. IF010
+.formula xkdsuchschluessel1 = xSELKSILId + ",frbez=" + xidabkunde
+.select customer 'xkdsuchschluessel1'
+..
+..
+.continue EL011 ? _(mehr)
+.. IF011
+.formula xidkundeab = num
+.formula xglkundeab = gln
+.formula xgrpidkundeab = 1
+..
+..**ok,11.06.2003 (es wird geprÅft, ob mehrere Kunden mit der gleichen Lief-Nr)
+..
+.select customer
+..
+..
+.continue EL012 ? _(mehr)
+.. IF012
+.formula xedifcode = 3
+..
+.. Fehlertext
+.formula xtxt1 = "- Mehrere Kunden mit der gleichen Lieferanten-Nr bei Kunde"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+..
+.formula xidkundeab = ""
+..
+!EL012
+.. FI012
+..
+.continue FI011
+!EL011
+.formula xedifcode = 3
+..
+.. Fehlertext
+.formula xtxt1 = "- Kunde/Kundenkontakt-ID aus BUY1-Segment ohne gÅltige Kunden-Information"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC001
+!RET004
+.formula xprocsp = xprocsp - 1
+..
+!FI011
+..
+.continue FI010
+!EL010
+.formula xedifcode = 3
+..
+.. Fehlertext
+.formula xtxt1 = "- Kunde/Kundenkontakt-ID aus BUY1-Segment ohne gÅltige Kunden-Information"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC001
+!RET005
+.formula xprocsp = xprocsp - 1
+..
+!FI010
+..
+!EL009
+.. FI009
+..
+..
+.continue EL013 ? _(xidkundeab = "")
+.. IF013
+.. Suchen mit Werk und Abladestelle
+..**ok,11.06.2003 (auch mit Werk und Abladestelle gesucht)
+..
+..
+.continue EL014 ? _((((xwerk >> "") << "") <> "") ; (((xablstelle >> "") << "") <> ""))
+.. IF014
+.formula xkdsuchschluessel1 = xSELKSILId + ",werk==" + xwerk + ";ablstelle==" + xablstelle
+.select customer 'xkdsuchschluessel1'
+..
+..
+.continue EL015 ? _(mehr)
+.. IF015
+.formula xidkundeab = firma
+.formula xgrpidkundeab = 1
+..
+..**ok,20.11.2003 (es wird geprÅft, ob mehrere Kunden mit gleichen Werk oder Ablade)
+..
+.select customer
+..
+..
+.continue EL016 ? _(mehr)
+.. IF016
+.formula xedifcode = 3
+..
+.. Fehlertext
+.formula xtxt1 = "- Mehrere Kunden mit dem gleichen Werk und/oder der gleichen Abladestelle"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC001
+!RET006
+.formula xprocsp = xprocsp - 1
+..
+.formula xidkundeab = ""
+..
+!EL016
+.. FI016
+..
+.continue FI015
+!EL015
+.formula xedifcode = 3
+..
+.. Fehlertext
+.formula xtxt1 = "- Kunde/Kundenkontakt-ID aus BUY1-Segment ohne gÅltige Kunden-Information"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC001
+!RET007
+.formula xprocsp = xprocsp - 1
+..
+!FI015
+..
+.continue FI014
+!EL014
+.formula xedifcode = 3
+..
+.. Fehlertext
+.formula xtxt1 = "- Kunde/Kundenkontakt-ID aus BUY1-Segment ohne gÅltige Kunden-Information"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC001
+!RET008
+.formula xprocsp = xprocsp - 1
+..
+!FI014
+..
+!EL013
+.. FI013
+..
+.select
+..
+!FI001
+..
+..  PrÅfen nach Differenz fÅr die GLN- und ID-Nummer aus EDI-Nachricht und ABAS
+..>> Test, ob:
+..>> - Ident-Nr. Kunde in EDI-Datensatz nicht leer und
+..>> - identifizierte Ident-Nr. aus ABAS nicht leer und
+..>> - beide Ident-Nr. unterschiedlich
+..
+..
+.continue EL017 ? _((((idkundeab >> "") << "") <> "") & (((xidkundeab >> "") << "") <> "") & (((idkundeab >> "") << "") <> ((xidkundeab >> "") << "")))
+.. IF017
+..>> "Differenz Ident-Nr. BUY1-Segment (GLN-Nr.) und ABAS-Kunde/Kundenkontakt"
+.formula xedifcode = 6
+..
+.formula xtxt1 = "- Differenz zwischen der Kunden-Ident-Nr. " + 'idkundeab' + " aus dem BUY1-Segment"
+.formula xtxt1 = xtxt1 + " und der Kunden-Ident-Nr. " + 'xidkundeab' + " aus ABAS"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC001
+!RET009
+.formula xprocsp = xprocsp - 1
+..
+.continue FI017
+!EL017
+..>> Test, ob:
+..>> - GLN-Nr. Kunde in EDI-Datensatz nicht leer und
+..>> - identifizierte GLN-Nr. nicht leer
+..>> - beide GLN-Nr. unterschiedlich
+..
+..
+.continue EL018 ? _((((glkundeab >> "") << "") <> "") & (((xglkundeab >> "") << "") <> "") & (((glkundeab >> "") << "") <> ((xglkundeab >> "") << "")))
+.. IF018
+..>> "Differenz GLN-Nr. BUY1-Segment (Ident-Nr.) und ABAS-Kunde/Kundenkontakt
+.formula xedifcode = 7
+..
+.formula xtxt1 = "- Differenz zwischen der Kunden-GLN-Nr. " + 'glkundeab' + " aus dem BUY1-Segment"
+.formula xtxt1 = xtxt1 + " und der Kunden-GLN-Nr. " + 'xglkundeab' + " aus ABAS"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC001
+!RET010
+.formula xprocsp = xprocsp - 1
+..
+!EL018
+.. FI018
+..
+!FI017
+..
+..**ok,07.07.2003 (jetzt EDI-Info hier entfernt und nur bei WarenempfÑnger geprÅft)
+..
+.reserve
+..
+.. PRöFEN WARENEMPFéNGER AUS DEM DPA-Satzart
+.. Suchen mit Kunden-Nr bei Lieferant
+..
+.continue EL019 ? _(((idkundesab >> "") << "") <> "")
+.. IF019
+..**ok,11.06.2003 (xidkundesab --> xidkundeabs)
+..
+.formula xidkundeabs = idkundesab
+..
+.select customer 'idkundesab'
+..
+..
+.continue EL020 ? _(mehr)
+.. IF020
+.formula xidkundeabs = num
+.formula xglkundeabs = gln
+..
+.continue FI020
+!EL020
+..>> "Kunde/Kundenkontakt aus DPA1 fÅr Warenempf. nicht gefunden (Ident-Nr.)"
+.formula xedifcode = 10
+..
+.. Fehlertext
+.formula xtxt1 = "- Kunde/Kundenkontakt-ID: " + 'xidkundeabs' + " aus DPA1-Segment fÅr WarenempfÑnger nicht gefunden!"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC001
+!RET011
+.formula xprocsp = xprocsp - 1
+..
+.formula xidkundeabs = ""
+..
+!FI020
+..
+!EL019
+.. FI019
+..
+..
+.continue EL021 ? _(xidkundeabs = "")
+.. IF021
+.. Suchen mit GLN-Nr
+..
+.continue EL022 ? _(((glkundesab >> "") << "") <> "")
+.. IF022
+.formula xglkundeabs = glkundesab
+..
+.formula U|xkdsuchschluessel1 = "$,,;@gruppe=1.2;@ablage=(1);@zeilen=(0);gln=" + glkundesab
+.select customer 'xkdsuchschluessel1'
+..
+..
+.continue EL023 ? _(mehr)
+.. IF023
+.formula xidkundeabs = num
+.formula xglkundeabs = gln
+..
+.continue FI023
+!EL023
+..>> "Kunde/Kundenkontakt aus DPA1-Segment fÅr Warenempf. nicht gefunden (GLN-Nr.)"
+.formula xedifcode = 9
+..
+.. Fehlertext
+.formula xtxt1 = "- Kunde/Kundenkontakt mit GLN-Nr: " + 'xglkundeabs' + " aus DPA1-Segment fÅr WarenempfÑnger nicht gefunden!"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC001
+!RET012
+.formula xprocsp = xprocsp - 1
+..
+.formula xglkundeabs = ""
+..
+!FI023
+..
+.continue FI022
+!EL022
+..>> "NAD-Segment fÅr WarenempfÑnger ohne gÅltige Kunden/Kundenkontakt-Information"
+.formula xedifcode = 8
+..
+.. Fehlertext
+.formula xtxt1 = "- DPA1-Segment fÅr WarenempfÑnger ohne gÅltige Kunden/Kundenkontakt-Information"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET013" 
+.continue PROC001
+!RET013
+.formula xprocsp = xprocsp - 1
+..
+!FI022
+..
+!EL021
+.. FI021
+..
+..**ok,11.06.2003 (wenn xidkundeabs leer ist, dann weitere Suchaktion mit idkundeab, werk und ablade)
+..
+..
+.continue EL024 ? _(xidkundeabs = "")
+.. IF024
+..**ok,11.08.2003 (die PrÅfung xidkundeab <> "" UND xgrpidkundeab = 1 wurde entfernt)
+..
+.. Suchen mit Werk und Ablade
+..
+.continue EL025 ? _((xwerk <> "") ; (xablstelle <> ""))
+.. IF025
+.formula xtsel = "$,,;@gruppe=2;@ablageart=(3);firma=" + xidkundeab + ";werk==" + xwerk + ";ablstelle==" + xablstelle + ";ablagef=0"
+.select customer 'xtsel'
+..
+..
+.continue EL026 ? _(mehr)
+.. IF026
+.formula xidkundeabs = num
+.formula xglkundeabs = gln
+..
+..**ok,28.08.2003 (jetzt Fehler auf 0 gestellt)
+.formula xedifcode = 0
+..
+.continue FI026
+!EL026
+..**ok,01.08.2003 (neu DFUE."Vorgangsart".DTR prÅfen)
+.type text xvorart ? _defined(xvorart)
+..
+..
+.continue EL027 ? _(xvorart<>"")
+.. IF027
+.. >> Aus .DTR Lief-Nr bei Kunde, Werk -> Werk neu
+.. ----------------------------------------
+.reserve
+.formula U|xkommando = "edpinfosys.sh -P -n PARTNERID -s kedi,kbusuchen,kbuschreiben -w " + 'U|xedinumactinnachr1' + ";1;1 -k - -f -"
+.system 'U|xkommando' password background
+..
+.select
+.. ----------------------------------------
+..
+.. Ersetzte Werk prÅfen
+.formula xtsel = "$,,;@gruppe=2;@ablageart=(3);firma=" + xidkundeab + ";werk==" + xwerk + ";ablstelle==" + xablstelle + ";ablagef=0"
+.select customer 'xtsel'
+..
+..
+.continue EL028 ? _(mehr)
+.. IF028
+.formula xidkundeabs = num
+.formula xglkundeabs = gln
+..
+..**ok,28.08.2003 (jetzt Fehler auf 0 gestellt)
+.formula xedifcode = 0
+..
+.continue FI028
+!EL028
+.. Fehlertext
+.formula xtxt1 = "- DPA1-Segment fÅr WarenempfÑnger ohne gÅltige Kunden/Kundenkontakt-Information"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET014" 
+.continue PROC001
+!RET014
+.formula xprocsp = xprocsp - 1
+..
+.formula xidkundeabs = ""
+..
+!FI028
+..
+.continue FI027
+!EL027
+.. Fehlertext
+.formula xtxt1 = "- DPA1-Segment fÅr WarenempfÑnger ohne gÅltige Kunden/Kundenkontakt-Information"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET015" 
+.continue PROC001
+!RET015
+.formula xprocsp = xprocsp - 1
+..
+.formula xidkundeabs = ""
+..
+!FI027
+..
+!FI026
+..
+!EL025
+.. FI025
+..
+!EL024
+.. FI024
+..
+.select
+..
+.. PrÅfen nach Differenz fÅr die GLN- und ID-Nummer aus EDI-Nachricht und ABAS
+..>> Test, ob:
+..>> - Ident-Nr. WarenempfÑnger in EDI-Datensatz nicht leer und
+..>> - identifizierte Ident-Nr. nicht leer
+..>> - beide Ident-Nr. unterschiedlich
+..
+..
+.continue EL029 ? _((((idkundesab >> "") << "") <> "") & (((xidkundeabs >> "") << "") <> "") & (((idkundesab >> "") << "") <> ((xidkundeabs >> "") << "")))
+.. IF029
+..>> "Differenz Ident-Nr. DPA1-Segment fÅr Warenempf. (Ident-Nr.) und ABAS-Kunde/Kundenkontakt"
+.formula xedifcode = 11
+..
+.formula xtxt1 = "- Differenz zwischen der Kunden-Ident-Nr. " + 'idkundesab' + " aus dem DPA1-Segment"
+.formula xtxt1 = xtxt1 + " und der Kunden-Ident-Nr. " + 'xidkundeabs' + " aus ABAS"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET016" 
+.continue PROC001
+!RET016
+.formula xprocsp = xprocsp - 1
+..
+.continue FI029
+!EL029
+..>> - GLN-Nr. WarenempfÑnger in EDI-Datensatz nicht leer und
+..>> - identifizierte GLN-Nr. nicht leer
+..>> - beide GLN-Nr. unterschiedlich
+..
+..
+.continue EL030 ? _((((glkundesab >> "") << "") <> "") & (((xglkundeabs >> "") << "") <> "") & (((glkundesab >> "") << "") <> ((xglkundeabs >> "") << "")))
+.. IF030
+..>> "Differenz GLN-Nr. DPA1-Segment fÅr Warenempf. (GLN-Nr.) und ABAS-Kunde/Kundenkontakt
+.formula xedifcode = 12
+..
+.formula xtxt1 = "- Differenz zwischen der Kunden-GLN-Nr.: " + 'glkundesab' +  " aus dem DAP1-Segment"
+.formula xtxt1 = xtxt1 + " und der Kunden-Ident-Nr. " +  'xglkundeabs' + " aus ABAS"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET017" 
+.continue PROC001
+!RET017
+.formula xprocsp = xprocsp - 1
+..
+!EL030
+.. FI030
+..
+!FI029
+..
+..
+.continue EL031 ? _(xidkundeabs <> "")
+.. IF031
+.. EDI-Info-Eintrag prÅfen
+.. ----------------------------------------
+.reserve
+.formula U|xediaktiv = false
+.formula U|xediauto = false
+..
+.formula U|xprkunde = U|xidkundeabs
+..
+..
+.continue EL032 ? _(F|empty(U|xprkunde))
+.. IF032
+.continue FI032
+!EL032
+.select customer 'U|xprkunde'
+.input "DFUE.GET.PROTOK"  ?  G|mehr
+..
+!FI032
+..
+..
+.continue EL033 ? _(U|xediaktiv ; _F|defined(H|firma))
+.. IF033
+.continue FI033
+!EL033
+.select customer 'H|firma'
+.input "DFUE.GET.PROTOK"  ?  G|mehr
+..
+!FI033
+..
+.formula U|xintedi = "EDL.STD"  ?  F|empty(U|xintedi)
+.formula U|xextedi = "EDLPRUEF.STD"  ?  F|empty(U|xextedi)
+..
+.. Processing of messages has to be active in the customer identified for this message.
+.. Esp messages with function 30 and 35 are "information only", and will not be processed.
+.. These messages will not give an error, if edi is not active for their customer.
+..
+..
+.continue EL034 ? _((U|xediaktiv) ; (H|funktion="30" ; H|funktion="35"))
+.. IF034
+.. not an error
+..
+.continue FI034
+!EL034
+.. Fehler 21 ins Protokoll
+.. "Kunde ohne EDI-Info-Eintrag fÅr Verarbeitung VKEDL*-/AM/"
+.formula U|xedifcode = 21
+..
+.formula U|xtxt1 = "- Kunde " + 'xprkunde' + " ohne EDI-Info-Eintrag fÅr die Verarbeitung dieser EDI-Nachricht: " + 'xmmvvl'
+.formula U|xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET018" 
+.continue PROC001
+!RET018
+.formula xprocsp = xprocsp - 1
+..
+.. Fehler 21 als status in EDI-Nachricht
+.select lock edifact 'xedinumactinnachr1'
+.formula fcode = 21
+.formula status = 4
+.rewrite
+..
+!FI034
+..
+.select
+.. ----------------------------------------
+..
+!EL031
+.. FI031
+..
+.. Validate Invoice Recipient for Credit Notes
+.. Invoice Recipients are validated only for credit notes.
+.. For ESP messages these are often not transmitted, and would cause unnecessary errors.
+..
+..
+.continue EL035 ? _(H|edinachr^nummer="2112")
+.. IF035
+.reserve
+..
+.. PRöFEN RECHNUNGSEMPFéNGER AUS DEM IV1-Satzart
+.. Suchen mit Kunden-Nr bei Lieferant
+..
+.continue EL036 ? _(((idkunderab >> "") << "") <> "")
+.. IF036
+..**ok,11.06.2003 (xidkunderab --> xidkundeabr)
+..
+.formula xidkundeabr = idkunderab
+..
+..>> Ermitteln, ob Kunde mit ABAS-Ident-Nr. aus EDI-Nachricht vorhanden
+.select customer 'idkunderab'
+..
+..
+.continue EL037 ? _(mehr)
+.. IF037
+..
+.continue EL038 ? _(gruppe = 1)
+.. IF038
+.formula xidkundeabr = num
+.formula xglkundeabr = gln
+..
+.continue FI038
+!EL038
+..>> "Kundenkontakt aus IV1-Segment fÅr Rechnungsempf. (Ident-Nr.)"
+.formula xedifcode = 17
+..
+.. Fehlertext
+.formula xtxt1 = "- Kunde/Kundenkontakt-ID: " + 'xidkunderab' + " aus IV1-Segment fÅr RechnungsempfÑnger nicht gefunden!"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET019" 
+.continue PROC001
+!RET019
+.formula xprocsp = xprocsp - 1
+..
+.formula xidkundeabr = ""
+..
+!FI038
+..
+.continue FI037
+!EL037
+..>> "Kunde aus IV1-Segment fÅr Rechnungsempf. nicht gefunden (Ident-Nr.)"
+.formula xedifcode = 16
+..
+.. Fehlertext
+.formula xtxt1 = "- Kunde/Kundenkontakt-ID: " + 'idkunderab' + " aus IV1-Segment fÅr RechnungsempfÑnger nicht gefunden!"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET020" 
+.continue PROC001
+!RET020
+.formula xprocsp = xprocsp - 1
+..
+!FI037
+..
+!EL036
+.. FI036
+..
+..
+.continue EL039 ? _(F|empty(xidkundeabr))
+.. IF039
+.. Suchen mit GLN-Nr
+..>> Test, ob ABAS-GLN-Nr. des RechnungsempfÑngers in EDI-Nachricht
+..
+..
+.continue EL040 ? _(((glkunderab >> "") << "") <> "")
+.. IF040
+.formula xglkundeabr = glkunderab
+..
+.. Ermitteln, ob ABAS-Kunde mit ABAS-GLN-Nr. aus EDI-Nachricht vorhanden
+.formula U|xkdsuchschluessel1 = "$,,;@gruppe=1.2;@ablage=(1);@zeilen=(0);gln=" + glkunderab
+.select customer 'xkdsuchschluessel1'
+..
+..
+.continue EL041 ? _(mehr)
+.. IF041
+..
+.continue EL042 ? _(gruppe = 1)
+.. IF042
+.formula xidkundeabr = num
+.formula xglkundeabr = gln
+..
+.continue FI042
+!EL042
+..>> "Kundenkontakt aus IV1-Segment fÅr Rechnungsempf. (GLN-Nr.)"
+.formula xedifcode = 15
+..
+.. Fehlertext
+.. mh, 04.09.2007: Korrektur, die GLN-Nummer steht in der Variablen xglkundeabr.
+.formula xtxt1 = "- Kundenkontakt mit GLN-Nr: " + 'xglkundeabr' + " aus IV1-Segment fÅr RechnungsempfÑnger nicht gefunden!"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET021" 
+.continue PROC001
+!RET021
+.formula xprocsp = xprocsp - 1
+..
+.formula xglkundeabr = ""
+..
+!FI042
+..
+.continue FI041
+!EL041
+..>> "Kunde aus IV1-Segment fÅr Rechnungsempf. nicht gefunden (GLN-Nr.)"
+.formula xedifcode = 14
+..
+.. Fehlertext
+.formula xtxt1 = "- Kunde mit GLN-Nr: " + 'xglkunderab' + " aus IV1-Segment fÅr RechnungsempfÑnger nicht gefunden!"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET022" 
+.continue PROC001
+!RET022
+.formula xprocsp = xprocsp - 1
+..
+.formula xglkundeabr = ""
+..
+!FI041
+..
+.continue FI040
+!EL040
+..>> "IV1-Segment fÅr Rechnungsempf. ohne gÅltige Kunden-Information"
+.formula xedifcode = 13
+..
+.. Fehlertext
+.formula xtxt1 = "- IV1-Segment fÅr RechnungsempfÑnger ohne gÅltige Kunden-Information"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET023" 
+.continue PROC001
+!RET023
+.formula xprocsp = xprocsp - 1
+..
+!FI040
+..
+!EL039
+.. FI039
+..
+.select
+..
+.continue FI035
+!EL035
+.. do nothing
+..
+!FI035
+..
+.. PrÅfen nach Differenz fÅr die GLN- und ID-Nummer aus EDI-Nachricht und ABAS
+..>> - Ident-Nr. RechnungsempfÑnger in EDI-Datensatz nicht leer und
+..>> - identifizierte Ident-Nr. nicht leer
+..>> - beide Ident-Nr. unterschiedlich
+..
+..
+.continue EL043 ? _((((idkunderab >> "") << "") <> "") & (((xidkundeabr >> "") << "") <> "") & (((idkunderab >> "") << "") <> ((xidkundeabr >> "") << "")))
+.. IF043
+..>> "Differenz Ident-Nr. IV1-Segment fÅr Rechnungsempf. (Ident-Nr.) und ABAS-Kunde"
+.formula xedifcode = 18
+..
+.formula xtxt1 = "- Differenz zwischen der Kunden-Ident-Nr. " + 'idkunderab' + " aus dem IV1-Segment"
+.formula xtxt1 = xtxt1 + " und der Kunden-Ident-Nr. " + 'xidkundeabr' + " aus ABAS"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET024" 
+.continue PROC001
+!RET024
+.formula xprocsp = xprocsp - 1
+..
+.continue FI043
+!EL043
+..>> - GLN-Nr. RechnungsempfÑnger in EDI-Datensatz nicht leer und
+..>> - identifizierte GLN-Nr. nicht leer
+..>> - beide Ident-Nr. unterschiedlich
+..
+..
+.continue EL044 ? _((((glkunderab >> "") << "") <> "") & (((xglkundeabr >> "") << "") <> "") & (((glkunderab >> "") << "") <> ((xglkundeabr >> "") << "")))
+.. IF044
+..>> "Differenz GLN-Nr. IV1-Segment fÅr Rechnungsempf. (GLN-Nr.) und ABAS-Kunde"
+.formula xedifcode = 19
+..
+.formula xtxt1 = "- Differenz zwischen der Kunden-GLN-Nr. " + 'glkunderab' + " aus dem IV1-Segment"
+.formula xtxt1 = xtxt1 + " und der Kunden-Ident-Nr. " + 'xglkundeabr' + " aus ABAS"
+.formula xtxt2 =  ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET025" 
+.continue PROC001
+!RET025
+.formula xprocsp = xprocsp - 1
+..
+!EL044
+.. FI044
+..
+!FI043
+..
+.. SPEICHERN DER ANGABEN, STATUS, FEHLERCODE
+..>> Holen aktuellen neuen EDI-Datensatz zum Speichern der Informationen
+.select lock edifact 'xedinumactinnachr1'
+..
+..>> Speichern Partner-Informationen:
+..
+.. >> Kunde/Besteller
+..>> Test, ob:
+..>> - Ident-Nr. Kunde in EDI-Datensatz leer und
+..>> - identifizierte Ident-Nr. nicht leer
+..
+..
+.continue EL045 ? _((((idkundeab >> "") << "") = "") & (((xidkundeab >> "") << "") <> ""))
+.. IF045
+.formula idkundeab = xidkundeab
+..
+!EL045
+.. FI045
+..
+..>> Test, ob:
+..>> - GLN-Nr. Kunde in EDI-Datensatz aus leer und
+..>> - identifizierte GLN-Nr. nicht leer
+..
+..
+.continue EL046 ? _((((glkundeab >> "") << "") = "") & (((xglkundeab >> "") << "") <> ""))
+.. IF046
+.formula glkundeab = xglkundeab
+..
+!EL046
+.. FI046
+..
+.. >> WarenempfÑnger
+..>> Test, ob:
+..>> - Ident-Nr. WarenempfÑnger in EDI-Datensatz leer und
+..>> - identifizierte Ident-Nr. nicht leer
+..
+..
+.continue EL047 ? _((((idkundesab >> "") << "") = "") & (((xidkundeabs >> "") << "") <> ""))
+.. IF047
+.formula idkundesab = xidkundeabs
+..
+!EL047
+.. FI047
+..
+..>> Test, ob:
+..>> - GLN-Nr. WarenempfÑnger in EDI-Datensatz leer und
+..>> - identifizierte GLN-Nr. nicht leer
+..
+..
+.continue EL048 ? _((((glkundesab >> "") << "") = "") & (((xglkundeabs >> "") << "") <> ""))
+.. IF048
+.formula glkundesab = xglkundeabs
+..
+!EL048
+.. FI048
+..
+.. >> RechnungsempfÑnger
+..>> Test, ob:
+..>> - Ident-Nr. RechnungsempfÑnger in EDI-Datensatz leer und
+..>> - identifizierte Ident-Nr. nicht leer
+..
+..
+.continue EL049 ? _((((idkunderab >> "") << "") = "") & (((xidkundeabr >> "") << "") <> ""))
+.. IF049
+.formula idkunderab = xidkundeabr
+..
+!EL049
+.. FI049
+..
+..>> Test, ob:
+..>> - GLN-Nr. RechnungsempfÑnger in EDI-Datensatz leer und
+..>> - identifizierte GLN-Nr. nicht leer
+..
+..
+.continue EL050 ? _((((glkunderab >> "") << "") = "") & (((xglkundeabr >> "") << "") <> ""))
+.. IF050
+.formula glkunderab = xglkundeabr
+..
+!EL050
+.. FI050
+..
+.rewrite
+..
+.continue
+..

@@ -1,0 +1,265 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ARTIKELAKTE.BSTART.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : carue
+.. Funktion       : Datensammler fuer Business-App "Artikelakte"
+.. Functionality  : Data miner for Buisiness App "Product File"
+..*****************************************************************************
+.set trans -
+..
+.type i9     xanzahl
+.type M9.3   xsummge
+.type M9.3   xsumlimge
+.type M9.3   xmge
+.type M9.3   xlimge
+..
+.type text   xOffeneAuftraege
+.type text   xUngebuchteLieferscheine
+.type text   xGelieferteLieferscheine
+..
+.set trans +
+.formula U|xOffeneAuftraege = "Offene Auftragspositionen"
+.formula U|xUngebuchteLieferscheine = "Ungebuchte Lieferscheinpositionen"
+.formula U|xGelieferteLieferscheine = "Gelieferte Positionen"
+.set trans -
+..
+.type text   xBestand
+.type text   xFertigung
+.type text   xBestellungen
+..
+.set trans +
+.formula U|xBestand = "Bestand"
+.formula U|xFertigung = "Fertigung"
+.formula U|xBestellungen = "Bestellungen"
+.set trans -
+..
+.type text   xAlle
+.type text   xSeitDatum
+.type text   xBisDatum
+..
+.set trans +
+.formula U|xAlle = "Alle"                                        ? _F|empty(M|kdatumvon) & _F|empty(M|kdatumbis)
+.formula U|xSeitDatum = 'F|formatstr("Seit {1}", M|kdatumvon)'   ? _F|empty(M|kdatumvon)
+.formula U|xBisDatum = 'F|formatstr("Bis {1}", M|kdatumbis)'     ? _F|empty(M|kdatumbis)
+.set trans -
+..
+..
+..  Query evaluation
+.. ----------- ----- Selektion ----- -------------------------------------------
+.continue ANZVER  ?  M|kbversand
+.continue ANZBES  ?  M|kbbeschaffung
+.. ----------- ---------- ---------- -------------------------------------------
+.continue OFFAU   ?  M|kboffeneauftraege
+.continue OFFLI   ?  M|kbungebuchtels
+.continue BUCLI   ?  M|kbgeliefert
+.. ----------- ---------- ---------- -------------------------------------------
+.continue BESTA   ?  M|kbbestand
+.continue FERTI   ?  M|kbfertigung
+.continue BESTE   ?  M|kbbestellungen
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+..*****************************************************************************
+..
+!ANZVER
+..
+!OFFAU: Offene Auftraege
+.formula U|xanzahl = 0
+.formula U|xsummge = 0.0
+.formula U|xsumlimge = 0.0
+.formula U|xmge = 0.0
+.formula U|xlimge = 0.0
+..
+.formula M|select = 'F|formatstr("$,,;kotyp=={1};artikel=={2};tterm=!{4};kopf^kunde={5};@ablageart=(Active);@ordnung=kunde,tterm;@gruppe=2;aktiv=(Yes)", "(SalesOrder)", M|kartikel^id, M|kvon:8, M|kbis:8, M|kkunde^id)'                         ?  F|empty(M|basisartikel) ; (_F|empty(M|basisartikel) & _F|empty(M|kartikel))
+.formula M|select = 'F|formatstr("$,,;kotyp=={1};basisartikel=={3};tterm=!{5};kopf^kunde={6};@ablageart=(Active);@ordnung=kunde,tterm;@gruppe=2;aktiv=(Yes)", "(SalesOrder)", M|kartikel^id, M|basisartikel^id, M|kvon:8, M|kbis:8, M|kkunde^id)' ? _F|empty(M|basisartikel) & F|empty(M|kartikel)
+.select sales 'M|select'
+!NVER1K
+.continue EVER1K  ?  _G|mehr
+.input 'M|tab'
+.select sales
+.continue NVER1K
+!EVER1K
+..
+.continue EVER1F  ?  F|empty(M|kkunde)
+.continue EVER1F  ?  M|kkunde^gruppe<> 1
+..
+.formula M|select = 'F|formatstr("$,,;kotyp=={1};artikel=={2};tterm=!{4};kopf^kunde^firma={5};@ablageart=(Active);@ordnung=kunde,tterm;@gruppe=2;aktiv=(Yes)", "(SalesOrder)", M|kartikel^id, M|kvon:8, M|kbis:8, M|kkunde^id)'                         ?  F|empty(M|basisartikel) ; (_F|empty(M|basisartikel) & _F|empty(M|kartikel))
+.formula M|select = 'F|formatstr("$,,;kotyp=={1};basisartikel=={3};tterm=!{5};kopf^kunde^firma={6};@ablageart=(Active);@ordnung=kunde,tterm;@gruppe=2;aktiv=(Yes)", "(SalesOrder)", M|kartikel^id, M|basisartikel^id, M|kvon:8, M|kbis:8, M|kkunde^id)' ? _F|empty(M|basisartikel) & F|empty(M|kartikel)
+.select sales 'M|select'
+!NVER1F
+.continue EVER1F  ?  _G|mehr
+.input 'M|tab'
+.select sales
+.continue NVER1F
+!EVER1F
+..
+.continue END  ? _M|kbversand
+.make screen line +O
+.formula M|tvorgangsart = U|xOffeneAuftraege
+.formula M|tvorgangsanzahl = U|xanzahl
+.formula M|tvorgangsmenge =  U|xsumlimge
+.formula M|tzeitraum = U|xBisDatum
+.formula M|kmaxanzahl = M|tvorgangsanzahl  ?  M|tvorgangsanzahl > M|kmaxanzahl
+.formula M|kmaxmenge  = M|tvorgangsmenge   ?  M|tvorgangsmenge > M|kmaxmenge
+.copy M|tlagereinheit = M|klagereinheit
+..
+..
+!OFFLI: Ungebuchte Lieferscheine
+.formula U|xanzahl = 0
+.formula U|xsummge = 0.0
+.formula U|xsumlimge = 0.0
+.formula U|xmge = 0.0
+.formula U|xlimge = 0.0
+..
+.formula M|select = 'F|formatstr("$,,;kotyp=={1};artikel=={2};tterm=!;kopf^kunde={5};kopf^uebertr=(Yes);@ablageart=(Active);@ordnung=kunde,tterm;@gruppe=2", "(PackingSlip)", M|kartikel^id, M|kvon:8, M|kbis:8, M|kkunde^id)'                          ?  F|empty(M|basisartikel) ; (_F|empty(M|basisartikel) & _F|empty(M|kartikel))
+.formula M|select = 'F|formatstr("$,,;kotyp=={1};basisartikel=={3};tterm=!;kopf^kunde={6};kopf^uebertr=(Yes);@ablageart=(Active);@ordnung=kunde,tterm;@gruppe=2", "(PackingSlip)", M|kartikel^id, M|basisartikel^id, M|kvon:8, M|kbis:8, M|kkunde^id)'  ? _F|empty(M|basisartikel) & F|empty(M|kartikel)
+.select sales 'M|select'
+!NVER2K
+.continue EVER2K  ?  _G|mehr
+.input 'M|tab'
+.select sales
+.continue NVER2K
+!EVER2K
+..
+.continue EVER2F  ?  F|empty(M|kkunde)
+.continue EVER2F  ?  M|kkunde^gruppe<> 1
+..
+.formula M|select = 'F|formatstr("$,,;kotyp=={1};artikel=={2};tterm=!;kopf^kunde^firma={5};kopf^uebertr=(Yes);@ablageart=(Active);@ordnung=kunde,tterm;@gruppe=2", "(PackingSlip)", M|kartikel^id, M|kvon:8, M|kbis:8, M|kkunde^id)'                         ?  F|empty(M|basisartikel) ; (_F|empty(M|basisartikel) & _F|empty(M|kartikel))
+.formula M|select = 'F|formatstr("$,,;kotyp=={1};basisartikel=={3};tterm=!;kopf^kunde^firma={6};kopf^uebertr=(Yes);@ablageart=(Active);@ordnung=kunde,tterm;@gruppe=2", "(PackingSlip)", M|kartikel^id, M|basisartikel^id, M|kvon:8, M|kbis:8, M|kkunde^id)' ? _F|empty(M|basisartikel) & F|empty(M|kartikel)
+.select sales 'M|select'
+!NVER2F
+.continue EVER2F  ?  _G|mehr
+.input 'M|tab'
+.select sales
+.continue NVER2F
+!EVER2F
+..
+.continue END  ? _M|kbversand
+.make screen line +O
+.formula M|tvorgangsart = U|xUngebuchteLieferscheine
+.formula M|tvorgangsanzahl = U|xanzahl
+.formula M|tvorgangsmenge =  U|xsummge
+.formula M|tzeitraum = U|xAlle
+.formula M|kmaxanzahl = M|tvorgangsanzahl  ?  M|tvorgangsanzahl > M|kmaxanzahl
+.formula M|kmaxmenge = M|tvorgangsmenge  ?  M|tvorgangsmenge > M|kmaxmenge
+.copy M|tlagereinheit = M|klagereinheit
+..
+!BUCLI: Gebuchte Lieferscheine
+.formula U|xanzahl = 0
+.formula U|xsummge = 0.0
+.formula U|xsumlimge = 0.0
+.formula U|xmge = 0.0
+.formula U|xlimge = 0.0
+..
+.formula M|select = 'F|formatstr("$,,;kotyp=={1};artikel=={2};kopf^vom={3}!;kopf^kunde={5};kopf^uebertr=(No);@ablageart=(Both);@ordnung=kunde,kopf^vom;@gruppe=2", "(PackingSlip)", M|kartikel^id, M|kvon:8, M|kbis:8, M|kkunde^id)'                         ?  F|empty(M|basisartikel) ; (_F|empty(M|basisartikel) & _F|empty(M|kartikel))
+.formula M|select = 'F|formatstr("$,,;kotyp=={1};basisartikel=={3};kopf^vom={4}!;kopf^kunde={6};kopf^uebertr=(No);@ablageart=(Both);@ordnung=kunde,kopf^vom;@gruppe=2", "(PackingSlip)", M|kartikel^id, M|basisartikel^id, M|kvon:8, M|kbis:8, M|kkunde^id)' ? _F|empty(M|basisartikel) & F|empty(M|kartikel)
+.select sales 'M|select'
+!NVER3K
+.continue EVER3K  ?  _G|mehr
+.input 'M|tab'
+.select sales
+.continue NVER3K
+!EVER3K
+..
+.continue EVER3F  ?  F|empty(M|kkunde)
+.continue EVER3F  ?  M|kkunde^gruppe<> 1
+..
+.formula M|select = 'F|formatstr("$,,;kotyp=={1};artikel=={2};kopf^vom={3}!;kopf^kunde^firma={5};kopf^uebertr=(No);@ablageart=(Both);@ordnung=kunde,kopf^vom;@gruppe=2", "(PackingSlip)", M|kartikel^id, M|kvon:8, M|kbis:8, M|kkunde^id)'                         ?  F|empty(M|basisartikel) ; (_F|empty(M|basisartikel) & _F|empty(M|kartikel))
+.formula M|select = 'F|formatstr("$,,;kotyp=={1};basisartikel=={3};kopf^vom={4}!;kopf^kunde^firma={6};kopf^uebertr=(No);@ablageart=(Both);@ordnung=kunde,kopf^vom;@gruppe=2", "(PackingSlip)", M|kartikel^id, M|basisartikel^id, M|kvon:8, M|kbis:8, M|kkunde^id)' ? _F|empty(M|basisartikel) & F|empty(M|kartikel)
+.select sales 'M|select'
+!NVER3F
+.continue EVER3F  ?  _G|mehr
+.input 'M|tab'
+.select sales
+.continue NVER3F
+!EVER3F
+..
+.continue END  ? _M|kbversand
+.make screen line +O
+.formula M|tvorgangsart = U|xGelieferteLieferscheine
+.formula M|tvorgangsanzahl = U|xanzahl
+.formula M|tvorgangsmenge =  U|xsummge
+.formula M|tzeitraum = U|xSeitDatum
+.formula M|kmaxanzahl = M|tvorgangsanzahl  ?  M|tvorgangsanzahl > M|kmaxanzahl
+.formula M|kmaxmenge = M|tvorgangsmenge  ?  M|tvorgangsmenge > M|kmaxmenge
+.copy M|tlagereinheit = M|klagereinheit
+..
+.continue END
+..
+..*****************************************************************************
+..
+!ANZBES
+..
+!BESTA
+.. No details for stock
+..
+.continue END  ? _M|kbbeschaffung
+.select parts 'M|kartikel^id'
+.make screen line +O
+.formula M|tvorgangsart = U|xBestand
+.formula M|tvorgangsanzahl = 0
+.formula M|tvorgangsmenge =  H|bestand
+.formula M|kmaxanzahl = M|tvorgangsanzahl  ?  M|tvorgangsanzahl > M|kmaxanzahl
+.formula M|kmaxmenge = M|tvorgangsmenge  ?  M|tvorgangsmenge > M|kmaxmenge
+.copy M|tlagereinheit = M|klagereinheit
+.select -
+..
+..
+!FERTI
+.formula U|xanzahl = 0
+.formula U|xsummge = 0.0
+.formula U|xsumlimge = 0.0
+.formula U|xmge = 0.0
+.formula U|xlimge = 0.0
+.formula M|select = 'F|formatstr("$,,;ba<>`;artikel={1};@gruppe=5;@ablageart=(Active);einplan=(Yes);mateinplan=(Yes);@ordnung=sterm", M|kartikel^id)'                            ?  F|empty(M|basisartikel) ; (_F|empty(M|basisartikel) & _F|empty(M|kartikel))
+.formula M|select = 'F|formatstr("$,,;ba<>`;basisartikel=={3};@gruppe=5;@ablageart=(Active);einplan=(Yes);mateinplan=(Yes);@ordnung=sterm", M|kartikel^id, M|basisartikel^id)'   ? _F|empty(M|basisartikel) & F|empty(M|kartikel)
+.select purchasing 'M|select'
+!NBES1
+.continue EBES1  ?  _G|mehr
+.input 'M|tab'
+.select purchasing
+.continue NBES1
+!EBES1
+..
+.continue END  ? _M|kbbeschaffung
+.make screen line +O
+.formula M|tvorgangsart = U|xFertigung
+.formula M|tvorgangsanzahl = U|xanzahl
+.formula M|tvorgangsmenge =  U|xsummge
+.formula M|kmaxanzahl = M|tvorgangsanzahl  ?  M|tvorgangsanzahl > M|kmaxanzahl
+.formula M|kmaxmenge = M|tvorgangsmenge  ?  M|tvorgangsmenge > M|kmaxmenge
+.copy M|tlagereinheit = M|klagereinheit
+..
+..
+!BESTE
+.formula U|xanzahl = 0
+.formula U|xsummge = 0.0
+.formula U|xsumlimge = 0.0
+.formula U|xmge = 0.0
+.formula U|xlimge = 0.0
+.formula M|select = 'F|formatstr("$,,;kotyp=={1};artikel=={2};@ablageart=(Active);@ordnung=lief,tterm;@gruppe=2;aktiv=(Yes)", "(PurchaseOrder)", M|kartikel^id)'                          ?  F|empty(M|basisartikel) ; (_F|empty(M|basisartikel) & _F|empty(M|kartikel))
+.formula M|select = 'F|formatstr("$,,;kotyp=={1};basisartikel=={3};@ablageart=(Active);@ordnung=lief,tterm;@gruppe=2;aktiv=(Yes)", "(PurchaseOrder)", M|kartikel^id, M|basisartikel^id)'  ? _F|empty(M|basisartikel) & F|empty(M|kartikel)
+.select purchasing 'M|select'
+!NBES3
+.continue EBES3  ?  _G|mehr
+.input 'M|tab'
+.select purchasing
+.continue NBES3
+!EBES3
+..
+.continue END  ? _M|kbbeschaffung
+.make screen line +O
+.formula M|tvorgangsart = U|xBestellungen
+.formula M|tvorgangsanzahl = U|xanzahl
+.formula M|tvorgangsmenge =  U|xsumlimge
+.formula M|kmaxanzahl = M|tvorgangsanzahl  ?  M|tvorgangsanzahl > M|kmaxanzahl
+.formula M|kmaxmenge = M|tvorgangsmenge  ?  M|tvorgangsmenge > M|kmaxmenge
+.copy M|tlagereinheit = M|klagereinheit
+..
+.continue END
+..
+..*****************************************************************************
+!END
+.continue

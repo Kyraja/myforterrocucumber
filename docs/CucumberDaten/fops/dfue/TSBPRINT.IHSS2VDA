@@ -1,0 +1,219 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : TSBPRINT.IHSS2VDA
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : Convert edi shipping from inhouse format to vda format
+..
+..    Argument      meaning
+..    -------------------------------------------------------------------------
+..    xtinhousefile file with edi shipping order in inhouse format
+..    xtvda4tsb     filename for file to receive the shipping order in vda format
+.. 
+..    This FO program does not use fields form screen buffer m!
+...Includes
+..  include  dfue/EDI.READROW
+..*****************************************************************************
+.set trans -
+..
+.type bool   xamest      ? _F|defined(U|xamest)
+.type text   xtsystem    ? _F|defined(U|xtsystem)
+..
+.type BT128  x711 x712L x712R x713 x714 x715 x716
+.type BT35   xa1 xa2 xa3 xa4 xa5 xa6 xa7 xa8 xa9 xa10 xa11 xa12 xa13 xa14 xa15 xa16 xa17 xa18 xa19 xa20 xa21 xa22 xa23 xa24 xa25
+..
+.. filler: spaces and zeroes
+.. e.g.  (x1 + xleer)<<20    => x1 left align, fill with space
+..       (xnull + x2)>>20    => x2 right align, fill with zeroes
+..        xleer <<2          => 2 spaces
+.type BT128  xleer
+.type BT128  xnull
+.formula U|xleer = "                                                                                                                                "
+.formula U|xnull = "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+..
+.. row in vda file: must have 129 letters!
+.type BT     xtrow
+..
+.type text xtinhousefile ? _F|defined(U|xtinhousefile)
+.type text xtvda4tsb ? _F|defined(U|xtvda4tsb)
+.. 
+.. convert inhouse to vda with fixed file length, then move to TSB-IN folder
+.type text xtvdafile
+.file -tempname T|xtvdafile
+..
+.type text xtvdafileFixedLength
+.file -tempname T|xtvdafileFixedLength
+..
+
+..*****************************************************************************
+.. convert  inhouse format edi-shipping file  to  vda format
+..*****************************************************************************
+..
+.output new 'U|xtvdafile'
+.input "DATEI.F"
+..
+.type text ediimportdatei
+.formula U|ediimportdatei = U|xtinhousefile
+!HOL
+.. Split row from xtinhousefile into fields  x1 .. x25
+.input "EDI.READROW"
+.continue ENDE    ? _G|mehr
+.continue HOL     ?  x1/"000*"
+.continue I400    ?  x1/"400*"
+.continue I405    ?  x1/"405*"
+.continue I500    ?  x1/"500*"
+.continue I505    ?  x1/"505*"
+.continue I550    ?  x1/"550*"
+.continue I565    ?  x1/"565*"
+.continue HOL
+..
+.. Aus der Satzart 400, bis zur Pos. 8 die VDA-Satzart 711 zusammenbilden
+!I400
+.formula xa3 = (x3 + xleer) <<9
+.formula xa4 = (x4 + xleer) <<9
+.formula xa5 = (xnull + x5) >>5
+.formula xa6 = (xnull + x6) >>5
+.formula xa7 = (x7 + xleer) >>6
+.formula xa8 =  xleer <<9
+.formula xa9 =  xleer <<9
+.formula xa10=  xleer <<1
+.formula xa11=  xleer <<1
+.formula xa12=  xleer <<69
+.formula x711 = "71103" +  xa3 + xa4 + xa5 + xa6 + xa7 + xa8 + xa9 + xa10 + xa11 + xa12
+.formula U|xtrow = 'x711'
+'xtrow                                                                                                                         'xENDEx
+.. Aus der Satzart 400, ab der Pos. 8 die VDA-Satzart 712 zusammenbilden
+.formula xa3 = (xnull + x8)  >>8
+.formula xa4 = (xleer + x13) >>3
+.formula xa5 = (x14 + xleer) <<14
+.formula xa6 = (xnull + x15) >>6
+.formula xa7 = (xnull + x16) >>4
+.formula xa8 = (xnull + x17) >>7
+.formula xa9 = (xnull + x18) >>7
+.formula xa10= (xnull + x19) >>2
+.formula xa11= (xleer + x20) >>1
+.formula xa12= (xnull + x21) >>4
+.formula x712L = "71203" + xa3 + xa4 + xa5 + xa6 + xa7 + xa8 + xa9 + xa10 + xa11 + xa12
+.continue HOL
+..
+!I405
+.. Aus der Satzart 405, ab der Pos. 12, den Resr der VDA-Satzart 712 zusammenbilden
+.formula xa13= (x3 + xleer) <<14
+.formula xa14= (xnull + x5) >>2
+.formula xa15= (x6 + xleer) <<25
+.formula xa16=  xleer <<1
+.formula xa17=  xleer <<8
+.formula xa18= (xnull + x8) >>6
+.formula xa19= (xnull + x9) >>4
+.formula xa20= ((xnull + (x10<<".")) >>2) + ((x10>>".")<<1)
+.formula xa21= (xnull + x11) >>1
+.formula xa22=  xleer <<3
+.formula x712R = xa13 + xa14 + xa15 + xa16 + xa17 + xa18 + xa19 + xa20 + xa21 + xa22
+.formula U|xtrow = x712L + x712R
+'xtrow                                                                                                                         'xENDEx
+.continue HOL
+..
+!I500
+.. Aus der Satzart 500, die VDA-Satzart 713 zusammenbilden
+.formula xa3 = (xnull + x3) >>8
+.formula xa4 = (xnull + x4) >>6
+.formula xa5 = (x5 + xleer) <<5
+.formula xa6 = (xnull + x6) >>2
+.formula xa7 = (x7 + xleer) <<4
+.formula xa8 = (x8 + xleer) <<12
+.formula xa9 = (xnull + x9) >>2
+.formula xa10=  xleer <<4
+.formula xa11= (x10 + xleer) <<3
+.formula xa12= (xnull + x11) >>8
+.formula xa13= (x12 + xleer) <<9
+.formula xa14=  xleer <<1
+.. x13 ist Lagerort-Kunde aus der Inhousesatz 500, Pos. 13
+.. x5  ist Abladestelle   aus der Inhousesatz 500, Pos. 5
+.formula xa15= (x13 + xleer) <<7  ? _F|empty(x13)
+.formula xa15= (x5  + xleer) <<7  ?  F|empty(x13)
+.formula xa16= (x14 + xleer) <<9
+.formula xa17= (x15 + xleer) <<14
+.formula xa18= (x16 + xleer) <<4
+.formula xa19= (x17 + xleer) <<6
+.formula xa20=  xleer <<14
+.formula xa21=  xleer <<5
+.formula x713 = "71303" + xa3 + xa4 + xa5 + xa6 + xa7 + xa8 + xa9 + xa10 + xa11 + xa12 + xa13 + xa14 + xa15 + xa16 + xa17 + xa18 + xa19 + xa20 + xa21
+.formula U|xtrow = 'x713'
+'xtrow                                                                                                                         'xENDEx
+.continue HOL
+..
+!I505
+.continue HOL
+..
+!I550
+.. Aus der Satzart 550, die VDA-Satzart 714 zusammenbilden
+.formula xa3 = (x4 + xleer) <<22
+.formula xa4 = (x5 + xleer) <<22
+.formula xa5 = (xnull + x6) >> 3
+.formula xa6 = (xnull + ('x7' << ","))>>10 + "000"
+.formula xa7 = (xleer + x8) >>2
+.formula xa8 =  xnull <<13
+.formula xa9 =  xleer <<2
+.formula xa10=  xnull <<3
+.formula xa11=  xleer <<1
+.formula xa12= (xnull + x3) >>3
+.formula xa13= (xleer + x21) >>1
+.formula xa14= (xleer + x13) >>15
+.formula xa15= (xleer + x14) >>1
+.formula xa16= (xleer + x15) >>8
+.formula xa17= (xleer + x16) >>1
+.formula xa18= (xleer + x17) >>1
+.formula xa19=  xleer <<1
+.formula xa20= (xleer + x18) >>1
+.formula xa21= (xleer + x19) >>2
+.formula xa22= (xleer + x22) >>8
+.formula x714 = "71403" + xa3 + xa4 + xa5 + xa6 + xa7 + xa8 + xa9 + xa10 + xa11 + xa12 + xa13 + xa14 + xa15 + xa16 + xa17 + xa18 + xa19 + xa20 + xa21 + xa22
+.formula U|xtrow = 'x714'
+'xtrow                                                                                                                         'xENDEx
+.continue HOL
+..
+!I565
+.. Aus der Satzart 565, die VDA-Satzart 715 zusammenbilden
+.formula xa3 = (x4 + xleer) <<22
+.formula xa4 = (x5 + xleer) <<22
+.formula xa5 = (xnull + x6) >> 13
+.formula xa6 = (xnull + x3) >>3
+.formula xa7 = (xnull + x7)>>10 + "000"
+.formula xa8 = (x8 + xleer) <<9
+.formula xa9 = (x9 + xleer) <<9
+.formula xa10= (xnull + x10) >>12
+.formula xa11= (xnull + x11) <<1
+.formula xa12= (xleer + x12) >>15
+.formula xa13= (xleer + x13) >>1
+.formula xa14= (xleer + x14) >>1
+.formula xa15= (xleer + x15) >>1
+.formula xa16=  xleer <<1
+.formula x715 = "71503" + xa3 + xa4 + xa5 + xa6 + xa7 + xa8 + xa9 + xa10 + xa11 + xa12 + xa13 + xa14 + xa15 + xa16
+.formula U|xtrow = 'x715'
+'xtrow                                                                                                                         'xENDEx
+.continue HOL
+..
+..
+!ENDE
+.formula U|xtrow = "71902000000100000010000001000000100000030000000000000000000010000000"
+'xtrow                                                                                                                         'xENDEx
+.select from
+.output
+..
+..
+.. end lines with [cr][lf]
+.formula U|xtsystem = "crlf+ " + 'U|xtvdafile
+.system 'U|xtsystem' background
+..
+.. line length
+.formula U|xtsystem = "sed -e " + 'G|apostroph' + "s/xENDEx//" + 'G|apostroph' + " "  + 'U|xtvdafile' + " >" + 'U|xtvdafileFixedLength'
+.system 'U|xtsystem' background
+..
+.. move/copy vda file
+.formula U|xtsystem = "cp " + 'U|xtvdafileFixedLength' + " " + U|xtvda4tsb
+.system 'U|xtsystem' background
+..
+..*****************************************************************************
+!END
+.continue

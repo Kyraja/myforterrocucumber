@@ -1,0 +1,153 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICECENTER.TAB
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text xselect  ? _F|defined(U|xselect)
+.type text xtext    ? _F|defined(U|xtext)
+..
+..<META M|='ev/ELINVOICECENTER'>
+..<META H|='P53:0'>
+..
+..EDI-Konfig Supplier/Suppliercontact
+..<META 3|='P1:4'>
+..
+..EDI-Konfig Customer/Customercontact
+..<META 5|='P0:4'>
+..
+.make screen line +O
+.colour -background -1 -1 -1 edipartner 'M|aktzeile'
+.assign M|edinr      = H|id
+.formula M|partnernameextern = H|partnernameextern ?  F|defined(H|partnernameextern)
+.formula M|partnernameextern = H|kdzeich           ?  F|empty(M|partnernameextern)
+.formula M|vorgangnrextern   = H|vorgangnrextern   ?  F|defined(H|partnernameextern)
+.formula M|vorgangnrextern   = H|abbenr            ?  F|empty(M|vorgangnrextern)
+..
+.formula M|tbuviewer = M|htmlviewerz ?  _F|empty(M|edinr^nachrftext)
+.. Vorgang wird nur gefÅllt, wenn in EDI-Nachricht der Vorgang gefÅllt ist.
+.. es wird nicht nach Rechnungen mit dieser EDI-Nachricht gesucht
+.formula M|vorgang = H|ideksvor
+.formula M|edidatenart = H|datenart
+.formula M|vom = H|dinhouse
+.set trans +
+.formula U|xtext = ""
+.formula U|xtext = "Dienstleistungsrechnung"    ? H|datenart = "82"
+.formula U|xtext = "Handelsrechnung"            ? H|datenart = "380"
+.formula U|xtext = "Gutschrift"                 ? H|datenart = "381" ; H|datenart = "81"
+.formula U|xtext = "Korrekturrechnung"          ? H|datenart = "384"
+.formula U|xtext = "Eigenrechnung"              ? H|datenart = "389"
+.formula U|xtext = "Selbstverfasste Gutschrift" ? H|datenart = "261"
+.formula U|xtext = "Vorauszahlungsrechnung"     ? H|datenart = "386"
+.formula U|xtext = "Rechnungsinformation fÅr die Buchhaltung" ? H|datenart = "751"
+.set trans -
+.formula M|vorgangstyp = U|xtext
+.formula M|bemerk = H|bemerk
+.continue WEITER    ? F|empty(H|ideksvor)
+.formula U|xselect = "$,,nummer=="+'H|ideksvor'+";typ=(Invoice);ident="+'M|edinr'
+.load 1 purchasing 'U|xselect' 
+.continue ABLAGE ? _G|mehr
+.continue ABLAGE ?  F|empty(1|pos)
+.assign M|idvorgang  = 1|id
+.continue WEITER
+..
+!ABLAGE
+.formula U|xselect = "$,,nummer="+'H|ideksvor'+";typ=(Invoice);ident="+'M|edinr'+";ablagef=TRUE"
+.load 1 purchasing 'U|xselect'
+.continue WEITER  ? _G|mehr
+.continue WEITER  ?  F|empty(1|pos)
+.assign M|idvorgang  = 1|id 
+..
+!WEITER: Dubletten suchen
+.copy M|bdublette = G|FALSE
+.formula xselect = "$,,;@gruppe=0;id=" + 'H|id' + ";text4=ExchangedDocumentID;@zeilen=(1)"  
+.load 2 edifact 'U|xselect'
+.continue EDIPARTNER ? _G|mehr
+.load 2 line '2|selzeile'
+.continue EDIPARTNER ? _G|mehr
+.formula M|extern = 2|text5
+.load 2
+.continue EDIPARTNER ? F|empty(M|extern)
+..
+!KL
+.formula U|xselect = "$,,ebeleg=="+'M|extern'+ ";kl="+ 'M|edipartner^id' + ";typ=(Invoice);ident<>`;ident<>"+'M|edinr^id'+";nummer=;stornopartnervorg=`;pos<>`;@ablageart=(Both)"
+...formula U|xselect = "$,,ebeleg=="+'M|extern'+ ";kl="+ 'M|edipartner^id' + ";typ=(Invoice);ident<>"+'M|edinr^id'+";nummer=;stornopartnervorg=`;pos<>`;@ablageart=(Both)"
+.load 1 purchasing 'U|xselect'  
+.continue KL2 ? _G|mehr
+.copy M|bdublette = G|TRUE ? F|empty(M|idvorgang)
+.assign M|reek = 1|id      ? F|empty(M|idvorgang)
+.assign M|dedi = 1|ident   ? F|empty(M|idvorgang)
+.continue EDIPARTNER
+..
+!KL2
+.formula U|xselect = "$,,ebeleg=="+'M|extern'+ ";kl2="+ 'M|edipartner^id' + ";typ=(Invoice);ident<>`;ident<>"+'M|edinr^id'+";nummer=;stornopartnervorg=`;pos<>`;@ablageart=(Both)"
+...formula U|xselect = "$,,ebeleg=="+'M|extern'+ ";kl2="+ 'M|edipartner^id' + ";typ=(Invoice);ident<>"+'M|edinr^id'+";nummer=;stornopartnervorv=`;pos<>`;@ablageart=(Both)"
+.load 1 purchasing 'U|xselect'  
+.continue EDIPARTNER ? _G|mehr
+.copy M|bdublette = G|TRUE ? F|empty(M|idvorgang)
+.assign M|reek = 1|id      ? F|empty(M|idvorgang)
+.assign M|dedi = 1|ident   ? F|empty(M|idvorgang)
+.continue EDIPARTNER
+..
+!EDIPARTNER
+.assign M|edipartner = H|partner
+.formula M|edipartnergln = H|glabkunde
+.. Das Feld (ed)kenn ist wie folgt  gefuellt: "USTD/STeuernummer"
+.formula M|edipartnerustid = H|kenn >> "/"
+.formula M|edipartnersteuernummer = H|kenn << "/"
+.assign M|ediobjsuch = H|ediobjsuch
+.assign M|vabmodell = H|vabmodell
+.formula M|tedistatusaz = H|edistatusaz
+.formula M|erfassd    = H|erfass
+..
+.. Status icon
+.formula M|fotoz = M|grauz        ? H|status < 0
+.formula M|fotoz = G|icook        ? H|status = 0
+.formula M|fotoz = G|icomessage   ? (H|status=2 ; H|status=3) & (H|fcode=0)
+.formula M|fotoz = G|icoerror     ? H|status=2  & H|fcode<>0
+.formula M|fotoz = G|icoerror     ? H|status = 4
+.formula M|fotoz = G|icowarn      ? (H|status=5 ; H|status=6 ; H|status=7 ; H|status=8 ; H|status=9 ; H|status=10)
+.formula M|fotoz = G|icoerror     ? H|status = 11
+..
+.formula xselect = "$,,;@gruppe=0;id=" + 'H|id' + ";text4=SpecifiedTradePaymentTerms;@zeilen=(1)"  
+.load 1 edifact 'U|xselect'
+.continue PARTNER ? _G|mehr
+.load 1 line '1|selzeile'
+.continue PARTNER ? _G|mehr
+.formula M|zbed = 1|text5
+.load 1
+.formula xselect = "$,,;@gruppe=0;id=" + 'H|id' + ";text4=SpecifiedTradePaymentTermsDueDateDateTime;@zeilen=(1)"
+.load 1 edifact 'U|xselect'
+.continue PARTNER ? _G|mehr
+.load 1 line '1|selzeile'
+.continue PARTNER ? _G|mehr
+.assign M|tterm = 1|text5
+.load 1
+..
+!PARTNER
+.continue EKEDI ? M|edipartner^dnr=1
+.continue VKEDI ? M|edipartner^dnr=0
+.continue END
+..
+!EKEDI
+.load 3 supplier 'F|formatstr("$,,;@gruppe=4;@zeilen=(1);edinachraz={1};klnum={2}", "(ZUGFeRDInvoice)", M|edipartner^id)'
+.continue END ? _G|mehr
+.load 3 line '3|selzeile'
+.assign M|ediaktiv = 3|erlaubt 
+.load 3
+.continue END
+..
+!VKEDI
+.load 5 customer 'F|formatstr("$,,;@gruppe=4;@zeilen=(1);edinachraz={1};klnum={2}", "(ZUGFeRDInvoice)", M|edipartner^id)'
+.continue END ? _G|mehr
+.load 5 line '5|selzeile'
+.assign M|ediaktiv = 5|erlaubt 
+.load 5
+.continue END
+..
+..*****************************************************************************
+!END
+.continue

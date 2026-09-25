@@ -1,0 +1,376 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : WORKLIST.BA
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  : "bstart"
+..                  - Selektion auf die offenen Arbeitsscheine sortiert nach Anfangsdatum
+..                  - 0| offenen Reservierungen
+..                  - 1| Auftragszeiten
+..                  - 2| Maschinengruppen
+..                  - 3| Qualifikationslisten
+..                  - D| Arbeitsschein
+..
+..                  "Maschinenstillstand melden"
+..                  - die Maschine bekommt den Status "Stillstand"
+..                  -> dadurch lÑsst sich kein Arbeitsgang mehr auf der Maschine stempeln
+..                  -> offene Auftragszeiten auf dieser Maschinengruppe mÅssen abgestempelt werden
+..
+..
+..  Includes       :
+.. include fe/WORKLIST.AVAILABILITY
+.. include fe/WORKLIST.CUMQUAN
+.. include fe/WORKLIST.STATUS
+.. include is/PDC.DURATION
+.. include fe/WORKLIST.EDP
+..
+.. Meta
+..<META M| = 'fe/WORKLIST'>
+..*****************************************************************************
+.set trans -
+.type text      xtsel        ? _F|defined(U|xtsel)
+.type bool      xbfehlmge    ? _F|defined(U|xbfehlmge) 
+.type ARTR51000 xrazmge      ? _F|defined(U|xrazmge)
+.type text      xtsel        ? _F|defined(U|xtsel)
+.type text      xtcmd        ? _F|defined(U|xtcmd)
+.type integer   xierror      ? _F|defined(U|xierror)
+.type integer   xiok         ? _F|defined(U|xiok)
+.type integer   xigesamt     ? _F|defined(U|xigesamt)
+.. xbzeitfehler wird in is/PDC.DURATION gesetzt
+.type bool      xbzeitfehler ? _F|defined(U|xbzeitfehler)
+.type bool      xbstart      ? _F|defined(U|xbstart)
+.type gd14      xgd14        ? _F|defined(U|xgd14)
+.type gd19      xfilemtime   ? _F|defined(U|xfilemtime)
+.type bool      xbstart      ? _F|defined(U|xbstart)
+.type text      xtas         ? _F|defined(U|xtas) 
+..
+..*******************************************************************************
+.. zu BSTART wenn aus fe/WORKLIST.INFOTIMER gestartet wird
+.continue BSTART       ? U|xbstart
+.continue STILLSTAND   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bumastill"
+.continue NOSTILLSTAND ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bustopmastill"
+.continue BSTART       ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+.continue ENDE
+!NOSTILLSTAND: PlausibilitÑten
+.continue NFEHL1 ? F|empty(M|mgr)
+.continue NOSICH ? _M|sicherheit
+.box -button no:yes
+Achtung: Sie beenden einen Maschinenstillstand.
+Wollen Sie das wirklich?
+..
+.continue ENDE ? G|box = G|boxno 
+.continue ENDE ? G|box = G|boxcancel 
+..
+!NOSICH
+.formula U|xtsel = "$,,nummer="+'M|mgr^nummer'+";gruppe=2"
+.select capacity 'U|xtsel'
+.formula M|kiev = 14
+.input "fe/WORKLIST.EDP"
+.select -
+.. Status setzen
+.set trans +
+.formula M|bdetext = "Stillstand beendet."   
+.set trans -
+.formula M|bdestatus = M|leg6
+..
+!PRUEF: Fertigungsereignisse prÅfen
+.copy U|xbstart = G|FALSE
+.continue STILL   ? F|equals(M|mgr^mgrstatus, "(Downtime)")
+.continue LAEUFT  ? F|empty(M|mgr^mgrstatus)
+.continue BSTART
+..
+!STILL
+.set trans +
+.formula M|maschstatus = "S T I L L S T A N D"
+.set trans -
+.colour -background 'M|farbe4' maschstatus
+.select screen header
+.select screen line
+.make screen line --
+.continue BSTART
+..
+!LAEUFT
+.set trans +
+.formula M|maschstatus = "ok"
+.set trans -
+.colour -background 'M|farbe1' maschstatus
+.copy U|xbstart = G|TRUE
+.continue BSTART
+..
+!NFEHL1: Maschine fehlt
+.error Bitte geben Sie zuerst eine Maschinengruppe ein.
+.cursor mgr
+.end 1
+..
+!STILLSTAND
+.formula U|xierror = 0
+.formula U|xiok = 0
+..
+.. PlausibilitÑten
+.continue SFEHL1  ? F|empty(M|mgr)
+.continue SNOSICH ? _M|sicherheit
+.box -button no:yes
+Achtung: Sie melden einen Maschinenstillstand.
+Wollen Sie das wirklich?
+?Sie haben keine Stîrungsursache eingetragen! ? F|empty(M|sgrund)
+..
+.continue ENDE ? G|box = G|boxno 
+.continue ENDE ? G|box = G|boxcancel 
+..
+!SNOSICH
+.formula U|xtsel = "$,,nummer="+'M|mgr^nummer'+";gruppe=2"
+.select capacity 'U|xtsel'
+.formula M|kiev = 13
+.input "fe/WORKLIST.EDP"
+.select -
+..
+.. offene Auftragszeiten abmelden
+.formula U|xtsel = "$,,offen=(Yes);mgr="+'M|mgr'+";ma=;fertstatus=;sperre=false"
+.select pdc 'U|xtsel'    
+.continue ELOOP ? _G|mehr
+..
+!LOOP: diese Auftragszeiten lassen sich nicht korrekt abstempeln, deswegen offen lassen
+.input "is/PDC.DURATION"
+.formula  U|xierror = U|xierror + 1  ? U|xbzeitfehler
+.continue NEXT                       ? U|xbzeitfehler
+.. M|kiev = 6 = "Stillstand"                           
+.formula M|kiev = 6
+.input "fe/WORKLIST.EDP"
+.formula U|xiok = U|xiok + 1
+..
+!NEXT
+.select pdc
+.continue LOOP ? G|mehr
+..
+!ELOOP: Status ausgeben
+.formula U|xigesamt = U|xiok + U|xierror
+.set trans +
+.formula M|bdetext = "Stillstand: " + 'U|xigesamt' + " offene Auftragszeiten;"
+.formula M|bdetext = 'M|bdetext' + 'U|xiok' + " wurden abgemeldet.;" 
+.formula M|bdetext = 'M|bdetext' + 'U|xierror' + " wurden NICHT abgemeldet."
+.set trans -
+.formula M|bdestatus = M|leg9             ? U|xierror > 0
+.formula M|bdestatus = M|leg6             ? U|xierror = 0
+.formula M|sgrund = ""
+.continue PRUEF
+..
+!SFEHL1: Maschine fehlt
+.error Bitte geben Sie zuerst eine Maschinengruppe ein.
+.cursor mgr
+.end 1
+..
+!BSTART: PlausibilitÑten
+.continue FEHL4                                  ? F|empty(M|mitarb)
+.continue FEHL5                                  ? F|empty(M|mitarb^splan)
+.continue FEHL6                                  ? F|equals(M|mitarb^lohn,"0") 
+.continue FEHL1                                  ? F|empty(M|mgr) & F|empty(M|qualliste)
+.. Maschinenstatus
+.set trans +
+.formula M|maschstatus = "S T I L L S T A N D"   ? F|equals(M|mgr^mgrstatus, "(Downtime)")
+.colour -background 'M|farbe4'  maschstatus      ? F|equals(M|mgr^mgrstatus, "(Downtime)")
+.formula M|maschstatus = "ok"                    ? F|empty(M|mgr^mgrstatus)
+.set trans -
+.colour -background 'M|farbe1' maschstatus       ? F|empty(M|mgr^mgrstatus)
+.continue FEHL2                                  ? F|equals(M|mgr^mgrstatus, "(Downtime)")
+..
+.input "is/TABLEEREN"
+..
+.. Variablen initialisieren
+.. Wann wurde der Startbutton gedrÅckt
+.formula M|infozeit = G|zeit
+..
+.. BDE-Status leeren
+.formula M|bdetext = ""    ? G|evtvar = "bstart" & M|mitarb^lohn <> 0
+.formula M|bdestatus = ""  ? G|evtvar = "bstart" & M|mitarb^lohn <> 0
+..
+.. Selektion der noch zu bearbeitenden Arbeitsscheine Åber Qualifikationsliste oder einzelne Maschinengruppe
+.continue LOOPMGR ? _F|empty(M|mgr)
+.continue LOOPQL  ?  M|qualliste
+..
+!LOOPQL
+.formula U|xtsel = "$,,such=;ma="+'M|mitarb'+";@gruppe=3;@autostart=ja;"
+.load 3 qualifications 'U|xtsel'
+.load 3 line
+.continue FEHL3 ? _G|mehr
+..
+!QL: Qualifikation in der Zeile. Ist die Qualifikation noch gÅltig
+.continue QUALOK    ?    '3|gltbis' = ""
+.continue QUALGLT   ?    G|datum > 3|gltbis
+..
+!QUALOK
+.formula U|xtsel = "$,,nummer=;such=;serqual="+'3|serqual'+";@autostart=ja;@gruppe=2;"
+.load 2 capacity 'U|xtsel'
+.continue QUALGLT ? _G|mehr
+..
+!MGR: Maschinengruppe mit passender Qualifikation
+.. diese Maschinenengruppe in der MGRLOOP Åbergeben
+.continue LOOPMGR 
+..
+!NEXTMGR
+.load 2 capacity
+.continue MGR ? G|mehr
+..
+!QUALGLT: nÑchste Zeile der Qualifikationsliste lesen
+.load 3 line
+.continue QL ? G|mehr
+.continue ENDE
+..
+..*************************************************************************************************************
+..START Arbeitsscheine fÅr eine Maschinengruppe laden
+..*************************************************************************************************************
+..  
+!LOOPMGR
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";mgr==" + M|mgr                ? _M|qualliste
+.formula U|xtsel = U|xtsel + ";mgr==" + 2|nummer             ? F|empty(M|mgr)
+.formula U|xtsel = U|xtsel + ";typ==(WorkSlips)"
+.formula U|xtsel = U|xtsel + ";art==" + M|art                ? _F|empty(M|art)
+.formula U|xtsel = U|xtsel + ";status<>*"
+.formula U|xtsel = U|xtsel + ";tsterm=!" + 'M|endegepl'      ? 'M|endegepl' <> ""
+.formula U|xtsel = U|xtsel + ";@ablageart=(Active)"
+.formula U|xtsel = U|xtsel + ";@gruppe=1"
+.formula U|xtsel = U|xtsel + ";@ordnung=tsterm"
+..
+.. Schleife Åber die offenen Arbeitsscheine
+.load 0 nolock production 'U|xtsel'
+.continue NEXTMGR ? _G|mehr & M|qualliste
+.continue ENDE    ? _G|mehr  
+..
+!HOLDAT
+.continue NEXTAS  ? 0|elanzahl = 0 & 0|amge = 0
+.make screen line +o
+.formula M|fbuz = M|leg13
+.formula M|tmgr    = 0|mgr^id
+.assign M|taschein = 0|nummer
+.formula M|tagbez = M|taschein^ag^namebspr
+.formula U|xfilemtime = 0|psterm
+.formula U|xgd14 = U|xfilemtime
+.formula M|tstartdat = 0|psterm
+.formula M|tstartzeit = 'U|xgd14'>>6<<4
+.formula M|tendedat = 0|tterm 
+.add M|taschein
+.. Daten aus AFL Åber lres
+.formula M|tapsanfdat = D|lres^apsanfdat
+.formula M|tgesamtmge = D|lres^mge
+.formula M|taflptext = D|lres^ptext            
+.formula M|thinweis = ""
+.formula M|thinweis = M|leg14  ? _F|empty(M|taflptext)
+.. Fertigungsdokumemt aus AFL laden  
+.formula M|tfertdoku = D|lres^fertdoku
+.formula M|tfertdok  = M|leg15  ? _F|empty(M|tfertdoku) 
+.formula M|ugrund = ""
+.protection ugrund 'M|aktzeile'
+..
+.. Arbeitsscheindaten
+.formula M|tartikel = D|art^id
+.assign M|tbasisartikel = M|tartikel^basisartikel
+.formula M|tindex = D|art^index
+.formula M|tzeich = D|art^zeichn
+.formula M|tsollmge = D|mge
+.copy M|rmimdialog = D|ag^rmimdialog
+.. ist der AS der letzte AG?
+..
+.formula U|xtas      = D|snba^pba
+.copy M|letzterag = G|TRUE   ? U|xtas = M|taschein
+.. und bucht dieser den Zugang des Fertigprodukts
+.copy M|zugangfp  = G|TRUE  ? M|letzterag & F|empty(D|snba^eres)
+.. offene Menge berechnen:  Sollmenge aus Arbeitsschein - Menge in ungebuchten AZ
+.formula U|xrazmge = 0
+.. @sort=öbernahme
+.formula U|xtsel = "$,,uebertr=(Yes);asnr="+'M|taschein'+";istmge=;anfzeit=;endzeit="
+.load 1 pdc 'U|xtsel'
+..
+!AZLOOP
+.continue NOAZ ? _G|mehr
+.formula U|xrazmge = U|xrazmge + 1|istmge
+.load 1 pdc
+.continue AZLOOP
+..
+!NOAZ
+.formula M|tofmge = M|tsollmge - U|xrazmge
+..
+.. grÅne Flagge: Arbeitsschein kann begonnen werden
+.formula M|tstatus = M|leg1
+.copy M|tfreig = G|TRUE
+.continue NOPBA ? F|empty(D|pba)
+.. gelbe Flagge: Vorgangerarbeitschein noch in Bearbeitung
+.formula M|tstatus = M|leg2     ? D|pba^status <> "*"
+..
+!NOPBA
+..prÅfen auf fehlende Teile
+.select object nolock 'D|lres^id'
+..
+!NEXTAFL
+.continue AS  ? _G|mehr
+.continue AS  ?  F|empty(H|ppos)
+.select object nolock 'H|ppos^id'
+.. elart = 1: Artikel 
+.reserve
+.copy U|xbfehlmge  =  G|FALSE
+.input "fe/WORKLIST.AVAILABILITY"       ? H|elart = 1
+.select
+.. elart = 3: Arbeitsschein
+.formula M|tstatus = M|leg3 ? U|xbfehlmge
+.continue AS                ? U|xbfehlmge
+.continue AS                ? H|elart = 3
+.continue NEXTAFL
+..
+!AS: Ende fehlende Teile
+.. Fortschrittsberechnung 
+.. -> wenn Fortschritt > 100 %  wird Arbeitsgang abgeschlossen
+..
+.input "fe/WORKLIST.CUMQUAN"
+..
+.. PrÅfen auf begonnene Fertigungsereignisse
+.input "fe/WORKLIST.STATUS"
+..
+!NEXTAS
+.load 0 nolock production
+.continue HOLDAT         ? G|mehr  
+.. Trennlinie einfÅgen  
+.make screen line +                          ?  M|qualliste
+.protection -line 'M|aktzeile'               ?  M|qualliste
+.continue NEXTMGR                            ?  M|qualliste
+.continue ENDE   
+..*************************************************************************************************************
+..ENDE Arbeitsscheine fÅr eine Maschinengruppe laden
+..*************************************************************************************************************
+..  
+!FEHL1: Maschinengruppe eingeben 
+.error Bitte Maschinengruppe oder Qualifikationsliste eingeben.
+.cursor mgr
+.end 1 
+..
+!FEHL2: Maschinenstillstand
+.error Achtung: Auf der Maschine wurde Stillstand gemeldet.
+..
+.select screen header
+.select screen line
+.make screen line --
+.end 1
+!FEHL3: Qualliste ohne Zeilen
+.error Keine eingetragene Qualifikation in der Qualifikationsliste.
+.end 1
+!FEHL4: kein Mitarbeiter eingetragen
+.error Bitte Mitarbeiter eingeben.
+.cursor mitarb
+.end 1
+!FEHL5: kein Schichtplan im Mitarbeiter
+.set trans +
+.formula M|bdetext = "Mitarbeiter hat keinen Schichtplan" 
+.set trans -
+.formula M|bdestatus = M|leg9
+.input "is/TABLEEREN"
+.continue ENDE
+!FEHL6: keine korrekte Lohngruppe
+.set trans +
+.formula M|bdetext = "Mitarbeiter hat keine Lohngruppe" 
+.set trans -
+.formula M|bdestatus = M|leg9
+.input "is/TABLEEREN"
+.continue ENDE
+..
+..***********************************************************************************************************
+!ENDE
+.end

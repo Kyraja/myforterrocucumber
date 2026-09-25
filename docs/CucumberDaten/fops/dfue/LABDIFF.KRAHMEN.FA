@@ -1,0 +1,85 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LABDIFF.KRAHMEN.FA
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Feldaustritts-Event zum Rahmenauftrag: ermittelt die letzten
+..                  zwei Abrufe zu Rahmen und Artikel
+.. Functionality  : field exit event for blanket order: finds two most recent
+..                  forecast messages that match blanket order and product
+...Includes       :
+..  include dfue/LABDIFF.SCREENCONTEXT.FOP
+..*****************************************************************************
+.set trans -
+..
+.type text xtselEDI  ? _F|defined(U|xtselEDI)
+.type bool xbneuquery  ? _F|defined(U|xbneuquery)
+.copy U|xbneuquery = G|false
+..
+.. initialize forecast fields
+.formula M|klab = ""         ?  M|klab^ideksrah <> M|krahmen^nummer
+.formula M|klabnummer = ""   ?  M|klab^ideksrah <> M|krahmen^nummer
+.formula M|klab1 = ""
+.formula M|klab2 = ""
+..
+.. no blanket order
+.continue ENDHOL  ?  F|empty(M|krahmen)
+.continue QUERY
+..
+..
+!NEUQUERY
+.assign M|kartikel = H|ideksart
+.formula M|kkuartnr = H|kuartnr
+.formula M|klab  = H|id
+.copy U|xbneuquery = G|true
+.select -
+..
+!QUERY: query for two most recent forecasts / forecast history
+.formula U|xtselEDI = F|formatstr("$,,;@gruppe=0;vorart=3;imex=IM;edinachr={1}", M|klabedinachr)
+.formula U|xtselEDI = F|formatstr("$,,;@gruppe=0;vorart=3;imex=IM;edinachr={1}", "2101!2102") ? M|klabedinachr^nummer="2102"
+.formula U|xtselEDI = U|xtselEDI + ";nummer="                            ?  F|empty(M|klab)
+.formula U|xtselEDI = U|xtselEDI + ";nummer=!"   +  M|klab^nummer        ? _F|empty(M|klab)
+.formula U|xtselEDI = U|xtselEDI + ";@ordnung=nummer.(Backwards)"
+.formula U|xtselEDI = U|xtselEDI + ";erfass="    + 'M|klabhisvon:8' + "!" + 'M|klabhisbis:8'
+.formula U|xtselEDI = U|xtselEDI + ";labruf="
+.formula U|xtselEDI = U|xtselEDI + ";ideksrah="  + M|krahmen^nummer
+.formula U|xtselEDI = U|xtselEDI + ";ideksart="  + M|kartikel^nummer     ? _F|empty(M|kartikel)
+.formula U|xtselEDI = U|xtselEDI + ";ideksart="                          ?  F|empty(M|kartikel)
+.formula U|xtselEDI = U|xtselEDI + ";kuartnr="   + M|kkuartnr            ?  F|empty(M|kartikel)
+.formula U|xtselEDI = U|xtselEDI + ";@ablageart=(3)"                     ?  M|kbablage
+
+..
+.. most recent forecast (new)
+.select edifact 'xtselEDI'
+.continue ENDHOL      ? _G|mehr
+.. fill product field, only once! - avoid loop with broken product data
+.continue NEUQUERY    ?  F|empty(M|kartikel) & _U|xbneuquery
+.formula M|klab2 = H|id
+.. do not overwrite triggering forecast here!
+.formula M|klab  = H|id  ?  F|empty(M|klab)
+..
+.. Pickup Sheets are not compared
+.continue ENDHOL ? M|klabedinachr^nummer="2104"
+..
+.. 2nd most recent forecast (old)
+.select edifact
+.continue ENDHOL  ? _G|mehr
+.formula M|klab1 = H|id
+..
+..
+!ENDHOL
+.select -
+..
+.. refresh fields/table
+.input "dfue/LABDIFF.LEEREN"
+..
+.. fill header fields
+.input "dfue/LABDIFF.BK"
+..
+.. Show table for difflist and registers for lab/fab/vab
+.input "dfue/LABDIFF.SCREENCONTEXT.FOP"
+..
+..*****************************************************************************
+!END
+.continue

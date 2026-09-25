@@ -1,0 +1,178 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : HBMGE.TAB
+.. Autor/Author   : ak
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       :
+..
+..
+.. Ablauf         :
+..
+.. Functionality  :
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+.set trans -
+.continue BADA ? M|kba<>""
+..
+.. Reservierung laden
+.load 0 add 9|reserv
+..
+.. kein Treffer, wenn Fertigteil im Kopf eingegeben und in der Reservierung
+.. ein anderer Fertigteil
+.continue AUSGANG  ? M|klffert <> "" & M|klffert^id <> 0|lffert^id
+..
+.. LFVorschlag laden
+.select add 0|vor
+..
+.. kein LFV da, Reservierung ausgeben, wenn keine Lohnfertigung und Lohnferti-
+.. ger als Suchkriterium eingegeben
+.continue AUSOHNELFV ? _G|mehr & M|klohnfert = "" & M|klief = ""
+..
+.continue AUSGANG    ? _G|mehr
+.continue AUSGANG    ? H|typ=G|FEVOR
+..
+.. LFV da, Lohnfertigung oder Lohnfertiger aus LFV stimmen mit Suchkriterien
+.. nicht Åberein
+.continue ? _F|defined(H|lief)
+.continue AUSGANG    ? M|klohnfert <> "" & M|klohnfert^id <> H|art^id
+.continue AUSGANG    ? M|klief     <> "" & M|klief^id     <> H|lief^id
+..
+.. Variable aus LFV merken
+.copy U|xlohnfert = H|art
+.copy U|xlief     = H|lief
+..
+.reserve application
+..
+.. 1. LF-RES holen
+.select  application
+..
+.. kein LF-RES zu LFV -> zur Ausgabe
+.continue AUSOHNELFV ? G|bvkenn=""
+.continue VERW20     ? G|bvkenn="L"
+..
+.. Dispo-MZ im 9.Lade-Puffer - Bestand summieren
+.formula M|klfbestand = M|klfbestand + 9|lzuomge ? M|kart<>""
+..
+!VERW: Ausgabe
+.make screen line +0
+..
+.formula M|banum  = H|vor^as
+.formula M|bamge  = H|limge
+.formula M|anzahl = H|anzahl
+.formula U|xmarke = "VERW20"
+.continue MZAUSGABE
+..
+!VERW20: 2.-n. LF-RES holen
+.select application
+.continue VERW ? G|mehr
+.continue AUSGANG
+..
+!AUSOHNELFV: Dispo-MZ im 9.Lade-Puffer - Bestand summieren
+.formula M|klfbestand = M|klfbestand + 9|lzuomge ? M|kart<>""
+..
+.make screen line +0
+.formula U|xmarke = "AUSGANG"
+.continue MZAUSGABE
+..
+!AUSGANG
+.continue
+..
+!BADA: BA laden in 9.Lade-Puffer
+.load 9 workorder 'M|kba'
+.continue BADAENDE  ? _G|mehr
+..
+.load 8 add 9|lres
+.continue BADAENDE  ? _G|mehr ; 8|gruppe<>5
+..
+..  FV im 8.Lade-Puffer. In HOLE-Puffer RES laden
+.select add 8|eres
+..
+!RES10: Schleife Åber RES zu FV
+.continue RES100  ? H|elart<>4 ; _F|empty(M|klohnfert) & M|klohnfert^id<>H|art^id
+..
+.. im HOLE-Puffer LF-Res fÅr Lohnfertigung (elart=4)
+.formula U|xranzahl = H|anzahl
+..
+.. Reservierung merken
+.reserve
+.reserve application
+..
+!RES20: Schleife Åber LFV zu einer LF-RES
+.select application
+.continue RES95  ?  G|bvkenn=""
+.continue RES20  ?  G|bvkenn="L"
+..
+.. LFVorschlag im HOLE-Puffer
+.continue RES20  ?  M|klief<>"" & M|klief^id<>H|lief^id
+..
+.. Ausgabe Lohnfertigung
+.make screen line +0
+.copy M|lffert   = H|lffert
+.assign M|lohnfert = H|artex
+.copy M|lief     = H|lief
+.copy M|lgruppe  = H|lgruppe
+.copy M|leinh    = H|artex^le
+.formula M|art        = ""
+.formula M|zuomge     = H|mge
+.formula M|einh       = H|he
+.formula M|faktor     = H|lehe
+.formula M|lzuomge    = H|mge * H|lehe
+.formula M|bamge      = M|lzuomge
+.formula M|anzahl     = U|xranzahl
+.formula M|banum      = M|kba
+..
+.. FL des LFVorschlags
+.load 3 add H|eres
+..
+!RES40: Schleife Åber FL des LFV aus HOLE-Puffer
+.continue RES20  ? _G|mehr
+..
+.. Halbfabrikat Åbereinstimmt? (wenn eingegeben)
+.continue RES80  ?  M|kart<>"" & M|kart^id<>3|art^id
+..
+.. Ausgabe Halbfabrikate
+.make screen line +0
+.copy M|lffert  = H|lffert
+.copy M|lief    = H|lief
+.copy M|art     = 3|art
+.copy M|lgruppe = 3|lgruppe
+.formula M|einh      = 3|art^le
+.formula M|zuomge    = 3|limge
+.formula M|lohnfert  = ""
+.formula M|faktor    = 1.0
+.formula M|lzuomge   = 3|limge
+.formula M|leinh     = M|einh
+.formula M|anzahl    = 3|anzahl
+.formula M|banum     = M|kba
+..
+!RES80: 2. - n. Reservierung zu LFV holen
+.load 3 line
+.continue RES40
+..
+!RES95: Reservierungsbereich aktivieren
+.select
+..
+!RES100: 2. - n. Reservierung zu FV holen
+.select line
+.continue RES10 ? G|mehr
+..
+!BADAENDE
+.continue AUSGANG
+..
+!MZAUSGABE
+.copy M|lgruppe  = 9|lgruppe
+.copy M|art      = 9|artikel
+.formula M|zuomge     = 9|zuomge
+.formula M|einh       = 9|einh
+.formula M|faktor     = 9|faktor
+.formula M|lzuomge    = 9|lzuomge
+.formula M|leinh      = M|kle  ?  M|kle <> ""
+..
+.. Variable aus Reservierung merken
+.copy M|lffert   = 0|lffert
+.formula M|lohnfert   = U|xlohnfert^id
+.formula M|lief       = U|xlief^id
+.continue 'U|xmarke'

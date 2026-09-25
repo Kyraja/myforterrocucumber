@@ -10,6 +10,22 @@
 import type { FeatureInput } from '../types/gherkin';
 
 /**
+ * Transliterate German umlauts and eszett to ASCII equivalents.
+ * The consuming Cucumber runner requires ASCII-only feature files — keeping
+ * preview and download in sync means we sanitize at the serialization edge.
+ */
+function transliterateUmlauts(text: string): string {
+  return text
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/Ä/g, 'Ae')
+    .replace(/Ö/g, 'Oe')
+    .replace(/Ü/g, 'Ue')
+    .replace(/ß/g, 'ss');
+}
+
+/**
  * Maps a zero-based output line number to the step and/or scenario it originated from.
  * Used by the preview pane to support click-to-focus navigation.
  */
@@ -105,7 +121,7 @@ export function generateGherkinWithMapping(input: FeatureInput): GherkinResult {
     }
   }
 
-  return { text: lines.join('\n') + '\n', lineMapping };
+  return { text: transliterateUmlauts(lines.join('\n') + '\n'), lineMapping };
 }
 
 /**

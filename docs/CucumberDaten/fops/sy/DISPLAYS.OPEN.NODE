@@ -1,0 +1,162 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name      : DISPLAYS.OPEN.NODE
+.. Autor         : fwester
+.. Verantwortlich: fwester
+.. Kontrolle     : xg
+.. Funktion      : Oeffnet den angeklickten Knoten.
+.. Ablauf        : Unterprogramm
+..
+.. Functionality : Opens the clicked node.
+.. Program flow  : Subroutine
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type integer    xdesc1 xlinesoffile xendlevel
+.type text   x1raw x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 xtmpcl
+.type text   xlastscreen xnewscreen xlastusersymbol xnewusersymbol xfilter xpattern xrootpattern
+.type bool   xotherusersymbol xotherscreen xisroot
+.type DV    xtmpfile
+..
+.. Open file with treeview data
+.formula U|xtmpfile = M|treeviewfile
+.occupy 'U|xtmpfile'
+.file -test -open U|xdesc1 'U|xtmpfile'
+.continue ERROR01 ? _G|mehr
+..
+.formula U|xendlevel = M|tbaumstufe + 1
+.formula U|xendlevel = 3 ? U|xendlevel > 3
+.copy U|xisroot = M|tbaumstufe = 1
+.formula M|motherrow = M|tmomofelem
+.formula M|rootrow = M|trootofelem
+.formula U|xfilter = M|tscreen ? M|typeofelem = M|screennode
+.formula U|xfilter = M|tclient + M|screensep + M|tusersymbol ? M|typeofelem = M|usernode
+.continue SETLAST ? U|xisroot
+..
+!ROOT: Getting root of element before loading event row
+.select screen line 'M|rootrow'
+.continue FATAL ? _G|mehr
+.continue USR1 ? M|userview
+.formula U|xlastscreen = M|tscreen
+.formula U|xlastusersymbol = U|xfilter
+.continue EVENT
+..
+!USR1
+.formula U|xlastscreen = U|xfilter
+.formula U|xlastusersymbol = M|tclient + M|screensep + M|tusersymbol
+..
+!EVENT: Get element of event row
+.select screen line 'G|evtzeile'
+.continue FATAL ? _G|mehr
+.continue TREE
+..
+!SETLAST
+.continue USR2 ? M|userview
+.formula U|xlastscreen = U|xfilter
+.continue TREE
+..
+!USR2
+.formula U|xlastusersymbol = U|xfilter
+..
+!TREE: Reading file with treeview data line by line
+.file -read U|xdesc1 U|x1raw ! U|x2 ! U|x3 ! U|x4 ! U|x5 ! U|x6 ! U|x7 ! U|x8 ! U|x9 ! U|x10 ! U|x11^
+.continue CLOSE ? _G|mehr
+.formula U|x1 = ( U|x1raw * "-#X" )
+.formula U|x1 = U|x1raw
+.formula U|xlinesoffile = U|xlinesoffile + 1
+.continue TREE ? M|tlineoffile > U|xlinesoffile
+.formula U|xrootpattern = (U|x1 + M|screensep + U|x2) ? M|userview
+.formula U|xpattern = U|x3 ? M|userview
+.formula U|xrootpattern = U|x1 ? _M|userview
+.formula U|xpattern = (U|x2 + M|screensep + U|x3) ? _M|userview
+.continue CLOSE ?  U|xisroot & U|xfilter <> U|xrootpattern
+.continue CLOSE ? _U|xisroot & U|xfilter <> U|xpattern
+.formula U|xtmpcl = F|condexpr(M|userview, F|substr(U|x1, 1, F|typelength(F|typeof(G|mandant))), F|substr(U|x2, 1, F|typelength(F|typeof(G|mandant))))
+.continue TREE ? _F|empty(M|clientname) & M|clientname <> U|xtmpcl
+.assign M|timestampofpid = U|x10
+.assign M|dateofpid = F|date('M|timestampofpid:8')
+.continue TREE ? M|dateofpid > (G|datum - M|pidexpiry)
+.continue USRANA2 ? M|userview
+..
+!SCRANA1: Analyzing line starting with screens
+.formula M|stufe = 1
+.formula U|xnewscreen = U|x1
+.copy U|xotherscreen = U|xnewscreen <> U|xlastscreen
+.continue TREE ? U|xotherscreen
+..
+!USRANA1: Analyzing user because screens in this view are unique
+.formula M|stufe = 2
+.formula M|client = U|x2
+.formula M|usersymbol = U|x3
+.formula U|xnewusersymbol = M|client + M|screensep + M|usersymbol
+.copy U|xotherusersymbol = U|xnewusersymbol <> U|xlastusersymbol
+.continue NEWUSR1 ? U|xotherusersymbol
+..
+!PIDANA
+.continue TREE ? M|stufe = U|xendlevel
+.formula M|motherrow = M|aktzeile ? M|typeofelem <> M|pidleaf
+.formula M|stufe = 3
+.formula M|pid = U|x4
+.formula M|ppid = U|x5
+.formula M|host = U|x6
+.formula M|callerno = U|x7
+.formula M|location = U|x9
+.assign M|dateofpid = U|x10 << M|lenofdate
+.assign M|timeofpid = U|x10 >> M|lenoftime
+.formula M|interface = U|x11
+..
+!PID: Always create a table row for the process
+.formula M|elementtype = M|pidleaf
+.formula M|lineoffile = U|xlinesoffile
+.input 'M|tab'
+.continue TREE
+..
+!NEWUSR1: Appearance of an other user symbol
+.formula U|xlastusersymbol = U|xnewusersymbol
+.formula M|elementtype = M|usernode
+.formula M|lineoffile = U|xlinesoffile
+.formula M|motherrow = M|rootrow
+.input 'M|tab'
+.continue TREE
+..
+!USRANA2: Analyzing starting with user
+.formula M|stufe = 1
+.formula M|client = U|x1
+.formula M|usersymbol = U|x2
+.formula U|xnewusersymbol = M|client + M|screensep + M|usersymbol
+.copy U|xotherusersymbol = U|xnewusersymbol <> U|xlastusersymbol
+.continue TREE ? U|xotherusersymbol
+..
+!SCRANA2: Analyzing screen because users in this view are unique
+.formula M|stufe = 2
+.formula U|xnewscreen = U|x3
+.copy U|xotherscreen = U|xnewscreen <> U|xlastscreen
+.continue NEWSCR2 ? U|xotherscreen
+.continue PIDANA
+..
+!NEWSCR2: Appearance of an other and unique screen/license
+.formula U|xlastscreen = U|xnewscreen
+.formula M|elementtype = M|screennode
+.formula M|lineoffile = U|xlinesoffile
+.formula M|motherrow = M|rootrow
+.input 'M|tab'
+.continue TREE
+..
+!CLOSE: Close file
+.file -close U|xdesc1
+.occupy
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!FATAL
+.error -number 1111
+.end 1
+..
+..
+!ERROR01: Cannot read file!
+.occupy
+.error -message Die Datei 'U|xtmpfile' kann nicht zum Lesen ge”ffnet werden!
+.end 1

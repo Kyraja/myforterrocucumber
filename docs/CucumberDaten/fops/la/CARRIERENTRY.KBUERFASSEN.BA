@@ -1,0 +1,201 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : CARRIERENTRY.KBUERFASSEN.BA
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : dsch
+.. Functionality  : Create the carrier status message from the info system table
+..                  TODO: use a mapping model ;)
+..*****************************************************************************
+..<META M|='la/CARRIERENTRY'>
+.set trans -
+..
+.colour -foreground -1 -1 -1 -background 'M|colerror' kkreislauf 0 ? F|empty(M|ksender) ; F|empty(M|ksendergln) ; F|empty(M|ksenderustid)
+.colour -foreground -1 -1 -1 -background 'M|colerror' ksender 0 ? F|empty(M|ksender)
+.colour -foreground -1 -1 -1 -background 'M|colerror' ksendergln 0 ? F|empty(M|ksendergln)
+.colour -foreground -1 -1 -1 -background 'M|colerror' ksenderustid 0 ? F|empty(M|ksenderustid)
+.colour -foreground -1 -1 -1 -background 'M|colerror' kabm 0 ? F|empty(M|kabm)
+.colour -foreground -1 -1 -1 -background 'M|colerror' kdatumvon 0 ? F|empty(M|kdatumvon)
+.colour -foreground -1 -1 -1 -background 'M|colerror' kdatumbis 0 ? F|empty(M|kdatumbis)
+.colour -foreground -1 -1 -1 -background 'M|colerror' kdokuart 0 ? F|empty(M|kdokuart)
+.colour -foreground -1 -1 -1 -background 'M|colerror' kdatumauszug 0 ? F|empty(M|kdatumauszug)
+.colour -foreground -1 -1 -1 -background 'M|colerror' kkoaznr 0 ? F|empty(M|kkoaznr)
+..
+.. Check required arguments
+.continue NOKREIS ? F|empty(M|ksender) ; F|empty(M|ksendergln)  ; F|empty(M|ksenderustid)
+.continue NOABM   ? F|empty(M|kabm)
+.continue NOZRAUM ? F|empty(M|kdatumvon) ; F|empty(M|kdatumbis)
+.continue NODOC   ? F|empty(M|kdokuart)
+.continue NOKDATE ? F|empty(M|kdatumauszug)
+.continue NOKNUM  ? F|empty(M|kkoaznr)
+..
+.. Define technical data for message: version and row numbers
+.type integer rowno
+.formula U|rowno = 0
+.type text version
+.formula U|version = "01"
+.type text messagetype
+.formula U|messagetype = "ACARSTA"
+..
+.. Count created non-empty rows
+.type integer rowsWithQty
+.formula U|rowsWithQty = 0
+..
+.. Construct file name
+.formula M|kdateiname = M|kempverz + "/" + 'M|kabm^datprefix' + 'M|kkreislauf^nummer' + "_" + 'M|kerfassenkontonr' + "_" + 'G|versionneu'
+..
+.. File is built as temporary file first
+.type text xladkoerfassen
+.file -tempname U|xladkoerfassen
+.output new 'U|xladkoerfassen'
+.input "DATEI.F"
+..
+.. temporary fields
+.type text xzuabzeichen
+.type text xzuabcode
+.type text xzeit
+.. sortable time:14 -> JJJJMMTThhmmss-> hhmmss -> hhmm
+.formula U|xzeit = 'G|zeitpunkt:14'>>6<<4
+.type text xiquantity
+..
+..
+!HEAD
+.select screen header
+..
+.. Message header data in info system header
+..  kkreislauf (v)
+..  kdatumauszug
+..  kdokuart
+..  kdatumvon
+..  kdatumbis
+..
+.formula U|rowno = U|rowno +1
+UNBI#'U|version'#'M|ksender^nummer'###'M|kempfaenger'###'G|datum:8'#'U|xzeit'##1#2##'G|datum:8'##########'U|rowno'#
+..
+.formula U|rowno = U|rowno +1
+UNHI#'U|version'##'U|messagetype'#####################'U|rowno'#
+..
+.formula U|rowno = U|rowno +1
+BGMI#'U|version'#'M|kkoaznr'#'M|kdatumauszug:8'#####################'U|rowno'#
+..
+.formula U|rowno = U|rowno +1
+DAH1#'U|version'#####'M|kdatumbis:8'#'M|kdatumvon:8'#################'U|rowno'#
+..
+!NEXTROW
+.select screen line
+.continue ENDROW ? _G|mehr
+.continue NEXTROW ? F|empty(M|tbehaelterkonto)
+.continue ERRKUA ? F|empty(M|tkuartnr)
+.continue ERRQTY ? F|empty(M|tzugang) & F|empty(M|tabgang)
+..
+.. Pack account data in info system table
+..  tbehaelterkonto (v)
+..  tpartner (v)
+..  tartikel (v)
+..  tkuartnr
+..  twerk
+..
+.. Quantity data in info system table
+..  tzugang
+..  tabgang
+..  tbeleg
+..  tbelegdatum
+..
+.formula U|xzuabzeichen = "-"
+.formula U|xzuabzeichen = "+" ? M|tzugang <> 0
+..
+.formula U|xzuabcode = "21"
+.formula U|xzuabcode = "10"  ?  M|tzugang <> 0
+..
+.formula U|xiquantity = M|tabgang
+.formula U|xiquantity = M|tzugang ? M|tzugang <> 0
+..
+.. count non-empty rows
+.formula U|rowsWithQty = U|rowsWithQty + 1 ? _F|empty(U|xiquantity)
+..
+.formula U|rowno = U|rowno +1
+LIN1#'U|version'#######################'U|rowno'#
+..
+.formula U|rowno = U|rowno +1
+SUP1#'U|version'#'M|kempfgln'#'M|kempfaenger'#####'M|kempfustid'################'U|rowno'#
+..
+.formula U|rowno = U|rowno +1
+BUY1#'U|version'#'M|tpartner^gln'#'M|tpartner^nummer'##'M|twerk'###################'U|rowno'#
+..
+.formula U|rowno = U|rowno +1
+PAC1#'U|version'##'M|tartikel^nummer'#'M|tkuartnr'####################'U|rowno'#
+..
+.formula U|rowno = U|rowno +1
+RFL1#'U|version'###'M|tbeleg'#'M|tbelegdatum:8'###################'U|rowno'#
+..
+.formula U|rowno = U|rowno +1
+RFL2#'U|version'###############'U|xzuabcode'########'U|rowno'#
+..
+.formula U|rowno = U|rowno +1
+FTXL#'U|version'#######################'U|rowno'#
+..
+.formula U|rowno = U|rowno +1
+QTY1#'U|version'#'U|xiquantity'#PCE###########'U|xzuabzeichen'##########'U|rowno'#
+..
+..
+.. Loop rows in info system table
+.continue NEXTROW
+..
+..
+!ENDROW
+.formula U|rowno = U|rowno +1
+UNZI#'U|version'#######################'U|rowno'#
+..
+..
+.. abort message, if there are no non-empty rows
+.continue NOROWS ? U|rowsWithQty = 0
+..
+.. move temp file to receiving directory
+.system 'F|formatstr("mv {1} {2}", U|xladkoerfassen, M|kdateiname)' background
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!NOKREIS
+.error -field M|ksender -message Zum Anlegen eines LadungstrÑgerkontoauszugs muss der Sender vollstÑndig angegeben werden.
+.end 1
+..
+!NOABM
+.error -field M|kabm -message Geben Sie das Abbildungsmodell fÅr den Import des LadungstrÑgerkontoauszugs an!
+.end 1
+..
+!NOZRAUM
+.error -field M|kdatumvon -message Geben Sie den Zeitraum fÅr den LadungstrÑgerkontoauszug an!
+.end 1
+..
+!NODOC
+.error -field M|kdokuart -message Geben Sie die Dokumentart fÅr den LadungstrÑgerkontoauszug an!
+.end 1
+..
+!NOKDATE
+.error -field M|kdatumauszug -message Geben Sie das Datum Kontoauszug fÅr den LadungstrÑgerkontoauszug an!
+.end 1
+..
+!NOKNUM
+.error -field M|kkoaznr -message Geben Sie die Kontoauszugsnummer fÅr den LadungstrÑgerkontoauszug an!
+.end 1
+..
+!ERRKUA
+.error -line 'M|aktzeile' -field M|tkuartnr -message Der BehÑlter hat keine Kundenartikelnummer!
+.output terminal
+.colour -foreground -1 -1 -1 -background 'M|colerror' tkuartnr 'M|aktzeile'
+.end 1
+..
+!ERRQTY
+.error -line 'M|aktzeile' -field M|tzugang -message Die Zeile enthÑlt keine Menge fÅr Zugang oder Abgang!
+.output terminal
+.colour -foreground -1 -1 -1 -background 'M|colerror' tzugang 'M|aktzeile'
+.colour -foreground -1 -1 -1 -background 'M|colerror' tabgang 'M|aktzeile'
+.end 1
+..
+!NOROWS
+.error -message Der LadungstrÑger-Kontoauszug enthÑlt keine Zeilen mit Mengen!
+.output terminal
+.end 1

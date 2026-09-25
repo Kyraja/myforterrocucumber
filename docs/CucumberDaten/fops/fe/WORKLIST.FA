@@ -1,0 +1,63 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : WORKLIST.FA
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Function       : Feld-FÅll-/Feld-Austritts-FOP fÅr Kopffelder mgr und mitarb
+.. Functionality  : Field-exit-/Field-fill-FOP for headerfields mgr and mibr
+..
+..  Includes       :
+..  include fe/WORKLIST.BA
+..*****************************************************************************
+.set trans -
+.type text xtsel ? _F|defined(U|xstsel)
+..
+.. Eventhandling
+.continue MASCHI   ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "mgr"
+.continue MITARB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "mitarb" 
+.continue ENDE
+..
+!MASCHI:  Maschine
+.continue LEER                                   ? F|empty(M|mgr)
+.. Maschinenstatus setzen
+.set trans +
+.formula M|maschstatus = "S T I L L S T A N D"   ? F|equals(M|mgr^mgrstatus, "(Downtime)")
+.colour -background 'M|farbe4' maschstatus       ? F|equals(M|mgr^mgrstatus, "(Downtime)")
+.formula M|maschstatus = "ok"                    ? F|empty(M|mgr^mgrstatus)
+.set trans -
+.colour -background 'M|farbe1' maschstatus       ? F|empty(M|mgr^mgrstatus)
+.. Wenn Maschine eingegeben wird die Qualifikationsliste geleert
+.formula M|qualliste = G|FALSE
+.continue ENDE
+..
+!LEER: Maschinenfelder leeren
+.formula M|mgr = ""
+.formula M|mgrname = ""
+.formula M|maschstatus = ""
+.continue ENDE
+..
+!MITARB: Mitarbeiter
+.continue ENDE ? F|empty(M|mitarb)
+..prÅfen auf Lohngruppe und Schichtplan im Mitarbeiter
+.formula M|bdetext = ""
+.formula M|bdestatus = ""
+.set trans +
+.formula M|bdetext = "Mitarbeiter hat keine Lohngruppe"   ? M|mitarb^lohn = 0 & _F|empty(M|mitarb)
+.formula M|bdestatus = M|leg9                             ? M|mitarb^lohn = 0 & _F|empty(M|mitarb)
+.formula M|bdetext = "Mitarbeiter hat keinen Schichtplan" ? F|empty(M|mitarb^splan)
+.set trans -
+.formula M|bdestatus = M|leg9                             ? F|empty(M|mitarb^splan)  
+.. prÅfen ob es eine Qualifikationsliste fÅr den Mitarbeiter gibt
+.. es kann nur ein Liste pro Mitarbeiter geben, KernprÅfung
+.continue ENDE ? F|empty(M|mitarb)
+.formula U|xtsel = "$,,such=;ma="+'M|mitarb'+";@gruppe=3;@autostart=ja;"
+.select qualifications 'U|xtsel'
+.copy M|qualliste = G|TRUE  ? G|mehr
+.copy M|qualliste = G|FALSE ? _G|mehr
+.formula M|mgr       = ""
+.continue ENDE
+..
+..**********************************************************************
+!ENDE: Programmende
+.end

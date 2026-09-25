@@ -1,0 +1,94 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SPEDAUO.EV
+.. Autor          : fwester
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Behandelt zentral die Ereignisse.
+.. Ablauf         : Zentrales EFOP
+..
+.. Functionality  : Central handling of events.
+.. Program flow   : Central efop
+..*****************************************************************************
+.set trans -
+..
+..---------------------------- Header: ----------------------------------------
+.continue REFRESH ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+.continue BUSEL   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "busel"
+.continue COMAND  ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "budoc"
+.continue NOSEL   ? G|evtartengl = "FIELD_FILL"   & G|evtvar = "filing"
+.continue NOSEL   ? G|evtartengl = "FIELD_FILL"   & G|evtvar = "printable"
+.continue NOSEL   ? G|evtartengl = "FIELD_FILL"   & G|evtvar = "send"
+.continue NOSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "fromno"
+.continue NOSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "tono"
+.continue NOSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "fromdate"
+.continue NOSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "todate"
+.continue NOSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "fromsubject"
+.continue NOSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "tosubject"
+.continue NOSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "customer"
+.continue NOSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "shipper"
+..---------------------------- Table: -----------------------------------------
+.continue DRUCK   ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "prspedauf"
+.continue DRUCK   ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "prwbs"
+.continue DRUCK   ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "prwhg"
+.continue DELNOTE ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "tbudelnote"
+..=============================================================================
+.continue END
+..
+!BUSEL: Query database with selection bar
+.formula M|select = "!"
+.formula G|evtfeldneu = "%"
+.input "is/AUSWAHL"
+.input "is/KOPFLEEREN" ? M|select <> "!"
+.copy M|sel = M|select <> "!"
+.continue CLRTAB
+..
+!DRUCK: Print papers
+.type ID87:9 xcallparam
+.assign U|xcallparam = "52392"    ?  G|evtvar = "prspedauf"
+.assign U|xcallparam = "52393"    ?  G|evtvar = "prwbs"
+.assign U|xcallparam = "52394"    ?  G|evtvar = "prwhg"
+.continue END ? _G|mehr ; F|empty(U|xcallparam)
+.input "st/CALLPARAM.EXEC"
+.continue END
+..
+!REFRESH: Start again
+.input "is/TABLEEREN"
+.formula M|select = M|select + ";@ablageart=(Active)"
+.input "is/HOL.LISTE"
+.continue END ? _M|filing
+.formula M|select = M|select + ";@ablageart=(Filed)"
+.input "is/HOL.LISTE"
+.continue END
+..
+!NOSEL: Switch off selection with SEL
+.copy M|sel = G|FALSE
+.continue CLRTAB
+..
+!CLRTAB: Clear table
+.input "is/TABLEEREN" ? _M|tzeilen = 0
+.continue END
+..
+!DELNOTE: Shows delivery notes as a list in a selection bar
+.type text xsel
+.formula U|xsel = "{1},,nummer=!;vom=!;betreff=!;sped="
+.formula U|xsel = U|xsel + M|tidentnumber^id
+.formula U|xsel = U|xsel + ";@.sort=;@gruppe=1;@autostart=(Yes)"
+.formula U|xsel = U|xsel + ";@lschutz=(Yes);@lesen=(Yes)"
+.formula U|xsel = U|xsel + ";@.verknuepfung=und;@bereich=(No)"
+.formula U|xsel = U|xsel + ";@ablageart=(Both)"
+.select sales 'F|formatstr(U|xsel, "%")' ? _G|edp
+.select sales 'F|formatstr(U|xsel, "$")' ?  G|edp
+.continue VIEW ? G|mehr
+.. Cancel event without core error message
+.error ? _G|edp
+.end 1
+..
+!VIEW: View delivery note
+.formula U|xsel = H|id
+.formula U|xsel = "$" + (G|selrohl<<-1) + G|selkrit ? G|selkrit/"*@ber*"
+.select -
+.end 0 'F|formatstr("<(Sales)>{1}<(View)>", U|xsel)'
+..*****************************************************************************
+!END
+.continue

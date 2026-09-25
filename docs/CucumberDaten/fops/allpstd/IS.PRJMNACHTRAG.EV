@@ -1,0 +1,335 @@
+..!interpreter english declaration noabbrev
+.set TRANS -
+..========================================================================
+..==  Name              : IS.PRJMNACHTRAG.EV
+..==  Pfad              : allpstd
+..==  Funktion          : Das Infosystem NACHTRAG soll einem Projektleiter oder Kostenstellenverantwortlichen
+..==                      erm”glichen zu allen ihm zugeordneten Projekten diejenigen Leistungsmeldungen anzuzeigen,
+..==                      die vom Bearbeiter als m”gliche Nachtr„ge oder Change Orders markiert wurden.
+..==
+..==  Erstellungsdatum  : 08.12.2010
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2014 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird ber EasyCase bearbeitet und mit easy2lg generiert!
+..==  Žnderungen auáerhalb von EasyCase werden nach der n„chsten Žnderung
+..==  im EasyCase wieder berschrieben und drfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF"
+..====================================================
+.type text    xtsys xtsel xtftext
+.type text    xtupkorepruef xykoobjekt xtindex xtid xtstack
+.type bool    xyberlaubt xbmehr
+.type integer xivar
+.type GD19    xdvon xdbis
+.type GD      xddat
+.type integer xprocsp      ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- KST_Projekt -----
+.copy U|xbmehr = G|TRUE
+.continue EL001 ? _(U|xypmrepruefkst)
+.formula U|xykoobjekt = H|yprojekt^yverantwkst^id
+.input 'U|xypmrepruefkstprog'
+.copy U|xbmehr = U|xyberlaubt
+!EL001
+.continue EL002 ? _(U|xypmrepruefktr)
+.formula U|xykoobjekt = H|yprojekt^yktr^id
+.input 'U|xypmrepruefktrprog'
+.copy U|xbmehr = U|xyberlaubt
+!EL002
+.continue EL003 ? _(U|xypmrepruefind)
+.input 'U|xypmrepruefindprog'
+.copy U|xbmehr = U|xyberlaubt
+!EL003
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Leistungsmeldungen_laden -----
+.select group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL004 ? _(_(F|empty(H|yprojekt)))
+.continue EL005 ? _(((H|yprojekt^yablage) & (_(M|ybproffen)) & (M|ybprabgeschlossen) & ((H|yprojekt^yabldat >= M|yvondatum) ; (F|empty(M|yvondatum))) & ((H|yprojekt^yabldat <= M|ybisdatum) ; (F|empty(M|ybisdatum)))) ; ((((H|yprojekt^yablage) & ((H|yprojekt^yabldat >= M|yvondatum) ; (F|empty(M|yvondatum))) & ((H|yprojekt^yabldat <= M|ybisdatum) ; (F|empty(M|ybisdatum)))) ; (_(H|yprojekt^yablage))) & (M|ybproffen) & (M|ybprabgeschlossen)) ; ((_(H|yprojekt^yablage)) & (M|ybproffen) & (_(M|ybprabgeschlossen))))
+.continue EL006 ? _(M|yballekst)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.continue FI006
+!EL006
+.continue EL007 ? _(H|yprojekt^yverantwkst^id = U|xtkst.xtindex)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+.continue FI007
+!EL007
+.formula U|xbmehr = G|FALSE
+!FI007
+!FI006
+.continue FI005
+!EL005
+.fo U|xbmehr = G|FALSE
+!FI005
+!EL004
+.continue EL008 ? _(U|xbmehr)
+.make screen line +
+.formula M|ytleistmeld   = H|id
+.formula M|ytlmname      = H|namebspr
+.formula M|ytpersonal    = H|ypersonal^id
+.formula M|ytarbzeit     = H|yarbzeit
+.copy    M|ytnachtragbeh = H|ynachtragbeh
+.formula M|ytnachtragbem = H|ynachtragbem
+.formula M|ytarbzeit     = H|yarbzeit
+.formula M|ytfaktzeit    = H|yfaktzeit
+.formula M|ytprojekt     = H|yprojekt^id
+.formula M|ytprojleit    = H|yprojekt^yprojleit^id
+.formula M|ytplname      = M|ytprojleit^namebspr
+.formula M|ytverantwkst  = H|yprojekt^yverantwkst^id
+.continue EL009 ? _(_(F|empty(H|ybeschext)))
+.output NEW 'U|xtftext'
+.input -TEXT 'H|ybeschext'
+.formula M|ytbeschext = U|xtftext
+.select from 'H|ybeschext' M|yttext^
+!EL009
+.continue EL010 ? _(_(F|empty(H|ybeschint)))
+.output NEW 'U|xtftext'
+.input -TEXT 'H|ybeschint'
+.formula M|ytbeschint = U|xtftext
+!EL010
+.colour -BACKGROUND "-1 -1 -1" 'M|aktzeile'
+!EL008
+.select continue
+.continue LOOP001
+!ELOP001: ==============================
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Leistungsmeldungen_selektieren -----
+.file -TEMPNAME U|xtftext
+.input DATEI.F
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt=="              + M|yprojekt^id         ? _F|empty(M|yprojekt)
+.formula U|xtsel = U|xtsel + ";yprojekt^yprojleit=="    + M|yprojleit^id        ? _F|empty(M|yprojleit)
+.formula U|xtsel = U|xtsel + ";yprojekt^yprojverantw==" + M|yprojverantw^id     ? _F|empty(M|yprojverantw)
+.formula U|xtsel = U|xtsel + ";yprojekt^yprojekttyp=="  + M|yprojekttyp^id      ? _F|empty(M|yprojekttyp)
+.formula U|xtsel = U|xtsel + ";yprojekt^ykunde=="       + M|ykunde^id           ? _F|empty(M|ykunde)
+.formula U|xtsel = U|xtsel + ";yprojekt^ystatus=="      + M|yprojstatus^id      ? _F|empty(M|yprojstatus)
+.formula U|xtsel = U|xtsel + ";ynachtrag==1"
+.formula U|xtsel = U|xtsel + ";ynachtragbeh==0"                                 ? _M|ynachtragbeh
+.formula U|xtsel = U|xtsel + ";@ablageart=(Active)"
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC002
+!RET003
+.formula xprocsp = xprocsp - 1
+.continue 'xprocst.xprocsp'
+!PROC004: ----- speichern -----
+.input "is/ABASFARBEN.DEF"
+.select screen header
+.select screen line
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.continue EL011 ? _(M|ytbspeichern)
+.select lock add M|ytleistmeld
+.continue EL012 ? _(G|mehr)
+.copy H|ynachtragbeh = M|ytnachtragbeh
+.copy H|ynachtragbem = M|ytnachtragbem
+.rewrite
+.copy M|ytbspeichern = G|FALSE
+.colour -BACKGROUND 'U|xabaslightgreen' 'M|aktzeile'
+.continue FI012
+!EL012
+.copy M|ytnachtragbeh = M|ytleistmeld^ynachtragbeh
+.copy M|ytnachtragbem = M|ytleistmeld^ynachtragbem
+.colour -BACKGROUND 'U|xabasred' 'M|aktzeile'
+!FI012
+!EL011
+.select screen line
+.continue LOOP002
+!ELOP002: ==============================
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskein")
+.input 'U|xtupprjmsel'
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "maskabbr")
+.select screen header
+.select screen line
+.copy U|xbmehr = G|mehr
+!LOOP003: ==============================
+.continue ELOP003 ? _(U|xbmehr)
+.continue EL013 ? _(M|ytbspeichern)
+.copy U|xbmehr = G|FALSE
+!REPT001: ==============================
+.menu (0,0,3) Achtung
+Es wurden noch nicht alle Vorg„nge gespeichert!
+
+speichern und beenden
+ohne speichern fortfahren
+.continue REPT001 ? _((G|menue = 3) ; (G|menue = 4))
+.continue EL014 ? _(G|menue = 3)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC004
+!RET004
+.formula xprocsp = xprocsp - 1
+.copy U|xbmehr = G|FALSE
+!EL014
+.continue FI013
+!EL013
+.select screen line
+.copy U|xbmehr = G|mehr
+!FI013
+.continue LOOP003
+!ELOP003: ==============================
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtart = "maskpruef")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC004
+!RET005
+.formula xprocsp = xprocsp - 1
+.continue ESAC001
+!BRK003
+.continue BRK004 ? _(G|evtart = "maskende")
+.end 1          ? M|ybmaskezu
+.continue ESAC001
+!BRK004
+.continue BRK005 ? _(G|evtart = "feldaus")
+.continue BRK006 ? _(G|evtvar = "yvondatum")
+.input 'U|xtupprjmsel'
+.continue ESAC002
+!BRK006
+.continue BRK007 ? _(G|evtvar = "ybisdatum")
+.input 'U|xtupprjmsel'
+.continue ESAC002
+!BRK007
+.continue BRK008 ? _(G|evtvar = "yprojekt")
+.input 'U|xtupprjmsel'
+.continue ESAC002
+!BRK008
+.continue BRK009 ? _(G|evtvar = "yprojleit")
+.input 'U|xtupprjmsel'
+.continue ESAC002
+!BRK009
+.continue BRK010 ? _(G|evtvar = "yprojekttyp")
+.input 'U|xtupprjmsel'
+.continue ESAC002
+!BRK010
+.continue BRK011 ? _(G|evtvar = "yballekst")
+.input 'U|xtupprjmsel'
+.continue EL015 ? _(M|yprojekt="")
+.formula M|yarbpaket = ""
+.formula M|yapname   = ""
+!EL015
+.continue ESAC002
+!BRK011
+.continue BRK012 ? _(G|evtvar = "ybproffen")
+.input 'U|xtupprjmsel'
+.continue ESAC002
+!BRK012
+.continue BRK013 ? _(G|evtvar = "ybprabgeschlossen")
+.input 'U|xtupprjmsel'
+.continue ESAC002
+!BRK013
+.continue BRK014 ? _(G|evtvar = "ybnurposoffen")
+.input 'U|xtupprjmsel'
+.continue ESAC002
+!BRK014
+.continue EL016 ? _(G|evtzeile = 0)
+.input 'U|xtupprjmsel'
+!EL016
+!ESAC002: =====   ENDCASE   =====
+.continue EL017 ? _(G|evtzeile = 0)
+.make screen line --O
+.continue FI017
+!EL017
+.copy M|ytbspeichern = G|TRUE   ? _G|evtvar = "ytbspeichern"
+.colour -BACKGROUND "-1 -1 -1" 'M|aktzeile'
+!FI017
+.continue ESAC001
+!BRK005
+.continue BRK015 ? _(G|evtart = "buttonvor")
+.make screen line --O
+.continue ESAC001
+!BRK015
+.continue BRK016 ? _(G|evtart = "buttonnach")
+.continue BRK017 ? _(G|evtvar = "bstart")
+.continue EL018 ? _(M|yballekst)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC003
+!RET006
+.formula xprocsp = xprocsp - 1
+.continue FI018
+!EL018
+.input 'U|xtupkstarray'
+.formula U|xtindex = ""
+.formula U|xtindex = F|nextelem(U|xtkst, xtindex)
+!LOOP004: ==============================
+.continue ELOP004 ? _(_(F|empty(U|xtindex)))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC003
+!RET007
+.formula xprocsp = xprocsp - 1
+.formula U|xtindex = F|nextelem(U|xtkst, xtindex)
+.continue LOOP004
+!ELOP004: ==============================
+!FI018
+.continue EL019 ? _((M|ybteilprojekte) & (_(F|empty(M|yprojekt))))
+.file -TEMPNAME U|xtftext
+.input DATEI.F
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yteilprojektzu==" + M|yprojekt^id
+.formula U|xtsel = U|xtsel + ";@ablageart=(1)"
+.load 0 group 'U|xydbgrprojekt' 'U|xtsel'
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.file -TEMPNAME U|xtftext
+.input DATEI.F
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt==" + 0|id
+.formula U|xtsel = U|xtsel + ";;ynachtrag==1"
+.formula U|xtsel = U|xtsel + ";ynachtragbeh==0"     ? _M|ynachtragbeh
+.formula U|xtsel = U|xtsel + ";@ablageart=(1)"
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC002
+!RET008
+.formula xprocsp = xprocsp - 1
+.load 0 continue
+.continue LOOP005
+!ELOP005: ==============================
+!EL019
+.continue ESAC003
+!BRK017
+.continue BRK018 ? _(G|evtvar = "ybuspeichern")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC004
+!RET009
+.formula xprocsp = xprocsp - 1
+.continue ESAC003
+!BRK018
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC001
+!BRK016
+!ESAC001: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJMNACHTRAG.EV")'       ? F|fileexists(F|foppath("IFOP.IS.PRJMNACHTRAG.EV"))
+.continue

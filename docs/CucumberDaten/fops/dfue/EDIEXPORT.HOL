@@ -1,0 +1,224 @@
+..!interpreter english translate noabbrev
+..!meta M|=dfue/EDIEXPORT
+..*****************************************************************************
+.. FOP-Name       : EDIEXPORT.HOL
+.. Autor          : ok/mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : Find new sales orders and shipping papers, that still need to be transfered with EDI
+..*****************************************************************************
+.set trans -
+..
+.type text xtsel   ? _defined(xtsel)
+.type text xmarke  ? _defined(xmarke)
+.type text xvorart ? _defined(xvorart)
+.type date xdleer  ? _defined(xdleer)
+.type text xdlader ? _defined(xdlader)
+..
+.. Helfer fuer Suche in EDI-Nachrichten
+.type I2   xi
+.type text xtsatzart
+.type text xtkeyfield
+.type text xtsel ? _F|empty(U|xtsel)
+..
+.. Wird an Zeilen EFOP 'M|tab' Åbergeben!
+.type P3   xvvk
+.type P55  xvsped
+..
+.input "dfue/DFUE.EXP.INI"
+.input "is/TABLEEREN"
+..
+.continue RECH ? 'M|kvorart(L=":")' = "(Invoice)"
+.continue AB   ? 'M|kvorart(L=":")' = "(SalesOrderConfirmation)"
+.continue LS   ? 'M|kvorart(L=":")' = "(PackingSlip)"
+.continue LAKO ? 'M|kvorart(L=":")' = "(LoadCarrierAccountStatement)"
+.continue ALLE ? 'M|kvorart(L=":")' = "(EmptyEntry)"
+..
+!RECH
+.formula U|xtsel ="$,,;@ablageart=(Filed);@gruppe=1;ktyp=(Invoice);dfuesenden=(Yes);@ordnung=nummer"
+.formula U|xtsel = U|xtsel + ";betreuer=" + 'M|betreuer^id' ? _F|empty(M|betreuer)
+.formula U|xtsel = U|xtsel + ";kunde2=" + 'M|kkunde^id' ? _F|empty(M|kkunde) & kkunde^gruppe=1
+.formula U|xtsel = U|xtsel + ";kunde2=" + 'M|kkunde^firma^id' ? _F|empty(M|kkunde) & kkunde^gruppe=2
+.formula U|xtsel = U|xtsel + F|formatstr(";dfuedat=!{1}",M|wdatum) ? _F|empty(M|wdatum)
+.select sales 'U|xtsel'
+.continue ENDRE ? _T|mehr
+.formula U|xvorart = "(Invoice)"
+.continue LPRE ? 'H|vorganga(L=":")'<> "(Invoice)" & 'H|vorganga(L=":")'<> "(CreditNoteCommercial)" 
+.input 'M|tab'  ? M|tab<>""
+..
+!LPRE
+.select sales
+.continue ENDRE ? _mehr
+.continue LPRE ? 'H|vorganga(L=":")'<> "(Invoice)" & 'H|vorganga(L=":")'<> "(CreditNoteCommercial)"
+.input 'M|tab'  ? M|tab<>""
+.continue LPRE
+..
+!ENDRE
+.continue ALL1 ? U|xmarke="ALLE"
+.continue ENDE
+..
+!LS
+.formula U|xtsel ="$,,;@ablageart=(Active);@gruppe=1;@ordnung=nummer;@bereich=(Yes);dfuesenden=(Yes)"
+.formula U|xtsel = U|xtsel + ";spediteur=" + 'M|klief^id' ? _F|empty(M|klief)
+.formula U|xtsel = U|xtsel + ";warenempf=" + 'M|kkunde^id' ? _F|empty(M|kkunde)
+.formula U|xtsel = U|xtsel + ";warenempf^betreuer=" + 'M|betreuer^id' ? _F|empty(M|betreuer)
+.formula U|xtsel = U|xtsel + F|formatstr(";kunde={1};uebdat={2}",M|kkunde^id, M|wdatum) ? _F|empty(M|wdatum)
+.select transportcompany 'U|xtsel'
+.continue ENDLS ? _T|mehr
+.formula U|xvorart = "(PackingSlip)"
+.load 1 customer 'H|kunde'
+.continue LPLS ? _T|mehr
+.load 2 add 1|edinfosnr
+.continue LPLS ? _T|mehr
+..
+!Z1
+.load 2 line
+.continue LPLS ? _mehr
+.continue Z1   ? _(2|vorgang/"VKLS*")
+.continue LPLS ? _2|erlaubt
+.input 'M|tab'  ? M|tab<>""
+..
+!LPLS
+.select transportcompany
+..**ok,10.01.2006 (jetzt weiter --> weiter ENDLS)
+.continue ENDLS ? _T|mehr
+.load 1 customer 'H|kunde'
+.continue LPLS ? _mehr
+.load 2 add 1|edinfosnr
+.continue LPLS ? _T|mehr
+..
+!Z2
+.load 2 line
+.continue LPLS ? _T|mehr
+.continue Z2   ? _(2|vorgang/"VKLS*")
+.continue LPLS ? _2|erlaubt
+.input 'M|tab'  ? M|tab<>""
+.continue LPLS
+..**ok,10.01.2006 (Markierung ENDLS ist neu)
+..
+!ENDLS
+.continue ALL2 ? xmarke="ALLE"
+.continue ENDE
+..
+!LAKO
+.continue ENDLAKO ? _F|sysinfo(18)^bman
+.continue ENDLAKO ? _F|sysinfo(18)^automotive
+.formula U|xvorart = "(LoadCarrierAccountStatement)"
+.formula U|xtsel ="$,,;@ablageart=(Active);@gruppe=2;dokuart=(Outgoing);status=(New);ablagef=(No);edifact=`"
+.formula U|xtsel = U|xtsel + ";partner=" + 'M|klief^id' ? _F|empty(M|klief)
+.select containeraccounting 'U|xtsel'
+.continue ENDLAKO ?_G|mehr
+!NLAKO
+.input 'M|tab'
+.select containeraccounting
+.continue NLAKO ? G|mehr
+!ENDLAKO
+.continue ALL3 ? xmarke="ALLE"
+.continue ENDE
+..
+!AB
+.formula U|xtsel ="$,,;@ablageart=(Active);@gruppe=1;dfuesenden=(Yes);typ=(SalesOrder);ablagef=(No)"
+.formula U|xtsel = U|xtsel + ";betreuer=" + 'M|betreuer^id' ? _F|empty(M|betreuer)
+.formula U|xtsel = U|xtsel + ";kunde=" + 'M|kkunde^id' ? _F|empty(M|kkunde)
+.select sales 'U|xtsel'
+.continue ENDAB ? _T|mehr
+.formula U|xvorart = "(SalesOrderConfirmation)"
+.input 'M|tab'  ? M|tab<>""
+..
+!LPAB
+.select sales
+.continue ENDAB ? _T|mehr
+.input 'M|tab'  ? M|tab<>""
+.continue LPAB
+..
+!ENDAB
+.continue ENDE
+..
+!ALLE
+.formula U|xmarke = "ALLE"
+.continue RECH
+..
+!ALL1
+.continue LS
+..
+!ALL2
+.continue LAKO
+..
+!ALL3
+.continue AB
+..
+..
+..*****************************************************************************
+!ENDE: bereits freigegebene, noch nicht gesendete Nachrichten anzeigen.
+.. Eine Nachricht kann mehrere VorgÑnge enthalten. Ein Vorgang wird mit
+.. mehreren Zeilen abgebildet.
+.. Beispiel: Zu einer VDA-Rechnung gibt es eine Zeile mit text1=500, in
+.. dieser Zeile steht im Feld text3 die Identnummer des Vorgangs.
+.. Bei einer anderen Kombination aus Protokoll/Vorgang kann die Identnummer
+.. in einem anderen Feld stehen.
+..
+.. index: RE(1) -> LS(2) -> AB(3) -> fertig(4)
+.formula U|xi = 1   ? 'M|kvorart(L=":")' =  "(Invoice)" ; M|kvorart =  ""
+.formula U|xi = 2   ? 'M|kvorart(L=":")' = "(PackingSlip)"
+.formula U|xi = 3   ? 'M|kvorart(L=":")' = "(SalesOrderConfirmation)"
+.continue ENDFOP    ? 'M|kvorart(L=":")' = "(LoadCarrierAccountStatement)"
+..
+!STARTK
+.formula U|xtsel = "$,,;@gruppe=0;@ablage=(1);@zeilen=(0);edinachraz=(Invoice);imex=EX;status=2"          ? U|xi = 1
+.formula U|xtsel = "$,,;@gruppe=0;@ablage=(1);@zeilen=(0);edinachraz=(PackingSlip);imex=EX;status=2"         ? U|xi = 2
+.formula U|xtsel = "$,,;@gruppe=0;@ablage=(1);@zeilen=(0);edinachraz=(SalesOrderConfirmation);imex=EX;status=2"         ? U|xi = 3
+.load 2 edifact 'U|xtsel'
+.continue ENDK       ? _T|mehr
+..
+!PROTO: Satzart/Identnummern-Feld abhÑngig von Protokoll/Vorgang
+.continue PROTO1     ? U|xi = 1
+.continue PROTO2     ? U|xi = 2
+.continue PROTO3     ? U|xi = 3
+.continue ENDFOP
+!PROTO1: Rechnungen
+.formula U|xtsatzart  = "500"           ? 2|such = "VKREVA"
+.formula U|xtkeyfield = "text3"         ? 2|such = "VKREVA"
+.formula U|xtsatzart  = "100"           ? 2|such = "VKREEA"
+.formula U|xtkeyfield = "text3"         ? 2|such = "VKREEA"
+.continue ROWS
+!PROTO2: Lieferscheine
+.formula U|xtsatzart  = "400"           ? 2|such = "VKSPVA"
+.formula U|xtkeyfield = "text8"         ? 2|such = "VKSPVA"
+.formula U|xtsatzart  = "UNHI"          ? 2|such = "VKAVIEXP"
+.formula U|xtkeyfield = "text3"         ? 2|such = "VKAVIEXP"
+.formula U|xtsatzart  = "UNHI"          ? 2|such = "VKDESADV"
+.formula U|xtkeyfield = "text3"         ? 2|such = "VKDESADV"
+.continue ROWS
+!PROTO3: AuftragsbestÑtigung
+.formula U|xtsatzart  = "UNHI"          ? 2|such = "VKORDRSP"
+.formula U|xtkeyfield = "text3"         ? 2|such = "VKORDRSP"
+..
+!ROWS: Zeilen einer EDI-Nachricht um VK-Vorgang bzw Sped-Auftrag zu finden
+.load 2 line
+.continue ENDROWS    ? _T|mehr
+.continue ROWS       ?  2|text1 <> U|xtsatzart
+.assign U|xvvk   = "$,,;@gruppe=1;nummer==" + 2|.xtkeyfield + ";ktyp=5;@ablageart=(2)"            ?  U|xi = 1
+.assign U|xvsped = "$,,;@gruppe=1;nummer==" + 2|.xtkeyfield                                       ?  U|xi = 2
+.assign U|xvvk   = "$,,;@gruppe=1;nummer==" + 2|.xtkeyfield + ";ktyp=3;@ablageart=(1)"            ?  U|xi = 3
+.select sales 'U|xvvk^id'    ?  U|xi = 1 ; U|xi = 3
+.select transportcompany    'U|xvsped^id'  ?  U|xi = 2
+.continue ROWS                 ? _T|mehr
+.formula U|xvorart = "(Invoice)"                    ?  U|xi = 1
+.formula U|xvorart = "(PackingSlip)"                ?  U|xi = 2
+.formula U|xvorart = "(SalesOrderConfirmation)"     ?  U|xi = 3
+.input 'M|tab'
+.continue ROWS
+..
+!ENDROWS: nÑchste EDI-Nachricht (Kopf)
+.load 2 edifact
+.continue PROTO      ? T|mehr
+..
+!ENDK: Wenn "alle": RE(1) -> LS(2) -> AB(3)
+.continue ENDFOP ? M|kvorart <> "" ; U|xi = 3
+.formula U|xi = U|xi + 1
+.continue STARTK
+..
+..*****************************************************************************
+!ENDFOP
+.continue
+

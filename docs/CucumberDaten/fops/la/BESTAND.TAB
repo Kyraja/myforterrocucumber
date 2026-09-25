@@ -1,0 +1,120 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : BESTAND.TAB
+..  Datum          : 20.12.03
+..  Version        : 2021
+..  Autor          : cl
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..
+.. Funktion        : erzeugt eine Zeile fr:
+..                   Platzmengen (U|xbplatzmge -> G|true) 
+..                   Platzmengenelemente (U|xbplatzmgeelem -> G|true)
+..
+..  Ablauf         : Tabellenzeige-EFOP des Infosystem BESTAND
+..  Program flow   : Table EFOP of the infosystem BESTAND
+..
+..
+..*****************************************************************************
+.. Variablen
+..*****************************************************************************
+.type bool xbartmge       ? _F|defined(U|xbartmge)
+.type bool xblgruppemge   ? _F|defined(U|xblgruppemge)
+.type bool xblagermge     ? _F|defined(U|xblagermge)
+.type bool xbplatzmge     ? _F|defined(U|xbplatzmge)
+.type bool xbplatzmgeelem ? _F|defined(U|xbplatzmgeelem)
+..
+.set trans -
+..
+.continue END      ? _F|empty(M|klplatz)  & M|klplatz^id  <> H|platz^id
+.continue PLMGE    ? U|xbplatzmge
+.continue PLELMGE  ?  U|xbplatzmgeelem
+.continue END
+!PLELMGE
+.continue END            ?  _F|empty(M|kprojekt)  & M|kprojekt^id  <> H|projekt^id
+.continue TABLINE
+!PLMGE
+.continue END            ?  _M|nullmge & H|bestand = 0 
+.continue END            ? _F|empty(M|klager)   & M|klager^id   <> H|lager^id
+.continue END            ? _F|empty(M|klgruppe) & M|klgruppe^id <> H|lgruppe^id
+.continue TABLINE
+..
+!TABLINE: Schreiben einer Tabellenzeile
+.make screen line +O
+..generelle Zuweisungen
+.assign M|tartikel = H|artikel
+.assign M|tartikeltyp  = M|tartikel^elementicon
+.assign M|tbasisartikel = M|tartikel^basisartikel
+.copy M|lplatz   = H|platz^id
+.formula M|dispo  = H|platz^disporel
+.. Unterscheidung nach Lmengen-Gruppe
+.continue PLMGE2  ? U|xbplatzmge
+.continue PLELMG2 ? U|xbplatzmgeelem
+!PLMGE2: Platzmenge
+.formula M|taufzu  = M|iconzu 
+..Nullmengen nur aufklappen, wenn es Platzmengenelemente gibt
+.formula M|taufzu  = ""  ? F|equals(H|bestand,"0") & _H|platzelemvorh
+.copy M|lager    = H|lager    
+.copy M|lgruppe  = H|lgruppe  
+.formula M|tlginfo = M|iconinternlg ? H|lgruppe^intlager 
+.formula M|tlginfo = M|iconexternlg ? _H|lgruppe^intlager 
+.formula M|lemge      = H|bestand
+.assign M|leinheit = H|le
+.copy M|platzmenge = U|xbplatzmge
+.continue END
+!PLELMG2: Platzmengenelemente
+.formula M|taufzu  = ""
+.formula M|lzu     = H|lzu
+.formula M|lab     = H|lab
+.formula M|gebmge  = H|gebmge
+.assign M|geinheit = H|gebeinh
+.formula M|bewmge  = H|bewmge
+.formula M|gebf    = H|gebf
+.copy M|platzmengeelem = U|xbplatzmgeelem
+.formula M|verw    = H|verw
+.formula M|charge = H|charge^id
+.formula M|exnum = H|charge^exnum
+.formula M|lffert     = H|lffert^id
+.assign M|projekt  = H|projekt^id
+.. bei Detail-Selektion noch weitere Daten holen
+.continue NODET ? _U|xbgebeigenschaft
+.copy M|lager    = M|lplatz^lager    
+.copy M|lgruppe  = M|lplatz^lgruppe
+.formula M|tlginfo = M|iconinternlg ? M|lgruppe^intlager 
+.formula M|tlginfo = M|iconexternlg ? _M|lgruppe^intlager
+!NODET
+.continue PLUS  ? H|gebmge > 0
+.continue MINUS ? H|gebmge < 0
+!PLUS
+..positive Best„nde
+.assign M|zugvorg  = H|orig^vorgang^id  ? H|orig^vorgang^dnr = 4
+.assign M|kopfzugvorg  = H|orig^vorgang^kopf^id ? H|orig^vorgang^dnr = 4
+.assign M|kopfzugvorg  = H|orig^vorgang^id ? H|orig^vorgang^dnr = 9
+.. manuelle Lagerzug„nge haben nun auch eine ID
+.assign M|kopfzugvorg  = H|orig^vorgang^id ? H|orig^vorgang^dnr = 190
+.. Anbindung an IS BEWERTNACHWEIS
+.assign M|lj       = H|lj
+.assign M|orig     = H|orig
+.assign M|beworig  = H|beworig
+.continue VORGTYP
+!MINUS
+.. negative Best„nde zeigen auf den verursachenden Vorgang
+.assign M|lj           = H|lj
+.formula M|kopfzugvorg = H|lj^vorgang^kopf^id  ? H|lj^vorgang^dnr = 4
+.formula M|kopfzugvorg = H|lj^vorgang^kopf^id  ? H|lj^vorgang^dnr = 3
+.assign M|kopfzugvorg  = H|lj^vorgang^id       ? H|lj^vorgang^dnr = 9
+.assign M|kopfzugvorg  = H|lj^vorgang^id       ? H|lj^vorgang^dnr = 190
+.continue VORGTYP
+!VORGTYP: Vorgangstyp
+.formula M|vorgang = M|iconvorgang ? _F|empty(M|kopfzugvorg)
+.formula M|vorgtyp = ""
+.formula M|vorgtyp = M|kopfzugvorg^typa279  ? M|kopfzugvorg^dnr = 9
+.formula M|vorgtyp = M|kopfzugvorg^lsart    ? F|equals(M|kopfzugvorg^lsart, "(PackingSlip)")
+.formula M|vorgtyp = M|kopfzugvorg^vorganga ? F|equals(M|kopfzugvorg^vorganga, "(Invoice)")
+.formula M|vorgtyp = M|kopfzugvorg^grbez    ? M|kopfzugvorg^dnr = 190
+.continue END
+..*****************************************************************************
+!END
+.continue
+
+

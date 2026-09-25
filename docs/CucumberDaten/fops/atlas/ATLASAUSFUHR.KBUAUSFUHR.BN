@@ -1,0 +1,185 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ATLASAUSFUHR.KBUAUSFUHR.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Erstellt die IHSS-Datei und die EDI-Nachricht (bzw.
+..                  ruft FOPs dafÅr auf), aktualisiert den Status im
+..                  Vorgang und auf dem Bildschirm.
+.. Functionality  : Creates IHSS-Files and edi message (i.e. calls efops
+..                  to do that), updates status in transaction and on screen.
+..  include     atlas/ATLASPARAMS
+..  include     atlas/ATLASAUSFUHRDATEI
+..  include     atlas/ATLASAUSFUHR.AUSFUHR
+..  include     atlas/ATLASAUSFUHR.IHSS1
+..  include     atlas/ATLASAUSFUHR.IHSS2
+..  include     atlas/ATLASAUSFUHR.STD
+..  include     atlas/ATLASAUSFUHR.EDI
+..*****************************************************************************
+.set trans -
+..
+.type text   xtfehler
+.type text   xtsystem
+..
+.type text   xtedizuihssedp    ? _F|defined(xtedizuihssedp)
+.type text   xtedizuihssedpout ? _F|defined(xtedizuihssedpout)
+.type text   xtedizuihssedperr ? _F|defined(xtedizuihssedperr)
+.type text   xtmpfile          ? _F|defined(U|xtmpfile)
+.type text   xtout             ? _F|defined(U|xtout)
+.type text   xterr             ? _F|defined(U|xterr)
+..
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+..
+..  cancel export, if ...
+..  --------------------------
+..      * no transaction entered
+..      * no customs number
+..      * transaction not "booked"
+..      * transaction already registered with customs
+..      * export directory is missing
+..      * trying to report invoice when flagged to use delivery
+..      * trying to report delivery when flagged to use invoice
+..
+.continue NOVORG  ?  F|empty(M|kvorgang)
+.continue NOZOLL  ?  F|empty(M|kuebzollst)
+..eiter ERRABG  ?  M|kvorgang^uebertr = true
+.continue ERRGEM  ?  M|katlasgem
+.continue ERRLIKO ?  M|katmitls  &  M|kvorgang^ktyp <> liko
+.continue ERRREKO ? _M|katmitls  &  M|kvorgang^ktyp <> reko
+..
+.input "ATLASPARAMS"
+.continue NODIR   ? _T|xbatverzsendenok
+..
+.. more export checks
+.. also: construct file names
+.assign T|xvatvorgang = M|kvorgang^id
+.input "ATLASSTATUS"
+.continue NOSEND  ?  T|xbatdonotsend
+..
+..
+..  write temporary export file (IHSS)
+..  --------------------------
+.input "atlas/ATLASAUSFUHR.AUSFUHR"
+..
+..
+..  create edi message from temporary file
+..  --------------------------
+.input "atlas/ATLASAUSFUHR.EDI"
+..
+..
+..  update "gesendet" status in transaction row
+..  --------------------------
+.select lock sales 'M|kvorgang^id'         ? M|kvorgang^dnr = 3
+.select lock purchasing 'M|kvorgang^id'    ? M|kvorgang^dnr = 4
+.continue E2      ? _T|mehr
+.select -
+..
+.select sales 'M|kvorgang^id'         ? M|kvorgang^dnr = 3
+.select purchasing 'M|kvorgang^id'    ? M|kvorgang^dnr = 4
+..
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database='M|kvorgang^dnr':'M|kvorgang^objgruppe'
+#!action=modify
+#!charset=eks
+#!flddelimiter=#
+nummer\
+zn#patlasgem
+'M|kvorgang^id'\ 
+..
+!LOAD1
+.select line
+.continue OUTPUT ? _G|mehr
+'H|zn'#1\
+.continue LOAD1
+..
+!OUTPUT
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR1 ? _G|mehr
+..
+!E2
+.select -
+..
+..  update "gesendet" status on screen
+..  --------------------------
+.input "ATLASSTATUS"
+.formula M|katlasgem = T|xbatgemeldet
+.assign M|kedi = T|xvatedi^id
+..
+..
+..  create real export file in export directory
+..  --------------------------
+.. assign temporary files
+.file -tempname T|xtedizuihssedp
+.file -tempname T|xtedizuihssedpout
+.file -tempname T|xtedizuihssedperr
+..
+.output new 'T|xtedizuihssedp'
+.input "DATEI.F"
+#!action=do
+#!typedcmd=38
+#!flddelimiter=#
+such         #kedi          #kvorgang          #bstart  #kbumarkalle  #kbuexport
+ATLASEXPORT  #'M|kedi^id'   #'M|kvorgang^id'   #1       #1            #1
+.output
+..
+.formula T|xtsystem = "edpimport.sh -p " + 'T|einmalpw' + " -c EKS -I " + 'T|xtedizuihssedp' + " >> " + 'T|xtedizuihssedpout' + " 2>> " + 'T|xtedizuihssedperr'
+.system 'T|xtsystem'  background
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!NOVORG
+.error Bitte geben Sie einen Vorgang an!
+.end 1
+..
+!NOZOLL
+.error PrÅfen Sie die ATLAS-Daten in Ihrem Betriebsdatensatz.
+.end 1
+..
+!NODIR
+.error Bitte legen sie das Ausfuhrverzeichnis an.
+.end 1
+..
+!ERRGEM
+.error Dieser Vorgang ist bereits fÅr ATLAS gemeldet.
+.end 1
+..
+!ERROR
+.error Fehler beim Aktualisieren des Vorgangs.
+.end 1
+..
+!ERRABG
+.set trans +
+.formula T|xtfehler = F|formatstr("Vorgang {1} ist nicht gebucht.", 'M|kvorgang^nummer')
+.set trans -
+.error 'T|xtfehler'
+.end 1
+..
+!NOSEND
+.set trans +
+.formula T|xtfehler = F|formatstr("Vorgang {1} darf nicht angemeldet werden.", 'M|kvorgang^nummer')
+.set trans -
+.error 'T|xtfehler'
+.end 1
+..
+!ERRLIKO
+.error Dieser Vorgang muss mit dem Lieferschein angemeldet werden.
+.end 1
+..
+!ERRREKO
+.error Dieser Vorgang muss mit der Rechnung angemeldet werden.
+.end 1
+..
+!ERROR1
+.input 'U|xterr'
+.error ZurÅckschreiben in den Vorgang gescheitert!
+.end 1
+

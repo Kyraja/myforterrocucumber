@@ -1,0 +1,465 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : MASK2XML
+.. Datum          : 11.10.07
+.. Version        : 2.0
+.. Autor          : wk
+.. Verantwortlich : wk
+.. Kontrolle      :
+.. Funktion       : Konvertierung der Masken von der alte Maskenbeschreibung in die neue
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : ja
+..
+..   Parameter      Bedeutung
+..   ---------------------------------------------------------
+..   xpscreennr     Maskennummer einer individuellen Maske (Datenbankmaske oder Infosystemmaske)
+..   xpprio         PrioritÑt (a..j)
+..   xptype         OWNDB|OWNINFO
+..                  OWNDB: individuelle Datenbankmasken
+..                  OWNINFO: individuelle Infosystemmasken
+..                  nur fuer Tests (abas inhouse)
+..                  STDINFO: Standard-Infosystemmasken
+..   xpcreatesplit "ja": Teiler erzeugen fÅr Tabelle/Baumansicht (optional)
+..   xpnogrid      "ja": kein neues Raster bei Trennlinien erzeugen (optional)
+..   xpquiet       "ja": keine Meldung auf dem Bildschirm ausgeben (optional)
+..
+.. Ablauf         : Aufruf von mask2xml.sh mit den passenden Optionen
+..                  Dieses Programm liest GUI-Masken (Dateien *.lay) und generiert
+..                  daraus Masken in der neuen Maskenbeschreibung.
+..
+..                  Wenn eine Maskennummer angegeben ist, dann muss das die Nummer eine
+..                  individuelle Masken sein.
+..                  Es werden nur die Masken konvertiert. Aus der neuen Maskenbeschreibung
+..                  werden anschliessend nicht die GUI-Masken generiert.
+..
+.. Functionality  : Convert screens from the old screen description into the new one
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : yes
+..
+..   Argument     meaning
+..   ---------------------------------------------------------
+..   xpscreennr     screen number of an individual screen
+..   xpprio         priority (a..j)
+..   xptype         OWNDB|OWNINFO
+..                  OWNDB: individual screens (vartab)
+..                  OWNINFO: individual infosystem screens
+..                  only for tests (abas inhouse)
+..                  STDINFO: standard infosystem screens
+..   xpcreatesplit "yes": create split for table/tree view (optional)
+..   xpnogrid      "yes": do not create a new grid at each seperator (optional)
+..   xpquiet       "yes": do not print messages to the screen (optional)
+..
+.. name arguments:
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+.type text xpscreennr ? _defined(U|xpscreennr)
+.type text xpprio ? _defined(U|xpprio)
+.type text xptype ? _defined(U|xptype)
+.type text xpcreatesplit ? _defined(U|xpcreatesplit)
+.type text xpnogrid ? _defined(U|xpnogrid)
+.type text xpquiet ? _defined(U|xpquiet)
+..
+.type integer  xiscreennr
+.type text xtprio
+.type bool xbowndb
+.type bool xbstdinfo
+.type bool xbowninfo
+.type bool xbcreatesplit
+.type bool xbnogrid
+.type bool xbquiet
+..
+.type text xtmpdir
+.type text xcmd
+.type text xcmd0
+.type text xsysout
+..
+.continue INIT ? (U|xpscreennr <> "" & U|xpprio <> "")
+.continue USAGE ? (U|xpscreennr = "" & U|xpprio <> "") ; (U|xpscreennr <> "" & U|xpprio = "")
+.continue USAGE ? _F|isflagset(298) & U|xptype <> "OWNDB" & U|xptype <> "OWNINFO"
+.continue USAGE ? F|isflagset(298) & U|xptype <> "OWNDB" & U|xptype <> "OWNINFO" & U|xptype <> "STDINFO"
+..
+.formula U|xbowndb="ja" ? U|xptype = "OWNDB"
+.formula U|xbstdinfo="ja" ? U|xptype = "STDINFO"
+.formula U|xbowninfo="ja" ? U|xptype = "OWNINFO"
+..
+!INIT
+.formula U|xbcreatesplit=U|xpcreatesplit
+.formula U|xbnogrid=U|xpnogrid
+.formula U|xbquiet=U|xpquiet
+.file -tempname U|xsysout
+.formula xcmd0 = "CONVERTSTDSCREENS=1; export CONVERTSTDSCREENS; " ? F|isflagset(298)
+..
+.. Synchronisieren
+.occupy "CONVERT SCREENS"
+.set trans +
+..
+.. keine Maskennummer/-prio angegeben --> alle Masken des angegebenen Typs konvertieren
+.continue GENDB ? xbowndb
+.continue GENSTDINFO ? xbstdinfo
+.continue GENOWNINFO ? xbowninfo
+..
+.continue ONE
+..
+.. === eine Maske konvertieren ===============================
+!ONE
+..
+?Konvertierung von Maske 'xpscreennr' PrioritÑt 'xpprio'? _xbquiet
+..
+.formula U|xtprio=F|tolower(U|xpprio)
+.continue F2 ? F|isdir("screens/screen_" + U|xpscreennr + "/" + U|xtprio)
+.continue ONEOK ? F|fileexists("masken/mask." + U|xpscreennr + "." + U|xtprio)
+.continue ONEOK ? U|xtprio = "a" & F|fileexists("masken/mask." + U|xpscreennr)
+.continue F3
+..
+!ONEOK
+?Maske konvertieren? _xbquiet
+..
+.formula U|xiscreennr = U|xpscreennr
+.continue INFOSYS ? U|xiscreennr > 9999
+..
+.set trans -
+.. erzeugt dgen/w32tmp/mask.<nr>.<prio>
+.formula xcmd="DEFAULTTERM=s3noesc maskengen.sh -m `pwd`/masken/"
+.formula xcmd=U|xcmd + "mask." + U|xpscreennr
+.formula xcmd=U|xcmd + "." + U|xtprio ? F|fileexists("masken/mask." + U|xpscreennr + "." + U|xtprio)
+.formula xcmd=U|xcmd + " $DEVNULL -x >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'xcmd' background
+.continue F1 ? _mehr
+..
+.set trans -
+.. erzeugt dgen/win/masken/mask.<nr>.<prio>.lay.<aufrufernr>
+.formula xcmd="guigen.sh -g -s . -e ."
+.formula xcmd=U|xcmd + T|aufrufernr + " "
+.formula xcmd=U|xcmd + "mask." + U|xpscreennr + "." + U|xtprio
+.formula xcmd=U|xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'xcmd' background
+.continue F1 ? _mehr
+.continue DOMOVE
+..
+!INFOSYS
+.. erzeugt dgen/win/masken/mask.<nr>.<prio>.lay.<aufrufernr>
+.formula xcmd="infomaskgen.sh -g -s . -e ."
+.formula xcmd=U|xcmd + T|aufrufernr + " "
+.formula xcmd=U|xcmd + "mask." + U|xpscreennr
+.formula xcmd=U|xcmd + "." + U|xtprio ? F|fileexists("masken/mask." + U|xpscreennr + "." + U|xtprio)
+.formula xcmd=U|xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'xcmd' background
+.continue F1 ? _mehr
+.continue DOMOVE
+..
+!DOMOVE
+.formula U|xtmpdir = "rmtmp/mask2xml." + T|aufrufernr + "." + T|sekundenz
+.formula xcmd=U|xcmd + " >" + U|xsysout + " 2>&1"
+.formula xcmd="mkdir -p " + U|xtmpdir
+.system 'xcmd' background
+.continue F1 ? _mehr
+..
+.set trans -
+.. GUI-Maske in temp-Verzeichnis verschieben (mask2xml.sh erwartet mask.<nr>.<prio>.lay)
+.formula xcmd="mv "
+.formula xcmd=U|xcmd + "dgen/win/masken/mask." + U|xpscreennr + "." + U|xtprio + ".lay." + T|aufrufernr
+.formula xcmd=U|xcmd + " " + U|xtmpdir + "/mask." + U|xpscreennr + "." + U|xtprio + ".lay"
+.formula xcmd=U|xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'xcmd' background
+.continue F1 ? _mehr
+..
+.set trans -
+.formula xcmd="mask2xml.sh"
+.formula xcmd=xcmd + " -v"
+.formula xcmd=xcmd + " -t" ? U|xbcreatesplit
+.formula xcmd=xcmd + " -1" ? U|xbnogrid
+.formula xcmd=xcmd + " -i " + U|xtmpdir
+.formula xcmd=xcmd + " -f" ? F|isflagset(298)
+.formula xcmd=xcmd + " mask." + U|xpscreennr + "." + U|xtprio + ".lay"
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'xcmd' background
+.continue F1 ? _mehr
+..
+.set trans -
+.formula xcmd="iSPR=`fr_test.sh -D .`; export iSPR; msgprep -q -w2 -y screens/screen_" + U|xpscreennr + "/" + U|xtprio + "/Resources.language"
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'xcmd' background
+.continue F1 ? _mehr
+..
+?Maske 'xpscreennr' PrioritÑt 'U|xtprio' erfolgreich konvertiert.? _xbquiet
+? ? _xbquiet
+.continue END
+..
+.. === Masken generieren ======================================
+!GENDB
+..
+Masken generieren
+..
+.. Masken generieren, damit wirklich alle individuellen Masken da und aktuell sind
+.set trans -
+.formula xcmd="fr_gen.sh -m DB -G " + bsprache
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'xcmd' background
+.continue F1 ? _mehr
+..
+.continue OWNDB
+..
+.. === Infosystemmasken generieren ============================
+!GENSTDINFO
+..
+Standard-Infosystemmasken generieren
+..
+.. Infosystemmasken generieren, damit wirklich alle Masken da und aktuell sind
+.set trans -
+.formula xcmd="fr_gen.sh -m STDINFO -G " + bsprache
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'U|xcmd' background
+.continue F1 ? _mehr
+..
+.continue STDINFO
+..
+.. === individuelle Infosystemmasken generieren ============================
+!GENOWNINFO
+..
+Individuelle Infosystemmasken generieren
+..
+.. Infosystemmasken generieren, damit wirklich alle Masken da und aktuell sind
+.set trans -
+.formula xcmd="fr_gen.sh -m OWNINFO -G " + bsprache
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'U|xcmd' background
+.continue F1 ? _mehr
+..
+.continue OWNINFO
+..
+.. === Individuelle Masken konvertieren ======================
+!OWNDB
+..
+Konvertierung der individuellen Masken
+.set trans -
+.formula xcmd="maskenlist.sh -M -p -a"
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'U|xcmd' background
+.continue F1 ? _mehr
+.continue NOTHINGTODO ? _F|filenotempty('U|xsysout')
+.input -text 'U|xsysout'
+..
+.. Masken konvertieren
+.set trans -
+.formula xcmd="mask2xml.sh -M DB"
+.formula xcmd=xcmd + " -v"
+.formula xcmd=xcmd + " -t" ? U|xbcreatesplit
+.formula xcmd=xcmd + " -1" ? U|xbnogrid
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'U|xcmd' background
+.continue F1 ? _mehr
+..
+.. Gerade konvertierte Masken uebersetzen
+.set trans -
+.formula xcmd="( manddir=`pwd`; iSPR=`fr_test.sh -D .`; export iSPR; maskenlist.sh -M DB -n -r . | sed 's,'$manddir'/,,'|xargs msgprep -q -w2 -y; )"
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'U|xcmd' background
+.continue F1 ? _mehr
+..
+.. keine Platzhalterdateien anlegen, weil der Kunde die individuellen Masken eventuell weiterpflegen will
+..
+.. PrÅfen ob alles ok
+.set trans -
+.formula xcmd="xml2lay.sh -P DB -p -m DB -s " + bsprache
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'U|xcmd' background
+.continue F1 ? _mehr
+Die individuellen Masken wurden erfolgreich konvertiert.
+
+..
+.continue GENSTDINFO ? xbstdinfo
+.continue GENOWNINFO ? xbowninfo
+.continue END
+..
+.. === Standardinfosystemmasken konvertieren ================
+!STDINFO
+..
+Konvertierung der Masken der Standardinfosysteme
+..
+.. Masken konvertieren
+.set trans -
+.formula xcmd=xcmd0
+.formula xcmd=xcmd + "mask2xml.sh -M STDINFO"
+.formula xcmd=xcmd + " -v"
+.formula xcmd=xcmd + " -t" ? U|xbcreatesplit
+.formula xcmd=xcmd + " -1" ? U|xbnogrid
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'U|xcmd' background
+.continue F1 ? _mehr
+..
+.. Gerade konvertierte Masken uebersetzen
+.set trans -
+.formula xcmd="( manddir=`pwd`; iSPR=`fr_test.sh -D .`; export iSPR; maskenlist.sh -i STDINFO -n -r . | sed 's,'$manddir'/,,'|xargs msgprep -q -w2 -y; )"
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'U|xcmd' background
+.continue F1 ? _mehr
+..
+.. Platzhalterdateien anlegen
+.. alte Maskenbeschreibung nicht aufheben (sind ja die Standardmasken)
+.set trans -
+.formula xcmd="maskenlist.sh -i STDINFO -n -p | sed -e 's,screen_\([0-9][0-9]*\)/a,masken/mask.\1-generate,' -e 's,screen_\([0-9][0-9]*\)/\([b-z]\),masken/mask.\1.\2-generate,' | xargs touch"
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'U|xcmd' background
+.continue F1 ? _mehr
+..
+.. PrÅfen ob alles ok
+.set trans -
+.formula xcmd="xml2lay.sh -P STDINFO -p -m STDINFO -s " + bsprache
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'U|xcmd' background
+.continue F1 ? _mehr
+Die Masken der Standardinfosysteme wurden erfolgreich konvertiert.
+
+..
+.continue GENOWNINFO ? xbowninfo
+.continue END
+..
+.. === Individuelle Infosystemmasken konvertieren ================
+!OWNINFO
+..
+Konvertierung der Masken der individuellen Infosysteme
+.set trans -
+.formula xcmd="maskenlist.sh -i OWNINFO -p -a"
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'U|xcmd' background
+.continue F1 ? _mehr
+.continue NOTHINGTODO ? _F|filenotempty('U|xsysout')
+.input -text 'U|xsysout'
+..
+.. Masken konvertieren
+.set trans -
+.formula xcmd="mask2xml.sh -M OWNINFO"
+.formula xcmd=xcmd + " -v"
+.formula xcmd=xcmd + " -t" ? U|xbcreatesplit
+.formula xcmd=xcmd + " -1" ? U|xbnogrid
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'U|xcmd' background
+.continue F1 ? _mehr
+..
+.. Gerade konvertierte Masken uebersetzen
+.set trans -
+.formula xcmd="( manddir=`pwd`; iSPR=`fr_test.sh -D .`; export iSPR; maskenlist.sh -i OWNINFO -n -r . | sed 's,'$manddir'/,,'|xargs msgprep -q -w2 -y; )"
+.formula xcmd=xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'xcmd' background
+.continue F1 ? _mehr
+..
+.. Platzhalterdateien anlegen
+.. alte Maskenbeschreibung aufheben
+.set trans -
+.formula xcmd="maskenlist.sh -i OWNINFO -n -p | sed -e 's,screen_\([0-9][0-9]*\)/a,masken/mask.\1-generate,' -e 's,screen_\([0-9][0-9]*\)/\([b-z]\),masken/mask.\1.\2-generate,' | xargs touch"
+.formula xcmd=U|xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'xcmd' background
+.continue F1 ? _mehr
+..
+.. alte Maskenbeschreibung aufheben
+.set trans -
+.formula xcmd="mkdir -p masken.alt && for m in `maskenlist.sh -i OWNINFO -p -a` ; do test ! -f masken/$f || cp -f masken/$f masken.alt/$f; done"
+.formula xcmd=U|xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'xcmd' background
+.continue F1 ? _mehr
+..
+.. PrÅfen ob alles ok
+.set trans -
+.formula xcmd="xml2lay.sh -P OWNINFO -p -m OWNINFO -s " + bsprache
+.formula xcmd=U|xcmd + " >" + U|xsysout + " 2>&1"
+.set trans +
+.system 'xcmd' background
+.continue F1 ? _mehr
+Die Masken der individuellen Infosysteme wurden erfolgreich konvertiert.
+
+..
+.continue END
+..
+.. === Usage-Meldung anzeigen ================================
+!USAGE
+..
+Erlaubte Namensparameter
+.set trans -
+.continue USAGE2 ? F|isflagset(298)
+MASK2XML = xptype=OWNDB
+MASK2XML = xptype=OWNINFO
+.continue USAGEEND
+!USAGE2
+MASK2XML = xptype=OWNDB
+MASK2XML = xptype=STDINFO
+MASK2XML = xptype=OWNINFO
+!USAGEEND
+MASK2XML = xpscreennr=<nr> xpprio=<priority>
+.set trans +
+
+Weitere Namensparamater:
+xpcreatesplit: Teiler erzeugen fÅr Tabelle bzw. Baumansicht
+xpnogrid: kein neues Raster beginnen bei Trennlinien
+xpquiet: keine Hinweismeldung anzeigen
+..
+.error Falscher Aufruf von MASK2XML
+.end 1
+..
+.. === Fehler beim Aufruf eines Kommandos ====================
+!F1
+.set cancel +
+.occupy
+.error Fehler beim Aufruf von 'xcmd'
+.input -text 'U|xsysout'
+..
+.end 1
+..
+..
+.. === Maske liegt schon in der neuen Maskenbeschreibung vor =
+!F2
+.set cancel +
+.error Maske 'xpscreennr' mit PrioritÑt 'U|xtprio' liegt schon in der neuen Maskenbeschreibung vor.
+..
+.end 1
+..
+..
+.. === Maske nicht gefunden =
+!F3
+.set cancel +
+.error Maske 'xpscreennr' mit PrioritÑt 'U|xtprio' existiert nicht.
+..
+.end 1
+..
+..
+.. === Nichts zu tun (alle Masken bereits konvertiert) =======
+!NOTHINGTODO
+Alle Masken sind bereits in die neue Maskenbeschreibung konvertiert.
+..
+.continue END
+..
+.. === Ende ==================================================
+!END
+.set cancel +
+.occupy
+.formula U|xcmd = "rm -rf " + U|xtmpdir
+.system 'U|xcmd' background ? F|isdir('U|xtmpdir')
+.continue

@@ -1,0 +1,483 @@
+..!interpreter english declaration noabbrev
+.. at 2017-03-03, 15:48
+.set TRANS -
+..========================================================================
+..==  Name              : IS.PRJMSTDFREIGABERM.EV
+..==  Pfad              : allppro
+..==  Funktion          : EVENT FOP fÅr Stundenfreigabe fÅr Personal einer Kostenstelle
+..==  Erstellungsdatum  : 07.04.2011
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..==
+..========================================================================
+.input PRJM.KONFIG.INI
+.input FOP.PRJM.UP.DEF
+.input PZE.KONFIG.INI   ? F|fileexists(F|foppath("PZE.KONFIG.INI"))
+..====================================================
+.type text    xtcmd xtsel xykoobjekt xtpersonal xtdatei xthistpers xtsuch
+.type real    xrarbzeit xrfaktzeit xrgkzeit xrnfaktzeit xrfcstd xrpzestd xrgzkonto
+.type real    xrtallgarbabs xrtallgabwabs xrtallgabwurabs xrtallgabwkrabs xrtallgabwsaabs xrtallgabwgzabs xrtgesabs
+.type integer xidatei
+.type GD      xddatum
+.type GD14    xd14von xd14bis xdhistzeitstempel
+.type bool    xbmehr xbpze xbnfreipze xbnfreiabw xberfabschluss xbfreigabe xballprojfrei xbstdzettel
+.type integer xprocsp      ? _F|defined(U|xprocsp)
+.set  DEMAND -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Aenderungen_speichern -----
+.set trans +
+.box -BUTTON yes:no -TITLE Achtung
+énderungen speichern?
+.set trans -
+.continue EL001 ? _(G|box = G|boxyes)
+.input is/ABASFARBEN.DEF
+.select screen header
+.select screen line
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ymonat=="    + 'F|month(M|ystdvondatum)'
+.formula U|xtsel = U|xtsel + ";yjahr=="     + 'F|year(M|ystdvondatum)'
+.formula U|xtsel = U|xtsel + ";ypersonal==" +  M|ytpersonal^id
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active);@rows=(No)"
+.load 0 group 'U|xydbgrstundenzettel' 'U|xtsel'
+.continue EL002 ? _(G|mehr)
+.continue EL003 ? _(0|ybgesabschluss <> M|ytbfreigabe)
+.select lock add 0|id
+.continue EL004 ? _(G|mehr)
+.copy H|ybgesabschluss = M|ytbfreigabe
+.rewrite
+.colour -BACKGROUND 'U|xabaslightgreen' 'M|aktzeile'
+.continue EL005 ? _(H|ybgesabschluss)
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yadatum="    + M|ystdvondatum:8 + "!" + M|ystdbisdatum:8
+.formula U|xtsel = U|xtsel + ";ypersonal==" + M|ytpersonal^id
+.formula U|xtsel = U|xtsel + ";ybsperre==1"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.select lock add 0|id
+.continue EL006 ? _(G|mehr)
+.copy H|ybsperre = G|FALSE
+.rewrite
+!EL006
+.load 0 continue
+.continue LOOP002
+!ELOP002: ==============================
+!EL005
+.continue FI004
+!EL004
+.set TRANS +
+.box Hinweis
+Der Stundenzettel fÅr die Zeile 'M|aktzeile' konnte nicht bearbeitet werden.
+.set TRANS -
+.copy M|ytbfreigabe = 0|ybgesabschluss
+.error
+!FI004
+!EL003
+.continue FI002
+!EL002
+.set TRANS +
+.box Hinweis
+Der Stundenzettel fÅr die Zeile 'M|aktzeile' existiert nicht.
+.set TRANS -
+.copy M|ytbfreigabe = G|FALSE
+.error
+!FI002
+.select screen line
+.continue LOOP001
+!ELOP001: ==============================
+.continue FI001
+!EL001
+.error
+.end 1
+!FI001
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskein")
+.formula M|ystdvondatum = 'G|datum:8'<<6 + "01"
+.formula M|ystdvondatum =  M|ystdvondatum - 1
+.formula M|ystdvondatum = 'M|ystdvondatum:8'<<6 + "01"
+.formula M|ystdbisdatum =  M|ystdvondatum + 31
+.formula M|ystdbisdatum = 'M|ystdbisdatum:8'<<6 + "01"
+.formula M|ystdbisdatum =  M|ystdbisdatum - 1
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "maskpruef")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtart = "feldaus")
+.continue BRK004 ? _(G|evtvar = "ykst")
+.continue EL007 ? _(U|xypmrepruefkst)
+.formula U|xykoobjekt = M|ykst^id
+.input 'U|xypmrepruefkstprog'
+.continue EL008 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderliche Rechte fÅr diese Kostenstelle.
+.set TRANS -
+.formula M|ykst = ""
+!EL008
+!EL007
+.continue ESAC002
+!BRK004
+.continue BRK005 ? _(G|evtvar = "ystdvondatum")
+.continue EL009 ? _(F|empty(M|ystdvondatum))
+.assign M|ystdbisdatum = ""
+.continue FI009
+!EL009
+.formula M|ystdvondatum = 'M|ystdvondatum:8'<<6 + "01"
+.formula M|ystdbisdatum =  M|ystdvondatum + 31
+.formula M|ystdbisdatum = 'M|ystdbisdatum:8'<<6 + "01"
+.formula M|ystdbisdatum =  M|ystdbisdatum - 1
+!FI009
+.continue ESAC002
+!BRK005
+.input 'U|xtupprjmsel'
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK003
+.continue BRK006 ? _(G|evtart = "buttonvor")
+.continue BRK007 ? _(G|evtvar = "bstart")
+.continue EL010 ? _(F|empty(M|ykst))
+.set TRANS +
+.box Hinweis
+Bitte zuerst eine Stammkostenstelle wÑhlen.
+.set TRANS -
+.error
+.end 1
+.continue FI010
+!EL010
+.continue EL011 ? _((F|empty(M|ystdvondatum)) & (F|empty(M|ystdbisdatum)))
+.set TRANS +
+.box Hinweis
+Bitte zuerst einen Zeitraum wÑhlen.
+.set TRANS -
+.error
+.end 1
+.continue FI011
+!EL011
+.make screen line --
+!FI011
+!FI010
+.continue ESAC003
+!BRK007
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC001
+!BRK006
+.continue BRK008 ? _(G|evtart = "buttonnach")
+.continue BRK009 ? _(G|evtvar = "bstart")
+.input PRJM.FARBEN.DEF
+.assign U|xbpze = F|sysinfo(10)^ykonfigprjm^ypzebpze
+.file -TEMPNAME U|xtdatei
+.output NEW 'U|xtdatei'
+.input DATEI.F
+.formula U|xd14von = 'M|ystdvondatum:8'  + "000000"
+.formula U|xd14bis = 'M|ystdbisdatum:8'  + "235959"
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";kstelle==" + M|ykst^id
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrpersonal' 'U|xtsel'
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.continue EL012 ? _(F|sysinfo(10)^ykonfigprjm^ypmbpershistorie)
+.formula U|xtsel = "$,,yhistpersonal==" + 0|id + ";yhistzeitstempel>=" + 'U|xd14von(L=":")'
+.formula U|xtsel = U|xtsel + ";@ordnung=yhistzeitstempel;@filingmode=(Active)"
+.load 9 group 'U|xydbgrpershistorie' 'U|xtsel'
+.continue EL013 ? _(G|mehr)
+.assign U|xdhistzeitstempel = ""
+!REPT001: ==============================
+.continue EL014 ? _((9|ykstelle^id = M|ykst^id) & ((F|empty(U|xdhistzeitstempel)) ; (U|xdhistzeitstempel <= U|xd14bis)))
+'0|such' # '0|id' #
+.assign U|xbmehr = G|FALSE
+.continue FI014
+!EL014
+.continue EL015 ? _(U|xdhistzeitstempel < U|xd14bis)
+.formula U|xdhistzeitstempel = 9|yhistzeitstempel
+.load 9 continue
+.assign U|xbmehr = G|mehr
+.continue FI015
+!EL015
+.assign U|xbmehr = G|FALSE
+!FI015
+!FI014
+.continue REPT001 ? _(_(U|xbmehr))
+.continue FI013
+!EL013
+'0|such' # '0|id' #
+!FI013
+.continue FI012
+!EL012
+'0|such' # '0|id' #
+!FI012
+.load 0 continue
+.continue LOOP003
+!ELOP003: ==============================
+.continue EL016 ? _(F|sysinfo(10)^ykonfigprjm^ypmbpershistorie)
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ykstelle==" + M|ykst^id
+.formula U|xtsel = U|xtsel + ";yhistzeitstempel>=" + 'U|xd14von(L=":")'
+.formula U|xtsel = U|xtsel + ";@ordnung=yhistpersonal,yhistzeitstempel;@filingmode=(Active)"
+.load 0 group 'U|xydbgrpershistorie' 'U|xtsel'
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.continue EL017 ? _((0|yhistzeitstempel <= U|xd14bis) ; (0|yhistpersonal^id <> U|xthistpers))
+.formula U|xthistpers = 0|yhistpersonal^id       ?  0|yhistzeitstempel > U|xd14bis
+'0|yhistpersonal^such' # '0|yhistpersonal^id' #
+.continue FI017
+!EL017
+.assign U|xbmehr = G|FALSE
+!FI017
+.load 0 continue
+.continue LOOP004
+!ELOP004: ==============================
+!EL016
+.output NEW WERF.WEG
+.sort 'U|xtdatei'
+Anpassung des Infosystems zur Freigabe fÅr Teamleiter. Folgende neue Spalten
+sollen eingefÅgt werden
+        - Berechnung der Abweichung: (PZE_Ist+Abwesenheit)-gebuchte Stunden
+        - Stand Gleitzeitkonmto zum Monatsende des geladenen Monats
+        - Detail-Button je Spalte
+.formula U|xtsel = ""
+.file -open U|xidatei 'U|xtdatei'
+.file -read U|xidatei U|xtsuch # U|xtpersonal #
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.continue EL018 ? _(U|xtpersonal <> U|xtsel)
+.load 0 group 'U|xydbgrpersonal' 'U|xtpersonal'
+.continue EL019 ? _(G|mehr)
+.formula U|xrarbzeit   = 0
+.formula U|xrfaktzeit  = 0
+.formula U|xrnfaktzeit = 0
+.formula U|xrgkzeit    = 0
+.formula U|xrtallgarbabs   = 0
+.formula U|xrtallgabwabs   = 0
+.formula U|xrtallgabwurabs = 0
+.formula U|xrtallgabwkrabs = 0
+.formula U|xrtallgabwgzabs = 0
+.formula U|xrtallgabwsaabs = 0
+.copy    U|xbstdzettel    = G|FALSE
+.copy    U|xberfabschluss = G|FALSE
+.copy    U|xbfreigabe     = G|FALSE
+.copy    U|xballprojfrei  = G|FALSE
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ypersonal==" + 0|id
+.formula U|xtsel = U|xtsel + ";yedatum=" + 'M|ystdvondatum' + "!" + 'M|ystdbisdatum'
+.formula U|xtsel = U|xtsel + ";@ablageart=lebendig;@ordnung=ypersonal,yedatum"
+.select group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP006: ==============================
+.continue ELOP006 ? _(G|mehr)
+.formula U|xrarbzeit  = U|xrarbzeit   + H|yarbzeit
+.formula U|xrfaktzeit = U|xrfaktzeit  + H|yfaktzeit
+.formula U|xrnfaktzeit= U|xrnfaktzeit + H|yarbzeit - H|yfaktzeit
+.continue EL020 ? _(H|ytaetschl^ydirindik = "I")
+.formula U|xrgkzeit        = U|xrgkzeit        + H|yarbzeit
+.formula U|xrtallgarbabs   = U|xrtallgarbabs   + H|yarbzeit      ? _H|ytaetschl^yabwesend
+.formula U|xrtallgabwabs   = U|xrtallgabwabs   + H|yarbzeit      ?  H|ytaetschl^yabwesend
+.continue EL021 ? _((H|ypersperstypk = "EM") & (H|ytaetschl^yabwesend))
+.formula U|xrtallgabwurabs = U|xrtallgabwurabs + H|yarbzeit      ?  H|ytaetschl^yanwesendk<<1 =  "U"
+.formula U|xrtallgabwkrabs = U|xrtallgabwkrabs + H|yarbzeit      ?  H|ytaetschl^yanwesendk<<1 =  "K"
+.formula U|xrtallgabwgzabs = U|xrtallgabwgzabs + H|yarbzeit      ?  H|ytaetschl^yanwesendk<<1 =  "G"
+.formula U|xrtallgabwsaabs = U|xrtallgabwsaabs + H|yarbzeit      ?  H|ytaetschl^yanwesendk<<1 <> "U" & H|ytaetschl^yanwesendk<<1 <> "K" & H|ytaetschl^yanwesendk<<1 <> "G"
+!EL021
+!EL020
+.select continue
+.continue LOOP006
+!ELOP006: ==============================
+.continue EL022 ? _(U|xbpze)
+.formula U|xrgzkonto = 0
+.formula U|xrpzestd  = 0
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ypersonal==" + 0|id
+.formula U|xtsel = U|xtsel + ";ydatum=" + M|ystdvondatum:8 + "!" + M|ystdbisdatum:8
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.select group 'U|xydbgristzeiten' 'U|xtsel'
+!LOOP007: ==============================
+.continue ELOP007 ? _(G|mehr)
+.formula U|xrpzestd  = U|xrpzestd   + H|yistzeit
+.select continue
+.continue LOOP007
+!ELOP007: ==============================
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ypersonal==" + 0|id
+.formula U|xtsel = U|xtsel + ";ydatum=" + 'M|ystdvondatum' + "!" + 'M|ystdbisdatum'
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active);@ordnung=ypersonal,yzeitstempel;@richtung=(1)"
+.select group 'U|xydbgrgleitzeitkto' 'U|xtsel'
+.continue EL023 ? _(G|mehr)
+.formula U|xrgzkonto = H|ysaldo
+!EL023
+.continue EL024 ? _((TRUE) ; (M|ystdbisdatum <= G|datum))
+.assign U|xddatum = M|ystdbisdatum
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ypersonal==" + 0|id
+.formula U|xtsel = U|xtsel + ";yadatum=" + M|ystdvondatum:8 + "!" + U|xddatum:8
+.formula U|xtsel = U|xtsel + ";yfreigabek=BEA"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.select group 'U|xydbgrabwesenheit' 'U|xtsel'
+.copy U|xbnfreiabw = G|mehr
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ypersonal==" + 0|id
+.formula U|xtsel = U|xtsel + ";ydatum=" + M|ystdvondatum:8 + "!" + M|ystdbisdatum:8
+.formula U|xtsel = U|xtsel + ";ygueltig==1"
+.formula U|xtsel = U|xtsel + ";yfreigabek<>GEN"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.select group 'U|xydbgrperszeiten' 'U|xtsel'
+.copy U|xbnfreipze = G|mehr
+!EL024
+!EL022
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ymonat=="    + 'F|month(M|ystdvondatum)'
+.formula U|xtsel = U|xtsel + ";yjahr=="     + 'F|year(M|ystdvondatum)'
+.formula U|xtsel = U|xtsel + ";ypersonal==" +  0|id
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active);@rows=(No)"
+.select group 'U|xydbgrstundenzettel' 'U|xtsel'
+.continue EL025 ? _(G|mehr)
+.assign U|xbstdzettel    = G|TRUE
+.assign U|xberfabschluss = H|yberfabschluss
+.assign U|xbfreigabe     = H|ybgesabschluss
+.assign U|xballprojfrei  = G|TRUE
+.select line
+!LOOP008: ==============================
+.continue ELOP008 ? _((G|mehr) & (U|xballprojfrei))
+.assign U|xballprojfrei = G|FALSE      ? _H|ybfreigabe
+.select line
+.continue LOOP008
+!ELOP008: ==============================
+!EL025
+.continue EL026 ? _((U|xbstdzettel) ; (_(0|yprjminaktiv)))
+.make screen line +O
+.colour -BACKGROUND "-1 -1 -1" 'M|aktzeile'
+.formula M|ytbuaktion       = "icon:view"
+.formula M|ytbunfreiabw     = "icon:attention"  ? U|xbnfreiabw
+.formula M|ytbunfreipze     = "icon:attention"  ? U|xbnfreipze
+.assign  M|ytpersonal       = 0|id
+.formula M|ytpersname       = 0|namebspr
+.formula M|ytarbzeit        = U|xrarbzeit
+.formula M|ytgkzeit         = U|xrgkzeit
+.formula M|ytfaktzeit       = U|xrfaktzeit
+.formula M|ytnfaktzeit      = U|xrnfaktzeit
+.formula M|ytallgarbabs     = U|xrtallgarbabs
+.formula M|ytallgabwabs     = U|xrtallgabwabs
+.formula M|ytallgabwurabs   = U|xrtallgabwurabs
+.formula M|ytallgabwkrabs   = U|xrtallgabwkrabs
+.formula M|ytallgabwgzabs   = U|xrtallgabwgzabs
+.formula M|ytallgabwsaabs   = U|xrtallgabwsaabs
+.formula M|ytpzestd         = U|xrpzestd
+.formula M|ytpzeabw         = U|xrpzestd + U|xrtallgabwabs
+.formula M|ytabwpzeprojzeit =(U|xrpzestd + U|xrtallgabwabs) - U|xrarbzeit
+.formula M|ytgzkonto        = U|xrgzkonto
+.copy    M|ytberfabschluss  = U|xberfabschluss
+.copy    M|ytbfreigabe      = U|xbfreigabe
+.copy    M|ytballprojfrei   = U|xballprojfrei
+.continue EL027 ? _(_(F|empty(M|ytpersonal)))
+.colour -BACKGROUND 'U|xtfarbes' 'M|aktzeile'
+.colour -BACKGROUND 'U|xtfarbe2' ytarbzeit    'M|aktzeile'
+.colour -BACKGROUND 'U|xtfarbe2' ytgkzeit     'M|aktzeile'
+.colour -BACKGROUND 'U|xtfarbe2' ytfaktzeit   'M|aktzeile'
+.colour -BACKGROUND 'U|xtfarbe2' ytnfaktzeit  'M|aktzeile'
+.colour -BACKGROUND 'U|xtfarbef2' ytallgarbabs   'M|aktzeile'
+.colour -BACKGROUND 'U|xtfarbef2' ytallgabwabs   'M|aktzeile'
+.colour -BACKGROUND 'U|xtfarbef2' ytallgabwurabs 'M|aktzeile'
+.colour -BACKGROUND 'U|xtfarbef2' ytallgabwkrabs 'M|aktzeile'
+.colour -BACKGROUND 'U|xtfarbef2' ytallgabwgzabs 'M|aktzeile'
+.colour -BACKGROUND 'U|xtfarbef2' ytallgabwsaabs 'M|aktzeile'
+.colour -BACKGROUND 'U|xtfarbee2' ytpzestd         'M|aktzeile'
+.colour -BACKGROUND 'U|xtfarbee2' ytpzeabw         'M|aktzeile'
+.colour -BACKGROUND 'U|xtfarbee2' ytabwpzeprojzeit 'M|aktzeile'
+.colour -BACKGROUND 'U|xtfarbee2' ytgzkonto        'M|aktzeile'
+!EL027
+!EL026
+!EL019
+!EL018
+.formula U|xtsel = U|xtpersonal
+.file -read U|xidatei U|xtsuch # U|xtpersonal #
+.continue LOOP005
+!ELOP005: ==============================
+.continue ESAC004
+!BRK009
+.continue BRK010 ? _(G|evtvar = "ybuspeichern")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK010
+.continue BRK011 ? _(G|evtvar = "ybumarkalle")
+.select screen header
+.select screen line
+!LOOP009: ==============================
+.continue ELOP009 ? _(G|mehr)
+.colour -BACKGROUND "-1 -1 -1" 'M|aktzeile'     ? _M|ytbfreigabe
+.assign M|ytbfreigabe = G|TRUE                  ? _M|ytbfreigabe
+.select screen line
+.continue LOOP009
+!ELOP009: ==============================
+.continue ESAC004
+!BRK011
+.continue BRK012 ? _(G|evtvar = "ybumarkkeine")
+.select screen header
+.select screen line
+!LOOP010: ==============================
+.continue ELOP010 ? _(G|mehr)
+.colour -BACKGROUND "-1 -1 -1" 'M|aktzeile'     ?  M|ytbfreigabe
+.assign M|ytbfreigabe = G|FALSE                 ?  M|ytbfreigabe
+.select screen line
+.continue LOOP010
+!ELOP010: ==============================
+.continue ESAC004
+!BRK012
+.continue BRK013 ? _(G|evtvar = "ytbustdzettel")
+.formula U|xtcmd = G|kkomname38 + " PRJMSTDZETTEL "
+.formula U|xtcmd = U|xtcmd + "? ystdvondatum= " + M|ystdvondatum:8
+.formula U|xtcmd = U|xtcmd + "|ypersonal="      + M|ytpersonal^id
+.formula U|xtcmd = U|xtcmd + "|bstart="
+.comman -PARALLEL 'U|xtcmd'
+.continue ESAC004
+!BRK013
+.continue BRK014 ? _(G|evtvar = "ytbunfreiabw")
+.continue EL028 ? _(F|sysinfo(10)^ykonfigprjm^ypzebpze)
+.formula U|xtcmd = G|kkomname38 + " PRJMFREIGABE "
+.formula U|xtcmd = U|xtcmd + "?ykerldb="     + 'U|xydbabwesenheit'
+.formula U|xtcmd = U|xtcmd + "|ykerlgruppe=" + 'U|xygrabwesenheit'
+.formula U|xtcmd = U|xtcmd + "|yvom="        + 'M|ystdvondatum'
+.formula U|xtcmd = U|xtcmd + "|ybis="        + 'M|ystdbisdatum'
+.formula U|xtcmd = U|xtcmd + "|bstart="
+.command -PARALLEL 'U|xtcmd'
+!EL028
+.continue ESAC004
+!BRK014
+.continue BRK015 ? _(G|evtvar = "ytbunfreipze")
+.continue EL029 ? _(F|sysinfo(10)^ykonfigprjm^ypzebpze)
+.formula U|xtcmd = G|kkomname38 + " PRJMFREIGABE "
+.formula U|xtcmd = U|xtcmd + "?ykerldb="     + 'U|xydbperszeiten'
+.formula U|xtcmd = U|xtcmd + "|ykerlgruppe=" + 'U|xygrperszeiten'
+.formula U|xtcmd = U|xtcmd + "|yvom="        + 'M|ystdvondatum'
+.formula U|xtcmd = U|xtcmd + "|ybis="        + 'M|ystdbisdatum'
+.formula U|xtcmd = U|xtcmd + "|bstart="
+.command -PARALLEL 'U|xtcmd'
+!EL029
+.continue ESAC004
+!BRK015
+!ESAC004: =====   ENDCASE   =====
+.continue ESAC001
+!BRK008
+!ESAC001: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJMSTDFREIGABERM.EV")'  ? F|fileexists(F|foppath("IFOP.IS.PRJMSTDFREIGABERM.EV"))
+.continue

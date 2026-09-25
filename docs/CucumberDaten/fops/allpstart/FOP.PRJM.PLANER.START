@@ -1,0 +1,210 @@
+..!interpreter english declaration noabbrev
+...............................................................................
+..
+.. Program to start alltrotec Projektplaner
+..
+.. alltrotec,ts
+.. 06.10.09 
+..
+.. Historie:
+.. 07.10.09: test, ob Datenbanktrigger aktiv /alltrotec,es
+.. 23.03.10: aufruf VP angepasst ( -c <Windows-Anwendungspfad>) /alltrotec,es
+.. 03.07.12: EDP Port aus alltrotec Konfig / alltrotec,ts
+.. 15.03.17: Umstellung Personal -> Mitarbeiter
+...............................................................................
+..
+.set TRANS -
+..
+.input "allpstart/PRJM.KONFIG.INI"
+..
+.continue START           ?  G|evtmaske = 0
+.continue START           ?  G|evtkommd = G|kaktname12
+..
+.set TRANS +
+..
+.error Das Starten das Projektplaners ist nur im <zeigen> erlaubt.
+.end 1
+..
+.set TRANS -
+..
+..
+!START:
+.type integer xiread    ? _F|defined(U|xiread)
+..
+.type text xtread       ? _F|defined(U|xtread)
+.type text xtsys        ? _F|defined(U|xtsys)
+.type text xtedp        ? _F|defined(U|xtedp)
+.type text xtprjid      ? _F|defined(U|xtprjid)
+.type text xtfile       ? _F|defined(U|xtfile)
+.type text xtplaner     ? _F|defined(U|xtplaner)
+.type text xteinmalpw   ? _F|defined(U|xteinmalpw)
+.type text xtoption     ? _F|defined(U|xtoption)
+.type text xtrmqid      ? _F|defined(U|xtrmqid)
+.type bool xbnotrigger  ? _F|defined(U|xbnotrigger)
+..
+..wurde ein Planer angegeben?
+.continue FEPLANER      ? _U|xtplaner = "PP" & _U|xtplaner = "RP" & _U|xtplaner = "VP" & _U|xtplaner = "PE"
+..
+................................................................................
+..EDP-Port
+.continue FEDPPORT      ?  F|empty(E|EDPPORT)
+.formula U|xtedp = E|EDPPORT
+.continue FEDPPORT      ?  U|xtedp = "0"
+................................................................................
+..
+..keine MQS-datei kopieren&auch kein test auf triggerHandler, wenn Datenbankagent deaktiviert
+.continue TROK    ? _U|xydbagentakt
+..
+.formula U|xtsys = "projectsuite\java\Projectplanner\Projectplanner.exe"        ?  U|xtplaner = "PP"
+.formula U|xtsys = "projectsuite\java\Resourceplanner\Resourceplanner.exe"      ?  U|xtplaner = "RP"
+.formula U|xtsys = U|xyprjmkonfig^ypfadvp                                       ?  U|xtplaner = "VP"
+.formula U|xtsys = "projectsuite\java\Staffplanner\Staffplanner.exe"            ?  U|xtplaner = "PE"
+.formula U|xtsys = F|regreplaceall(U|xtsys,"\\","\/")
+.formula U|xtsys = U|xtsys<$"/" + "/conf"
+.formula U|xtsys = "cp " + U|xydbagentserv + "/.bindings win/" + U|xtsys
+.system 'U|xtsys' Background
+.continue CPOK          ?  G|mehr
+..
+.error
+.set TRANS +
+.box
+Konfigurationsdatei des Datenbankagenten konnte nicht kopiert werden!
+Das bedeutet, daá Sie aktuell nicht ber Žnderungen informiert werden,
+aber gefahrlos weiterarbeiten k”nnen.
+
+Bitte informieren Sie Ihren IT-Verantwortlichen.
+..
+.set TRANS -
+..
+!CPOK
+..testen, ob triggerHandler fr den Mandanten deaktiv ist
+.formula U|xbnotrigger = G|false
+.formula U|xtsys = "test -n " + G|dblquote + "`ps -ef|grep " + G|dblquote + "$HOME.*db_trigger.sh" + G|dblquote + "|grep -v grep`" + G|dblquote
+.system 'U|xtsys' Background
+.continue TROK    ? G|mehr
+.formula U|xbnotrigger = G|TRUE
+.error 
+..
+.set TRANS +
+.box
+Der Datenbankagent ist im Moment nicht aktiv.
+Das bedeutet, daá Sie aktuell nicht ber Žnderungen informiert werden,
+aber gefahrlos weiterarbeiten k”nnen.
+
+Bitte informieren Sie Ihren IT-Verantwortlichen darber, daá der TriggerHandler des 
+Datenbankagenten nicht aktiv ist."
+..
+.set TRANS -
+..
+!TROK
+..
+..Rechte prfen (nur PP und RP):
+..    - Personaldatensatz gefunedn
+..    - Leserechte Projektkonfiguration
+..    - Lese- und Schreibrechte und Neu Projekt
+..    - Lese- und Schreibrechte und Neu Projektvorgang
+..    - Lese- und Schreibrechte und Neu Aufgabe
+..
+.continue RECHTEOK        ? U|xtplaner = "VP"
+.continue RECHTEOK        ? U|xtplaner = "RP"
+..
+.continue RECHTEOK        ?  F|cmdpermitted(U|xydbprojekt,12) &  F|cmdpermitted(U|xydbpvorgang,12) & F|cmdpermitted(U|xydbpvorgang,13) & F|cmdpermitted(U|xydbpvorgang,14)
+.continue FEZEIGEN        ? _F|cmdpermitted(U|xydbprojekt,12) ; _F|cmdpermitted(U|xydbpvorgang,12)
+..
+.set TRANS +
+.box Hinweis
+Zugriffsrechte auf die Projektdatenbank nicht korrekt. Daten k”nnen im Planer nicht ge„ndert werden.
+..
+.set TRANS -
+..
+!RECHTEOK:
+..
+.formula U|xtprjid = M|id        ? F|empty(U|xtprjid) & F|defined(M|id)
+.continue CHKPW                  ? F|empty(U|xtfile)
+..
+..IDs aus Datei lesen
+.continue CHKPW                  ? _F|fileexists(U|xtfile) ; _F|filenotempty(U|xtfile)
+.formula U|xtprjid = ""
+.file -open U|xiread 'U|xtfile'
+!READFF:
+.file -read U|xiread U|xtread
+.continue CHKPW                 ? _G|mehr
+.formula U|xtprjid = U|xtprjid + U|xtread
+.continue READFF
+..
+!CHKPW:
+.formula U|xteinmalpw = G|einmalpw
+.continue CHKPW   ?  F|regmatch(U|xteinmalpw, "^-.*")
+..
+..Planer Starten
+.formula U|xtsys = F|regreplaceall(G|clwindir,"\/","\\")
+.formula U|xtsys = U|xtsys + "\projectsuite\java\Projectplanner\Projectplanner.exe"     ?  U|xtplaner = "PP"
+.formula U|xtsys = U|xtsys + "\projectsuite\java\Resourceplanner\Resourceplanner.exe"   ?  U|xtplaner = "RP"
+.formula U|xtsys = U|xtsys + "\" + U|xyprjmkonfig^ypfadvp                               ?  U|xtplaner = "VP"
+.formula U|xtsys = U|xtsys + "\projectsuite\java\Staffplanner\Staffplanner.exe"         ?  U|xtplaner = "PE"
+.formula U|xtsys = U|xtsys + " -c "+ U|xtsys<$"\" 
+.formula U|xtsys = U|xtsys + " -h " + 'E|HOST_MANDANTDIR' + " -m " + E|MNAME + " -p " + U|xtedp + " -a " + U|xteinmalpw
+.formula U|xtsys = U|xtsys + " -notrigger "                                             ?  U|xbnotrigger
+.formula U|xtsys = U|xtsys + " -i "     + U|xtprjid                                     ? _U|xtprjid = ""
+.formula U|xtsys = U|xtsys + " -rmqid " + U|xtrmqid                                     ? _U|xtrmqid = ""
+.formula U|xtsys = U|xtsys + " -l "     + G|BSPRI                                       ?  U|xtplaner = "PP" ;  U|xtplaner= "RP" ; U|xtplaner = "PE"
+.formula U|xtsys = U|xtsys + " " + U|xtoption                                           ? _F|empty(U|xtoption)
+.. Zeile auskommentieren, wenn log zu gross oder init-Problem gefunden
+.formula U|xtsys = U|xtsys + " -logdebug"                                               ?  U|xtplaner = "PP"
+.continue PLANSTART                                                                     ? _U|xtplaner = "RP"
+..
+..Ressourcenplaner - auf VP prfen
+.continue NOVPMOD       ? _F|defined(F|sysinfo(10)^yallkonfig)
+.continue PLANSTART     ?  F|defined(F|sysinfo(10)^yallkonfig^ybvfplan)
+..
+!NOVPMOD
+.formula U|xtsys = U|xtsys + " -novpmod"
+..
+!PLANSTART:
+..      .formula U|xtsys = U|xtsys + " -nosplash "
+..      .formula U|xtsys = U|xtsys + " -s (181,222,222)"
+..
+.pc.exec 'U|xtsys'
+.continue ENDE
+..
+!ENDE
+.continue
+..
+..
+!FEDPPORT:
+.error
+.set TRANS +
+.box
+Bitte die Nummer des EDP Ports in der homedir.env eintragen.
+..
+.end 1
+..
+..
+!FEZEIGEN:
+.error
+.set TRANS +
+.box
+Benutzerrechte sind nicht korrekt gesetzt.
+Zum Start des Planers ist <zeigen> auf die Projektdatenbank notwendig.
+..
+.end 1
+..
+..
+!FEPLANER:
+.error
+.set TRANS +
+.box
+Es ist kein Planer zum Start angegeben. Bitte das Programm mit 
+folgenden Parametern aufrufen:
+
+<text> FOP.PRJM.PLANER.START = xtplaner=PLANER xtprjid=ID <zeigen>
+
+PLANER:
+PP - Projektplaner
+RP - Ressourcenplaner
+PE - Peersonalplaner
+
+ID (optional):
+ID des Objektes welches in den Planer geladen werden soll.
+..
+.end 1

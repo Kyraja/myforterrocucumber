@@ -1,0 +1,225 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : BUJ.EV
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : BUJ/STBUJ allgemeines Event-FOP
+..*****************************************************************************
+..
+.set trans -
+..
+.. Selection
+.type text xtsel
+..
+..*****************************************************************************
+..
+.input "is/TABLEEREN"    ? G|evtvar = "bevon" ; G|evtvar = "bebis"
+.continue PERIOD         ? G|evtvar = "anfm" ; G|evtvar = "endm"
+.continue PERIOD         ? G|evtvar = "anfj" ; G|evtvar = "endj"
+.continue PERIOD         ? G|evtvar = "von"  ; G|evtvar = "bis"
+.continue CHECK          ? (G|evtartengl = "BUTTON_BEFORE")  & (G|evtvar = "bstart")
+.continue SEL            ? (G|evtartengl = "BUTTON_AFTER") & (G|evtvar = "bsel")
+.continue BELEG          ? (G|evtartengl = "BUTTON_AFTER") & (G|evtvar = "tbbeleg")
+.continue BUART          ? (G|evtartengl = "FIELD_EXIT")    & (G|evtvar = "buartalle")
+.continue BUART          ? (G|evtartengl = "FIELD_EXIT")    & (G|evtvar = "buart")
+.continue BETRAGREL      ? (G|evtartengl = "BUTTON_BEFORE")  & (G|evtvar = "bbetrag")
+.input "is/TABLEEREN"    ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "ustva"
+.input "is/TABLEEREN"    ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "vrgstrgl"
+.continue TOUCHED
+..
+..*****************************************************************************
+!PERIOD: period changed
+..*****************************************************************************
+.input "fb/IS.SETPERIOD"
+.continue TOUCHED
+..
+..*****************************************************************************
+!TOUCHED: Parameter changed
+..*****************************************************************************
+.formula M|bese   = G|false
+.input "is/TABLEEREN"
+.formula M|sollsum  = 0.0
+.formula M|habensum = 0.0
+.continue
+..
+..*****************************************************************************
+!BETRAGREL: Set relation kind for amounts (min, max etc.)
+..*****************************************************************************
+.type text xtitle
+.set trans +
+.formula U|xtitle = "Relation auswÑhlen"
+.set trans -
+.menu 'U|xtitle'
+   >> .formula M|betrrel = ""
+>  >> .formula M|betrrel = ">"
+<  >> .formula M|betrrel = "<"
+=  >> .formula M|betrrel = "="
+>= >> .formula M|betrrel = ">="
+<= >> .formula M|betrrel = "<="
+.continue
+..
+..*****************************************************************************
+!BUART: statistical and financial entries selected ?
+..*****************************************************************************
+.protection        buart    ?  M|buartalle
+.protection -reset buart    ? _M|buartalle
+.continue BUARTF          ? _M|buartalle & 'M|buart(L="0")' = "(70)"
+..
+.protection valvon
+.protection valbis
+.protection zbed
+.protection faelligv
+.protection faelligb
+.continue
+..
+..*****************************************************************************
+!BUARTF: financial accounting entries only
+..*****************************************************************************
+.protection -reset valvon
+.protection -reset valbis
+.protection -reset zbed
+.protection -reset faelligv
+.protection -reset faelligb
+.continue
+..
+..*****************************************************************************
+!CHECK: Plausibility check
+..*****************************************************************************
+.input "is/RANGECHECK"
+.continue START
+..
+..*****************************************************************************
+!START: Start-Button
+..*****************************************************************************
+..Init
+.formula M|sollsum  = 0
+.formula M|habensum = 0
+..
+.formula M|grp = 1 ? 'M|buart(L="0")' = "(70)" & _M|buartalle
+.formula M|grp = 2 ? 'M|buart(L="0")' = "(83)" & _M|buartalle
+.formula M|grp = 3 ?  M|buartalle
+..
+.. Selection via selection bar?
+.continue START3 ? M|bese & M|select <> ""
+..
+.. Build selection
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";buchung=" + 'M|bevon' + "!" + 'M|bebis' ? _F|empty(M|bevon)  ; _F|empty(M|bebis)
+.formula U|xtsel = U|xtsel + ";@gruppe=" ?  M|grp < 3
+.formula U|xtsel = U|xtsel + "1"         ?  M|grp = 2
+.formula U|xtsel = U|xtsel + "0"         ?  M|grp = 1
+.formula U|xtsel = U|xtsel + ";budat="   + 'M|von'      + "!" + 'M|bis'
+.. The entries' month will only be used as a criterion if the
+.. entries within the same financial period are printed. This
+.. has technical reasons.
+.formula U|xtsel = U|xtsel + ";monat="   + 'M|anfm'     + "!" + 'M|endm'  ? M|anfj = M|endj
+.continue START2                                                           ? M|anfj = M|endj
+..
+.. show message if the selected period is not within one single financial period
+.box Hinweis
+Bei geschÑftsjahresÅbergreifender Selektion wird nur das
+Buchungsdatum als zeitliches Kriterium genutzt (nicht der Buchungsmonat).
+..
+..*****************************************************************************
+!START2: Continue the infosystem start
+..*****************************************************************************
+.formula U|xtsel = U|xtsel + ";typ=1"   
+.formula U|xtsel = U|xtsel + ";gjahr="   + 'M|anfj'     + "!" + 'M|endj'
+.formula U|xtsel = U|xtsel + ";beldat="  + 'M|beldatv'  + "!" + 'M|beldatb'  ? _F|empty(M|beldatv) ; _F|empty(M|beldatb)
+.formula U|xtsel = U|xtsel + ";term="    + 'M|faelligv' + "!" + 'M|faelligb' ? _(M|grp = 2 ; M|grp = 3) & (_F|empty(M|faelligv) ; _F|empty(M|faelligb))
+.formula U|xtsel = U|xtsel + ";stand="   + 'M|aendv'    + "!" + 'M|aendb'    ? _F|empty(M|aendv) ; _F|empty(M|aendb)
+.formula U|xtsel = U|xtsel + ";vdat="    + 'M|valvon'   + "!" + 'M|valbis'   ? _(M|grp = 2 ; M|grp = 3) & (_F|empty(M|valvon) ; _F|empty(M|valbis))
+.formula U|xtsel = U|xtsel + ";beleg="   + 'M|beleg'                         ? _F|empty(M|beleg)
+.formula U|xtsel = U|xtsel + ";sortgjgm=" + 'F|fysortdat(M|anfj, M|anfm)' +"!"+ 'F|fysortdat(M|endj, M|endm)' ? _F|empty(M|beleg)
+.. 107;zu konsolidieren;k;(107);ToBeConsolidated;
+.. 110;nicht zu konsolidieren;n;(110);NotToBeConsolidated;
+.formula U|xtsel = U|xtsel + ";konsol=true"                                  ?  M|konsoln = 107
+.formula U|xtsel = U|xtsel + ";konsol=false"                                 ?  M|konsoln = 110
+.formula U|xtsel = U|xtsel + ";zbed="    + 'M|zbed'                          ? _(M|grp = 2 ; M|grp = 3) & _F|empty(M|zbed)
+.formula U|xtsel = U|xtsel + ";ursache=" + 'M|ursache(L="0")'                ? _F|empty(M|ursache)
+.formula U|xtsel = U|xtsel + ";iwbu="    + 'M|buwaehr'                       ? _F|empty(M|buwaehr)
+.formula U|xtsel = U|xtsel + ";inbukreis" + 'M|bukreis^bknr' + "=true"       ? +'M|bukreis' > 0
+.formula U|xtsel = U|xtsel + ";erfasserzeichen=="   + 'M|bearb'              ? _F|empty(M|bearb)
+.. only defined in STBUJ
+.set reference +
+.formula U|xtsel = U|xtsel + ";vkzart="  + 'M|vkzart(L="0")' ? F|defined(M|vkzart)
+.set reference -
+..
+.type bool xbjkenn
+.formula U|xbjkenn = _F|empty(jkenn) & F|strindex(M|jkenn, ",") = 0
+.formula U|xtsel   = U|xtsel + ";kenn="  + M|jkenn      ? U|xbjkenn
+.continue ISSTBUJ1  _F|defined(M|vrgstrgl)
+.formula U|xtsel   = U|xtsel + ";vrgstrgl="  + M|vrgstrgl  ? _F|empty(M|vrgstrgl)
+!ISSTBUJ1
+.formula U|xtsel   = U|xtsel + ";@ordnung=nummer." + 'M|richtung(L=":")'
+..
+.formula M|select = U|xtsel
+..
+.formula M|select ="!"       ? (M|select ="")
+..
+..*****************************************************************************
+!START3: Entry point for selection via selection bar
+..*****************************************************************************
+.input "is/TABLEEREN"
+.formula M|sollsum  = 0.0
+.formula M|habensum = 0.0
+.. we use the buffer 0 to load the entries
+.type text xxlbuffer
+.formula U|xxlbuffer = "0"
+.input "is/HOL.LISTE"
+.continue
+..
+..*****************************************************************************
+!SEL: Selektionsleiste-Button
+..*****************************************************************************
+.formula M|bevon    = ""
+.formula M|bebis    = ""
+.formula G|evtfeldneu = "%"
+.input "is/AUSWAHL"
+.formula M|bese     = _(M|select ="!")
+.input "is/TABLEEREN"
+.formula M|sollsum  = 0.0
+.formula M|habensum = 0.0
+.continue
+..
+..*****************************************************************************
+!BELEG: Show voucher
+..*****************************************************************************
+.continue NOEKVK ? F|empty(M|tbunum^ursacheref)
+.command -parallel 'M|tbunum^ursacheref^id' ? + 'M|tbunum^ursacheref' <> 0
+.continue END
+..
+..*****************************************************************************
+!NOEKVK: No voucher (invoice) available
+..*****************************************************************************
+.box(0,0) Beachte!
+ Es existiert kein Beleg fÅr diese Buchungsursache 
+.continue END
+..
+..*****************************************************************************
+..
+..*****************************************************************************
+!FEHL0: Fehler
+.error Datumsuntergrenze grî·er als Datumsobergrenze
+.cursor von
+.end 1
+..
+!FEHL1: Fehler
+.error Kein gÅltiger Anfangsmonat
+.cursor anfm
+.end 1
+..
+!FEHL2: Fehler
+.error Kein gÅltiger Endmonat
+.cursor endm
+.end 1
+..
+!FEHL3: Fehler
+.error Kein gÅltiger Zeitraum
+.cursor von
+.end 1
+..
+!END
+.continue
+

@@ -1,0 +1,73 @@
+..!interpreter english translate noabbrev
+..!meta M|=vk/SPEDAUO
+..*****************************************************************************
+.. FOP-Name       : SPEDAUO.BSTART.BV
+.. Autor          : fwester
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Setzt Datenbankanfrage zusammen.
+.. Ablauf         : Button-vor-EFOP
+..
+.. Functionality  : Builds database query.
+.. Program flow   : After button efop
+..*****************************************************************************
+.set trans -
+..
+.. Query build by selection bar
+.continue END ? M|sel
+..
+.formula M|fromno = M|fromno>>"+"  ? M|fromno/"\+*"
+.formula M|tono = M|tono>>"+"  ? M|tono/"\+*"
+..
+.type P55:1 xdocument
+.assign U|xdocument = "$,,;@gruppe=1;@numsuch=" + M|fromno + "!" + M|tono + ";@lesen=" + 'G|FALSE'
+.continue ERROR01 ? _G|mehr
+.assign U|xdocument = "$,,;@gruppe=1;schlag=" + M|fromsubject + "!" + M|tosubject + ";@lesen=" + 'G|FALSE'
+.continue ERROR02 ? _G|mehr
+..
+.. Normalize search words
+.formula M|fromno = -M|fromno  ?  F|isvalue('M|fromno', "SW55")
+.formula M|tono = -M|tono  ?  F|isvalue('M|tono', "SW55")
+..
+.. Build query
+.formula M|select = "$,,;@gruppe=1;@ordnung=nummer"
+..
+.. Avoid using ranges for single numbers or search words, as ranges will break the key finder
+.continue DATE ? F|empty(M|fromno) & F|empty(M|tono)
+.formula M|select = M|select + ";@numsuch=" + M|fromno + "!" + M|tono
+..
+!DATE: select all within date period
+.continue SUBJECT ? F|empty(M|fromdate) & F|empty(M|todate)
+.formula M|select = M|select + ";datum=" + 'M|fromdate' + "!" + 'M|todate'  ?  M|fromdate<>M|todate
+.formula M|select = M|select + ";datum==" + 'M|fromdate'  ?  M|fromdate=M|todate
+.formula M|select = M|select + ";@ordnung=datum"
+..
+!SUBJECT: select all within catchword area
+.continue CUSTOM ? F|empty(M|fromsubject) & F|empty(M|tosubject)
+.formula M|select = M|select + ";schlag=" + 'M|fromsubject' + "!" + 'M|tosubject'
+..
+!CUSTOM: select all with a certain recipient
+.continue FORWARD ? F|empty(M|customer)
+.formula M|select = M|select + ";kunde=" + 'M|customer^id'
+..
+!FORWARD: select all with a certain shipping agent
+.continue PRINT ? F|empty(M|shipper)
+.formula M|select = M|select + ";spediteur=" + 'M|shipper^id'
+..
+!PRINT: add print and send switches
+.formula M|select = M|select + ";druck=" + 'M|printable'
+.formula M|select = M|select + ";dfuesenden=" + 'M|send'
+..
+..*****************************************************************
+!END
+.continue
+..*****************************************************************
+!ERROR01: Wrong number or searchword range!
+.error
+.cursor fromno 0
+.end 1
+..
+!ERROR02: Wrong subject range!
+.error
+.cursor fromsubject 0
+.end 1

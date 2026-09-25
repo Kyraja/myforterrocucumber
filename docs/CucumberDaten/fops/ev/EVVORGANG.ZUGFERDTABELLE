@@ -1,0 +1,246 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EVVORGANG.ZUGFERDTABELLE
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text xmerkartikelpos ? _F|defined(U|xmerkartikelpos)
+..
+.continue AUFTRAG ? _F|empty(M|bestellnummer)
+.formula M|bestellnummer = H|abnrpo              ? H|kopf^dnr = 3
+.continue AUFTRAG                                ? _F|empty(M|bestellnummer)
+.formula M|bestellnummer = H|orig^abnrpo         ? H|kopf^dnr = 3
+.formula M|bestellnummer = H|okopf^frzeich       ? H|kopf^dnr = 3 & F|empty(M|bestellnummer)
+..
+!AUFTRAG
+.formula M|auftragsnummer = H|okopf^nummer       ? H|kopf^dnr = 3 & H|okopf^typ = 3
+.formula M|auftragsnummer = H|orig^okopf^nummer  ? H|kopf^dnr = 3 & H|okopf^typ = 4
+..
+.continue NOLIEF ? H|okopf^typ = 4
+..
+!LS: Lieferscheindatum
+.load 4 add M|position
+.continue NOLIEF ? _G|mehr
+.load 8 add 4|okopf 
+.continue NOLIEF ? _G|mehr
+.continue PROJ   ? 8|typ<>4
+.formula M|lieferdate = 8|vom
+.formula M|lieferdate = 8|erfass ? F|empty(M|lieferdate)
+.load 8
+.load 4
+..
+!NOLIEF: Leistungsdatum ist Rechnungdatum
+.formula M|lieferdate = H|vom    ? F|empty(M|lieferdate)
+.formula M|lieferdate = H|erfass ? F|empty(M|lieferdate)
+..
+!PROJ
+.continue UNIT ? _F|empty(M|projektnummer)
+.formula M|projektnummer = H|projekt^nummer
+.formula M|projektname = H|projekt^namebspr
+..
+.. contractrefdoc - Rahmenauftrag
+.assign M|contractrefdoc = H|zrahmen^nummer
+!UNIT
+.. Handelseinheit
+.load 8 unit 'F|formatstr("$,,;@gruppe=1;gruppe=1;einheitbspr=={1}", H|artikel^vhe)'  ? M|ekvk = 3
+.load 8 unit 'F|formatstr("$,,;@gruppe=1;gruppe=1;einheitbspr=={1}", H|artikel^ehe)'  ? M|ekvk = 4
+.. Einheit nach ISO
+.formula M|basisunitcode = 8|eiso
+.load 8
+.. Ma·einheit fÅr die in Rechnung gestellte Menge
+.load 8 unit 'F|formatstr("$,,;@gruppe=1;gruppe=1;einheitbspr=={1}", H|he)'
+.formula M|hunitcode = 8|zfunece
+.load 8
+.. Preiseinheit
+.load 8 unit 'F|formatstr("$,,;@gruppe=1;gruppe=1;einheitbspr=={1}", H|artikel^vpe)' ? M|ekvk = 3
+.load 8 unit 'F|formatstr("$,,;@gruppe=1;gruppe=1;einheitbspr=={1}", H|artikel^epe)' ? M|ekvk = 4
+.. Preiseinheit UN/ECE
+.formula M|punitcode = 8|zfunece
+.load 8
+..
+.formula M|steuerproz = M|stsatz  
+.copy M|abzukenn = G|FALSE ? _F|empty(H|zfabtyp)
+.copy M|abzukenn = G|TRUE  ? _F|empty(H|zfzutyp)
+..
+.. MaterialzuschlÑge sind mit 0 noch ein Zuschlag, 
+.. die anderen Typen sind mit 0 ein Abschlag
+..
+.formula M|abbasis = H|mge * H|preis ?  (M|vktyp = 7)
+.formula M|abbasis = H|preis         ? _(M|vktyp = 7)
+.formula M|abbasis = 0               ?  (M|vktyp = 13 ; M|vktyp = 14)
+.copy M|abzukenn = G|TRUE ? M|vktyp = 13 & M|gpreis > 0
+.formula M|abwert = ""
+.formula M|abwert = H|pwert  ? (M|zptyp = 14)
+.formula M|abwert = H|pwert  ? (M|zptyp = 13 ; M|vktyp = 12 )
+.formula M|abwert = H|pwert - (H|mge * H|preis) ?   M|vktyp = 7 & H|proz <> 0
+.formula M|abwert = H|pwert                     ? _(M|vktyp = 7) & H|proz <> 0
+..
+.formula M|abwert = M|abwert * -1 ? _F|empty(H|zfzutyp) &  ('H|kopf^vorganga(L=":")' = "(CreditNoteCommercial)")
+.formula M|abwert = M|abwert * -1 ? _F|empty(H|zfabtyp) & _('H|kopf^vorganga(L=":")' = "(CreditNoteCommercial)")
+..
+.formula M|abproz = F|abs(H|proz)
+.formula M|abgrund = ""
+.formula M|steuerbefrtxt = M|prtsthinwname
+.. Lieferdatum entspricht Rechnungsdatum wenn Re mit Lagerbewegung (fakt) 
+.formula M|steuerfaellig = H|kovom
+..
+.. Besonderheiten: Anzahlungsrechnung bzw. Rechnungen ohne Artikelposition.
+.. Der ZUGFeRD-Export benoetigt mindestens eine Artikelposition.
+.. Zusatzpositionen mit einer Positionsnummer werden als Artikelpostionen umgestellt.
+.. Eine Zusatzposition mit einem negativen Wert in der Rechnung kann nicht
+.. umgestellt werden und muss als Zuschlag/Abschlag exportiert werden weil der
+.. Wert einer Artikelposition positiv sein muss.
+..
+.. Nur Zusatzpositionen von Typ (12) koennen umgestellt werden
+.continue KEINEUMSTELLUNG ? _((1|gruppe = 4) & (M|vktyp = 12))
+..
+.. Keine Umstellung einer Zusatzposition falls mindestens eine Artikelposition
+.. bereits vorhanden ist oder die Positionsnummer ist leer.
+.continue KEINEUMSTELLUNG ? U|xbhatartikel ; F|empty(H|pnum)
+..
+.. Keine Umstellung einer Zusatzposition wenn der Preis negativ ist.
+.. Eine Anzahlung in einer Anzahlungsrechnung hat einen positiven Wert und kann umgestellt werden.
+.. Eine Anzahlung in einer Rechnung hat einen negativen Wert und kann nicht umgestellt werden. 
+.continue KEINEUMSTELLUNG ? M|gpreis < 0
+..
+.formula M|vktypa = "(7)"
+.formula M|vktyp = "7"
+.formula M|mge = 1 
+.formula M|epreis = M|gpreis
+.formula M|ebetragbrutto = M|gpreis
+.formula M|ebetragnet= M|gpreis
+.formula M|abwert = 0
+.copy M|abzukenn = G|false
+..
+!KEINEUMSTELLUNG
+..
+.continue KEINSTORNO ? _('H|kopf^vorganga(L=":")' = "(InvoiceReversal)")
+..
+.. Behandlung von Zu und AbschlÑgen bei Storno Rechnung 
+..
+.. MaterialzuschlÑge sind mit 0 noch ein Zuschlag, 
+.. die anderen Typen sind mit 0 ein Abschlag
+..
+.copy M|abzukenn = G|TRUE ? M|vktyp = 13 & M|gpreis < 0
+.formula M|abwert = ""
+.formula M|abwert = H|pwert ? (M|zptyp = 14)
+.formula M|abwert = H|pwert ? (M|zptyp = 13 ; M|vktyp = 12 )
+.formula M|abwert = H|pwert ? H|proz <> 0
+..
+.formula M|abwert = M|abwert * -1 ? _F|empty(H|zfzutyp)
+..
+.formula M|abproz = F|abs(H|proz)
+.formula M|abgrund = ""
+..
+!KEINSTORNO
+..
+..KaufmÑnische Gutschrift / oder Storno Werte mÅssen positiv sein
+..
+.continue KEINGUT ? _(('H|kopf^vorganga(L=":")' = "(CreditNoteCommercial)") ; ('H|kopf^vorganga(L=":")' = "(InvoiceReversal)"))
+.formula M|epreis = M|epreis * -1
+.formula M|gpreis = M|gpreis * -1
+.formula M|ebetragbrutto = M|ebetragbrutto * -1
+.formula M|ebetragnet = M|ebetragnet * -1
+.formula M|ezuschlag = M|ezuschlag * -1
+.formula M|abbasis = M|abbasis * -1  ? (M|vktyp = 7) ; (M|vktyp = 10)
+.formula M|abwert = M|abwert * -1  ? (M|vktyp = 7) ; (M|vktyp = 10)
+..
+!KEINGUT
+.. Artikelidentnummer
+.formula M|artikel2 = 1|nummer
+.. Artikelverkaufsbezeichnung
+.formula M|artname = '1|vkbez.P|ksi'
+.formula M|artname = '1|name.P|ksi' ? F|empty(M|artname)
+.. Ursprungsland
+.assign M|purland = H|purland
+.. ISO2 aus Ursprungsland
+.formula M|purlandiso2 = H|purland^iso2
+.. ID von Auftrag/Bestellung
+.assign M|bestposorig = M|position^orig^id      ? M|position^okotyp <> 4
+.assign M|bestposorig = M|position^orig^orig^id ? M|position^okotyp = 4
+.load 4 add M|bestposorig
+.continue ENDBESTPOS ? _G|mehr
+..Angebotspositions 
+.assign M|angposorig = 4|orig ? 4|okotyp = 2
+.load 5 add 4|okopf
+.continue ENDANG ? _G|mehr
+.. Angebotsnummer 
+.formula M|angnum = 5|nummer
+..Angebotsdatum
+.formula M|angvom = 5|vom
+.formula M|angvom = 5|erfass ? F|empty(M|angvom)
+.load 5
+..
+!ENDANG
+.. Positionsnummer aus Auftrag/Bestellung
+.formula M|bestpos = 4|pnum         ? _F|empty(M|bestposorig)
+.load 8 add 4|kopf
+.. Auftrags- / Bestellnummer
+.formula M|bestvom = 8|vom
+.formula M|bestvom = 8|erfass ? F|empty(M|bestvom)
+.. Auftrags- / Bestelldatum
+.formula M|bestnum = 8|nummer
+.load 8
+.load 4
+..
+!ENDBESTPOS
+.. IS aus Lieferschein
+.assign M|liefposorig = M|position^orig^id      ? M|position^okotyp = 4
+.. Positionsnummer aus Lieferschein
+.formula M|liefpos = M|liefposorig^pnum      ? _F|empty(M|liefposorig)
+.load 4 add M|liefposorig
+.continue ENDLIEFPOS ? _G|mehr
+.load 8 add 4|kopf
+.formula M|liefvom = 8|vom
+.formula M|liefvom = 8|erfass ? F|empty(M|liefvom)
+.formula M|liefnum = 8|nummer
+.load 5 add 8|sped
+.continue ENDSPED ? _G|mehr
+.formula M|spednum = 5|nummer
+.formula M|spedvom = 5|datum
+.load 5
+..
+!ENDSPED
+.load 8
+.load 4
+..
+!ENDLIEFPOS
+.. Menge Preiseinheit
+.formula M|mengepreiseinheit = 1/H|pehe ? H|pehe<>0
+.. Startdatum Lieferzeitraum
+.formula M|lieferzeitraumstart = M|position^orig^kovom  ? _F|empty(M|liefposorig)
+.formula M|lieferzeitraumstart = H|kovom                ?  F|empty(M|liefposorig)
+.formula M|rechperiodstart = M|lieferzeitraumstart      ? M|lieferzeitraumstart:8 < H|kovom:8
+.. Enddatum Lieferzeitraum
+.formula M|lieferzeitraumende = M|position^orig^kovom  ? _F|empty(M|liefposorig)
+.formula M|lieferzeitraumende = H|kovom                ?  F|empty(M|liefposorig)
+..
+.. Aufzaehlungen Rechnungspositionen
+.. AZMK20400
+.assign M|steuercode = H|zftaxcode
+.. AZMK20404
+.assign M|zutyp = H|zfzutyp
+.. AZMK20403
+.assign M|abtyp = H|zfabtyp
+.. AZMK20407
+.assign M|steuerbefrcode = H|zfvatexemp
+.. AZMK20405
+.assign M|steuerart = H|zftaxtyp
+..
+.. Brutto-Endsumme
+.formula U|xgesamtsum = H|pwert ? M|zptyp = 16
+.. Summe aller Anzahlungspositionen 
+.formula U|xvorauszahlsum = U|xvorauszahlsum + H|pwert ? F|equals(H|kategorie, "(Downpayment)") & _('H|kopf^vorganga(L=":")' = "(Downpayment)")
+..
+.formula M|merkartikelpos = H|id    ? M|artikelsuch^gruppe = 1 & M|vktyp = 7 & M|pos <> "N"
+.formula M|merkartikelpos = H|id    ? M|artikelsuch^gruppe = 4 & M|vktyp = 7 & M|pos <> "N"
+.formula M|merkartikelpos = H|id    ? M|artikelsuch^gruppe = 5 & M|vktyp = 7 & M|pos <> "N"
+.formula U|xmerkartikelpos = M|merkartikelpos ? (M|vktyp = 7 ; M|vktyp = 12 ; M|vktyp = 26) & M|pos <> "N"
+.formula U|xmerkartikelpos = "" ? M|vktyp = 8 ; M|vktyp = 9 ; M|vktyp = 10 ; M|vktyp = 51 ; M|vktyp = 16 ; M|vktyp = 19
+.formula M|merkartikelpos = U|xmerkartikelpos ? M|zptyp = 11 ;  M|zptyp = 14 
+..***********************************************************************************************
+!END
+.continue

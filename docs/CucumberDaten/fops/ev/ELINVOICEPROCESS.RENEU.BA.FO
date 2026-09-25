@@ -1,0 +1,169 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICEPROCESS.RENEU.BA.FO
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text    xtmpfile    ? _F|defined(U|xtmpfile)
+.type text    xtout       ? _F|defined(U|xtout)
+.type text    xterr       ? _F|defined(U|xterr)
+.type text    xterr2      ? _F|defined(U|xterr2)
+.type integer xistatus    ? _F|defined(U|xistatus)
+..
+..<META M|='ev/ELINVOICEPROCESS'>
+..
+.type P53:0  xedi  ? _F|defined(U|xedi) 
+.type P92:11 xsuch ? _F|defined(U|xsuch)
+..
+.. ZUGFeRD ist fuer den Absender nicht aktiv!
+.continue ERROR0 ? _M|ediaktiv
+..
+.. per edp eine EK-Rechnung anlegen oder RE aus BE oder LS
+.continue ERROR1 ? M|tzeilen = 0
+.continue ERROR9 ? M|buttonartikel = M|rotz
+.continue ERROR2 ? F|empty(M|ediobjsuch)
+.continue ERROR4 ? _F|empty(M|reek) & _G|evtvar = "bstart"
+.. sind alle Pflichtfelder gefÅllt?
+.continue ERROR3 ? _M|bausbe & _M|bausls & _M|breneu & _M|bbeleganfuegen & _M|bausrlsre
+.continue ERROR3 ?  M|button0 = M|rotz ; M|button9 = M|rotz ; M|button8 = M|rotz ; M|button7 = M|rotz
+.continue ERROR5 ?  F|empty(M|resteller) & F|empty(M|lieferant)
+.continue ERROR6 ?  F|empty(M|kobverb) & _M|bbiban & _F|equals(M|zaform, "(DebitNote)")
+.. Tabelle prÅfen
+.select screen header
+..
+!LINE
+.select screen line
+.continue EDP    ? _G|mehr
+.continue ERROR8 ? M|bzusatz & F|empty(M|artikel)
+.continue LINE
+..
+!EDP
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+.file -tempname U|xterr2
+..
+.output new 'U|xtmpfile'
+.input DATEI.F
+..
+.continue ERROR7       ? F|empty(DeliveryDateTime) & M|bewlei
+.continue REAUSRE      ?  M|bwerteausrechnung
+.continue RERLSRE      ?  M|bausrlsre
+.continue BELEGAN      ?  M|bbeleganfuegen
+.continue NEUERECH     ?  F|empty(M|liefek) & F|empty(M|bestellung)
+.continue LIEFERSCHEIN ? _F|empty(M|liefek) & M|lsfakt & M|lsueb
+.continue BESTELLUNG   ? _F|empty(M|bestellung)
+.continue NEUERECH
+..
+!REAUSRE
+.input 'M|fopreausre'
+.continue MEHR
+..
+!BELEGAN: Rechnung Åber Beleg anfÅgen
+.input 'M|fopbeleganfuegen'
+.continue MEHR
+..
+!RERLSRE: Gutschrift aus RLS bzw. RE
+.input 'M|fopreausrlsre'
+.continue MEHR
+..
+!BESTELLUNG: Rechnung aus Bestellung
+.note Bitte beachten, die Nettosumme passt nicht zu den XML-Daten ? M|sumnettoliefer = M|kLineTotalAmount
+.input 'M|foprebe'
+.continue MEHR 
+..
+!LIEFERSCHEIN: Rechnung aus Lieferschein
+.note Bitte beachten, die Nettosumme passt nicht zu den XML-Daten ? M|sumnettoliefer = M|kLineTotalAmount
+.input 'M|foprels'
+.continue MEHR
+..
+!NEUERECH: Rechnung neu
+.input 'M|fopreneu'
+.continue MEHR
+..
+!MEHR: erzeugte Rechnug eintragen
+.formula M|select = "$,,"
+.formula M|select = M|select + ";typ=(Invoice)"
+.formula M|select = M|select + ";vorganga=(CreditNoteCommercial)" ? F|equals(M|vorganga, "(CreditNoteCommercial)")
+.formula M|select = M|select + ";ebeleg="+'M|ExchangedDocumentID'
+.formula M|select = M|select + ";vom="+'M|IssueDateTime'   ? _F|empty(M|IssueDateTime)
+.formula M|select = M|select + ";vom=."                    ?  F|empty(M|IssueDateTime)
+.formula M|select = M|select + ";@ablageart=(Both)"
+.formula M|select = M|select + ";@richtung=(Backwards)"
+.formula M|select = M|select + ";stornopartnervorg=`" 
+.formula M|select = M|select + ";@gruppe=1"
+.load 1 purchasing 'M|select' 
+.continue END ? _G|mehr
+.assign M|reek = 1|id
+.formula M|ebeleg = 1|ebeleg
+.formula M|neurenetto = 1|sumnetto
+.formula M|neurebrutto = 1|rebetr
+.. 
+.. Jezt die RE-Nummer noch in die EDI-Nachricht zurÅckschreiben (M|edifact)
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=53
+#!action=modify
+#!charset=eks
+id;ideksvor;status;edistatusaz
+'M|edifact^id';'1|nummer';0;(ProcessingSuccessful)
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERREDI  ? _G|mehr
+.assign M|status = M|edifact^edistatusaz
+.formula M|fotoz = G|icook
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERREDI
+.input 'U|xterr'
+.error -message éndern der EDI-Nachricht ist gescheitert.
+.end 1
+..
+!ERROR0
+.error -message Der ZUGFeRD-Import ist fÅr den Absender nicht erlaubt.
+.end 1
+..
+!ERROR1
+.error -message Keine Tabellen eilen vorhanden.
+.end 1
+..
+!ERROR2
+.error -message Keine Objektsuche gefÅllt.
+.end 1
+..
+!ERROR3
+.error -message Bitte alle Pflichtfelder fÅllen.
+.end 1
+..
+!ERROR4
+.error -message 'F|formatstr("Es wurde bereits eine Rechnung {1} zu EDI-Nachricht {2} erstellt.", M|reek, M|edifact)'
+.end 1
+..
+!ERROR5
+.error -message Rechnungssteller und Lieferant wurden nicht zugeordnet.
+.end 1
+..
+!ERROR6
+.error -message 'F|formatstr("Die IBAN {1} konnte keinen Bankdaten des Lieferanten {2} zugewiesen werden. Bitte Bankverbindung anlegen.", M|PayeePartyCreditorFinancialAccountIBANID, M|lieferant)'
+.end 1 
+..
+!ERROR7
+.error -message Das Leistungsdatum fehlt.
+.cursor DeliveryDateTime 0
+.end 1
+..
+!ERROR8
+.error -message 'F|formatstr("Bitte noch den Artikel {1} eintragen oder den Kenner entfernen.", M|artikel)'
+.cursor artikel 'M|aktzeile'
+.end 1
+..
+!ERROR9
+.error -message Es wurden nicht alle Artikelzeilen einem Artikel zugewiesen. 
+.end 1

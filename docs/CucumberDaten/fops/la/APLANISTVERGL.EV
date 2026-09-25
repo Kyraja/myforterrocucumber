@@ -1,0 +1,97 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : APLANISTVERGL.EV
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Infosystem Absatzplanwerte: Eventbehandlung
+.. Functionality  :
+..
+.. Ablauf         : Behandelt alle Feld- und Button-Events
+..
+.. Includes       :
+..  include la/HOL.APLAN
+..
+..*****************************************************************************
+..
+.set trans -
+.continue PLANEINHEIT ? G|evtartengl="FIELD_EXIT"    & G|evtvar="kplaneinheit"
+.continue KUMMU       ? G|evtartengl="FIELD_EXIT"    & G|evtvar="kumuliert"
+.continue MISCH       ? G|evtartengl="FIELD_EXIT"    & G|evtvar="bistplan"
+.continue STARTVOR    ? G|evtartengl="BUTTON_BEFORE" & G|evtvar="bstart"
+.continue STARTNACH   ? G|evtartengl="BUTTON_AFTER"  & G|evtvar="bstart"
+.continue DATUM       ? G|evtartengl="FIELD_EXIT"    & G|evtvar="gdistplan"
+.continue TIEF        ? G|evtartengl="FIELD_EXIT"    & G|evtvar="bstufeauswert"
+.continue DATOK       ? G|evtartengl="FIELD_EXIT"    & G|evtvar="anzstufen"
+.continue
+..
+!TIEF
+.formula M|ianzstufe = 99          ?  M|bstufeauswert
+.formula M|anzstufen = 0           ?  M|bstufeauswert
+.formula M|ianzstufe = M|anzstufen ? _M|bstufeauswert
+.assign P|maskkontextfop = "abw"   ?  M|bstufeauswert
+.assign P|maskkontextfop = ""      ? _M|bstufeauswert
+.continue DATOK
+..
+!STARTVOR: Prueft, ob Planungseinheit im Maskenkopf ausgefuellt ist
+..         und leert die Tabelle
+..
+.continue TYPOK ? _F|empty(M|kplaneinheit)
+.set trans +
+.error Bitte zuerst eine Planungseinheit eintragen.
+.set trans -
+.end 1
+..
+!TYPOK
+.continue DATOK ? F|empty(M|kadatum) ; F|empty(M|kedatum)
+.continue DATOK ? M|kadatum < M|kedatum
+.error Zeitbereich nicht korrekt.
+.end 1
+..
+!DATOK
+.input "is/TABLEEREN"
+.formula M|ianzstufe = M|anzstufen ? M|anzstufen <> 0 ; M|anzstufen = 0 & _M|bstufeauswert
+.copy M|bstufeauswert = G|FALSE    ? M|anzstufen <> 0
+.assign P|maskkontextfop = ""      ? _M|bstufeauswert
+.continue PLANEINHEIT    ? G|evtartengl="BUTTON_BEFORE" & G|evtvar="bstart"
+.continue
+..
+!STARTNACH
+.input "la/HOL.APLAN"
+.continue
+..
+!PLANEINHEIT: Feldaustritt Absatzplanwerte Planungseinheit, Kopfteil fllen
+.assign M|kartber = M|kplaneinheit^artber
+.assign M|le = M|kplaneinheit^le
+.assign M|waehr = M|kplaneinheit^waehr
+.continue END
+..
+!KUMMU
+.copy M|bistplan = G|FALSE  ?  M|kumuliert
+.formula M|gdistplan = ""   ? _M|bistplan
+.protection gdistplan       ? _M|bistplan
+.make screen line --        ?  M|tzeilen > 0
+.continue END
+..
+!MISCH
+.copy M|kumuliert = G|FALSE ? M|bistplan
+.formula M|gdistplan = ""        ? _M|bistplan
+.protection gdistplan               ? _M|bistplan
+.protection -reset gdistplan        ?  M|bistplan
+.make screen line --           ? M|tzeilen > 0
+.continue END
+..
+!DATUM
+.continue FEHLER            ? 'M|gdistplan:8' > 'G|datum:8'
+.continue FEHLER            ? 'M|kedatum:8' < 'M|gdistplan:8' ; 'M|gdistplan:8' < 'M|kadatum:8'
+.make screen line --     ?  M|tzeilen > 0
+.continue END
+..
+!END
+.input "is/TABLEEREN"
+.continue
+..
+!FEHLER
+.error Falsche Datumsangabe!
+.formula M|gdistplan = ""
+.end 1

@@ -1,0 +1,75 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KM.EMAIL.XMAILUSER
+.. Datum          : 23.04.2007
+.. Version        : 2007
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : as
+.. Funktion       : Unterprogramm von ser/KM.EMAIL,
+..                  schreibt die rmtmp/XXMAILUSER+T|aufrufnr-Datei,
+..                  öbergabeparameter = T|xtemdatei
+..
+.. Ablauf         :
+..
+.. Functionality  :
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+.type text xtsubject    ? _F|defined(U|xtsubject)
+.type text xtmailto     ? _F|defined(U|xtmailto)
+.type text xtftzeile    ? _F|defined(U|xtftzeile)
+.type text xt2ftzeile   ? _F|defined(U|xt2ftzeile)
+.type text xt3ftzeile   ? _F|defined(U|xt3ftzeile)
+.type text xtsys        ? _F|defined(U|xtsys)
+.type text xtmandat     ? _F|defined(U|xtmandat)
+..
+.. eMail-Datei mit Parametern schreiben
+.output addedto 'U|xtemdatei'
+.input "DATEI.F"
+..
+.formula U|xtsubject = "EingangsbestÑtigung zu Ihrer Anfrage " + 'M|extnr'    ? M|extnr <> ""
+.formula U|xtsubject = "EingangsbestÑtigung zu Ihrer Anfrage"                 ? M|extnr = ""
+.formula U|xtmailto = 'M|rman1^email'
+..
+.set trans +
+[ABASMAIL]
+HTMLBODY=0
+SEND=0
+PRIORITY=3
+SUBJECT='U|xtsubject'
+..
+!SCFT: Freitext zeilenweise lesen und ZeilenlÑnge prÅfen
+.select from 'M|rmtext' xtftzeile^
+.continue ENFT                           ? _G|mehr
+..
+.formula U|xilge = +U|xtftzeile
+?BODYZ='U|xtftzeile'                     ? U|xilge<2994
+.continue SCFT                           ? U|xilge<2994
+.. Freitext zerlegen und Schaltung anhÑngen
+.formula U|xt3ftzeile = U|xtftzeile >> " "
+.formula U|xt2ftzeile = U|xtftzeile << U|xt3ftzeile
+..
+!SCPRFT: Freitextzeile auf LÑnge prÅfen
+.formula U|xilge      = +U|xt2ftzeile
+.formula U|xt2ftzeile = U|xt2ftzeile + "\" ? U|xilge < 2994
+?BODYZ='U|xt2ftzeile'                     ? U|xilge < 2994
+?BODYZ='U|xt3ftzeile'                     ? U|xilge < 2994
+.continue SCFT                              ? U|xilge < 2994
+..
+.formula U|xtftzeile  = U|xt2ftzeile >> -1
+.formula U|xt2ftzeile = " " + U|xt3ftzeile
+.formula U|xt3ftzeile = U|xt3ftzeile + U|xt2ftzeile
+.formula U|xt2ftzeile = U|xtftzeile << U|xt3ftzeile
+.continue SCPRFT
+..
+!ENFT: Ende des Freitextes
+..
+FROMADRESS='U|xtfromadress'
+TO1='U|xtmailto'
+.set trans -
+.output
+.formula U|xtsys = "s3_conv 11 " + 'U|xtemdatei'
+.system 'U|xtsys' background
+.continue

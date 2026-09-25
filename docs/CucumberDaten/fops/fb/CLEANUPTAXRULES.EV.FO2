@@ -1,0 +1,1251 @@
+..!interpreter declaration english translate noabbrev
+..*****************************************************************************
+.. Autor          : rowa
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+..*****************************************************************************
+..<VAR folded>
+    .type text xlastobj
+    .type ID58 xacctaxrule
+    .type bool xfetchsingleacctaxrule
+    .type text xdelstringdnrgrp
+    .type text xdelstringid
+    .type text xtswapdbgpnr
+    .type text xswap
+    .type text xswapline
+    .type ID100 xodpobjid
+    .type text xoptaxruleswaphead
+    .type text xoptaxruleswaptable
+    .type integer xpurchsalegroup
+    .type integer xlastgroup
+    .type integer xlastdb
+    .type integer xtreeiter
+    .type text xpurchsaleobjid
+    .type text xcashbookfinentryobjid
+    .type ID90 xpaymentformobjid
+    .type ID90 xbankstatementobjid
+    .type bool xedpsuccess
+    .type text xedpimp
+    .type text xlogstring
+    .type text xlogname
+    .type bool xrowdel
+    .type integer xrows
+    
+..</VAR>
+    
+.. <META M|='op/CLEANUPTAXRULES'>
+def main() {
+    .set trans -
+    switch (G|evtartengl) {
+        case ("SCREEN_ENTER") {
+            .call screenEnter()
+        }
+        
+        case("FIELD_EXIT") {
+            .call clearScreen()
+        }       
+        
+        case("BUTTON_BEFORE") {
+            .call buttonBefore()
+        }
+        
+        case("BUTTON_AFTER") {
+            .call buttonAfter()
+        }       
+    }
+    
+}
+
+.. button before event handler
+def buttonBefore() {
+    switch (G|evtvar) {
+        case ("bstart") {
+            .call clearScreen()
+            
+            if (F|empty(M|steuerregel)) {
+                .error Bitte Steuer- oder Kontensteuerregel eintragen.
+                .cursor steuerregel
+                .end 1
+            }
+        }
+        
+        case ("tdelete") {
+            if (M|tdnr = 110 ; M|tdnr = 98 ; M|tdnr = 90) {
+                .error Bei dieser Art nicht m”glich.
+                .end 1
+            }
+            
+            if (M|tdnr = 3 ; M|tdnr = 4 ; M|tdnr = 100) {
+                if (_G|wartung) {
+                    .error Žnderungen an Vorgangsdaten nur im Wartungsmodus m”glich!
+                    .end 1       
+                }
+            }
+            
+            if (M|tdnr = 58) {
+                .formula U|xacctaxrule = M|tobjid^id
+                .call checkAccTaxRulesRows()
+                
+                if (U|xrows < 1) {
+                    .error L”schen hier nicht m”glich, da Steuerregel einzige Steuerregel in Kontensteuerregel ist.
+                    .end 1
+                }
+            }
+        }
+        
+        case ("tswap") {            
+            if (F|empty(M|tswapstrgl)) {
+                .error Bitte Steuerregel fr Tausch eingeben.
+                .cursor tswapstrgl
+                .end 1
+            }
+            
+            if (M|tswapstrgl^id = M|steuerregel^id) {
+                .error Die Tauschsteuerregel muss sich von der inspizierten Steuerregel unterscheiden!
+                .cursor tswapstrgl
+                .end 1
+            }
+            
+            if (M|tdnr = 3 ; M|tdnr = 4 ; M|tdnr = 100) {
+                if (_G|wartung) {
+                    .error Žnderungen an Vorgangsdaten nur im Wartungsmodus m”glich!
+                    .end 1       
+                }
+            }
+        }
+        
+        case("deltaxrule") {
+            if (_(M|launched)) {
+                .error L”schen der Steuerregel erst dann m”glich, wenn das Infosystem mindestens ein Mal ausgefhrt wurde.
+                .end 1
+            }
+        
+            if (M|ozeilen > 0) {
+                .error L”schen der Steuerregel erst dann m”glich, wenn diese nicht mehr verwendet wird.
+                .end 1
+            }
+            
+            if (M|steuerregel^grust <> 6) {
+                .call checkForTaxRuleInAccTaxRule()
+                if (_(M|delvalid)) {
+                    .error Das L”schen der Steuerregel ist erst dann m”glich, wenn diese nicht die einzige Steuerregel in einer Kontensteuerregel ist.
+                    .end 1
+                }
+            }
+        }
+        
+        case("swapacctaxrule") {
+            if (F|empty(M|accswaptaxrule)) {
+                .error Bitte eine Steuerregel zum Tausch angeben.
+                .end 1
+            }
+        }
+        
+        case("showlog") {
+            .call validateLogFile()
+        }
+        
+        case("emptylog") {
+            .call validateLogFile()
+        }
+    }
+}
+
+.. button after event handler 
+def buttonAfter() {
+    if (M|edplogging) {
+        .call defineLogName()
+    }
+    
+    switch (G|evtvar) {
+        case ("bstart") {
+            if (M|edplogging) {
+                .call writeLogHead()
+            }
+            
+            .assign M|stufe = 1
+            .call start()
+        }
+        
+        case ("tdelete") {
+            if (M|edplogging) {
+                .call logRowDelete()
+            }
+            
+            if (M|tdnr = 5) {
+                .call deleteAccTaxRule()
+            } else {
+                if (M|tbaumstat = "=") {
+                    .call swapTaxRule()
+                } else {
+                    .call swapTaxRuleRange()
+                }
+            }
+        }
+        
+        case ("tswap") {
+            if (M|edplogging) {
+                .call logRowSwap()
+            }
+            
+            if (M|tdnr = 5) {
+                .call swapAccTaxRule()
+            } else {
+                if (M|tbaumstat = "=") {
+                    .call swapTaxRule()
+                } else {
+                    .call swapTaxRuleRange()
+                }
+            }
+        }
+        
+        case ("deltaxrule") {
+            if (M|edplogging) {
+                .call logDelete()
+            }
+            
+            .call delTaxRuleDataset()
+            .call clearScreen()
+        }
+        
+        case ("swapacctaxrule") {
+            if (M|edplogging) {
+                .call logSwapAccTaxRule()
+            }
+        
+            .assign U|xswap = M|accswaptaxrule
+            .copy U|xfetchsingleacctaxrule = G|false
+            .call swapTaxRuleFromAccTaxRule()
+        }
+        
+        case ("tbaumaufzu") {
+            if (M|tbaumstat = "+") {
+                .call openTreeNode()
+            } 
+            
+            if (M|tbaumstat = "-") {
+                .call closeTreeNode()
+            }
+        }
+        
+        case("showlog") {
+            .call showLogFile()
+        }
+        
+        case("emptylog") {
+            .call emptyLogFile()
+        }
+    }
+}
+
+def screenEnter() {
+    .copy M|taxruleinacctaxrul = G|true
+    .copy M|treeopenclose = G|false
+    .copy M|showprocesses = G|false
+    
+    .call clearScreen()
+}
+
+.. function to clear the screen after certain events
+def clearScreen() {
+    .assign M|anzstufen = 1
+    .assign M|acctaxrule = "(0,0,0)"
+    .assign M|accswaptaxrule = "(0,0,0)"
+    .copy M|delvalid = G|false
+    .copy M|launched = G|false
+    
+    .make screen line --
+    .protection M|deltaxrule 0
+    if (_F|empty(M|steuerregel)) {
+        if (M|steuerregel^grust = 6) {
+            .copy M|taxruleinacctaxrul = G|false
+            .copy M|showprocesses = G|false
+            .copy M|treeopenclose = G|false
+            .protection M|taxruleinacctaxrul 0
+            .protection M|showprocesses 0
+            .protection M|treeopenclose 0
+        } else {
+            .protection -reset M|taxruleinacctaxrul 0
+            .protection -reset M|showprocesses 0
+            .protection -reset M|treeopenclose 0
+        }
+    } else {
+        .protection -reset M|taxruleinacctaxrul 0
+        .protection -reset M|showprocesses 0
+        .protection -reset M|treeopenclose 0
+    }
+    
+    if (_M|edplogging) {
+        .protection M|edplogfile 0
+        .copy M|edplogfile = ""
+    } else {
+        .protection -reset M|edplogfile 0
+    }
+    
+    if (M|taxruleinacctaxrul & G|evtvar = "taxruleinacctaxrul") {
+        .copy M|showprocesses = G|false
+        .copy M|treeopenclose = G|false
+    }
+    
+    if (M|showprocesses ; M|treeopenclose) {
+        .copy M|taxruleinacctaxrul = G|false
+    }
+}
+
+
+.. Handler for the start button
+def start() {
+    .protection -reset M|deltaxrule 0
+    .call fetchDataAfterStart()
+    
+    if (M|steuerregel^gruppe <> 6) {
+        .. checks if the choosen tax rule is the last tax rule in a account tax rule
+        .call checkForTaxRuleInAccTaxRule()
+    }
+}
+
+.. Methods for data set selection and insertion into the infosystem table
+
+.. function to select the case books where the tax rule appears
+def selectCashBooks() {
+    .formula M|select = F|formatstr("$,strgl=={1};@gruppe={2};@ablageart=(Active)", M|steuerregel^id, 1)
+    .load 0 'G|hdatname98' 'M|select'
+}
+
+.. function to select open down payments where the tax rule appears
+def selectODPayments() {
+    .formula M|select = F|formatstr("$,strgl=={1};strglgko=={1};strglsko1=={1};strglsko2=={1};@gruppe={2};@ablageart=(Active);@verknuepfung=(Or)", M|steuerregel^id, 2)
+    .load 0 'G|hdatname100' 'M|select'
+}
+
+.. function to select financial entry templates where the tax rule appears
+def selectFinancialEntry() {
+    .formula M|select = F|formatstr("$,strgl=={1};@gruppe={2};@ablageart=(Active)", M|steuerregel^id, 0)
+    .load 0 'G|hdatname110' 'M|select'
+}
+
+def selectFinancialEntryTemplate() {
+    .formula M|select = F|formatstr("$,strgl=={1};@gruppe={2};@ablageart=(Active)", M|steuerregel^id, 0)
+    .load 0 'G|hdatname180' 'M|select'
+}
+
+.. function to select purchase and sales positions where the tax rule appears
+def selectPurchSalePos() {
+    if (M|steuerregel^ev = "Einkauf") {
+        .. <META 0|='P4:2'>
+        .. checking the purchase processes
+        .formula M|select = F|formatstr("$,strgl=={1};@gruppe={2};@ablageart=(Active);@ordnung=objgruppe;@verknuepfung=(Or)", M|steuerregel^id, 2)
+                
+        .load 0 'G|hdatname4' 'M|select'
+    } else {
+        .. <META 0|='P3:2'>
+        .. checking the sales processes
+        .formula M|select = F|formatstr("$,strgl=={1};kotypn<>36;@gruppe={2};@ablageart=(Active);@verknuepfung=(And);@ordnung=objgruppe", M|steuerregel^id, 2)
+        
+        .load 0 'G|hdatname3' 'M|select'
+    }
+}
+
+.. function to select account tax rules. selects one 
+def selectAccTaxRule() {
+    if (U|xfetchsingleacctaxrule) {
+        .. fetches a single account tax rule
+        .formula M|select = F|formatstr("$,kopf^id=={1};@gruppe={2};@ablageart=(Active)",  M|tobjid^id, 16)
+    } else {
+        .. fetches all the account tax rules where a specific tax rule appears
+        .formula M|select = F|formatstr("$,strgl=={1};@gruppe={2};@ablageart=(Active)", M|steuerregel^id, 16)
+    }
+    .load 0 'G|hdatname58' 'M|select'
+}
+
+def selectPaymentForm() {
+    .formula M|select = F|formatstr("$,strgl=={1};@gruppe={2};@ablageart=(Active)", M|steuerregel^id, 6)
+    .load 0 'G|hdatname90' 'M|select'
+}
+
+def selectBankStatementTable() {
+    .formula M|select = F|formatstr("$,tztr^id=={1};@gruppe={2};@ablageart=(Active);@zeilen=ja", U|xpaymentformobjid, 1)
+    .load 1 'G|hdatname90' 'M|select'
+}
+
+.. function that fetches and inserts the data into the table, after the start button was pushed
+def fetchDataAfterStart() {
+    if (M|taxruleinacctaxrul) {
+        .copy U|xfetchsingleacctaxrule = G|false
+        .call selectAccTaxRule()
+        
+        ..fetching the data
+        .call fetchData()
+    } else {
+        switch(M|steuerregel^gruppe) {
+            case(5) {
+                .assign U|xlastgroup = -1
+                
+                if (M|showprocesses) {
+                    .assign U|xpurchsalegroup = 0
+                    
+                    .. selecting the purchasing and sales positions
+                    .call selectPurchSalePos()
+                    .call fetchData()
+                    
+                    .. selecting the open down payments
+                    .call selectODPayments()
+                    .call fetchData()
+                }
+                
+                .. selecting the  90:6
+                .call selectPaymentForm()
+                .call fetchData()
+                
+                .. selecting the cash books
+                .call selectCashBooks()
+                .call fetchData()
+                
+                .. selecting the financial entries
+                .call selectFinancialEntry()
+                .call fetchData()
+                
+                .call selectFinancialEntryTemplate()
+                .call fetchData()
+            }
+            
+            case(6) {
+                .formula M|select = F|formatstr("$,ktostrgl={1};@gruppe=1", M|steuerregel^id)
+            
+                .load 0 'G|hdatname5' 'M|select'
+                .call fetchData()
+            }
+        }
+        
+        .copy M|launched = G|true
+    }
+}
+
+.. function to fetch the data after a selection. Inserts detailed rows or builds the initial tree view 
+def fetchData() {
+    while (G|mehr) {
+        if (G|evtvar = "bstart") {
+            .call buildInitTable()
+        } else {
+            .call insertDetailRow()
+        }
+        
+        .load 0 continue
+    }
+}
+
+
+.. function to build the table after the start button was pushed. distinguishes between an open or closed tree view
+def buildInitTable() {
+    if (M|steuerregel^gruppe = 6) {
+        .make screen line +O
+        .assign M|tobjid = 0|id
+        .call insertDbInformation()
+    } else {
+        if (M|taxruleinacctaxrul) {
+            .call insertDetailRow()
+        } else {
+             if (_(U|xlastgroup = 0|objgruppe) ; _(U|xlastdb = 0|dnr)) {
+                .make screen line +O
+                .assign M|tbaumstufe = 1
+                .assign M|tbaumstat = "+"
+            
+                .assign M|tgrust = 0|objgruppe
+                .formula M|tgrbez = 0|objgrbez
+                
+                .assign M|tdnr = 0|objdnr
+                .formula M|tdbez = 0|dbez
+            }
+         
+            .formula U|xlastgroup = 0|objgruppe
+            .formula U|xlastdb = 0|dnr 
+            
+            if (M|treeopenclose) {
+                .call insertDetailRow()
+            }
+        }
+    }
+}
+
+.. function to insert a detailed row into the table
+def insertDetailRow() {
+    if (M|taxruleinacctaxrul) {
+        .copy U|xpurchsalegroup = 0
+        .call insertAccTaxRulePurchSaleEntry()
+    } else {
+        switch(M|tdnr) {
+            case(180) {
+                .call insertCashBookFinancialEntryTemp()
+            }
+        
+            case(110) {
+                .call insertCashBookFinancialEntryTemp()
+            }
+            
+            case(100) {
+                .call insertODPMovement()
+            }
+            
+            case(90) {
+                .call insertCashBookFinancialEntryTemp()
+            }            
+                       
+            case(98) {
+                .call insertCashBookFinancialEntryTemp()
+            }
+                            
+            case(4) {
+                .call insertAccTaxRulePurchSaleEntry()
+            }
+                            
+            case(3) {
+                .call insertAccTaxRulePurchSaleEntry()
+            }
+        }
+    
+    }
+    
+}
+
+.. function to insert an open down payment detailed row
+def insertODPMovement() {
+    if (_(0|ophist = U|xlastobj)) {
+        .make screen line +O
+        .assign M|tobjid = 0|id
+        .call insertDbInformation()
+    }
+        
+    .assign U|xlastobj = 0|ophist
+}
+
+.. function to insert a cash book or financial entry template detailed row
+def insertCashBookFinancialEntryTemp() {
+    if (_(0|id = U|xlastobj)) {
+        .make screen line +O
+        .assign M|tobjid = 0|id
+        .call insertDbInformation()
+    }
+        
+    .assign U|xlastobj = 0|id
+}
+
+.. function to insert a account tax rule (case xpurchsalegroup = 0), purchase or sales entry detailed row
+def insertAccTaxRulePurchSaleEntry() {
+    if (_(0|kopf^id = U|xlastobj)) {
+        if (U|xpurchsalegroup = 0 ; (U|xpurchsalegroup = 0|objgruppe)) {
+            .make screen line +O
+            .assign M|tobjid = 0|kopf^id
+            .call insertDbInformation()    
+        }        
+    }
+        
+    .assign U|xlastobj = 0|kopf^id        
+}
+
+.. function to insert common details for a detailed row into the table
+def insertDbInformation() {
+    .copy M|tbaumstufe = 2
+    .formula M|tbaumstat = "="
+    
+    .assign M|tgrust = 0|objgruppe
+    .formula M|tgrbez = 0|objgrbez
+    .assign M|tdnr = 0|objdnr
+    .formula M|tdbez = 0|dbez
+}
+
+.. function to check if the choosen tax rule is the last tax rule in a account tax rule
+def checkForTaxRuleInAccTaxRule() {
+    .copy U|xfetchsingleacctaxrule = G|false
+    .call selectAccTaxRule()
+    
+    if (G|mehr) {
+        .formula U|xacctaxrule = 0|kopf^id
+        .call checkAccTaxRulesRows()
+        
+        if (U|xrows >= 1) {
+            .copy M|delvalid = G|true
+        } else {
+            .copy M|delvalid = G|false
+        }
+    } else {
+        .copy M|delvalid = G|true
+    }
+    
+    .copy M|select = ""
+}
+
+.. function to check for apperances of the tax rule in the head in the rows of an account tax rule
+def checkAccTaxRulesRows() {
+    while (G|mehr) {
+        .formula M|select = F|formatstr("$,kopf^id=={1};@gruppe={2};@ablageart=(Active)", U|xacctaxrule, 16)
+        .load 1 'G|hdatname58' 'M|select'
+        
+        .copy U|xrows = 0    
+        while (G|mehr) {
+            if (_(1|strgl^id = M|steuerregel^id)) {
+                .formula U|xrows = U|xrows + 1
+            } 
+                    
+            .load 1 continue
+        }
+            
+        if (U|xrows < 1) {
+            if (G|evtvar = "bstart") {
+                .assign M|acctaxrule = 0|kopf^id    
+            }
+                
+            .break
+        } else {
+            .load 0 continue
+        }
+    }
+}
+
+
+.. tree specific functions
+
+..function to open a tree node
+def openTreeNode() {
+    .select screen line 'M|aktzeile'
+
+    switch (M|tdnr) {
+        case(3) {
+            .assign U|xpurchsalegroup = M|tgrust
+            .call selectPurchSalePos()   
+        }
+        
+        case(4) {
+            .assign U|xpurchsalegroup = M|tgrust
+            .call selectPurchSalePos()
+        }
+        
+        case(90) {
+            .call selectPaymentForm()
+        }
+        
+        case(98) {
+            .call selectCashBooks()
+        }
+        
+        case(100) {
+            .call selectODPayments()
+        }
+        
+        case(110) {
+            .call selectFinancialEntry()
+        }
+        
+        case(180) {
+            .call selectFinancialEntryTemplate()
+        }
+   }
+   
+   .call fetchData()
+}
+
+..function to close a tree node
+def closeTreeNode() {
+    .formula U|xtreeiter = M|aktzeile + 1
+    
+    do {
+        .select screen line 'U|xtreeiter'    
+        .make screen line -
+    } while(M|tbaumstat = "=")
+    
+    if (M|aktzeile > 1 & U|xtreeiter < (M|ozeilen+1)) {
+        .formula U|xtreeiter = M|aktzeile - 1
+    } else {
+        .copy U|xtreeiter = M|aktzeile
+    }
+    
+    if (G|evtvar = "tswap" ; G|evtvar = "tdelete") {
+        .select screen line 'U|xtreeiter'
+        .make screen line -
+    } else {
+        ..formula U|xtreeiter = M|aktzeile - 1
+        .select screen line 'U|xtreeiter'
+        .formula M|tbaumstat = "+"
+    }
+}
+
+.. function to update the tree view after updating/deleting a tax rule
+def updateTreeViewAfterUpdate() {
+    if (M|tbaumstat = "+") {
+        if (U|xedpsuccess) {
+            .make screen line -
+        }
+    } else {
+        .call closeTreeNode()
+    }
+}
+
+.. function to update the tree view after a single row was changed
+def updateTreeViewAfterRowElimination() {
+    ..checking the line above
+    .formula U|xtreeiter = M|aktzeile - 1
+    
+    .make screen line -
+    .select screen line 'U|xtreeiter'
+    
+    if (M|tbaumstat <> "=") {
+        ..checking the line underneath
+        .formula U|xtreeiter = M|aktzeile + 1
+       
+        if (U|xtreeiter <= M|ozeilen) {
+            .select screen line 'U|xtreeiter'
+            if (M|tbaumstat <> "=") {
+                .formula U|xtreeiter = M|aktzeile - 1
+                .select screen line 'U|xtreeiter'
+                .make screen line -
+            }                    
+        } else {
+            .select screen line 'M|aktzeile'
+            .make screen line -
+        }
+    }
+}
+
+
+.. functions to update the choosen datasets 
+
+.. Function to change a tax rule for a single line 
+def swapTaxRule() {
+    if (G|evtvar = "tswap") {
+        .assign U|xswap = M|tswapstrgl^id
+    } else {
+        .formula U|xswap = "(0,0,0)"
+    }
+
+    switch(M|tdnr) {
+        case(3) {
+            .formula U|xpurchsaleobjid = M|tobjid^id
+            .call updatePurchSaleTaxRule()
+        }
+        case(4) {
+            .formula U|xpurchsaleobjid = M|tobjid^id
+            .call updatePurchSaleTaxRule()
+        }
+        
+        case(58) {
+            .formula U|xfetchsingleacctaxrule = G|true
+            
+            if (G|evtvar = "tswap") {
+                .call swapTaxRuleFromAccTaxRule()
+            } else {
+                .formula U|xswap = ""
+                .call delTaxRuleFromAccTaxRule()
+            }
+        }
+        
+        case(90) {
+            .copy U|xpaymentformobjid = M|tobjid^id
+            .call updatePaymentForm()
+        }
+        
+        case(98) {
+            .formula U|xcashbookfinentryobjid = M|tobjid^id
+            .call updateTaxRuleCashBookFinEntryTemp()
+        }
+        
+        case(100) {
+            .copy U|xodpobjid = M|tobjid^id
+            .call updateOpenDownPayment()
+        }
+        
+        case(110) {
+            .formula U|xcashbookfinentryobjid = M|tobjid^id
+            .call updateTaxRuleCashBookFinEntryTemp()
+        }
+        
+        case(180) {
+            .formula U|xcashbookfinentryobjid = M|tobjid^id
+            .call updateTaxRuleCashBookFinEntryTemp()
+        }
+    }
+}
+
+.. Functions to update multiple tax rules
+def swapTaxRuleRange() {
+    if (G|evtvar = "tswap") {
+        .formula U|xswap = M|tswapstrgl^id
+    } else {
+        .formula U|xswap = "(0,0,0)"
+    }
+
+    switch(M|tdnr) {
+        case(3) {
+            .copy U|xpurchsalegroup = M|tgrust
+            .call updateMultiPurchSalePos()
+        }
+        case(4) {
+            .copy U|xpurchsalegroup = M|tgrust
+            .call updateMultiPurchSalePos()
+        }
+        
+        case(90) {
+            .call updateMultiPaymentForms()
+        }
+        
+        case(98) {
+            .call updateMultiCashBookFinEntryTemp()
+        }
+        
+        case(100) {
+            .call updateMultiODP()
+        }
+        
+        case(110) {
+            .call updateMultiCashBookFinEntryTemp()
+        }
+        
+        case(180) {
+            .call updateMultiCashBookFinEntryTemp()
+        }
+    }
+}
+
+.. function to delete a tax rule
+def delTaxRuleDataset() {    
+    .. setting db and grp number in the edp script
+    if (M|steuerregel^grust = 6) {
+        .system "printf '#!EDP_FOPMODE=0\n#!DATABASE=58\n#!GROUP=6\n' >> strgl_tmp.edp" background
+    } else {
+        .formula U|xfetchsingleacctaxrule = G|false
+        .call delTaxRuleFromAccTaxRule()
+        .system "printf '#!EDP_FOPMODE=0\n#!DATABASE=58\n#!GROUP=25\n' >> strgl_tmp.edp" background
+    }
+    
+    .. setting the fix edp options
+    .system "printf '#!ACTION=DELETE\nid;\n' >> strgl_tmp.edp" background
+    
+    .formula U|xtswapdbgpnr = F|formatstr("printf '{1};\n' >> strgl_tmp.edp",M|steuerregel^id)
+    .system 'U|xtswapdbgpnr' background
+    .call launchEdpImp()
+    .call clearScreen()
+}
+
+.. function to delete a tax rule from an account tax rule
+def delTaxRuleFromAccTaxRule() {
+    .. Deleting tax rule from the account tax rules
+   .call selectAccTaxRule()
+    
+    while (G|mehr) {
+        if (U|xfetchsingleacctaxrule) {
+            if (0|strgl^id = M|steuerregel^id) {
+                .call deleteTaxRuleFromAccTaxRule()
+            } else {
+                .load 0 continue
+            }
+        } else {
+            .call deleteTaxRuleFromAccTaxRule()
+        }
+    }
+            
+    if (G|evtvar = "tdelete" & U|xfetchsingleacctaxrule) {
+        .make screen line -
+    }
+}
+
+.. function to delete a tax rule from an account tax rule using edp
+def deleteTaxRuleFromAccTaxRule() {
+    .. setting db and grp number in the edp script
+    .system "printf '#!EDP_FOPMODE=0\n#!DATABASE=58\n#!GROUP=26\n#!ACTION=UPDATE\n#!RECORDIDFLD=id\n#!FIRSTTABFLD=zeile\nid;zeile\n' >> strgl_tmp.edp" background
+                    
+    .formula U|xtswapdbgpnr = F|formatstr("printf '{1};-{2}\n' >> strgl_tmp.edp",0|kopf^id,0|zlnr)
+    .system 'U|xtswapdbgpnr' background
+    
+    .call launchEdpImp()
+                
+    .load 0 'G|hdatname58' 'M|select'
+}
+
+.. function to swap a tax rule from an account tax rule using edp
+def swapTaxRuleFromAccTaxRule() {
+    .call selectAccTaxRule()
+    .system "touch 'strgl_tmp.edp'" background
+    
+    if (G|mehr) {
+        .. setting the fix edp options
+        .system "printf '#!EDP_FOPMODE=0\n#!DATABASE=58\n#!GROUP=26\n#!ACTION=UPDATE\n#!RECORDIDFLD=id\n#!FIRSTTABFLD=zeile\nid;zeile;strgl\n' >> strgl_tmp.edp" background
+        
+        while (G|mehr) {
+            if (U|xfetchsingleacctaxrule) {
+                if (0|strgl^id = M|steuerregel^id) {
+                    .formula U|xtswapdbgpnr = F|formatstr("printf '{1};{2};{3}\n' >> strgl_tmp.edp",0|id,0|zlnr,U|xswap)
+                    .system 'U|xtswapdbgpnr' background
+                }
+            } else {
+                .formula U|xtswapdbgpnr = F|formatstr("printf '{1};{2};{3}\n' >> strgl_tmp.edp",0|kopf^id,0|zlnr,U|xswap)
+                .system 'U|xtswapdbgpnr' background
+            }
+            
+            .load 0 continue
+        }
+    }
+    .formula M|accswaptaxrule = ""
+    
+    .call launchEdpImp()
+    .call checkForTaxRuleInAccTaxRule()
+}
+
+.. Function to delete a tax rule from an account
+def deleteAccTaxRule() {
+    .formula U|xdelstringid = F|formatstr("printf '{1};\n' >> strgl_tmp.edp",M|tobjid^id)
+    .call updateAcc()
+}
+
+.. Function to change a tax rule from an account
+def swapAccTaxRule() {
+    .formula U|xdelstringid = F|formatstr("printf '{1};{2}\n' >> strgl_tmp.edp",M|tobjid^id,M|tswapstrgl^id)
+    .call updateAcc()
+}
+
+.. Function to update an account
+def updateAcc() {
+    .system "printf '#!EDP_FOPMODE=0\n#!DATABASE=5\n#!GROUP=1\n' >> strgl_tmp.edp" background
+    .. setting the fix edp options
+    .system "printf '#!ACTION=UPDATE\nid;ktostrgl\n' >> strgl_tmp.edp" background
+    .system 'U|xdelstringid' background
+    .call launchEdpImp()
+    
+    if (U|xedpsuccess) {
+        .make screen line -
+    }
+}
+
+.. Function to update multiple tax rules from a purchase or sales position
+def updateMultiPurchSalePos() {
+    .call selectPurchSalePos()
+            
+    while(G|mehr) {
+        if (_(0|kopf^id = U|xlastobj)) {
+            if (U|xpurchsalegroup = 0 ; (U|xpurchsalegroup = 0|objgruppe)) {
+                .formula U|xpurchsaleobjid = 0|kopf^id
+                .call updatePurchSaleTaxRule()
+            }        
+        }
+                
+        .assign U|xlastobj = 0|kopf^id
+        .load 0 continue
+    }
+            
+    .call launchEdpImp()
+    .call updateTreeViewAfterUpdate()
+}
+
+.. Function to update multiple tax rules from a cash book or a financial entry template
+def updateMultiCashBookFinEntryTemp() {
+    if (M|tdnr = 98) {
+        .call selectCashBooks()
+    } else {
+        .call selectFinancialEntry()
+    }
+    
+    while(G|mehr) {
+        if (_(0|id = U|xlastobj)) {
+            .formula U|xcashbookfinentryobjid = '0|id'
+            .call updateTaxRuleCashBookFinEntryTemp()        
+        }
+        
+        .assign U|xlastobj = 0|id
+        .load 0 continue
+    }
+    
+    .call launchEdpImp()
+    .call updateTreeViewAfterUpdate()
+}
+
+.. Function to update multiple tax rules from a open down payment
+def updateMultiODP() {
+    .call selectODPayments()
+    
+    while(G|mehr) {
+        if (_(0|ophist = U|xlastobj)) {            
+            .assign U|xodpobjid = 0|ophist^id
+            .call updateOpenDownPayment()
+        }
+        
+        .assign U|xlastobj = 0|ophist
+        .load 0 continue
+    }
+    
+    .call launchEdpImp()
+    .call updateTreeViewAfterUpdate()
+}
+
+.. Function to update multiple tax rules from a open down payment
+def updateMultiPaymentForms() {
+    .call selectPaymentForm()
+    
+    while(G|mehr) {
+        if (_(0|id = U|xlastobj)) {            
+            .assign U|xpaymentformobjid = 0|id
+            .call updatePaymentForm()
+        }
+        
+        .assign U|xlastobj = 0|id
+        .load 0 continue
+    }
+    
+    .call launchEdpImp()
+    .call updateTreeViewAfterUpdate()
+}
+
+.. function to swap a tax rule from an financial entry or a cash book
+def updateTaxRuleCashBookFinEntryTemp() {
+    .formula U|xdelstringdnrgrp = F|formatstr("{1}:{2}", M|tdnr, M|tgrust)
+    .formula M|select = F|formatstr("$,,id={1};@zeilen=ja", U|xcashbookfinentryobjid)
+    
+    .. selecting the entries in the table
+    .select group 'U|xdelstringdnrgrp' 'M|select'
+    .formula M|select = ""
+    
+    .. setting db and grp number in the edp script
+    .formula U|xtswapdbgpnr = F|formatstr("printf '#!EDP_FOPMODE=0\n#!DATABASE={1}\n#!GROUP={2}\n' >> strgl_tmp.edp",M|tdnr,M|tgrust)
+    .system 'U|xtswapdbgpnr' background
+    .. setting the fix edp options
+    .system "printf '#!ACTION=UPDATE\n#!RECORDIDFLD=id\n#!FIRSTTABFLD=zid\nid;zid;strgl\n' >> strgl_tmp.edp" background
+    
+    .select line
+    
+    while (G|mehr) {
+        ..adding the lines which will be swapped
+        if (H|strgl^id = M|steuerregel^id) {
+            .formula U|xswapline = F|formatstr("echo '{1};{2};{3}' >> strgl_tmp.edp",U|xcashbookfinentryobjid,H|zid,U|xswap)
+            .system 'U|xswapline' background
+        }        
+        
+        .select line continue
+    }
+    
+    if (M|tbaumstat = "=") {
+        .call launchEdpImp()
+    }
+}
+
+.. function to swap a tax rule from an financial entry or a cash book
+def updatePaymentForm() {
+    .formula U|xtswapdbgpnr = F|formatstr("printf '#!EDP_FOPMODE=0\n#!ACTION=UPDATE\n#!DATABASE={1}\n#!GROUP={2}\n#!RECORDIDFLD=id\n#!FIRSTTABFLD=zid\nid;zid;>tmanuell;strgl;<\n' >> strgl_tmp.edp",M|tdnr,1)
+    .system 'U|xtswapdbgpnr' background
+        
+    .call selectBankStatementTable()
+    
+    if (G|mehr) {
+        .formula U|xbankstatementobjid = 1|id
+        .load 1 line
+        
+        while (G|mehr) {
+            if (1|tztr^id = U|xpaymentformobjid) {
+                .formula U|xswapline = F|formatstr("printf '{1};{2};;{3}\n' >> strgl_tmp.edp",U|xbankstatementobjid,1|zid, M|tswapstrgl^id)
+                .system 'U|xswapline' background 
+            }
+            
+            .load 1 line continue
+        }    
+    }
+    
+    if (M|tbaumstat = "=") {
+        .call launchEdpImp()
+    }
+}
+
+
+.. function to swap or delete a tax rule from an purchase or sales process
+def updatePurchSaleTaxRule() {
+    .formula U|xdelstringdnrgrp = F|formatstr("{1}:{2}", M|tdnr, 2)
+    .formula M|select = F|formatstr("$,,kopf={1}", U|xpurchsaleobjid)
+    
+    .. selecting the positions in the table
+    .select group 'U|xdelstringdnrgrp' 'M|select'
+    .formula M|select = ""
+    
+    .. setting db and grp number in the edp script
+    .formula U|xtswapdbgpnr = F|formatstr("printf '#!EDP_FOPMODE=0\n#!DATABASE={1}\n#!GROUP={2}\n' >> strgl_tmp.edp",M|tdnr,M|tgrust)
+    .system 'U|xtswapdbgpnr' background
+    .. setting the fix edp options
+    .system "printf '#!ACTION=UPDATE\n#!RECORDIDFLD=kopf^id\n#!FIRSTTABFLD=id\nkopf^id;id;strgl\n' >> strgl_tmp.edp" background
+    
+    while (G|mehr) {
+        ..adding the lines which will be swapped
+        if (H|strgl^id = M|steuerregel^id) {
+            .formula U|xswapline = F|formatstr("printf '{1};{2};{3}\n' >> strgl_tmp.edp",U|xpurchsaleobjid,H|id,U|xswap)
+            .system 'U|xswapline' background
+        }        
+        
+        .select continue
+    }
+    
+    if (_(M|tbaumstat = "+" ; M|tbaumstat = "-")) {
+        .call launchEdpImp()
+    }
+}
+
+.. function to swap or delete a tax rule from an open down payment
+def updateOpenDownPayment() {
+    .formula M|select = F|formatstr("$,ophist=={1};@gruppe={2};@ablageart=(Active);@verknuepfung=(Or)", U|xodpobjid, 2)
+    .load 1 'G|hdatname100' 'M|select'
+    .formula M|select = ""
+        
+    if (G|mehr) {
+        .system "printf '#!EDP_FOPMODE=0\n#!DATABASE=102\n#!GROUP=7\n#!ACTION=NEW\n#!FIRSTTABFLD=ophist\n#!menuchoice=(MaintainOutstandingItem)\n#!dontchange=-\n' >> strgl_tmp.edp" background
+        .formula U|xoptaxruleswaphead = "printf 'ophist;"
+        .formula U|xoptaxruleswaptable = F|formatstr("printf '{1};",U|xodpobjid)
+        
+        if (1|strgl^id = M|steuerregel^id) {
+            .formula U|xoptaxruleswaphead = U|xoptaxruleswaphead + ";strgl"
+            .formula U|xoptaxruleswaptable = U|xoptaxruleswaptable + ";" + U|xswap
+        }
+        
+        if (1|strglsko1^id = M|steuerregel^id) {
+            .formula U|xoptaxruleswaphead = U|xoptaxruleswaphead + ";strglsko1"
+            .formula U|xoptaxruleswaptable = U|xoptaxruleswaptable + ";" + U|xswap
+        }
+        
+        if (1|strglsko2^id = M|steuerregel^id) {
+            .formula U|xoptaxruleswaphead = U|xoptaxruleswaphead + ";strglsko2"
+            .formula U|xoptaxruleswaptable = U|xoptaxruleswaptable + ";" + U|xswap
+        }
+        
+        if (1|strglgko^id = M|steuerregel^id) {
+            .formula U|xoptaxruleswaphead = U|xoptaxruleswaphead + ";strglgko"
+            .formula U|xoptaxruleswaptable = U|xoptaxruleswaptable + ";" + U|xswap
+        }
+        
+        .formula U|xoptaxruleswaphead = U|xoptaxruleswaphead + "\n' >> strgl_tmp.edp"
+        .formula U|xoptaxruleswaptable = U|xoptaxruleswaptable + "\n' >> strgl_tmp.edp"
+        
+        .system 'U|xoptaxruleswaphead' background
+        .system 'U|xoptaxruleswaptable' background
+        
+        if (M|tbaumstat = "=") {
+            .call launchEdpImp()
+        }
+    }
+}
+
+.. function to launch an edp command
+def launchEdpImp() {
+    if (M|edplogging) {
+        .call writeEDPStatemantToLog()
+        .call launchEDPImportWithLogging()
+    } else {
+        .formula U|xedpimp = F|formatstr("edpimport.sh -p {1} -H -I strgl_tmp.edp", G|einmalpw)
+        .system 'U|xedpimp'
+        .formula U|xedpsuccess = G|mehr
+    }
+    
+    if (_U|xedpsuccess & M|edplogging) {
+        .error Fehler beim Ausfhren des EDP-Statements! Bitte Logdatei fr n„here Informationen einsehen.
+    }
+    
+    if (_(G|evtvar = "deltaxrule") & _(G|evtvar = "swapacctaxrule") & _M|steuerregel^grust = 6) {
+        if (_M|taxruleinacctaxrul & G|mehr  & M|tbaumstat = "=") {
+            .call updateTreeViewAfterRowElimination()
+        }
+    }
+   
+    .system "rm -f strgl_tmp.edp" background
+}
+
+.. log specific functions
+def writeLogHead() {
+    .copy U|xlogstring = F|formatstr("echo 'Infosystem start {1}|{2}|{3};Inspecting Tax rule:{4}' >> {5}",G|datum,G|zeit,G|aufrufernr,M|steuerregel^id,U|xlogname)
+    .system 'U|xlogstring' background
+}
+
+def defineLogName() {
+    if (_F|empty(M|edplogfile)) {
+        .copy U|xlogname = 'M|edplogfile'
+    } else {
+        .copy U|xlogname = "CLEANUPTAXRULESLOG"
+    }
+}
+
+def logRowDelete() {
+    if (M|tbaumstat = "=") {
+        .copy U|xlogstring = F|formatstr("echo 'Trying to delete the taxrule {1} out of the object {2};{3}|{4}' >> {5}", M|steuerregel^id, M|tobjid, G|datum, G|zeit, U|xlogname)
+    } else {
+        .copy U|xlogstring = F|formatstr("echo 'Trying to delete the taxrule {1} out of the database group {2}:{3};{4}|{5}' >> {6}", M|steuerregel^id, M|tdnr, M|tgrust, G|datum, G|zeit, U|xlogname)
+    }  
+    
+    .system 'U|xlogstring' background
+}
+
+def logRowSwap() {
+    if (M|tbaumstat = "=") {
+        .copy U|xlogstring = F|formatstr("echo 'Trying to swap the taxrule {1} with the taxrule {2} in the object {3};{4}|{5}' >> {6}",M|steuerregel^id,M|tswapstrgl^id,M|tobjid,G|datum,G|zeit,U|xlogname)
+    } else {
+        .copy U|xlogstring = F|formatstr("echo 'Trying to swap the taxrule {1} in the the database group {2}:{3};{4}|{5}' >> {6}", M|steuerregel^id, M|tdnr, M|tgrust, G|datum, G|zeit, U|xlogname)
+    }
+    
+   .system 'U|xlogstring' background
+}
+
+def logDelete() {
+    .copy U|xlogstring = F|formatstr("echo 'Trying to delete the tax rule {1};{2}|{3}' >> {4}",M|steuerregel^id,G|datum,G|zeit,U|xlogname)
+    .system 'U|xlogstring' background
+}
+
+def logSwapAccTaxRule() {
+    .copy U|xlogstring = F|formatstr("echo 'Trying to swap the tax rule {1} in all the account tax rules where it appears;{2}|{3}' >> {4}",M|steuerregel^id,G|datum,G|zeit,U|xlogname)
+    .system 'U|xlogstring' background
+}
+
+def writeEDPStatemantToLog() {
+    .copy U|xlogstring = F|formatstr("cat 'strgl_tmp.edp' >> {1}",U|xlogname)
+    .system 'U|xlogstring' background
+}
+
+def launchEDPImportWithLogging() {
+    .copy U|xedpimp = F|formatstr("edpimport.sh -p {1} -H -L -I strgl_tmp.edp 1> {1}_tmp 2> {2}_tmp", G|einmalpw, U|xlogname)
+    .system 'U|xedpimp' background
+    
+    .copy U|xedpsuccess = G|mehr
+    .copy U|xlogstring = F|formatstr("cat {1}_tmp >> {1} && rm -f {1}_tmp", U|xlogname)
+    .system 'U|xlogstring' background
+}
+
+
+def validateLogFile() {
+    if (_M|edplogging) {
+        .error Das EPD-Logging musst zun„chst aktiviert werden!
+        .end 1
+    } else {
+        .call checkIfLogFileExists()
+    }
+}
+
+def checkIfLogFileExists() {
+    if (_F|empty(M|edplogfile)) {
+        .system 'F|formatstr("cat {1}",M|edplogfile)' background
+    } else {
+        .system "cat CLEANUPTAXRULESLOG" background
+    }
+    
+    if (_G|mehr) {
+        if (F|empty(M|edplogfile)) {
+            .error Die Standardlogdatei "CLEANUPTAXRULESLOG" existiert nicht!
+            .end 1
+        } else {
+            .error Die angegebene Logdatei existiert nicht!
+            .end 1
+        }
+    } 
+}
+
+def showLogFile() {
+     if (_F|empty(M|edplogfile)) {
+        .system 'F|formatstr("cat {1}",M|edplogfile)'
+    } else {
+        .system "cat CLEANUPTAXRULESLOG"
+    }
+}
+
+def emptyLogFile() {
+    if (_F|empty(M|edplogfile)) {
+        .system 'F|formatstr(":> {1}",M|edplogfile)' background
+    } else {
+        .system ":> CLEANUPTAXRULESLOG" background
+    }
+}
+

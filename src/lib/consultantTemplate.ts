@@ -428,7 +428,22 @@ export function parseActionFromText(text: string, customActions?: CustomActionPa
   // === Parameterless actions ===
   if (/^Editor speichern$/i.test(t)) return { type: 'editorSpeichern' };
   if (/^Editor schlie(?:ss|ß)en$/i.test(t)) return { type: 'editorSchliessen' };
+  if (/^Subeditor schlie(?:ss|ß)en$/i.test(t)) return { type: 'subeditorSchliessen' };
+  if (/^Subeditor speichern$/i.test(t)) return { type: 'subeditorSpeichern' };
+  if (/^I close the current subeditor to switch back to the parent editor$/i.test(t)) return { type: 'subeditorSchliessen' };
+  if (/^I save the current subeditor to switch back to the parent editor$/i.test(t)) return { type: 'subeditorSpeichern' };
   if (/^Zeile anlegen$/i.test(t)) return { type: 'zeileAnlegen' };
+  // Disposition starten / Scheduling Tippkommando
+  if (/^(?:Dispo(?:sition)?\s+starten|Scheduling(?:\s+starten)?|Tippkommando\s*(?:[:\-]?\s*)?Scheduling)$/i.test(t)) {
+    return { type: 'editorOeffnenTipp', editorName: 'dispo', tipCommand: '(Scheduling)', arguments: '' };
+  }
+
+  // Generic Tippkommando: "Tippkommando: (Stockadjustment)" / "Tippkommando ausfuehren: Fbuchung"
+  m = t.match(/^Tippkommando(?:\s+(?:ausfuehren|ausführen))?\s*[:\-]\s*(.+)$/i);
+  if (m) {
+    const cmd = unquote(m[1]);
+    return { type: 'editorOeffnenTipp', editorName: '', tipCommand: cmd, arguments: '' };
+  }
 
   // === Simple single-param actions ===
   m = t.match(/^Editor wechseln:\s*(.+)$/i);

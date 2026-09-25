@@ -167,6 +167,17 @@ describe('stepTextFromAction', () => {
     expect(result.text).toBe('I close the current editor');
   });
 
+  it('editorOeffnenTipp', () => {
+    const result = stepTextFromAction({
+      type: 'editorOeffnenTipp',
+      editorName: 'dispo',
+      tipCommand: '(Scheduling)',
+      arguments: '',
+    });
+    expect(result.keyword).toBe('Given');
+    expect(result.text).toBe('I open an editor "dispo" for tip command "(Scheduling)" and arguments ""');
+  });
+
   it('editorWechseln', () => {
     const result = stepTextFromAction({
       type: 'editorWechseln',
@@ -300,6 +311,7 @@ describe('createDefaultAction', () => {
       tableRef: '',
       command: 'STORE',
       record: '',
+      recordFromEditor: '',
     });
   });
 
@@ -314,6 +326,12 @@ describe('createDefaultAction', () => {
 
   it('creates editorSpeichern', () => {
     expect(createDefaultAction('editorSpeichern')).toEqual({ type: 'editorSpeichern' });
+  });
+
+  it('creates editorOeffnenTipp', () => {
+    expect(createDefaultAction('editorOeffnenTipp')).toEqual({
+      type: 'editorOeffnenTipp', editorName: '', tipCommand: '', arguments: '',
+    });
   });
 
   it('creates subeditorOeffnen', () => {

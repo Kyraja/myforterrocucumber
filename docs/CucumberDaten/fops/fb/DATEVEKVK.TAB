@@ -1,0 +1,296 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : DATEVEKVK.TAB
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Lesen der EKVK-Positionen in der korrekten Reihenfolge
+..                  und Verdichtung
+.. Functionality  :
+..
+.. include fb/DATEVEKVK.TAB.2
+.. include fb/DATEVEKVK.ZEILE
+..
+..*****************************************************************************
+..
+.type text     xtdatafile
+.type text     xttmpfile
+.. Mit Kostenstellen ?
+.type bool     xbkstueb
+..
+.type integer      xidnr
+.type GD       xdbudat
+.type VID99    xpkopf
+.type BGL20    xtnummer
+.type A138     xeustart
+.type bool     xbbrutto
+.type P94:1    xpland
+.type AU8      xelaart
+.type VID99    xppos
+.type integer      xipostyp
+.type ID5      xpkonto
+.type ID5      xpkstelle
+.type ID58     xpsteuer
+.type real     xrpwert
+..
+.type VID99    xplpos
+.type integer      xilpostyp
+.type VID99    xplkopf
+.type ID5      xplkonto
+.type ID5      xplkstelle
+.type ID58     xplsteuer
+.type real     xrspwert
+.type real     xrpsatz
+..
+.type bool     xbmehr
+.type bool     xbpsatzgefunden
+.type real     xrbrutto
+.type real     xrnetto
+.type integer      xifaktor
+.type RP6.9    xrhilf
+.type text     xtstsnum
+.type integer  xistsmax
+.type integer  xij
+.type integer  xiaktzeile
+.type bool     xbdosum
+..
+.. FOP um die Zeilen zusaetzlich anzureichern
+.. speziell zum Setzen von individuellen Zusatzinfos
+.. sinnvoll. Diese Variable ist besetzt, wenn "DATEVEKVK.CUSTOM.TAB" im
+.. FOP-Suchpfad existiert.
+.type text     xtowzeilefop
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.formula U|xtowzeilefop = F|FOPPATH("DATEVEKVK.CUSTOM.TAB")
+..
+.input "DATEI.F"
+.copy U|xbkstueb  = M|expkostobj
+.end 1 ? _G|mehr
+.input "fb/DATEVEKVK.TAB.2"
+.output terminal
+..
+..*****************************************************************************
+!HOLE
+..*****************************************************************************
+.select from 'U|xtdatafile' U|xidnr # U|xdbudat # U|xpkopf # U|xtnummer # U|xeustart # U|xbbrutto # U|xpland # U|xelaart # U|xppos # U|xipostyp # U|xpkonto # U|xpkstelle # U|xpsteuer # U|xrpwert^
+.formula U|xbmehr = G|mehr
+.continue NEXT   ? _U|xbmehr
+.continue SUM    ?  F|empty(U|xplkopf)
+.continue NEXT   ?  U|xilpostyp   > U|xipostyp
+.continue NEXT   ?  U|xplkopf    <> U|xpkopf
+.continue NEXT   ?  U|xplkonto   <> U|xpkonto
+.continue NEXT   ?  U|xplkstelle <> U|xpkstelle
+.continue NEXT   ?  U|xplsteuer  <> U|xpsteuer
+.continue SUM
+..
+..*****************************************************************************
+!SUM: Aufsummierung
+..*****************************************************************************
+.formula U|xrspwert = U|xrspwert + U|xrpwert
+.. Steuerbetrag und Steuerbasisbetrag pro Steuerschluessel merken
+.. Nur wenn Steuerposition (xipostyp=1)
+.continue L4 ? U|xipostyp <> 1
+.continue L4 ? U|xpkopf^brutto
+..
+..*****************************************************************************
+!SUMSTS: Aufsummierung der Steuerschluessel
+..*****************************************************************************
+.formula U|xtstsnum = U|xpsteuer^nummer
+..
+.. Iterativ (1..xistsmax) pruefen, ob die Nummer des Steuerschluessels bereits in der Map enthalten ist
+.formula U|xij = 1
+..*****************************************************************************
+!L1
+..*****************************************************************************
+.continue L2 ? U|xij > U|xistsmax
+.continue L3 ? U|xtsts.U|xij = U|xtstsnum
+.formula U|xij = U|xij + 1
+.continue L1
+..*****************************************************************************
+!L2: Steuerschluessel der Map hinzufuegen und Werte ggf. definieren
+..*****************************************************************************
+.formula U|xistsmax = U|xistsmax + 1
+.type text xtsts.xistsmax ? _F|defined(U|xtsts.U|xistsmax)
+.formula U|xtsts.U|xistsmax = U|xtstsnum
+.type real xrstssum.xtstsnum ? _F|defined(U|xrstssum.U|xtstsnum)
+.type real xrstsbas.xtstsnum ? _F|defined(U|xrstsbas.U|xtstsnum)
+..
+..*****************************************************************************
+!L3
+..*****************************************************************************
+.formula U|xrstssum.U|xtstsnum = U|xrstssum.U|xtstsnum + U|xrpwert
+.. auf das Vorzeichen des Preis der Steuerzeile ist leider kein Verlass. Wir passen es dem des pwert an. 
+.formula U|xrstsbas.U|xtstsnum = U|xrstsbas.U|xtstsnum + F|condexpr(U|xrpwert >= 0, F|abs(U|xppos^preis), F|abs(U|xppos^preis)*-1)
+..*****************************************************************************
+!L4
+..*****************************************************************************
+.continue SETVAL ? _U|xbdosum
+.. Es hatte ein Gruppenwechsel (neue Buchung) stattgefunden und nun muss die
+.. aktuelle Zeile auch noch aufsummiert werden und dann direkt die naechste geholt
+.. werden.
+.copy U|xbdosum = G|FALSE
+.continue HWEI
+..
+..*****************************************************************************
+!NEXT: Naechste Buchung gefunden (Gruppenwechsel) - Verarbeitung der vorherigen Daten
+..*****************************************************************************
+.continue NEXT2  ? U|xrspwert = 0
+.continue NEXT2  ? U|xilpostyp= 1
+.continue STFREI ? 'U|xplkopf^ustart(L=":")' = "(TaxfreeNoTaxLines)" ; 'U|xplkopf^ustart(L=":")' = "(TaxFreeWithTaxLines)"
+.continue STFREI ? 'U|xplkopf^ustart(L=":")' = "(TaxRelevant)" & F|empty(U|xplkopf^vrgstrgl^ustartsp)
+.continue STFREI ? U|xplsteuer^nullsts
+..
+.. Suche gueltigen Steuersatz im Steuerschluessel (zum Buchungsdatum)
+.formula U|xrpsatz = 0
+.formula U|xbpsatzgefunden = G|FALSE
+.load 0 'G|hdatname58' 'F|formatstr("$,kopf={1};@gruppe=11", U|xplsteuer)'
+.continue EST ? _G|mehr
+..*****************************************************************************
+!NSTZEIL
+..*****************************************************************************
+.continue EST ? _G|mehr
+.formula U|xbpsatzgefunden = (U|xplkopf^budat >= 0|gvon & (U|xplkopf^budat <= 0|gbis ; F|empty(0|gbis)))
+.formula U|xrpsatz = 0|psatz ? U|xbpsatzgefunden
+.continue LOOP ? _U|xbpsatzgefunden
+.continue EST
+..
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+.load 0 continue
+.continue NSTZEIL
+..
+..*****************************************************************************
+!EST
+..*****************************************************************************
+.load 0
+.continue BRUTTO ? U|xplkopf^brutto
+.continue NETTO
+..
+..*****************************************************************************
+!BRUTTO
+..*****************************************************************************
+.formula U|xrbrutto = U|xrspwert
+.formula U|xrnetto  = U|xrbrutto / (1 + U|xrpsatz/100)
+.continue AUS
+..
+..*****************************************************************************
+!NETTO
+..*****************************************************************************
+.formula U|xrnetto  = U|xrspwert
+.formula U|xrbrutto = U|xrnetto * (1 + U|xrpsatz/100)
+.continue AUS
+..
+..*****************************************************************************
+!STFREI
+..*****************************************************************************
+.formula U|xrnetto  = U|xrspwert
+.formula U|xrbrutto = U|xrspwert
+.continue AUS
+..
+..*****************************************************************************
+!AUS
+..*****************************************************************************
+.make screen line +O
+.copy M|tgrpobjekt     = U|xplkopf
+.assign M|trechnung      = U|xplkopf
+.end 1 ? _G|mehr
+.assign M|terpgegenkonto = U|xplkonto
+.end 1 ? _G|mehr
+.assign M|terpkstelle    = U|xplkstelle
+.end 1 ? _G|mehr
+.assign M|terpsts        = U|xplsteuer
+.end 1 ? _G|mehr
+.formula  M|tpsatz = U|xrpsatz
+..
+.formula   U|xifaktor =  1
+.formula   U|xifaktor = -1  ? M|trechnung^dnr = 4
+.copy M|tbruttoumsatz  = U|xrbrutto * U|xifaktor
+.copy M|tnettoumsatz   = U|xrnetto * U|xifaktor
+..
+..*****************************************************************************
+!NEXT2
+..*****************************************************************************
+.. letzte zeile ?
+.continue SETVAL  ? _U|xbmehr
+.copy U|xbdosum  = G|TRUE
+.formula   U|xrspwert = 0
+.continue SETVAL
+..
+..*****************************************************************************
+!SETVAL: Rechnungswechsel. Setze restliche Werte in Buchungszeilen der Rechnung
+..*****************************************************************************
+.continue HWEI ? (U|xplkopf = U|xpkopf ; F|empty(U|xplkopf)) & U|xbmehr
+.copy U|xiaktzeile = M|aktzeile
+.copy U|xij = U|xiaktzeile
+.. Ueber alle Zeilen der Rechnung laufen (in der Tabelle nach oben laufen)
+!S1
+.continue S3 ? U|xij <= 0
+.select screen line 'U|xij'
+.continue S3  ? M|trechnung^id <> U|xplkopf
+.continue S1A ? U|xplkopf^brutto ; 'U|xplkopf^ustart(L=":")' = "(TaxfreeNoTaxLines)" ; 'U|xplkopf^ustart(L=":")' = "(TaxFreeWithTaxLines)" ; U|xplsteuer^nullsts
+..
+.. Gegentest zur Steuerzeile
+.. Brutto auf Basis des Anteils am Steuerbasisbetrag errechnen und
+.. eine Differenz bilden.
+..
+.formula U|xtstsnum   = M|terpsts^nummer
+.. Zur Sicherheit: Gab es ueberhaupt eine Steuerzeile fuer diesen Schluessel?
+.continue S1A ? _F|defined(U|xrstsbas.U|xtstsnum)
+.continue S1A ? U|xrstsbas.U|xtstsnum = 0
+..
+.formula M|tsteuerabw = M|tbruttoumsatz - (M|tnettoumsatz + ((M|tnettoumsatz / U|xrstsbas.U|xtstsnum) * U|xrstssum.U|xtstsnum))
+.. Differenz auf Bruttobetrag aufschlagen
+.. damit die Bruttorechnungssumme stimmt (DATEV-Bruttoprinzip)
+.. Netto bleibt zur Kontrolle so (wird ja nicht an die Schnittstelle uebergeben)
+.formula M|tbruttoumsatz = M|tbruttoumsatz - M|tsteuerabw
+!S1A
+.input "fb/DATEVEKVK.ZEILE"
+.continue S2
+!S2
+.formula U|xij = U|xij - 1
+.continue S1
+!S3
+.. und wieder zurueck
+.select screen line 'U|xiaktzeile'
+..
+..*****************************************************************************
+!C1: Neue Rechnung - Steuerschluesselsummen initialisieren
+..*****************************************************************************
+.formula   U|xij = 1
+..*****************************************************************************
+!INITSTS: Steuerschluessel-Map in Schleife (neu) initialisieren (1..xistsmax)
+..*****************************************************************************
+.continue EINIT ? U|xij > U|xistsmax
+.formula   U|xtstsnum = U|xtsts.U|xij
+.formula   U|xtsts.U|xij = ""
+.formula   U|xrstsbas.U|xtstsnum = 0
+.formula   U|xrstssum.U|xtstsnum = 0
+.formula   U|xij = U|xij + 1
+.continue INITSTS
+..*****************************************************************************
+!EINIT: Ende der Initialisierung. Indizes zuruecksetzen
+..*****************************************************************************
+.formula   U|xistsmax   = 0
+.formula   U|xij        = 0
+.continue END  ? _U|xbmehr
+..
+..*****************************************************************************
+!HWEI: Umkopieren und naechsten Datensatz holen
+..*****************************************************************************
+.continue SUM ? U|xbdosum
+.copy U|xplpos     = U|xppos
+.copy U|xilpostyp  = U|xipostyp
+.copy U|xplkopf    = U|xpkopf
+.copy U|xplkonto   = U|xpkonto
+.copy U|xplkstelle = U|xpkstelle
+.copy U|xplsteuer  = U|xpsteuer
+.continue HOLE
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

@@ -1,0 +1,174 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BVSTATUS.FA
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Feldaustritt Artikel
+.. Functionality  :
+...Includes       :
+.. include st/GETICONPART
+..*****************************************************************************
+.set trans -
+.type bool xverkauf ? _F|defined(U|xverkauf)
+.type text xart:20 xlgruppe:20 xsel:100
+.type VPKS1   xtartid    ? _F|defined(xtartid)
+.type ID39:2  xtlgid     ? _F|defined(xtlgid)
+.type text    xticon     ? _F|defined(xticon)
+..
+.formula U|xverkauf = M|select / "*,3,*"
+.continue SELLEER ? F|empty(M|kart)
+.continue DOSEL   ? G|evtartengl = "BUTTON_AFTER" & _F|empty(kvart)
+.formula M|select =  ""
+.select add M|kart
+.continue SEL     ? _G|mehr
+.formula U|xart   = 'H|id'
+.assign U|xtartid = M|kart^id
+.assign U|xtlgid  = M|klgruppe
+.input "st/GETICONPART"
+.formula M|icon  = U|xticon
+.select add M|klgruppe
+.formula U|xlgruppe = 'H|id'
+..
+.continue BSTATUS _F|defined(M|bstatus)
+.continue ASL     ? M|ansasl
+..
+!BSTATUS
+.. Auswahlmenue ueber die Plankarte (xart,xlgruppe) aufbauen
+.formula U|xsel = "%,,art=" + U|xart + ";tsterm=;tterm=;lgruppe=" + U|xlgruppe + ";verw=;mge=;limge=;@ablageart=(Active);mateinplan=1;einplan=1;@ordnung=term;@gruppe=2.5;bsres=B"
+.select purchasing 'U|xsel'
+.formula M|select = 'H|id' ? G|mehr
+.continue SEL
+..
+!ASL
+.formula U|xsel = "%,,artex=" + U|xart + ";kotyp=(2)!(3);kopf=;verw=;@gruppe=2;@ablageart=beides"
+.select sales 'U|xsel'
+.formula M|select = 'H|id' ? G|mehr
+.continue SEL
+..
+!SEL: Informationsfelder im Kopfteil fuellen
+.. Auftragsposition ??
+.copy U|xverkauf = M|select / "*,3,*"
+..
+.continue SELLEER  ? F|empty(M|select)
+.continue DOSEL    ? _F|defined(H|id)
+.continue SELHOLOK ? H|id = M|select
+..
+!DOSEL
+.select sales 'M|select'              ?  U|xverkauf
+.select purchasing 'M|select'              ? _U|xverkauf
+.continue SELLEER  ? _G|mehr
+..
+!SELHOLOK: Felder, die fuer alle BS und RES gleichermassen gefuellt werden
+.formula M|kvorgang  =  H|id
+.copy M|klgruppe =  H|lgruppe
+.formula M|klimge    =  H|limge           ? H|typ<>G|ARPOS
+.formula M|klimge    =  H|limge * H|lehe  ? H|typ= G|ARPOS
+.formula M|kmge      =  H|mge             ? H|typ<>G|ARPOS
+.formula M|kmge      =  H|mge   * H|lehe  ? H|typ= G|ARPOS
+.formula M|kterm     =  H|term
+.formula M|kwterm    =  H|term            ? U|xverkauf & H|fix
+.formula M|kwterm    =  H|wterm           ? _U|xverkauf
+.formula M|kfterm    =  H|fterm
+.formula M|kvorlauf  =  0                 ? H|typ<>G|ARPOS
+.formula M|kvorlauf  =  H|vorlauf         ? H|typ=G|ARPOS
+.formula M|verw      =  H|verw
+.assign  M|kprojekt  =  H|projekt
+.formula M|kdispo    =  H|dispo           ? _U|xverkauf
+.formula M|kdispoa   =  H|dispoa          ? _U|xverkauf
+.formula M|kfix      =  H|fix
+..
+.. Typspezifische Felder initialisieren
+.continue SELRES   ?  H|typ=G|RESERV
+.. Auftragsposition/Bestellposition/BV/UMV/FV
+.continue SELFV    ?  H|typ=G|FEVOR
+.add H|kopf
+.formula M|kvkopf     =  ""                ? _G|mehr
+.formula M|kvkopf     =  D|id              ? G|mehr
+.copy M|kfreig   =  G|mehr
+.add
+.continue SELBE    ? _U|xverkauf
+.. Auftragsposition
+.assign M|kvart = "(SalesOrder)"
+.continue SELBS1
+..
+!SELBE: Bestellposition/BV/UMV/LFV
+.assign M|kvart = "(ExternalProcurement)" ? F|equals(H|bsart, "(ExternalProcurement)")
+.assign M|kvart = "(Relocation)"          ? F|equals(H|bsart, "(Relocation)")
+.assign M|kvart = "(Subcontracting)"      ? F|equals(H|bsart, "(Subcontracting)")
+..
+!SELBS1
+.formula M|ksterm     =  ""                ? _F|empty(H|kopf)
+.formula M|ksterm     =  H|sterm           ? F|empty(H|kopf)
+.continue SELBS2
+..
+!SELFV
+.add H|ba
+.formula M|kvkopf     =  ""                ? _G|mehr
+.formula M|kvkopf     =  D|id              ? G|mehr
+.formula M|kfreig     =  G|mehr
+.add
+.assign M|kvart = "(InhouseProduction)"
+.formula M|ksterm     =  H|sterm
+..
+!SELBS2
+!SELBSART
+.formula M|kart       =  H|art^id
+.formula M|kle        =  H|art^le
+.continue SELEND
+..
+!SELRES: Reservierungen
+.formula M|kvart = "(Reservation)"
+.formula M|ksterm     =  ""                ? H|elart<>3
+.formula M|ksterm     =  H|sterm           ? H|elart=3
+.add H|vor
+.continue SELRESFV ?  D|typ=G|FEVOR
+.. RES zu Auftragsposition/Bestellposition/BV/UMV
+.add D|kopf
+.continue SELRES2
+..
+!SELRESFV: RES zu FV
+.add D|ba
+..
+!SELRES2
+.formula M|kvkopf     =  ""                ? _G|mehr
+.formula M|kvkopf     =  D|id              ? G|mehr
+.copy M|kfreig   =  G|mehr
+.add
+..
+.copy M|kfix     = G|TRUE             ? M|kfreig
+.continue SELBSART ?  H|elart=1 ; H|elart=4
+.formula M|kart       =  ""
+.formula M|kle        =  ""
+.continue SELEND
+..
+!SELLEER: Informationsfelder leeren, weil Vorgang leer ist
+.formula M|select     =      ""
+.formula M|kvart      =      ""
+.formula M|kvkopf     =      ""
+.formula M|kvorgang   =      ""
+.copy M|klgruppe = M|intlgruppe ? F|empty(M|klgruppe)
+.formula M|kart       =      ""
+.formula M|klimge     =      0.0
+.copy M|kfreig   =      G|FALSE
+.formula M|kmge       =      0.0
+.formula M|kle        =      ""
+.formula M|kvorlauf   =      0
+.formula M|ksterm     =      ""
+.formula M|kterm      =      ""
+.formula M|kwterm     =      ""
+.formula M|kfterm     =      ""
+.formula M|verw       =      ""
+.formula M|kprojekt   =      ""
+.formula M|kdispo     =      ""
+.formula M|kdispoa    =      ""
+.formula M|kfix       =      ""
+.formula M|iconz      =      ""
+.continue SELEND
+..
+!SELEND: unlock, clear table
+.select -
+.input "is/TABLEEREN"
+.continue          ? _F|defined(M|bstatus)
+.continue DOSEL    ? G|evtartengl = "BUTTON_AFTER" & F|empty(kvart)
+.continue

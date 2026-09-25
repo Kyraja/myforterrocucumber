@@ -1,0 +1,117 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : VKZ.TAB2
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  : Table FOP of the Infosystem fb/VKZ
+..*****************************************************************************
+..
+.set trans -
+..
+.copy M|tasoll.U|xperiod    = H|asoll  - H|ahaben ? H|asoll  >= H|ahaben
+.copy M|tahaben.U|xperiod   = H|ahaben - H|asoll  ? H|ahaben >  H|asoll
+.copy M|tvkzsoll.U|xperiod  = H|ssum
+.copy M|tvkzhaben.U|xperiod = H|hsum
+.copy M|tesoll.U|xperiod    = H|esoll  - H|ehaben ? H|esoll  >= H|ehaben
+.copy M|tehaben.U|xperiod   = H|ehaben - H|esoll  ? H|ehaben >  H|esoll
+..
+..*****************************************************************************
+!TURNOVER
+..*****************************************************************************
+.continue TO3 ? _M|mitbuumsatz
+.formula U|xbuchung = ""
+.load 1 entryjournal 'F|formatstr("$,@zeilen=(1);bukreis={1};konto={2};iwbu={3};sortgjgm={4}!{5};@gruppe=0;gruppe=0;0:kvnextrakt=1;@ordnung=buchung", M|bukreis^id, H|id, M|buwaehr^id, F|fysortdat(M|jahr.U|xperiod, M|von.U|xperiod), F|fysortdat(M|jahr.U|xperiod, M|bis.U|xperiod))'
+..*****************************************************************************
+!TO1
+..*****************************************************************************
+.continue TO3  ? _G|mehr
+.continue NTO1 ? U|xbuchung^id=1|buchung^id
+.copy U|xbuchung = 1|buchung
+..*****************************************************************************
+!TO2
+..*****************************************************************************
+.load 2 entryjournal 'F|formatstr("$,@gruppe=0;gruppe=0;buchung={1};konto^dnr=5;konto^umsatz=1;kvnextrakt=1", 1|buchung^id)'
+..*****************************************************************************
+!ITO1
+..*****************************************************************************
+.continue NTO1  ? _G|mehr
+.formula M|tbuumsatz.U|xperiod = M|tbuumsatz.U|xperiod - F|fxamount(M|auswaehr, 2|sbetr, G|datum, 2|iwbu) ?  2|soll
+.formula M|tbuumsatz.U|xperiod = M|tbuumsatz.U|xperiod + F|fxamount(M|auswaehr, 2|hbetr, G|datum, 2|iwbu) ? _2|soll
+..*****************************************************************************
+!NITO1
+..*****************************************************************************
+.load 2 continue
+.continue ITO1
+..
+..*****************************************************************************
+!NTO1
+..*****************************************************************************
+.load 1 continue
+.continue TO1
+..
+..*****************************************************************************
+!TO3: use turnover figures
+..*****************************************************************************
+.continue C4 ? _M|mitumsatz
+.. (80) = Plan, (73) = Ist
+.load 1 object 'F|formatstr("$,,@datenbank={1};kosn={2};gjahr={3};waehr={4};bukreis={5};gruppe=3;@gruppe=3", H|dnr, H|id, M|jahr.U|xperiod, M|buwaehr^id, M|bukreis^id)'                ?  M|bmitplanumsatz
+.load 1 object 'F|formatstr("$,,@datenbank={1};kosn={2};dart={3};gjahr={4};waehr={5};bukreis={6};gruppe=3;@gruppe=3", H|dnr, H|id, "(73)", M|jahr.U|xperiod, M|buwaehr^id, M|bukreis^id)' ? _M|bmitplanumsatz
+..
+!LOAD1
+.continue C4       ? _G|mehr
+.type integer ximonth ? _F|defined(U|ximonth)
+.formula U|ximonth = M|von.U|xperiod
+..*****************************************************************************
+!TO4
+..*****************************************************************************
+.continue LOOP1   ? U|ximonth > M|bis.U|xperiod ; U|ximonth > 12
+.formula M|tumsatz.U|xperiod = M|tumsatz.U|xperiod + F|fxamount(M|auswaehr, 1|u.U|ximonth, G|datum, 1|waehr)         ? F|equals(1|dart, "(73)")
+.formula M|tplanumsatz.U|xperiod = M|tplanumsatz.U|xperiod + F|fxamount(M|auswaehr, 1|u.U|ximonth, G|datum, 1|waehr) ? F|equals(1|dart, "(80)")
+.formula U|ximonth = U|ximonth + 1
+.continue TO4
+..
+!LOOP1
+.load 1 continue
+.continue LOAD1
+..*****************************************************************************
+!C4
+..*****************************************************************************
+.copy M|tbuumsatz.U|xperiod = M|tbuumsatz.U|xperiod * -1 ? (H|dnr=1 ; H|dnr=11) & (M|tesoll.U|xperiod = 0 ; M|tehaben.U|xperiod = 0)
+.copy M|asollsum.U|xperiod    = M|asollsum.U|xperiod  + M|tasoll.U|xperiod
+.copy M|ahabensum.U|xperiod   = M|ahabensum.U|xperiod + M|tahaben.U|xperiod
+.copy M|vkzsollsum.U|xperiod  = M|vkzsollsum.U|xperiod  + H|ssum
+.copy M|vkzhabensum.U|xperiod = M|vkzhabensum.U|xperiod + H|hsum
+.copy M|esollsum.U|xperiod    = M|esollsum.U|xperiod  + M|tesoll.U|xperiod
+.copy M|ehabensum.U|xperiod   = M|ehabensum.U|xperiod + M|tehaben.U|xperiod
+.copy M|gesumsatz.U|xperiod   = M|gesumsatz.U|xperiod + M|tumsatz.U|xperiod
+.copy M|gesbuumsatz.U|xperiod = M|gesbuumsatz.U|xperiod + M|tbuumsatz.U|xperiod
+..
+.continue C6 ? _M|mitgvkz
+.select year 'M|jahr.U|xperiod' "1" 'M|bis.U|xperiod'
+.copy M|tgssum.U|xperiod = H|ssum
+.copy M|tghsum.U|xperiod = H|hsum
+.copy M|ggvkzs.U|xperiod = M|ggvkzs.U|xperiod + M|tgssum.U|xperiod
+.copy M|ggvkzh.U|xperiod = M|ggvkzh.U|xperiod + M|tghsum.U|xperiod
+.continue C6
+..
+..*****************************************************************************
+!C6
+..*****************************************************************************
+.formula U|xranfsolsum.U|xperiod   = U|xranfsolsum.U|xperiod   + M|tasoll.U|xperiod
+.formula U|xranfhabensum.U|xperiod = U|xranfhabensum.U|xperiod + M|tahaben.U|xperiod
+.formula U|xrvkzssum.U|xperiod     = U|xrvkzssum.U|xperiod     + M|tvkzsoll.U|xperiod
+.formula U|xrvkzhsum.U|xperiod     = U|xrvkzhsum.U|xperiod     + M|tvkzhaben.U|xperiod
+.formula U|xrgssum.U|xperiod       = U|xrgssum.U|xperiod       + M|tgssum.U|xperiod
+.formula U|xrghsum.U|xperiod       = U|xrghsum.U|xperiod       + M|tghsum.U|xperiod
+.formula U|xrendsolsum.U|xperiod   = U|xrendsolsum.U|xperiod   + M|tesoll.U|xperiod
+.formula U|xrendhabensum.U|xperiod = U|xrendhabensum.U|xperiod + M|tehaben.U|xperiod
+.formula U|xrumsatz.U|xperiod      = U|xrumsatz.U|xperiod      + M|tumsatz.U|xperiod
+.formula U|xrbuumsatz.U|xperiod    = U|xrbuumsatz.U|xperiod    + M|tbuumsatz.U|xperiod
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue
+

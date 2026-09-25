@@ -1,0 +1,243 @@
+..!interpreter german translate declaration noabbrev
+..*****************************************************************************
+.. Name           : CONFIG.DS.BSTART.BN
+.. Datum/Date     : 04.12.12
+.. Version        : 2011r4n01p01
+.. Autor/Author   : sy
+.. Copyright      : (c) 2012
+.. Funktion       :
+..
+.. Program flow   :
+...Includes       :
+..include is/TABLEEREN
+..include ow1/CONFIG.DS.VAR.DECLARE
+..include ow1/CONFIG.DS.EXCEPTION
+..
+..*****************************************************************************
+..: Input program with variable declarations
+.eingabe "ow1/CONFIG.DS.VAR.DECLARE"
+..*****************************************************************************
+..
+..set trace +
+..set vtrace ++
+..
+..:============================================================================
+..: Variable initialization
+..:============================================================================
+..: initialize variable for file list in available work space
+.formel U|xtfilelist    = "ow1/FILES.1.LIST"
+..
+.formel U|xtlogfpath    = "rmtmp/"
+.formel M|yedpoutput    = U|xtlogfpath + "X.CONFIGDS.EDP.OUT.LOG"
+.formel U|xtsys         = "rm " + M|yedpoutput
+.system 'U|xtsys' HINTER 
+..
+..
+..:============================================================================
+..: Prepare reading file
+..:============================================================================
+..: Test and open file which keeps the import file list
+..  Terminate if file can not be opened
+.datei -TEST -OEFFNEN  U|xilistdesc 'U|xtfilelist'
+.weiter ERRBN01                                         ? _G|mehr
+..
+..:============================================================================
+..: Restart after Error abbort
+..:============================================================================
+..: Test if lines in Infosystem exist
+.weiter READFILE                                        ? M|ozeilen = 0
+.hole MASKE ZEILE 'M|ozeilen'
+.weiter READFILE                                        ? F|empty(M|processid)
+.weiter READFILE                                        ? _G|mehr
+!INITREAD
+.datei -LESEN U|xilistdesc U|xtfilepath ; U|xtprocssnr ;
+.weiter END                                             ? _G|mehr
+.box                                                    ? M|processid = U|xtprocssnr
+?Restarting with process number 'U|xtprocssnr'          ? M|processid = U|xtprocssnr
+.weiter RESTART                                         ? M|processid = U|xtprocssnr
+.weiter INITREAD
+..
+..:============================================================================
+..: Import procedure (convert to EKS-format, dynamic data declaration and import)
+..:============================================================================
+!READFILE
+..
+.datei -LESEN U|xilistdesc U|xtfilepath ; U|xtprocssnr ;
+.weiter END                                             ? _G|mehr
+..
+..
+!RESTART
+..: Append infosystem row in order to protocol success/failure
+.mache MASKE ZEILE +
+..
+..
+..: preset necessary variables
+.formel M|desc          = "    [PROCESS]:  "
+.formel M|processid     =  U|xtprocssnr
+.formel M|origfile      =  U|xtfilepath
+.formel U|xtlogfile     =  U|xtlogfpath  + "X" + U|xtprocssnr + ".LOG"
+.formel U|xtsys         =  "rm " + U|xtlogfile
+.system 'U|xtsys' HINTER 
+.formel M|ytedpoutput   =  U|xtlogfpath  + "X" + U|xtprocssnr + ".OUT.LOG"
+.formel M|logfile       =  U|xtlogfile
+.formel M|convstat      =  1
+.formel M|dynastat      =  1
+.formel M|impostat      =  1
+.formel M|impostatdesc  = "failure"
+..
+..: extract transaction area from import file name
+.formel M|transgrp      =  F|substr(U|xtfilepath,21,3)
+..
+..: extract dynamic position template from import file name
+.formel M|posvaria      =  F|substr(U|xtfilepath,24,1)
+..
+.. mage 09.10.15, conversion of encoding and dynamisation deactivated. Not needed. This disables the import of files with a lenght of more than 3000 lines.
+.formel U|xtdynafile = M|origfile
+..
+..: prepare file name for converted file and dynamised file
+...formel U|xtbufffile    =  "ow1/CONV." + U|xtprocssnr + ".EDP"
+...formel U|xtdynafile    =  "ow1/DYNA." + U|xtprocssnr + ".EDP"
+..
+..: convert file from UTF-8 to EKS format
+...formel U|xtsys         = "s3_conv 51 < " + 'M|origfile' + " > " + 'U|xtbufffile' + " 2> " + 'U|xtlogfile'
+...system 'U|xtsys' HINTER
+...formel M|convstat      =  1                            ? _G|mehr
+...weiter ERRBN02                                         ? _G|mehr
+...formel M|convstat      =  0                            ?  G|mehr
+..
+..: Prepare output to dynamic file
+...ausgabe auf 'U|xtdynafile' -ENCODIERUNG UTF-8
+...eingabe DATEI.F
+..
+..: Load EDP import file in order to dynamise it
+..weiter DYNAMIC                                         ?  M|posvaria  = "Y"
+..eingabe -TEXT 'U|xtbufffile'
+..weiter PROCEED
+..
+..!DYNAMIC
+...eingabe 'U|xtbufffile'
+...weiter PROCEED
+..
+..!PROCEED
+..: Completed dynamisation should set indicator
+...formel M|dynastat      =  0
+..
+..: Display dynamised file name in table
+...formel M|dynafile   =  U|xtdynafile
+..
+..: Close output
+...ausgabe auf "WERF.WEG"
+..
+..:============================================================================
+..: Prepare edpimport.sh and its execution
+..:============================================================================
+..: Build edpimport.sh
+..  Background information about building edpimport:
+..  edpimport.sh is used for importing/updating master and transaction files
+..  which makes it necessary to handle different constellations
+..  Therefore, this program builds the edpimport transaction dynamically in
+..  dependence of transaction group (password) and other specialities.
+..
+.formel U|xtpassword    =  M|password
+.. Finanzbuchhaltungskonfiguration
+.formel U|xtpassword    =  M|mainword                                   ?  U|xtprocssnr = "000017"
+.. Passworte anlegen
+.formel U|xtpassword    =  M|mainword                                   ?  U|xtprocssnr = "000170"
+.. Fibu Er”ffnung schlieáen
+.formel U|xtpassword    =  M|mainword                                   ?  U|xtprocssnr = "000900"
+.. Passworte aktivieren
+.formel U|xtpassword    =  M|mainword                                   ?  U|xtprocssnr = "000991"
+..
+.formel M|execedp         = ""
+.formel M|execedp         =  M|execedp      + " edpimport.sh "
+..
+..: build password in conjunction with transaction area
+.. ****************************************************
+.formel M|execedp         =  M|execedp      + " -p " +  U|xtpassword
+..
+..: Transaction control
+.weiter NOTRANS                                                         ?  U|xtprocssnr  =  "000011"
+.weiter NOTRANS                                                         ?  U|xtprocssnr  =  "000020"
+.weiter NOTRANS                                                         ?  U|xtprocssnr  =  "000021"
+.weiter NOTRANS                                                         ?  U|xtprocssnr  =  "000025"
+.weiter NOTRANS                                                         ?  U|xtprocssnr  =  "000026"
+.weiter NOTRANS                                                         ?  U|xtprocssnr  =  "000028"
+.weiter NOTRANS                                                         ?  U|xtprocssnr  =  "000055"
+.weiter NOTRANS                                                         ?  U|xtprocssnr  =  "000211"
+.weiter NOTRANS                                                         ?  U|xtprocssnr  =  "000212"
+.weiter NOTRANS                                                         ?  M|bedidata = G|true
+.formel M|execedp         =  M|execedp      + " -T "
+!NOTRANS
+..
+..: Determine import file
+.formel M|execedp         =  M|execedp      + " -I " + U|xtdynafile + " "
+..
+..: Import charset
+...formel M|execedp         =  M|execedp      + " -c EKS" + " "
+..
+..: activate debug mode
+...formel M|execedp         =  M|execedp      + " -d" + " "
+..
+..: Protocol error output stream in log file
+.formel M|execedp         =  M|execedp      + " -L " + U|xtlogfile
+..
+..: Protocol output stream in file
+.formel M|execedp         =  M|execedp      + " 2>" + M|ytedpoutput
+..
+..: Execute edpimport.sh
+.hinweis -sofort 'M|desc' 'M|processid'    ? G|grafik
+.eingabe "DATEI.F"
+.ausgabe an 'M|yedpoutput'
+.println 'M|execedp'
+.ausgabe BILDSCHIRM
+.system 'M|execedp' HINTER
+..
+..: successful transactions
+.formel M|impostat      =  0                            ?  G|mehr
+.formel M|impostatdesc  = "successful"                  ?  G|mehr
+..
+..: Add Output to outputfile for all imports
+.formel U|xtsys = "cat " + M|ytedpoutput + " >>" + M|yedpoutput
+.system 'U|xtsys' HINTER
+..
+..: procceed with next import File
+.weiter READFILE                                        ?  M|impostat      =  0
+..
+..: unsuccessful transactions
+..  Retrieve exit status of the import process
+.formel U|xtsys         = "grep " + G|dblquote + "+ exit "+ G|dblquote + " " + U|xtlogfile + " >> rmtmp/CONFIG.DS.IMPORT.STATUS"
+.system 'U|xtsys' HINTER
+..
+.hole von "rmtmp/CONFIG.DS.IMPORT.STATUS" U|xtexitstat^
+..
+.formel M|impostat      =  F|tovalue(F|trim(F|substr(U|xtexitstat,8,3)),"I3")
+.weiter ERRBN03
+
+..
+..:============================================================================
+..: End of program
+..:============================================================================
+!END
+.hinweis -sofort ? G|grafik
+.weiter
+..
+..:============================================================================
+..: error messages and hint messages
+..:============================================================================
+!ERRBN01
+.formel U|xiexceptnr    =  201
+.formel U|xtexceptxt    = 'U|xiexceptnr' + " " + "File " + 'U|xtfilelist' + " could not be opened!"
+.eingabe "ow1/CONFIG.DS.EXCEPTION"
+.ende 'U|xiexceptnr'
+..
+!ERRBN02
+.formel U|xiexceptnr    =  202
+.formel U|xtexceptxt    = 'U|xiexceptnr' + " " + "Conversion to EKS-format failed for file " + 'U|xtbufffile' + "."
+.eingabe "ow1/CONFIG.DS.EXCEPTION"
+.ende 'U|xiexceptnr'
+..
+!ERRBN03
+.formel U|xiexceptnr    =  203
+.formel U|xtexceptxt    = 'U|xiexceptnr' + " " + "Import of file " + 'U|xtdynafile' + " failed."
+.eingabe "ow1/CONFIG.DS.EXCEPTION"
+.ende 'U|xiexceptnr'

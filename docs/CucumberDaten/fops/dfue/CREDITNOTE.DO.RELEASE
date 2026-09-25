@@ -1,0 +1,83 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : CREDITNOTE.DO.RELEASE
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : Mark delivery note item or invoice item as "released" for 
+..                  credit note process, if values of edi credit note and 
+..                  item in abas erp do match.
+..                  An item is "released" for further processing, if field 
+..                  (ev)ganr contains the credit note number.
+..*****************************************************************************
+..!meta M|=dfue/CREDITNOTE
+.set trans -
+..
+.type P3:2 xvpos ? _F|defined(U|xvpos)
+.type integer xi ? _F|defined(U|xi)
+.. 
+.. Must have credit note number!
+.continue END ? F|empty(M|tganr)
+..
+.. Nothing to do for this row
+.continue ENDPACK ? F|empty(M|tlieferposition)
+..
+.. Credit note has alreaedy been "released"
+.continue ENDPACK ? M|tganr=M|tliganr & M|tganr=M|treganr
+.continue ENDPACK ? M|tganr=M|tliganr & F|empty(M|treposition)
+.continue ENDPACK ? M|tganr=M|tliganr 
+.. 
+.. Difference in prices, do not release
+.continue ENDPACK ? M|tgaposwert<>M|tlipwert
+.. 
+.. Difference in quantity, do not release
+.continue ENDPACK ? M|tgamenge<>M|tlimge
+..
+.. Release packing slip item
+.copy M|tlifreigabe = G|true
+.copy M|tliganr = M|tganr
+.. 
+.formula U|xi = 0
+!NPACK
+.formula U|xi = U|xi + 1
+.continue ENDPACK ? U|xi > 10
+.copy U|xvpos = M|ttlipos.xi
+.continue ENDPACK ? F|empty(U|xvpos)
+.select lock nowait sales 'U|xvpos^id'
+.continue ENDPACK ? _G|mehr
+.continue ENDPACK ? _G|gesperrt
+.copy H|ganr = M|tganr
+.rewrite
+.continue NPACK
+!ENDPACK
+..
+.. Nothing to do for this row
+.continue ENDINV ? F|empty(M|treposition)
+.. 
+.. Difference in prices, do not release
+.continue ENDINV ? M|tgaposwert<>M|trepwert
+.. 
+.. Difference in quantity, do not release
+.continue ENDINV ? M|tgamenge<>M|tremge
+..
+.. Release invoice item
+.copy M|trefreigabe = G|true
+.copy M|treganr = M|tganr
+.. 
+.formula U|xi = 0
+!NINV
+.formula U|xi = U|xi + 1
+.continue ENDINV ? U|xi > 10
+.copy U|xvpos = M|ttrepos.xi
+.continue ENDINV ? F|empty(U|xvpos)
+.select lock nowait sales 'U|xvpos^id'
+.continue ENDINV ? _G|mehr
+.continue ENDINV ? _G|gesperrt
+.copy H|ganr = M|tganr
+.rewrite
+.continue NINV
+!ENDINV
+.. 
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,305 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LEERGUT.EV
+.. Datum          : 24.08.06
+.. Version        : 2006r4n00
+.. Autor          : dek/ok
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Eventhandling fÅr Infosystem LEERGUT
+.. Ablauf         : Feldaustritt Events
+..
+.. Functionality  : central eventhandling for infosystem LEERGUT
+..
+.. Program flow   : field exit events
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.type text xtsel    ? _F|defined(U|xtsel)
+.type text xsel     ? _F|defined(U|xsel)
+.type bool xnotmehr ? _F|defined(U|xnotmehr)
+..
+.copy U|xnotmehr   = G|FALSE
+.protection gebucht
+..
+.. ----------- ---- Kopf-Events -------- -------------------------------------------
+.continue PKUNDE    ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kunde"
+.continue PWERK     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "werk"
+.continue PLIEF     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "lief"
+.continue BUARTIKEL ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "buartikel"
+.continue BEHAELTER ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kbehaelterkonto"
+.. ----------- ---------- ---------- -------------------------------------------
+..
+.. ----------- ---- Tabellen-Events -------- -------------------------------------------
+.continue MGE       ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "mge"
+.continue ART       ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "artikel"
+.continue PLATZ     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "platz2"
+.. ----------- ---------- ---------- --------------------------------------------------
+.continue END
+..
+!MGE
+.continue FEHLER5 ? M|mge > 0 & _F|empty(M|kunde)
+.continue FEHLER6 ? M|mge < 0 & _F|empty(M|lief)
+.formula M|vklsnr = ""
+.copy M|gebucht = G|FALSE
+.continue END
+..
+!BEHAELTER
+.continue LEERBEH ? F|empty(M|kbehaelterkonto)
+.formula M|werk = ""
+.formula M|kunde = ""
+.formula M|lief = ""
+.formula M|ablstelle = ""
+.formula M|lsnr = ""
+.formula M|beldat = ""
+.formula M|bem = ""
+.formula M|werk = M|kbehaelterkonto^werk
+.assign M|kunde = M|kbehaelterkonto^partner ? M|kbehaelterkonto^partner^dnr = 0
+.assign M|lief  = M|kbehaelterkonto^partner ? M|kbehaelterkonto^partner^dnr = 1
+.formula M|ablstelle = M|kunde^ablstelle
+.protection kunde 
+.protection lief  
+.protection werk
+.protection ablstelle
+.select screen header
+.select screen line  
+.make screen line +O ? M|tzeilen = 0      
+.select screen line 'M|tzeilen'              
+.make screen line +O ? _F|empty(M|artikel)
+.assign M|artikel = M|kbehaelterkonto^artikel
+.continue ART
+..
+!LEERBEH
+.protection -reset kunde 
+.protection -reset lief
+.protection -reset werk               
+.protection -reset ablstelle
+.formula M|werk = ""
+.formula M|kunde = ""
+.formula M|lief = ""
+.formula M|ablstelle = ""
+.select screen line
+.formula M|artikel = ""  ? G|mehr
+.continue ARTLEER
+..
+!PKUNDE:
+.formula M|lief = ""
+.protection lief
+.protection kbehaelterkonto
+.continue LEERKU    ?  F|empty(M|kunde) ;  M|kunde^gruppe <> 2
+.formula M|werk = M|kunde^werk
+.formula M|ablstelle = M|kunde^ablstelle
+.protection werk
+.protection ablstelle
+.formula M|lief = ""
+.protection lief 
+.continue TABLEEREN
+..
+!LEERKU
+.formula M|werk = ""
+.formula M|ablstelle = ""
+.protection ablstelle         ?  M|kunde^gruppe <> 2
+.continue TABLEEREN           ? _F|empty(M|kunde)
+.protection -reset werk
+.protection -reset ablstelle
+.protection -reset lief
+.protection -reset kbehaelterkonto
+.copy M|gebucht = G|FALSE
+.formula M|vklsnr = ""
+.continue TABLEEREN
+..
+!PWERK
+.continue END     ?  F|empty(M|werk)
+.continue END     ?  F|empty(M|lief) & F|empty(M|kunde)
+.continue PW2     ?  M|kunde^gruppe = 2 & _F|empty(M|kunde)
+.continue PLIEF2  ?  M|lief^gruppe = 2 & _F|empty(M|lief)
+.formula U|xtsel = "$,,firma=" + 'M|kunde^id' + ";werk=" + 'M|werk' + ";ablstelle="   ? _F|empty(M|kunde)
+.formula U|xtsel = "$,,firma=" + 'M|lief^id' + ";werk=" + 'M|werk' + ";ablstelle="    ? _F|empty(M|lief)
+.select customer 'U|xtsel'             ? _F|empty(M|kunde)
+.select supplier 'U|xtsel'             ? _F|empty(M|lief)
+.continue PW2     ? _G|mehr & _F|empty(M|kunde)
+.continue PLIEF2  ? _G|mehr & _F|empty(M|lief)
+.formula M|ablstelle = H|ablstelle     ?  _F|empty(H|ablstelle)
+.. Hier versuchen wir weitere Kundensachbearbeiter zu einem Werk/Firma zu lesen,
+.. bei Erfolg haben wir mehr als eine Abladestelle. Der Bediener muss auswÑhlen!
+.select customer   ? _F|empty(M|kunde)
+.select supplier   ? _F|empty(M|lief)
+.continue TABLEEREN   ? _G|mehr
+..
+!PLIEF2
+.formula U|xtsel = "$,,firma=" + 'M|lief^id' + ";werk=" + 'M|werk' + ";ablstelle=" 
+.select supplier 'U|xtsel'
+.select
+.continue PWERR                ? _G|mehr
+.continue WEITER               ?  U|xnotmehr
+..
+.select supplier
+.. only one hit, no dynamic selection
+.copy U|xnotmehr = G|TRUE ? _G|mehr
+.continue PLIEF2          ? _G|mehr
+..
+.formula U|xtsel = "%,,firma=" + 'M|lief^id' + ";werk=" + 'M|werk' + ";ablstelle="
+.select supplier 'U|xtsel'
+.continue PWERR                      ? _G|mehr
+.continue WEITER
+..
+!PW2: Kundensachbearbeiter
+.formula U|xtsel = "$,,firma=" + 'M|kunde^id' + ";werk=" + 'M|werk' + ";ablstelle="
+.select customer 'U|xtsel'                                                        
+.select 
+.continue PWERR                ? _G|mehr
+.continue WEITER               ?  U|xnotmehr
+..
+.select customer
+.. only one hit, no dynamic selection
+.copy U|xnotmehr = G|TRUE ? _G|mehr
+.continue PW2             ? _G|mehr
+..
+.formula U|xtsel = "%,,firma=" + 'M|kunde^id' + ";werk=" + 'M|werk' + ";ablstelle="
+.select customer 'U|xtsel'
+.continue PWERR                      ? _G|mehr
+..
+!WEITER
+.formula M|werk = H|werk             ? _F|empty(H|werk)
+.formula M|ablstelle = H|ablstelle   ? _F|empty(H|ablstelle)
+.continue TABLEEREN
+..
+!PLIEF: Schreibschutz des Kunden und des BehÑlterkontos wenn Lieferant gefÅllt
+.copy M|gebucht = G|FALSE
+.formula M|vklsnr = ""
+.continue LEERLIEF   ?  F|empty(M|lief) ;  M|lief^gruppe <> 2
+.formula M|werk = M|lief^werk 
+.formula M|ablstelle = ""
+.formula M|kunde = ""
+.protection kbehaelterkonto
+.protection kunde
+.protection werk
+.protection ablstelle
+.continue TABLEEREN
+..
+!LEERLIEF
+.formula M|werk = ""
+.protection ablstelle         ?  M|lief^gruppe <> 2
+.formula M|kunde = ""         ?  M|lief^gruppe <> 2
+.protection kunde             ?  M|lief^gruppe <> 2
+.continue TABLEEREN           ? _F|empty(M|lief)
+.protection -reset kunde
+.protection -reset kbehaelterkonto
+.protection -reset werk
+.protection -reset ablstelle
+.continue TABLEEREN
+..
+!BUARTIKEL
+.formula U|xsel = "%,,nummer=;such=;packmit=ja;@gruppe=1;@ablageart=lebendig"
+.load 1 parts 'U|xsel'
+.formula M|artikel = ""    ? _G|mehr
+.assign M|artikel = 1|id  ?  G|mehr
+.formula M|vklsnr = ""
+.formula M|hinweis = ""
+.copy M|gebucht = G|FALSE
+..
+!ART
+.continue ARTLEER ? F|empty(M|artikel) 
+.continue FEHLER  ? _M|artikel^packmit
+.formula M|vklsnr = ""
+.formula M|hinweis = ""
+.copy M|gebucht = G|FALSE
+.formula M|platz2 = F|sysinfo(10)^intlgruppe^vkkundenanlieferung  ? _F|empty(M|kunde)
+.formula M|platz2 = M|artikel^zuplatz                             ? _F|empty(M|lief)
+.formula M|lgdbestand = M|artikel^lgdbestand
+.formula M|mindest  = M|artikel^mindest
+.formula M|lgbestand = M|artikel^lgbestand
+.formula M|dbestand = M|artikel^dbestand
+.formula M|bestand  = M|artikel^bestand
+.formula M|zeinheit = M|artikel^le
+.continue END ? F|empty(M|kunde) & F|empty(M|lief)
+.continue END ? F|empty(M|werk) & _F|empty(M|kunde)    
+.formula U|xsel = "$,,;@gruppe=1"
+.formula U|xsel = U|xsel + ";artikel=" + M|artikel^id
+.formula U|xsel = U|xsel + ";werk=" + M|werk
+.formula U|xsel = U|xsel + ";partner=" + M|kunde^id ? _F|empty(M|kunde)
+.formula U|xsel = U|xsel + ";partner=" + M|lief^id  ? _F|empty(M|lief)
+.assign M|behaelterkonto  = 'U|xsel' 
+.cursor lsnr  0          ? _F|empty(M|lief)
+.cursor mge 'M|aktzeile' ? _F|empty(M|kunde)
+.continue END
+..
+!ARTLEER
+.continue END ? F|empty(M|tzeilen)
+.formula M|behaelterkonto = ""
+.formula M|platz2     = ""
+.formula M|dbestand   = ""
+.formula M|mindest    = ""
+.formula M|bestand    = ""
+.formula M|lgdbestand = ""
+.formula M|lgbestand  = ""
+.formula M|mge        = ""
+.formula M|statusz    = ""
+.formula M|vklsnr     = ""
+.formula M|lsnr       = ""
+.formula M|beldat     = ""
+.formula M|bem        = ""
+.formula M|hinweis    = ""
+.copy M|gebucht = G|FALSE
+.continue END
+..
+!PLATZ
+.formula M|platz2 = M|artikel^zuplatz                             ? F|empty(M|platz2) & _F|empty(M|lief)
+.formula M|platz2 = F|sysinfo(10)^intlgruppe^vkkundenanlieferung  ? F|empty(M|platz2) & _F|empty(M|kunde)
+.continue FEHLER4 ? _M|platz2^lgruppe^zkonsilg & _F|empty(M|kunde)
+..
+.continue END
+..
+!TABLEEREN
+.input "is/TABLEEREN"
+.make screen line +O  ? G|evtvar = "lief" ; G|evtvar = "kunde"
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!PWERR
+.error Das Werk 'M|werk' ist nicht vorhanden!
+.cursor werk 0
+.end 1
+..
+!FEHLER
+.formula M|artikel = ""
+.error Artikel ist kein Packmittel
+.cursor artikel 'M|aktzeile'
+.end 2
+..
+!FEHLER1
+.error Bitte erst einen Kunden eintragen!
+.cursor kunde 0
+.end 1
+..
+!FEHLER2
+.error Bitte erst einen Lieferanten eintragen!
+.cursor lief 0
+.end 1
+..
+!FEHLER3
+.error Kein Datensatz vorhanden!
+.end 1
+..
+!FEHLER4
+.error Bitte einen Lagerplatz aus einer Lagergruppe mit der Eigenschaft Fremdeigentum eintragen. 
+.cursor platz2 'M|aktzeile'
+.end 1
+..
+!FEHLER5
+.error FÅr eine Kundenanlieferung sind nur negative Mengen erlaubt.
+.cursor mge 'M|aktzeile'
+.formula M|mge = ""
+.end 1
+..
+!FEHLER6
+.error FÅr einen Lieferschein im Einkauf sind nur positive Mengen erlaubt.
+.cursor mge 'M|aktzeile'
+.formula M|mge = ""
+.end 1
+

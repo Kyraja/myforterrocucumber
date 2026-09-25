@@ -1,0 +1,61 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SPEDAUF.EV
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Zentrales Eventhandling fuer SPEDAUF
+.. Functionality  : central eventhandling for infosystem SPEDAUF
+..*****************************************************************************
+.set trans -
+..
+.type P55    xvsped
+.type P3     xvls
+.type integer    xaufruf
+.type text   xformat
+.type bool   xkompakt
+.type bool   xbpastnr
+..
+.. ----------- ----- Events -------- -------------------------------------------
+.continue SPED    ? G|evtartengl = "FIELD_EXIT"      & G|evtvar = "vkspednr"
+.continue LS      ? G|evtartengl = "FIELD_EXIT"      & G|evtvar = "vklsnr"
+.continue TABINIT ? G|evtartengl = "FIELD_EXIT"      & G|evtvar = "kompact"
+.continue TABINIT ? G|evtartengl = "FIELD_EXIT"      & G|evtvar = "kbpastnr"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue FORBID  ? G|evtartengl = "ROW_MOVE_BEFORE"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue
+..
+!SPED: new shipping order
+.formula   M|vklsnr = ""                 ?  M|vklsnr^sped^id <> M|vkspednr^id  &  _F|empty(M|vkspednr)
+.continue TABINIT
+..
+!LS: new delivery note
+.assign M|vkspednr = M|vklsnr^sped^id     ? _F|empty(M|vklsnr)
+.continue TABINIT
+..
+!TABINIT: a key field was changed, remove old rows
+.assign T|xvsped   = M|vkspednr^id
+.assign T|xvls     = M|vklsnr^id
+.formula   T|xaufruf  = M|aufrufernr
+.formula   T|xformat  = M|format
+.copy      T|xkompakt = M|kompact
+.copy      U|xbpastnr = M|kbpastnr
+.input "is/KOPFLEEREN"
+.formula   M|aufrufernr = T|xaufruf
+.formula   M|format     = T|xformat
+.copy      M|kompact    = T|xkompakt
+.copy      M|kbpastnr   = U|xbpastnr
+.formula   M|kkompakti  = 1              ?  M|kompact
+.formula   M|kkompakti  = 0              ? _M|kompact
+.assign M|vklsnr   = T|xvls^id
+.assign M|vkspednr = T|xvsped^id
+.make screen line -- ? M|tzeilen > 0
+.continue END
+..
+!FORBID: an event was triggered, which is not allowed
+.error
+.end 1
+..*****************************************************************************
+!END
+.continue

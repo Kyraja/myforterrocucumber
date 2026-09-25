@@ -1,0 +1,80 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDI.EDI2VKAUV
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : carue
+.. Funktion       : Abruf-Verarbeitung, Startprogramm
+.. Functionality  : Forecast processing, main program,
+..                  Called from Infosystem EDIIMPVER -> FOP EDIIMPVER.VERARBEITEN
+..
+..   Argument       Meaning
+..   ---------------------------------------------------------
+..   xidkundeabe    number of customer (key account)
+..
+..*****************************************************************************
+.set trans -
+..
+.set demand -
+..
+.. Query forecasts with status 2 (new)
+.type text xtseledineu ? _F|defined(U|xtseledineu)
+..
+.. Call partner identifaction
+.type text xtpartnerid ? _F|defined(U|xtpartnerid)
+..
+.. Parameter for date normalisation and early warning system
+.type text xtediparam ? _F|defined(U|xtediparam)
+..
+.. Avoid processing same edi message twice
+.type text xedinumneu ? _F|defined(U|xedinumneu)
+.type P53 xvedi       ? _F|defined(U|xvedi)
+..
+..
+.. Read import parameters
+.input "dfue/DFUE.IMP.INI"
+..
+..
+.. Query new messags for partner identification and object search
+.formula U|xtseledineu = 'F|formatstr("$,,;@gruppe=0;edinachr=2101!2104;vorart<>0;abmodell<>`;idkundeab={1};imex=IM;fcode=0;status=2", U|xidkundeabe)'
+!NEXTEDI
+.select nolock edifact 'U|xtseledineu'
+.continue PROCESS ? _G|mehr
+.formula U|xedinumneu = H|nummer
+.assign U|xvedi = H|id
+..
+.. PARTNERIDENTIFIACTION
+.formula U|xtpartnerid = "edpinfosys.sh -P -n PARTNERID -s kedi,kbusuchen,kbuschreiben -w " + 'H|nummer' + ";1;1 -k - -f -"
+.system 'U|xtpartnerid' password background
+..
+.. OBJECTSEARCH
+.. Important: edi message is in buffer h, edi message is not locked before object search
+.input "EDI.DO.OSEARCH.INIT"
+.input "EDI.DO.OSEARCH.CUSTOMER"
+.input "EDI.DO.OSEARCH.CUSTOMERCONTACT" ? F|empty(H|fcode)
+.input "EDI.DO.OSEARCH.PRODUCT"         ? F|empty(H|fcode)
+.input "EDI.DO.OSEARCH.BLANKETORDER"    ? F|empty(H|fcode)
+.input "EDI.DO.OSEARCH.LASTDELIVERY"    ? F|empty(H|fcode)
+.input "EDI.DO.OSEARCH.OTHER"           ? F|empty(H|fcode)
+.input "EDI.DO.OSEARCH.FINISH"          ? F|empty(H|fcode)
+.. Release lock on edi message!
+.select -
+..
+.. Pre-Processing: Normalize date encoding and run early warning system
+.formula U|xtediparam = U|xedinumneu
+.input "EDI2VKAUV.UNITS"                ? U|xvedi^status=3
+.input "EDI2VKAUV.TERMINNORMIERUNG"     ? U|xvedi^status=3
+.input "EDI2VKAUV.FRUEHWARNUNG"         ? U|xvedi^status=3
+..
+.continue NEXTEDI
+..
+..
+!PROCESS
+.output terminal
+.input "EDI.EDI2VKAUVUP1"
+.input "EDI.EDI2VKAUVUP1.PUS"
+.continue END
+..
+..*****************************************************************************
+!END
+.continue

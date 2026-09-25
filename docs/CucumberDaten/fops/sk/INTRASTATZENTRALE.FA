@@ -1,0 +1,108 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : INTRASTATZENTRALE.FA
+..  Datum          : 03.07.2010
+..  Version        : 2010
+..  Autor          : cl
+..  Verantwortlich : cl
+..  Kontrolle      : tiwe
+..  Funktion       :
+..  Ablauf         :
+..
+..  includes       :
+..*****************************************************************************
+.type text xti       ? _F|defined(U|xti)
+.type text xperiod   ? _F|defined(U|xperiod)
+..
+.set trans -
+.. KOPF
+.continue DATUM         ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "datumvon"
+.continue DATUM         ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "datumbis"
+.continue GEMELDET      ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "bgemeldet"
+.continue UMSATZST      ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "umsstformular"
+.continue TEST          ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "testindikator"
+.continue STORNO        ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "storniert"
+.continue BNOINTRA      ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "bnointra"
+.continue ENDE
+..
+!BNOINTRA
+.copy M|storniert = G|FALSE
+.copy M|bgemeldet = G|FALSE
+.protection intra
+.formula P|maskkontextfop = "" 
+.continue ENDE
+..
+!STORNO
+.copy M|bnointra = G|FALSE
+.copy M|bgemeldet = G|FALSE
+.formula M|intra = ""
+.protection intra
+.formula M|dntver = ""
+.formula P|maskkontextfop = "storniert" ?  M|storniert
+.formula P|maskkontextfop = ""          ? _M|storniert
+.continue ENDE
+..
+!TEST
+.formula U|xperiod = 'F|year(M|datumvon)'+'F|month(M|datumvon)'        ? F|length(F|month(M|datumvon)) = 2
+.formula U|xperiod = 'F|year(M|datumvon)'+"0"+'F|month(M|datumvon)'    ? F|length(F|month(M|datumvon)) = 1
+.formula M|period = 'F|year(M|datumvon)'+"-"+'F|month(M|datumvon)'     ? F|length(F|month(M|datumvon)) = 2
+.formula M|period = 'F|year(M|datumvon)'+"-"+"0"+'F|month(M|datumvon)' ? F|length(F|month(M|datumvon)) = 1
+.formula M|envelopeid = F|formatstr("XGTEST-{1}-{2}-{3}", U|xperiod, 'G|datum:8', F|regreplace('G|zeit', ":", ""))
+.formula M|envelopeid = F|formatstr("{1}-{2}-{3}-{4}", M|matnum, U|xperiod, 'G|datum:8', F|regreplace('G|zeit', ":", "")) ? _F|empty(M|matnum) & _M|testindikator
+.formula M|dntver  = M|osintra + M|envelopeid + ".xml"
+.continue ENDE
+..
+!UMSATZST
+.. Steuernummer von m”glichen Leerzeichen oder brigen nicht-Zahlen bereinigen
+.formula M|steunr = F|regreplaceall(F|sysinfo(10)^steunr, "[^0-9]", "")  ?  F|empty(M|umsstformular)
+.formula M|steunr = M|umsstformular^steunr                               ? _F|empty(M|umsstformular)
+.formula M|partyid = M|ischl + M|steunr + M|ustzus
+.continue ENDE
+..
+!GEMELDET
+.formula M|intra = 0         ? _M|bgemeldet
+.protection intra            ? _M|bgemeldet
+.protection -reset intra     ?  M|bgemeldet
+.formula M|dntver = ""       ?  M|bgemeldet
+.copy M|bnointra = G|FALSE   ?  M|bgemeldet
+.copy M|storniert = G|FALSE  ?  M|bgemeldet
+.formula P|maskkontextfop = "" 
+.continue ENDE
+..
+!DATUM
+.input "is/TABLEEREN"
+.continue FEHLER3 ? F|empty(M|datumvon) ; F|empty(M|datumbis)
+.continue FEHLER1 ? M|datumvon > M|datumbis
+.continue FEHLER2 ? M|datumvon < G|bueuro
+.formula U|xperiod = 'F|year(M|datumvon)'+'F|month(M|datumvon)'        ? F|length(F|month(M|datumvon)) = 2
+.formula U|xperiod = 'F|year(M|datumvon)'+"0"+'F|month(M|datumvon)'    ? F|length(F|month(M|datumvon)) = 1
+.formula M|period = 'F|year(M|datumvon)'+"-"+'F|month(M|datumvon)'     ? F|length(F|month(M|datumvon)) = 2
+.formula M|period = 'F|year(M|datumvon)'+"-"+"0"+'F|month(M|datumvon)' ? F|length(F|month(M|datumvon)) = 1
+.formula M|envelopeid = F|formatstr("XGTEST-{1}-{2}-{3}", U|xperiod, 'G|datum:8', F|regreplace('G|zeit', ":", ""))
+.formula M|envelopeid = F|formatstr("{1}-{2}-{3}-{4}", M|matnum, U|xperiod, 'G|datum:8', F|regreplace('G|zeit', ":", "")) ? _F|empty(M|matnum) & _M|testindikator
+.formula M|dntver  = M|osintra + M|envelopeid + ".xml"
+.continue
+..
+!ENDE
+.formula M|textedi = ""
+.formula M|textedi2 = ""
+.input "is/TABLEEREN"
+.continue
+..
+!FEHLER1
+.error Vom 'M|datumvon' bis 'M|datumbis' ist kein gltiger Zeitraum!
+.formula M|datumvon = M|datumbis ? G|evtvar = "datumvon"
+.formula M|datumbis = M|datumvon ? G|evtvar = "datumbis"
+.end 1
+..
+!FEHLER2
+.error Ausgew„hlter Zeitraum fr Erstellung der Intrahandelsstatistik nicht m”glich. Bewegungsdaten in Euro ab: 'G|bueuro'
+.end 1
+..
+!FEHLER3
+.error Zeitraum unvollst„ndig.
+.. set first day of year
+.formula U|xti = F|fystartdate(F|getfy(G|datum)) 
+.formula M|datumvon = U|xti
+.formula M|datumbis = G|datum
+.end 1

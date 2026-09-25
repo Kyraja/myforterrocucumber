@@ -1,0 +1,87 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SPEDWBS.RPH.FO
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : write goods receipt/issue slip, report header
+..*****************************************************************************
+.set trans -
+..
+..<META H|='P3:1' >
+..<META D|='P55:1' >
+..<META M|='vk/SPEDWBS' >
+..<META P|='P88'>
+..<META 8|='P1'>
+..<META 7|='P1'>
+..
+.. Sprache setzen  / set language
+.assign P|spr = H|warenempf^spr ? F|modifiable(P|spr) & _P|sprfoschutz
+..
+.formula M|datzeit   = 'T|datum' + " - " + 'T|zeit'
+.formula M|linr      = H|reempf^frbez
+..
+..<BLOCK> add address data for sender and recipient, plant and unloading point
+.. WarenempfÑnger - Anschrift oder Versandanschrift  / (1) Customer - Address or delivery address
+.formula M|kuans1    =  H|ans << ";"                     ? H|ans2=""
+.formula M|kuans2    =  H|ans  >> ";" << ";"             ? H|ans2=""
+.formula M|kustr     = 'H|str'                           ? H|ans2=""
+.formula M|kuort     = 'H|plz' + " " + (H|nort << ";")   ? H|ans2=""
+
+.formula M|kuans1    =  H|ans2 << ";"                    ? H|ans2<>""
+.formula M|kuans2    =  H|ans2 >> ";" << ";"             ? H|ans2<>""
+.formula M|kustr     = 'H|str2'                          ? H|ans2<>""
+.formula M|kuort     = 'H|plz2' + " " + (H|nort2 << ";") ? H|ans2<>""
+..
+.formula M|kunr      = H|reempf^nummer
+.formula M|kuwerk    = H|werk
+.formula M|kuablade  = H|ablstelle
+.formula M|kulagort  = H|laortku
+.formula M|kuverbrau = H|vbrstelle
+..
+.formula M|kuversand = H|versand^schl << 2
+.formula M|kuversand = H|versand^sucherw
+..
+.. Lieferantenanschrift / Supplier address
+.formula M|lians1 = F|sysinfo(10)^ans << ";"
+.formula M|lians2 = F|sysinfo(10)^ans >> ";" << ";"
+.formula M|liwerk = F|sysinfo(10)^werk
+.formula M|liort  = F|sysinfo(10)^plz + " " + F|sysinfo(10)^nort << ";"
+.formula M|listr  = F|sysinfo(10)^str
+..</BLOCK>
+..
+.. 
+..<BLOCK> Read shipping order into D buffer and add shipping order data to IS header
+.continue END  ? F|empty(H|sped)
+.add H|sped
+.continue END ? _G|mehr
+..
+.. Sendungsdaten / Freight datas
+.formula M|sendnr  = D|nummer
+..
+.. show manualy entered gross weight from shipping order; 
+.. if there is no manually entered weight show gross weight from delivery notes
+.formula M|gewicht = D|gewbrutto 
+.formula M|gewicht = D|bruttogew ? F|empty(M|gewicht)
+..
+.. Transportpartnernummer = Spediteurnummer = FrachtfÅhrernummer
+.continue ETRANS  ?  F|empty(D|spediteur)
+.load 8 supplier 'D|spediteur^id'
+.continue ETRANS  ? _T|mehr
+.continue ETRANS  ?  F|empty(8|liekunsnr)
+.load 7 supplier '8|liekunsnr^id'
+.continue ETRANS  ? _T|mehr
+!TRANS
+.load 7 line
+.continue ETRANS  ? _T|mehr
+.continue TRANS   ?  7|kunlie^nummer <> M|kunr
+.formula M|fuehrnr  = 7|bemkl
+!ETRANS
+.formula M|fuehrtxt = D|frachtfueh
+..
+.add
+..</BLOCK>
+..
+..*****************************************************************************
+!END
+.continue

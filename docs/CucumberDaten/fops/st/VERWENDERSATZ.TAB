@@ -1,0 +1,99 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : VERWENDERSATZ.TAB
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : amk
+.. Funktion       : Erzeugt eine Verwendung als Tabellenzeile.
+.. Ablauf         : Tabellen-EFOP
+..
+.. Functionality  : Creates a table row as a where-used entry.
+.. Program flow   : Table EFOP
+..*****************************************************************************
+.set trans -
+..
+.. Load product of production list
+.add H|artikel
+.continue END ? _G|mehr
+..
+.continue REWORK ? M|bauteilort > 0
+.continue COMPONT
+..
+!REWORK: We have components in the table
+.. Has component changed?
+.copy M|bautwechsel = _(M|bauteil^id = D|id & M|flistbauteil^id = H|id)
+.continue USING ? _M|bautwechsel
+..
+.. Update protection for last component
+.input "st/VERWENDERSATZ.NACHBEHANDELN"
+..
+!COMPONT: Next component
+.assign M|flistbauteil = H|id
+.assign M|bauteil = D|id
+.formula M|bauteilzahl = M|bauteilzahl + 1
+.copy M|bautwechsel = G|FALSE
+..
+.make screen line +O
+.formula M|kaktzeile = M|aktzeile
+.copy M|bauteilverw = 0
+.formula M|bauteilort = M|aktzeile
+.copy M|tbaumstufe = 1
+.assign M|tbaumstat = "-"
+.copy M|istbauteil = G|TRUE
+.copy M|tflstd = H|flistestd
+.assign M|tfertliste = H|id
+.copy M|tflversionn = H|versionn
+.copy M|tfllgruppe = H|lgruppe
+.assign M|tbauteil = D|id
+.assign M|tbasisartikel = M|tbauteil^basisartikel ? M|tbauteil^gruppe = 1
+.copy M|tbuersetzen = M|nichtsymbol
+..
+!USING: create a leaf for a using of the original in a component
+.make screen line +O
+.copy M|tflstd = H|flistestd
+.assign M|tfertliste = H|id
+.copy M|tfllgruppe = H|lgruppe
+.formula M|kaktzeile = M|aktzeile
+.formula M|verwendzahl = M|verwendzahl + 1
+.copy M|bauteilzeile = M|bauteilort
+.copy M|tbaumstufe = 2
+.assign M|verwend = M|original
+.copy M|tbuersetzen = M|nichtsymbol
+.copy M|zeile = H|selzeile
+..
+.select line 'H|selzeile'
+.formula M|vpos = H|vpos
+.copy M|lge = H|lge
+.copy M|ellme = H|ellme
+.copy M|breite = H|breite
+.copy M|elbme = H|elbme
+.copy M|anzahl = H|anzahl
+.copy M|melle = H|melle
+..
+.continue ARTICLE ? F|equals(M|originalart, "(Product)")
+.continue MEANPRO ? F|equals(M|originalart, "(MeansOfProduction)")
+.continue OPERAT  ? F|equals(M|originalart, "(Operation)")
+.continue FATAL
+..
+!MEANPRO
+.copy M|tersetzbar = M|aktersetzbar
+.continue REPLACE
+..
+!ARTICLE
+!OPERAT
+.. Check compatibility of dimensions of operation in the production list
+.input "st/VERWENDERSATZ.ERSATZCHECK" ? _M|istbauteil
+..
+!REPLACE
+.copy M|tersetzbar = M|aktersetzbar
+..
+.. Update details in last component
+.input "st/VERWENDERSATZ.NACHBEHANDELN"
+.continue COMPONT ? M|bautwechsel
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+!FATAL
+.error -number 1111
+.end 1

@@ -1,0 +1,336 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : PRODLIST.EV
+..  Datum          : 01.10.2004
+..  Autor          : jn
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..  Funktion       : Infosystem, FertigungsvorschlÑge,
+..                   Eventbehandlung / Kopfteil
+..*****************************************************************************
+.type text  xkomm:100 ? _F|defined(U|xkomm)
+.type date xdleer    ? _F|defined(U|xdleer)
+.type text  xselect   ? _F|defined(U|xselect)
+.type P9    xorder    ? _F|defined(U|xorder)
+.type text  xtcmd     ? _F|defined(U|xtcmd)
+.type text  xselrohl  ? _F|defined(U|xselrohl)
+.type text  xtsel     ? _F|defined(U|xtsel)
+.type text  xsel      ? _F|defined(U|xsel)
+.type GD2   xdvom     ? _F|defined(U|xdvom)
+..
+.set trans -
+.. Tabellenfelder
+.continue FVRES     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "breserv"
+.continue FVRES     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bfvres"
+.continue RUECK     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "rueck"
+.continue VERFUEG   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "verfueg"
+.continue SCHED     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "icoattdispo"
+..
+.input "is/TABLEEREN"
+.. Kopffelder
+.continue BA        ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kba"
+.continue BV        ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bstart"
+.continue BSEL      ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "bselect"
+.continue FAV       ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "vom"
+.continue FAV2      ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "vom2"
+.continue AUSWAHL   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bis"
+.continue AUSWAHL   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "klgruppe"
+.continue AUSWAHL   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "krit"
+.continue AUSWAHL   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "detail"
+.continue BBA       ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bba"
+.continue BFV       ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bfv"
+.continue BFVFREI   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bfvfreigeben"
+.continue ARTIKEL   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kart"
+.continue AUSWAHL   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kabtlg"
+.continue TOL       ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "tol"
+.continue DISPONENT ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "betreuer"
+.continue AUSWAHL   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "vorgfix"
+.continue AUSWAHL   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kapazdetails"
+.continue AUSWAHL   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "prozeng"
+.continue AUSWAHL   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "wterm"
+.continue AUSWAHL   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kprojekt"
+.continue AUSWAHL   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kverw"
+.continue FVANLEGEN ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "bufvanlegen"
+.continue LOESCH    ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "loeschpruef"
+.continue BASIS     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "basisartikel"
+.continue
+..
+!ARTIKEL
+.formula M|basisartikel = M|kart^basisartikel ? _F|empty(M|kart)
+.continue AUSWAHL
+..
+!BASIS
+.formula M|kart = "" ? _F|empty(M|basisartikel)
+.continue AUSWAHL 
+..
+!LOESCH
+.continue AUSWAHL   ? _M|loeschpruef
+.copy M|bba          = G|TRUE 
+.copy M|bfvfreigeben = G|FALSE  
+.copy M|bfv          = G|FALSE
+.continue AUSWAHL 
+..
+!FVANLEGEN
+.continue FV ? F|empty(M|kart)
+.continue ERROR3 ? M|kart^gruppe <> 1 
+.continue ERROR4 ? F|equals(M|kart^bsart, "(Subcontracting)")
+..
+!FV: Fertigungsvorschlag anlegen
+.formula U|xtcmd = "<(Purchasing)> <(New)>,(WorkOrderSuggestions)"
+.continue EXEC                 ? F|empty(M|kart)
+.formula U|xtcmd = U|xtcmd + " ? [insert]=1|1:artex="+'M|kart'
+..
+!EXEC
+.command -wait 'U|xtcmd'
+.continue
+..
+!SCHED    
+.continue     ? F|empty(M|icoattdispo)
+.command -parallel 'F|formatstr("<(Infosystem)>{1}<(Call)> ? artikel={2}|lgruppe={3}|bstart=", "10430", M|art^id, M|lgruppe^id)'
+.continue     
+..
+!VERFUEG
+.continue NOTE ? M|engmatz = M|ldengmatz ; M|art^gruppe <> 1
+.select add M|vorgang^id
+.continue BOX      ? _G|mehr
+..
+.formula U|xkomm = "(AvailabilityCheck)?matbedarfobj="+H|id+"|verfuegterm="+'G|datum'+"|verfuegpruef=1"
+.command -parallel 'U|xkomm'
+.continue NOVERFUEG ? _G|mehr
+.select -
+.continue
+..
+!RUECK
+.continue ERROR1  ? F|empty(M|order)
+.continue HINWEIS ? F|empty(M|rueck)
+..
+.continue BETRIEB ? F|empty(M|order^ag)
+.formula U|xorder = 'M|order'>>-3
+..
+.. Arbeitsschein -> RÅckmeldebeleg
+.formula U|xselect = "$,,nummer=;lres=="+M|order^lres^id+";@.gruppe=2;@.ablage=(Filed)"
+.load 5 workorder 'U|xselect'
+.continue          ? _G|mehr
+.load 5 workorder
+.continue MORE     ?  G|mehr
+.formula U|xselect = "$,,nummer=;lres=="+M|order^lres^id+";@.gruppe=2;@.ablage=(Filed)"
+.continue NOTMORE
+..
+!MORE
+.formula U|xselect = "%,,nummer=;art=;ag=;mge=;gutmge=;typ=;lres=="+M|order^lres^id+";@.gruppe=2;@.ablage=(Filed)"
+..
+!NOTMORE
+.formula U|xkomm = "<(Workorder)>" + U|xselect + ";<(View)>,(CompletionConfirmations)"
+.command -parallel 'U|xkomm'
+.continue ERROR2 ? _G|mehr 
+.continue 
+..
+!BETRIEB: Betriebsauftrag -> alle RÅckmeldebelege
+.formula U|xdvom = M|order^vom - 14
+.formula U|xselect = "%,,nummer=`"+'M|order'+";aezeich=;vom="+'U|xdvom'+"!;art="+M|art^id+";1:limgen=;1:limgev=;1:menge=;1:mge=;1:te=;1:tr=;1:verlust=;1:verlustmge=;@.gruppe=2;@.ablage=(Filed)"  
+.formula U|xkomm = "<(Workorder)>" + U|xselect + ";<(View)>,(CompletionConfirmations)"
+.command -parallel 'U|xkomm'
+.continue
+..
+!BA
+.continue                      ?  F|empty(M|kba)
+.. Betriebsauftrag
+.formula M|kba = M|kba^id     ?  F|empty(M|kba^snba)
+.. Arbeitsschein
+.formula M|kba = M|kba^snba   ? _F|empty(M|kba^snba)
+.copy M|bfv          = G|FALSE
+.copy M|bfvfreigeben = G|FALSE
+.continue AUSWAHL
+..
+!FVRES: Fertigungsvorschlag
+.select add M|vorgang^id
+.continue                                        ? _G|mehr
+.continue STUECK                                 ?  G|evtvar = "breserv"
+.continue                                        ?  F|empty(M|aufzu)
+.formula U|xkomm = H|id + " <(Edit)>"
+.continue SPERRE
+..
+!STUECK: Fertigungsliste
+.formula U|xkomm = H|id + " <(Edit)>"           ?  F|empty(M|aufzu)
+.continue SPERRE                                 ?  F|empty(M|aufzu)
+.select add H|lres
+.continue                                        ? _G|mehr
+.formula U|xkomm = H|id + " <(Edit)>"
+..
+!SPERRE: Sperre freigeben und Maske îffnen
+.select -
+.command -parallel 'U|xkomm'
+.continue
+..
+!BV
+.formula M|bba = G|TRUE ?  M|selart = 1
+.formula M|bfv = G|TRUE ?  M|selart = 2
+..
+.copy M|krit = G|TRUE    ?  M|tol <> 0
+.continue                    ?  M|selektion
+.continue F02                ? 'M|bis' <> "" & M|bis < M|vom
+.formula M|selektion = "n"
+.formula M|select    = "$,,;"
+.formula M|select    = M|select + "projekt="+ M|kprojekt^id + ";"  ? _F|empty(kprojekt)
+.formula M|select    = M|select + "tsterm=" + 'M|vom' + "!" + 'M|bis' + ";"
+.formula M|select    = M|select + "tterm=" + 'M|vom2' + "!" + 'M|bis2' + ";"
+.formula M|select    = M|select + "betreuer=" + 'M|betreuer^id' + ";"         ? _F|empty(M|betreuer)
+.formula M|select    = M|select + "nummer=" + 'M|kba' + ";"                   ? _F|empty(M|kba^id)
+.formula M|select    = M|select + "verw=" + 'M|kverw' + ";"                   ? _F|empty(M|kverw)
+.formula M|select    = M|select + "fix=TRUE;"                                 ?  M|vorgfix
+.add M|kart
+.continue BV1                ? _G|mehr
+.formula M|select    = M|select + "art=" + D|id + ";"
+.add
+..
+!BV1
+.add M|klgruppe
+.continue BV2                ? _G|mehr
+.formula M|select = M|select + "lgruppe=" + D|id + ";"
+.add
+..
+!BV2
+.add M|kabtlg
+.continue BV3                ? _G|mehr
+.formula M|select = M|select + "abtlg=" + D|id + ";"
+.add
+..
+!BV3
+.formula M|select = M|select + "ba<>`;"       ? M|bba
+.formula M|select = M|select + "ba=`;"        ? M|bfv
+.formula M|select = M|select + "ablagef=nein;@gruppe=5;@ablageart=(Active);einplan=1;mateinplan=1;@ordnung=sterm"
+.continue AUSWAHL
+..
+!BSEL: Selektion Åber selektionsleiste: alle Kopffelder leeren, Bools bleiben als Filter gesetzt
+.formula M|kprojekt       = ""
+.formula M|select         = ""
+.formula M|bis            = ""
+.formula M|vom            = ""
+.formula M|kart           = ""
+.formula M|klgruppe       = ""
+.formula M|kabtlg         = ""
+.formula M|betreuer       = ""
+.formula M|bis2           = ""
+.formula M|vom2           = ""
+.formula M|kba            = ""
+.formula G|evtfeldneu   = "%"
+.input "is/AUSWAHL"
+..
+.formula U|xselrohl = F|regreplaceall(G|selrohl, "\%", " ") 
+.formula U|xselrohl = F|regreplaceall(U|xselrohl, ",,", " ")
+.formula U|xselrohl = F|regreplaceall(U|xselrohl, ",", " ")
+.formula U|xselrohl = F|trim('U|xselrohl')
+.continue SELEKTION ? F|empty(U|xselrohl)
+.. mateinplan und einplan mÅssen im Rohling vorkommen
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";nummer=" + U|xselrohl
+.formula U|xtsel = U|xtsel + ";@gruppe=24;@zeilen=ja"
+.formula U|xsel  = U|xtsel + ";merkmalname=mateinplan"
+.load 6 company 'U|xsel'
+.continue ERROR5 ? _G|mehr
+.formula U|xsel  = U|xtsel + ";merkmalname=einplan"
+.load 6 company 'U|xsel'
+.continue ERROR5 ? _G|mehr
+..
+!SELEKTION
+.formula M|selektion = M|select <> "!"
+.formula M|select    = M|select + ";fix=TRUE" ?  M|vorgfix
+.formula M|select    = M|select + ";einplan=1;mateinplan=1"
+.continue
+..
+!FAV:
+.formula M|bis  = M|vom
+.formula M|bis2 = U|xdleer
+.formula M|vom2 = U|xdleer
+.continue AUSWAHL
+..
+!FAV2:
+.formula M|bis2 = M|vom2
+.formula M|bis  = U|xdleer
+.formula M|vom  = U|xdleer
+.continue AUSWAHL
+..
+!BBA
+.formula M|selart    = 0
+.formula M|selart    = 1 ? M|bba
+.copy M|loeschpruef  = G|FALSE ? _M|bba
+.copy M|bfv          = G|FALSE ?  M|bba
+.copy M|bfvfreigeben = G|FALSE ?  M|bba
+.continue AUSWAHL
+..
+!BFV
+.formula M|selart    = 0
+.formula M|selart    = 2  ? M|bfv
+.formula M|kba       = "" ? M|bfv & _F|empty(M|kba)
+.copy M|loeschpruef  = G|FALSE      ? M|bfv
+.copy M|bba          = G|FALSE      ? M|bfv
+.copy M|bfvfreigeben = G|FALSE      ? M|bfv
+.continue AUSWAHL
+..
+!BFVFREI
+.formula M|selart    = 0
+.formula M|kba       = "" ? M|bfvfreigeben & _F|empty(M|kba)
+.copy M|loeschpruef  = G|FALSE ? M|bfvfreigeben
+.copy M|bba          = G|FALSE ? M|bfvfreigeben
+.copy M|bfv          = G|FALSE ? M|bfvfreigeben
+.continue AUSWAHL
+..
+!DISPONENT
+.continue AUSWAHL
+..
+!AUSWAHL
+.copy M|selektion  = G|FALSE
+.continue
+..
+!TOL
+.copy M|krit = G|TRUE
+.continue AUSWAHL
+..
+!F02
+.error Der von-Termin ist grî·er als der bis-Termin.
+.end 1
+..
+!ERROR
+.error UnzulÑssige Angabe.
+.end 1
+..
+!ERROR1
+.error Nur fÅr Betriebsauftrags- oder Arbeitsscheinzeilen mîglich.
+.end 1
+..
+!ERROR2
+.error Keine gebuchte RÅckmeldung vorhanden.
+.end 1
+..
+!HINWEIS
+.note Keine gebuchten RÅckmeldungen vorhanden.
+.continue
+..
+!NOMGE
+.note Keine verfÅgbare Menge vorhanden.
+.continue
+..
+!BOX
+.note Kein Fertigungsvorschlag vorhanden.
+.continue
+..
+!NOVERFUEG
+.note VerfÅgbarkeitsprÅfung gescheitert.
+.continue
+..
+!NOTE
+.note VerfÅgbarkeitsprÅfung liefert kein Ergebnis.
+.continue
+..
+!ERROR3: kein Artikel
+.error Es kînnen nur FertigungsvorschlÑge fÅr Artikel angelegt werden.
+.end 1
+..
+!ERROR4: Lohnfertigungsartikel
+.error FÅr Artikel mit der Beschaffungsart Lohnfertigung kann kein Fertigungsvorschlag angelegt werden.
+.end 1
+..
+!ERROR5:
+.error Leistenrohling beinhaltet nicht die benîtigten Felder einplan und mateinplan. Bitte im Rohling aufnehmen.
+.copy M|selektion = G|FALSE
+.end 1

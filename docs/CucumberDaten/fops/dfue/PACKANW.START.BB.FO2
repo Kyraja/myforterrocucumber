@@ -1,0 +1,265 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PACKANW.START.BA.FO2
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : drpf
+.. Functionality  : fill table with data from pack instructions 
+..                  check for objects using a row's pack instruction
+..                  check if pack types in pack instruction row and pack item master data are the same
+..                  check if smallest and biggest unit have a layout set
+..                  -
+..                  the jfop on button after will check for duplicate pack structures 
+..                  = same packaging materials, same setting for levels, same layouts
+..*****************************************************************************
+
+..<META M|='dfue/PACKANW'>
+
+def main() {
+    .set trans -
+    
+    .type PS2:1 smallUnit
+    .type PS88:3 smallUnitLayout
+    .type A215 smallUnitPackType
+    .type PS2:1 bigUnit
+    .type PS88:3 bigUnitLayout
+    .type A215 bigUnitPackType
+    .type integer levels
+    .type text packSummary
+    .type bool hasLayout
+    .type bool hasPackTypeDifferences
+    .type bool missesPackTypes
+
+    .type integer usageCount
+    .type integer partsCount
+    .type integer propertiesCount
+    .type integer blanketOrdersCount
+    .type integer ordersCount
+    .type integer packingSlipsCount
+    .type integer shippingOrdersCount
+    .type integer prodCount
+
+    .type text xtpmtyp 
+    .type text xContainer
+    .type text xPalette  
+    .type text xBehaelter
+
+    .formula U|xContainer = "(67)"
+    .formula U|xPalette = "(80)"
+    .formula U|xBehaelter = "(66)"
+    
+    .type bool rowSelection
+
+    .make screen line --  ?  M|tzeilen > 0
+
+    .formula U|rowSelection = _F|empty(M|kpackmittel) ; _F|empty(M|klayout) ; M|kauffuellen ; M|kauffuellenebene
+
+    .formula M|select = "$,,;@gruppe=1"
+    .formula M|select = M|select + ";@zeilen=(Yes)" ?  U|rowSelection
+
+    .formula M|select = M|select + F|formatstr(";@numsuch={1}", M|ksuch)          ?  _F|empty(M|ksuch)
+    .formula M|select = M|select + F|formatstr(";sucherw=`{1}", M|ksucherw)       ?  _F|empty(M|ksucherw)
+    .formula M|select = M|select + F|formatstr(";artikel={1}", M|kpackmittel^id)  ?  _F|empty(M|kpackmittel)
+    .formula M|select = M|select + F|formatstr(";walayout={1}", M|klayout^id)     ?  _F|empty(M|klayout)
+    .formula M|select = M|select + ";auffuell=(Yes)"                              ?  M|kauffuellen
+    .formula M|select = M|select + ";auffuell=(Level)"                              ?  M|kauffuellenebene
+    
+    .select packinginstructions 'M|select'
+    while (G|mehr) {
+        .call addPackagingInstructionToTable()  
+        .select packinginstructions
+    }
+}
+
+def addPackagingInstructionToTable() { 
+    ..<META H|='P106:1'>
+
+    if (M|tzeilen > 0 & U|rowSelection) {
+        if (M|tpackanw^id = H|id) {
+            .return   
+        }
+    }
+    
+    .make screen line +O 
+    .colour -foreground -1 -1 -1 -background -1 -1 -1 'M|aktzeile'
+
+    .formula M|tpackanw = H|id
+    .formula M|tpackanwx = H|id
+    
+    .call showSinglePackInstruction()
+    
+    .call showUsage()
+} 
+
+def showSinglePackInstruction() {
+    ..<META H|='P106:1'>
+
+    .load 1 packinginstructions 'H|id'
+    .call readPackagingMaterials()
+    .copy M|tpackm = U|smallUnit
+    .copy M|tlaypackm = U|smallUnitLayout
+    .copy M|tpalette = U|bigUnit
+    .copy M|tlaypalette = U|bigUnitLayout
+
+    .formula M|tpmstufen = U|levels
+    .formula M|tpmstruktur = U|packSummary
+
+    .formula M|tlayoutstatus = M|klayoutfehlt ?  _U|hasLayout
+    
+    .copy M|tpmtypstatus = ""
+    .copy M|tpmtypstatus = M|kpmtypabw ?  U|hasPackTypeDifferences
+    .copy M|tpmtypstatus = M|kpmtypfehlt ?  U|missesPackTypes
+}
+
+
+def readPackagingMaterials() { 
+    .formula U|smallUnit = ""
+    .formula U|smallUnitLayout = ""
+    .assign U|smallUnitPackType = ""
+    .formula U|bigUnit = ""
+    .formula U|bigUnitLayout = ""
+    .assign U|bigUnitPackType = ""
+    .formula U|packSummary = ""
+    .formula U|levels = 0
+    .copy U|hasLayout = G|false
+    .copy U|hasPackTypeDifferences = G|false
+    .copy U|missesPackTypes = G|false
+
+    ..<META 1|='P106:1'>
+    .load 1 header
+    .load 1 line
+    if (G|mehr) { 
+        .. smallest unit: always first row of packing instruction
+        .formula U|xtpmtyp = F|value(1|pmtyp, "AU215")
+        .copy U|smallUnit = 1|artikel
+        .copy U|smallUnitLayout = 1|walayout
+        .copy U|smallUnitPackType = 1|pmtyp
+        .call addPackStatistics()
+        .load 1 line
+    }
+    while (G|mehr) {
+        .. biggest unit: last "containing" packaging material is the biggest unit
+        .formula U|xtpmtyp = F|value(1|pmtyp, "AU215")
+        if (U|xtpmtyp = U|xPalette ; U|xtpmtyp = U|xContainer ; U|xtpmtyp = U|xBehaelter) {
+            .copy U|bigUnit = 1|artikel 
+            .copy U|bigUnitLayout = 1|walayout
+            .copy U|bigUnitPackType = 1|pmtyp
+        }
+        .call addPackStatistics()
+        .load 1 line
+    }
+}
+
+def addPackStatistics() {
+    if (U|xtpmtyp = U|xPalette ; U|xtpmtyp = U|xContainer ; U|xtpmtyp = U|xBehaelter) {
+        .formula U|levels = U|levels + 1
+    }
+    .copy U|hasLayout = G|true ?  _F|empty(1|walayout)
+    .formula U|packSummary = U|packSummary + F|formatstr("{1}_{2}_{3}_{4}_{5}_{5}_{6}_{7};", 1|pmtyp, 1|artikel^nummer, 1|anzahl, 1|ebene, 1|minebene, 1|auffuell, 1|walayout^nummer)
+    .copy U|hasPackTypeDifferences = G|true ?  1|pmtyp <> 1|artikel^pmtyp
+    .copy U|missesPackTypes = G|true ?  F|empty(1|artikel^pmtyp) ; F|empty(1|pmtyp)  
+}
+
+def showUsage() { 
+    .formula U|usageCount = 0
+    .formula U|partsCount = 0
+    .formula U|propertiesCount = 0
+    .formula U|blanketOrdersCount = 0
+    .formula U|ordersCount = 0
+    .formula U|packingSlipsCount = 0
+    .formula U|shippingOrdersCount = 0
+    .formula U|prodCount = 0
+    
+    .. Parts pack instruction for shipping
+    .load 2 nolock parts 'F|formatstr("$,,;@gruppe=1;packanwstd={1}", H|id)'
+    while (G|mehr) {
+        .copy M|tverwendartikel = G|true 
+        .formula U|usageCount = U|usageCount + 1
+        .formula U|partsCount = U|partsCount + 1
+        .load 2 nolock parts
+    }
+    
+    .. Parts  pack instruction for storage
+    .load 2 nolock parts 'F|formatstr("$,,;@gruppe=1;packanwstdla={1}", H|id)'
+    while (G|mehr) {
+        .copy M|tverwendartikel = G|true 
+        .formula U|usageCount = U|usageCount + 1
+        .formula U|partsCount = U|partsCount + 1
+        .load 2 nolock parts
+    }
+    
+    .. Customer product pack instructions for shipping
+    .load 2 nolock parts 'F|formatstr("$,,;@gruppe=6;packanw={1}", H|id)'
+    while (G|mehr) {
+        .copy M|tverwendkuartbez = G|true 
+        .formula U|propertiesCount = U|propertiesCount + 1
+        .formula U|usageCount = U|usageCount + 1
+        .load 2 nolock parts
+    }
+
+    .. Customer product pack instructions for storage
+    .load 2 nolock parts 'F|formatstr("$,,;@gruppe=6;packanwla={1}", H|id)'
+    while (G|mehr) {
+        .copy M|tverwendkuartbez = G|true 
+        .formula U|usageCount = U|usageCount + 1
+        .formula U|propertiesCount = U|propertiesCount + 1
+        .load 2 nolock parts
+    }
+    
+    .. Verkauf (R, A, L) V
+    .load 2 nolock sales 'F|formatstr("$,,;@gruppe=2;packanw={1};kotyp=(BlanketOrder)", H|id)'
+    while (G|mehr) {
+        .copy M|tverwendrahmen = G|true 
+        .formula U|usageCount = U|usageCount + 1
+        .formula U|blanketOrdersCount = U|blanketOrdersCount + 1
+        .load 2 nolock sales
+    }
+
+    .load 2 nolock sales 'F|formatstr("$,,;@gruppe=2;packanw={1};kotyp=(SalesOrder)", H|id)'
+    while (G|mehr) {
+        .copy M|tverwendauftrag = G|true
+        .formula U|usageCount = U|usageCount + 1
+        .formula U|ordersCount = U|ordersCount + 1
+        .load 2 nolock sales
+    }
+    
+    .load 2 nolock sales 'F|formatstr("$,,;@gruppe=2;packanw={1};kotyp=(PackingSlip)", H|id)'
+    while (G|mehr) {
+        .copy M|tverwendliefer = G|true 
+        .formula U|usageCount = U|usageCount + 1
+        .formula U|packingSlipsCount = U|packingSlipsCount + 1
+        .load 2 nolock sales
+    }
+    
+    .. Versandplanung V  
+    .load 2 nolock shippingplanning 'F|formatstr("$,,;@gruppe=1;@zeilen=(Yes);packanw={1}", H|id)'
+    while (G|mehr) {
+        .copy M|tverwendvplan = G|true 
+        .formula U|usageCount = U|usageCount + 1
+        .formula U|shippingOrdersCount = U|shippingOrdersCount + 1
+        .load 2 nolock shippingplanning
+    }
+    
+    .. Fertigungsvorschlaege L
+    .load 2 nolock purchasing 'F|formatstr("$,,;@gruppe=5;packanw={1}", H|id)'
+    while (G|mehr) {
+        .copy M|tverwendfertvor = G|true 
+        .formula U|usageCount = U|usageCount + 1
+        .formula U|prodCount = U|prodCount + 1
+        .load 2 nolock purchasing
+    }
+    
+    .. Summarize
+    if (U|usageCount > 0) {
+        .copy M|tverwendet = G|true
+        .formula M|tbuverwendungen = "icon:plus_black"
+        .formula M|tanzverwend = U|usageCount
+        .formula M|tverwendartikelz = U|partsCount 
+        .formula M|tverwendkuartbezz = U|propertiesCount 
+        .formula M|tverwendrahmenz = U|blanketOrdersCount 
+        .formula M|tverwendauftragz = U|ordersCount 
+        .formula M|tverwendlieferz = U|packingSlipsCount 
+        .formula M|tverwendvplanz = U|shippingOrdersCount 
+        .formula M|tverwendfertvorz = U|prodCount 
+    }
+} 

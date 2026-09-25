@@ -1,0 +1,126 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SCHED.MONITOR
+.. Autor          : es
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Unterprogramm zum Pruefen, ob ein Dispo-Vorgang schon
+..                  komplett eingeplant ist
+..  Ablauf        : Dieses Unterprogramm setzt voraus, dass der Aufrufer in der VP29-Variablen
+..                  U|xmonitor einen Verweis auf ein Dispoobjekt (V-03-02, V-04-02, V-04-04, V-04-05)
+..                  hinterlegt. Es prueft, ob fuer dieses Objekt oder eines seiner Folgeobjekte in der
+..                  Gesamt-AFL noch ein Dispoauftrag existiert und uebergibt dasjenige Dispoobjekt
+..                  wieder unter U|xmonitor, das in der AFL noch disponiert werden muss.
+..                  Ist kein (Folge-)Objekt mehr zu disponieren, so leert das FOP den Verweis U|xmonitor.
+..                  Aufruf:
+..                       .type VP29 xmonitor
+..                       .type B    xprotokoll
+..                       .formula U|xmonitor   = <zu untersuchendes Dispoobjekt>
+..                       .formula U|xprotokoll = <mit Protokollausgabe der untersuchten AFL-Elemente?>
+..                       .input "SCHED.MONITOR"
+..                       .continue EINGEPLANT ? F|empty(U|xmonitor)
+..
+..                  ------------------ ACHTUNG -----------------------
+..                  Belegt und damit korrumpiert wird nur der Puffer 9
+..                  Alle anderen Puffer bleiben erhalten
+..                  --------------------------------------------------
+..
+..*****************************************************************************
+.set trans -
+.type IP8 xschedn     ? _F|defined(U|xschedn)
+.continue F0          ? _F|defined(U|xmonitor)
+.continue F0          ?  F|empty(U|xmonitor)
+.. log all traversed production list nodes ?
+.continue P           ?  F|defined(U|xprotokoll)
+.type bool xprotokoll
+.formula U|xprotokoll = G|arg1 = "p" ? F|defined(G|arg1)
+!P:
+.formula U|xschedn    = 0
+.. save H-buffer
+.reserve
+.select nolock add U|xmonitor
+.continue END         ? _G|mehr
+.continue F1          ? H|typ<>ARPOS & H|typ<>FEVOR & H|typ<>RESERV
+.continue NEXT1
+
+!SP:
+.. examine procurement in H-buffer
+.continue NEXT        ? _H|einplan
+?>>>> 'H|dbez   ' 'H|id          ' 'H|artikel     ' 'H|verw   ' '     H|mge' 'H|tterm  ' ' H|typ'  ?  U|xprotokoll
+.continue SP2 ? H|disponiert
+.. not yet scheduled
+.formula U|xmonitor=H|id
+.continue END1
+
+!SP2:
+.. note successor
+.select nolock add eres
+.continue NEXT                   ? _G|mehr
+.type VP29 xschedstack.U|xschedn ? _F|defined(U|xschedstack.U|xschedn)
+.formula U|xschedstack.U|xschedn = H|id
+.formula U|xschedn               = U|xschedn + 1
+.continue NEXT
+
+!RES:
+.. examine reservation in H-buffer
+.. note   successional reservation
+.type VP29 xschedstack.U|xschedn ? _F|defined(U|xschedstack.U|xschedn)
+.formula U|xschedstack.U|xschedn = H|pos^id
+.formula U|xschedn               = U|xschedn + 1  ? _F|empty(U|xschedstack.U|xschedn)
+.continue NEXT                   ? _H|einplan
+?>>>> 'H|dbez   ' 'H|id          ' 'H|artikel     ' 'H|verw   ' '     H|mge' 'H|tterm  ' ' H|typ'  ?  U|xprotokoll
+.continue ART ? H|disponiert
+.. not yet scheduled
+.formula U|xmonitor              = H|id
+.continue END1
+
+!ART:
+.. examine plan chart for product and warehouse group
+.load 9 nolock add H|artikel
+.continue NEXT                   ? _G|mehr
+.copy 9|lgruppean                = H|lgruppe
+.continue RES2                   ? 9|disponiert
+.. not yet scheduled
+.formula U|xmonitor              = H|id
+.continue END1
+
+!RES2:
+.. note all allocated procurements
+.reserve application
+!ALLOC:
+.select nolock application
+.continue NEXT                   ? G|bvkenn=""
+.continue ALLOC                  ? G|bvkenn<>"B"
+.type VP29 xschedstack.U|xschedn ? _F|defined(U|xschedstack.U|xschedn)
+.formula U|xschedstack.U|xschedn = H|id
+.formula U|xschedn               = U|xschedn + 1
+.continue ALLOC
+
+!NEXT:
+.continue END                    ? U|xschedn=0
+.formula U|xschedn               = U|xschedn - 1
+.select nolock add U|xschedstack.U|xschedn
+!NEXT1:
+.continue END1                   ? _G|mehr
+.continue SP                     ? H|typ=ARPOS ; H|typ=FEVOR
+.continue RES                    ? H|typ=RESERV
+.continue F2
+
+!END:
+.formula U|xmonitor              = ""
+!END1:
+.. restore H-buffer
+.select
+.continue
+
+!F0:
+.error Es ist kein zu beobachtendes Dispoobjekt (xmonitor) angegeben.
+.end 1
+
+!F1:
+.error 'H|id' ist weder eine Auftragsposition noch eine Beschaffung
+.end 1
+
+!F2:
+.error 'H|id': unbekannter typ='H|typ'
+.end 1

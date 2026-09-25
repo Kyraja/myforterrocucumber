@@ -1,0 +1,192 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SPED.GEWICHT.TAB
+.. Datum          : 04.12.2007
+.. Version        : 2008r1n00
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Wertet die Struktur der Packmittel auf einem Lieferschein
+..                  aus, um die Gewichte der Packstcke zu berechnen.
+..
+.. Functionality  : Evaluates structure of packing items on a delivery note
+..                  to calculate weight of packets.
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+..   Argument     meaning
+..   ---------------------------------------------------------
+..   buffer H     continueing rows from a delivery note
+..
+..   Returnvalue  meaning
+..   ---------------------------------------------------------
+..   xrsumbrutto  gross weight  del note row
+..   xrsumnetto   net weigth              "
+..   xrsumtara    packing item weight     "     including contained boxes
+..   xrzeiltara   packing item weight only of this packing item
+..   xrartzeile   number of products inside packing item in this row
+..
+..   buffer 2     last item row in del note
+..   buffer 3     row in blanket order to buff-2
+..
+.. Program flow   : called from SPEDWHG.TAB or SPEDAUF.TAB
+..                  This suproutine is called for each row of the delivery
+..                  note. The fetch-cycle and display of rows has to be done
+..                  in the calling program.
+..
+..
+..                  typical scenario: a delivery note with 2 items with
+..                  basic packing structure
+..
+..                  item A
+..                  s packing (contains item A)     |  Level  1  box
+..                  m packing                       |  Level  2  box
+..                  m packing big                   |        etc
+..                  m packing bigger                |  Level  n  palette
+..                  item B
+..                  s packing (contains item B)
+..                  s packing (contains item B)
+..                  m packing
+..                  m packing big
+..                  m packing bigger
+..
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+..  initialize one time per delivery note
+.type bool   xbinitsub           ? _F|defined(U|xbinitsub)
+.continue ENDINIT ?  U|xbinitsub
+..
+..  return values
+.type R9.6   xrsumbrutto         ? _F|defined(U|xrsumbrutto)
+.type R9.6   xrsumnetto          ? _F|defined(U|xrsumnetto)
+.type R9.6   xrsumtara           ? _F|defined(U|xrsumtara)
+.type R9.6   xrzeiltara          ? _F|defined(U|xrzeiltara)
+.type R9.6   xrartzeile          ? _F|defined(U|xrartzeile)
+.type text   xtpackmitken        ? _F|defined(U|xtpackmitken)
+.type text   xtpmtyp             ? _F|defined(U|xtpmtyp)
+..  for use in sped*-infosytems
+.type bool   xbnextrow           ? _F|defined(U|xbnextrow)
+.type bool   xbshowrow           ? _F|defined(U|xbshowrow)
+..
+..  internal use
+.type text   xtsel               ? _F|defined(U|xtsel)
+.type R9.6   xrgewicht           ? _F|defined(U|xrgewicht)
+.type P3     xvlspos1            ? _F|defined(U|xvlspos1)
+..
+..  enumeration PackagingType A215
+.type text   xContainer          ? _F|defined(U|xContainer)
+.type text   xPalette            ? _F|defined(U|xPalette)
+.type text   xBehaelter          ? _F|defined(U|xBehaelter)
+.type text   xPackhilfsmittel    ? _F|defined(U|xPackhilfsmittel)
+.type text   xZwischenlage       ? _F|defined(U|xZwischenlage)
+.type text   xFuellmaterial      ? _F|defined(U|xFuellmaterial)
+.type text   xDeckel             ? _F|defined(U|xDeckel)
+.type text   xLeer               ? _F|defined(U|xLeer)
+..
+.. enumeration PackagingType A215
+.formula U|xContainer       = "(67)"
+.formula U|xPalette         = "(80)"
+.formula U|xBehaelter       = "(66)"
+.formula U|xPackhilfsmittel = "(72)"
+.formula U|xZwischenlage    = "(90)"
+.formula U|xFuellmaterial   = "(70)"
+.formula U|xDeckel          = "(68)"
+.formula U|xLeer            = "(0)"
+..
+.formula U|xbinitsub = true
+!ENDINIT
+..
+..
+..  initialize return values
+.formula U|xrsumbrutto  = 0.0
+.formula U|xrsumnetto   = 0.0
+.formula U|xrsumtara    = 0.0
+.formula U|xrzeiltara   = 0.0
+..
+..  converse text to internal value of enumeration (language compatibility)
+.formula U|xtpmtyp = U|xLeer
+.formula U|xtpmtyp = F|value(H|pmtyp,"AU215")
+..
+.type bool xbgpack ? _F|defined(U|xbgpack)
+.copy U|xbgpack = G|false
+..
+.. construct "packaging material code" from delivery note (Packmittelkennzeichen)
+.formula U|xtpackmitken = ""
+.formula U|xtpackmitken = "S"    ?  H|stufe = 1       &  ( U|xtpmtyp = U|xPalette ; U|xtpmtyp = U|xBehaelter ; U|xtpmtyp = U|xContainer )
+.formula U|xtpackmitken = "M"    ?  H|stufe > 1       &  ( U|xtpmtyp = U|xPalette ; U|xtpmtyp = U|xBehaelter ; U|xtpmtyp = U|xContainer )
+.formula U|xtpackmitken = "G"    ?  U|xtpmtyp = U|xPalette  & ( _F|empty(H|pmgemein) ; H|zusfmenge > 0 )
+.formula U|xtpackmitken = "G"    ?  H|pmgemrefz > 0
+..
+..
+..  ignore non-products / non-packages
+.continue NEXTROW ?  H|artex^gruppe <> 1
+..
+..  product
+.continue PART    ? _H|artex^packmit
+..
+..  not a box or palette
+.continue EMPTY   ?  U|xtpmtyp <> U|xBehaelter  &  U|xtpmtyp <> U|xPalette  &  U|xtpmtyp <> U|xContainer
+..
+..  this palette is located on a different delivery note
+.continue GPNOLAY ?  U|xtpmtyp = U|xPalette    &  _F|empty(H|pmgemein)  &   F|empty(H|walayout)
+.continue GPAL    ?  U|xtpmtyp = U|xPalette    &  _F|empty(H|pmgemein)  &  _F|empty(H|walayout)
+..
+..  box / palette
+.continue PACK
+..
+..
+..
+!PART
+..  keep row with product in buffer 2 (then read packaging into h-buffer)
+.load 2 sales 'H|id'
+..  find row with product in blanket order, and read into buffer 3
+..  Artikel-Kunde (evkopf;evartex;evkotyp;vkkunde;evkovom)
+.formula U|xtsel = "$,,;kotyp=(BlanketOrder);@ablageart=(3);@gruppe=2"
+.formula U|xtsel = U|xtsel + ";kopf="  + 2|zrahmen^id
+.formula U|xtsel = U|xtsel + ";artex=" + H|artex^id
+.formula U|xtsel = U|xtsel + ";kunde=" + 2|kunde^id
+.load 3 sales 'U|xtsel'
+.continue NEXTROW
+..
+..
+!EMPTY
+.continue NEXTROW
+..
+..
+!GPNOLAY: mixed palette without layout
+.continue NEXTROW
+..
+!GPAL: mixed palette with layout
+.formula U|xrsumbrutto    = H|pmgewbrut
+.formula U|xrsumnetto     = H|pmgewnet
+.formula U|xrsumtara      = H|pmgewbrut - H|pmgewnet
+.formula U|xrzeiltara     = H|pmgewbrut - H|pmgewnet
+.formula U|xrartzeile     = H|verpackmge
+.continue SHOWROW
+..
+..
+!PACK: regular  box or palette
+.formula U|xrsumbrutto    = H|pmgewbrut
+.formula U|xrsumnetto     = H|pmgewnet
+.formula U|xrsumtara      = H|pmgewbrut - H|pmgewnet
+.formula U|xrzeiltara     = H|pmgewbrut - H|pmgewnet
+.formula U|xrartzeile     = H|verpackmge
+.continue SHOWROW
+..
+..
+..
+!SHOWROW
+.formula U|xbnextrow = false
+.formula U|xbshowrow = true
+.continue END
+..
+!NEXTROW
+.formula U|xbnextrow = true
+.formula U|xbshowrow = false
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,122 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : KBLSS.BFUSS
+..  Datum          : 18.06.2007
+..  Version        : 1
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : Berichtsfuss-FOP des Infosystems fb/KBLSS
+..
+..  Schnittstelle (Parameter und ihre Bedeutung)
+..    verwendet Arrayparameter (arg.i)          : nein
+..    verwendet Namensparameter (xpname=wert)   : nein
+..
+..    Parameter    Bedeutung
+..    ---------------------------------------------------------
+..    xp...        ...
+..
+..  Ablauf         :
+..
+..  Functionality  :
+..
+..  Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    ---------------------------------------------------------
+..    xp...        ...
+..
+..  Program flow  :
+... Includes      :
+..*****************************************************************************
+.. Variablen
+..*****************************************************************************
+.type R13.2 xesaldo ? _F|defined(U|xesaldo)
+.type ARTR52100 xkreditbetr ? _F|defined(U|xkreditbetr)
+..
+.set trans -
+..
+.formula M|asaldo   = 0
+.formula M|esaldo   = 0
+.formula M|vkzsoll  = 0
+.formula M|vkzhaben = 0
+..
+.continue END  ? F|empty(M|kober)
+..
+.continue ARF  ? M|kober^gruppe <> 1 & M|kober^gruppe <> 3
+.select accrange 'M|kober^id'
+.continue ARSUM
+..
+..*****************************************************************************
+!ARF: Loop over account range form rows
+..*****************************************************************************
+.load 0 accrange 'M|kober^id'
+..
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+.load 0 line
+.continue END  ? _G|mehr
+.continue ACCSUM ?_F|empty(0|konto)
+.continue LOOP   ? F|empty(0|kbereich)
+.select accrange '0|kbereich^id'
+.continue ARSUM
+..
+..*****************************************************************************
+!ACCSUM: Sump up account value
+..*****************************************************************************
+.select object '0|konto^id'
+.formula M|asaldo   = M|asaldo + H|asaldo
+.formula M|esaldo   = M|esaldo + H|esaldo
+.formula M|vkzsoll  = M|vkzsoll  + H|ssum
+.formula M|vkzhaben = M|vkzhaben + H|hsum
+.continue NEXT
+..
+..*****************************************************************************
+!ARSUM: Sum up account range values
+..*****************************************************************************
+.formula M|asaldo   = M|asaldo + H|kbasaldo
+.formula M|esaldo   = M|esaldo + H|kbesaldo
+..
+.. Debit (A90)
+.formula H|reregeln2 = "(6)"
+.formula M|vkzsoll   = M|vkzsoll  + H|kbesaldo
+..
+.. Credit (A90)
+.formula H|reregeln2 = "(7)"
+.formula M|vkzhaben  = M|vkzhaben + H|kbesaldo
+.continue NEXT
+..
+..*****************************************************************************
+!NEXT
+..*****************************************************************************
+.. account range ?
+.continue END ? M|kober^gruppe = 1 ; M|kober^gruppe = 3
+.. account range form assumed
+.continue LOOP
+..
+..*****************************************************************************
+!END: Ende - nun noch fÅr Dashboard Summenzeile anfÅgen
+..*****************************************************************************
+.continue ENDE2 ? _M|inklkredit 
+.select screen header
+.select screen line
+.continue ENDE2 ? _G|mehr
+!SCLOOP
+.formula U|xesaldo     = U|xesaldo + M|tesaldo
+.formula U|xkreditbetr = U|xkreditbetr + M|kreditbetr
+.select screen line
+.continue SCLOOP ? G|mehr
+.select screen line 'M|tzeilen'
+.make screen line +o
+.formula M|tesaldo = U|xesaldo 
+.formula M|kreditbetr = U|xkreditbetr
+.assign M|tbuwaehr = M|buwaehr
+.continue ENDE2
+..*****************************************************************************
+!ENDE2: Programmende
+..*****************************************************************************
+.continue
+

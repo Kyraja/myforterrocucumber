@@ -1,0 +1,138 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ERFLIE.KBULABKOPIEREN.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Kopiert aus einem Auftrag die Zeilen zu einem Artikel
+..                  in die Tabelle in Infosystem ERFLIE
+.. Functionality  : Copies rows to one product from an order into
+..                  table of infosystem ERFLIE
+..*****************************************************************************
+.set trans -
+..
+.type text   xtsel
+..
+.. unit conversion
+.type text   xposphe
+.type bool   xprocreturn
+..
+.type real xlfzahl
+.type real xefzahl
+..
+.. ----------- ----- Events -------- -------------------------------------------
+.continue VORG    ? G|evtartengl = "BUTTON_AFTER"   & G|evtvar = "kbulabvorgae"
+.continue SUCH    ? G|evtartengl = "BUTTON_AFTER"   & G|evtvar = "kbulabsuch"
+.continue KOPI    ? G|evtartengl = "BUTTON_AFTER"   & G|evtvar = "kbulabkopier"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+..
+!VORG
+..  letzten Auftrag zu Rahmen suchen, Zeilen erstellen
+.continue END     ?  F|empty(M|rahmen)
+.select sales 'M|rahmen^id'
+.continue END     ? _G|mehr
+!VORGZEI
+.select line
+.continue END     ? _G|mehr
+.continue VORGZEI ?  F|empty(labediid)  &  F|empty(labnr)  &  F|empty(lztau)
+.formula U|xtsel = "$,,;@gruppe=2;kotyp=(SalesOrder);kopf^nummer==" + 'H|lztau'
+.formula U|xtsel = U|xtsel + ";artex^gruppe=1;artex^packmit=(No)"
+.formula U|xtsel = U|xtsel + ";artex=" + 'M|kartikel^id'     ? _F|empty(M|kartikel)
+.formula U|xtsel = U|xtsel + ";artex="                       ?  F|empty(M|kartikel)
+.select sales 'U|xtsel'
+.continue END     ? _G|mehr
+.formula   M|kuartnr  = H|zkuartnr
+.assign M|kartikel = H|artex^id
+.assign M|kauftrag = H|kopf^id
+.continue PLAUSI
+..
+..
+!SUCH
+..  alle Auftrage zum Rahmen zeigen, einen Aussuchen, dann Zeilen erstellen
+.continue END     ?  F|empty(M|rahmen)
+.formula U|xtsel = "%,,;kotyp=(SalesOrder);kopf^nummer=;kopf^such=;kopf^rahmen=" + 'M|rahmen^id'
+.formula U|xtsel = U|xtsel + ";artex=" + 'M|kartikel^id'     ? _F|empty(M|kartikel)
+.formula U|xtsel = U|xtsel + ";artex="                       ?  F|empty(M|kartikel)
+.formula U|xtsel = U|xtsel + ";kopf^bem=;@autostart=(1)"
+.formula U|xtsel = U|xtsel + ";artex^gruppe=1;artex^packmit=(No)"
+.select sales 'U|xtsel'
+.continue END     ? _G|mehr
+.formula   M|kuartnr  = H|zkuartnr
+.assign M|kartikel = H|artex^id
+.assign M|kauftrag = H|kopf^id
+.continue PLAUSI
+..
+..
+!KOPI
+..  Auftrag ist bereits ausgewaehlt! jetzt nur die Zeilen erstellen
+.continue PLAUSI
+..
+..
+!PLAUSI
+.continue END     ?  F|empty(M|kartikel)
+.continue END     ?  F|empty(M|kauftrag)
+..
+..
+!ZEILEN
+.. vor dem Kopieren alle alten Zeilen wegwerfen
+.make screen line --
+..
+.select sales 'M|kauftrag^id'
+.continue ORITEST ? _G|mehr
+.formula U|xlfzahl = M|lfzahl
+.formula U|xefzahl = M|einfzahl
+!NEXT
+.select line
+.continue PRUEF   ? _G|mehr
+.continue NEXT    ?  H|artex^id   <> M|kartikel^id
+.continue NEXT    ?  H|zrahmen^id <> M|rahmen^id
+.make screen line +O
+.formula M|termint = H|oterm
+.formula M|termcod = H|oterm:8
+.formula M|menge = H|mge
+.formula M|teinhtaz = H|he
+.formula U|xposphe = 'H|he(L=":")'
+.input "EDI.UNITS"
+.formula M|meinheitt = H|he
+.formula M|meinheitt = U|evda ? _F|empty(U|evda)
+.formula U|xlfzahl  = U|xlfzahl + M|menge
+.formula U|xefzahl  = U|xefzahl + M|menge
+.formula M|fzahl = U|xlfzahl
+.formula M|tefz  = U|xefzahl
+.continue NEXT
+..
+!ORITEST: test original message / last delivery forecast
+.continue END     ?  M|kbfab
+.formula U|xtsel = "$,,;@gruppe=0;such=VKAUV;vorart=3;ideksvor=" + M|kauftrag^nummer
+.select edifact 'U|xtsel'
+.continue PRUEF   ? _G|mehr
+.select screen header
+.continue PRUEF   ? _G|mehr
+!ORINEXT
+.select line
+.continue PRUEF   ? _G|mehr
+.continue ORINEXT ?  H|text1 <> "521"
+.continue ORI000  ?  H|text4 / "000000*"
+.continue ORI555  ?  H|text4 / "555555*"
+!ORIMASK
+.select screen line
+.continue PRUEF   ? _G|mehr
+.formula M|termcod = H|text4
+.continue ORINEXT
+!ORI555
+.make screen line +O
+.formula M|termcod = "555555"
+.continue ORINEXT
+!ORI000
+.make screen line +O
+.formula M|termcod = "000000"
+.continue ORINEXT
+..
+!PRUEF
+.input "dfue/ERFLIE.KBUPRUEFEN.BN"
+..
+..*****************************************************************************
+!END
+.continue

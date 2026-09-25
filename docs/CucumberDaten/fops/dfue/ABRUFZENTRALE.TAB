@@ -1,0 +1,121 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ABRUFZENTRALE.TAB
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : Read and evaluate the most recent "previous" edi messages
+..                  for the same blanket order and product
+...Includes       :
+..  include     dfue/ABRUFZENTRALE.TAB.INIT
+..  include     dfue/ABRUFZENTRALE.TAB.KENNZAHLEN
+..  include     dfue/ABRUFZENTRALE.TAB.MENGEN
+..  include     dfue/ABRUFZENTRALE.TAB.STATUS
+..  include     dfue/ABRUFZENTRALE.TAB.SUMMEN
+..  include     dfue/ABRUFZENTRALE.TAB.LIEFERUNGEN
+..*****************************************************************************
+.set trans -
+..
+..  Buffer 0 has the most recent edi message
+..  Buffer H the matching blanket order item
+..
+..  Buffer 1 is used to find the the previous edi messages for same
+..  0|ideksrah, 0|ideksart.
+..
+.type text  xtfeld   ? _F|defined(U|xtfeld)
+.type text  xtdiff   ? _F|defined(U|xtdiff)
+.type text  xtselEDI ? _F|defined(U|xtselEDI)
+..
+.. Query EDI messages
+.formula U|xtselEDI = F|formatstr("$,,;@gruppe=0;erfass={1}!{2};ideksrah={3};ideksart={4};idkundesab={5};edinachr=2101!2102;@ordnung=nummer.rueckwaerts", M|kletztertermin, M|kstichtag, 0|ideksrah, 0|ideksart, 0|idkundesab) ? _M|kbnurlieferabrufe
+.formula U|xtselEDI = F|formatstr("$,,;@gruppe=0;erfass={1}!{2};ideksrah={3};ideksart={4};idkundesab={5};edinachr=2101;@ordnung=nummer.rueckwaerts", M|kletztertermin, M|kstichtag, 0|ideksrah, 0|ideksart, 0|idkundesab)  ?  M|kbnurlieferabrufe
+.load 1 edifact 'U|xtselEDI'
+.continue END  ?   _G|mehr
+..
+.make screen line +O
+.colour  -foreground -1 -1 -1  -background -1 -1 -1  'M|aktzeile'
+.formula M|trahmen = H|kopf^id
+.formula M|trahmenpos = H|id
+.formula M|tkunde = H|kopf^kunde^id
+.formula M|tbetreuer = H|kopf^betreuer^id
+.formula M|tartikel = H|artex^id
+.formula M|tartikelbez = H|artex^sucherw
+.formula M|tzkuartnr = H|zkuartnr
+.formula M|tediffzeitraum = H|zefzdiff
+.formula M|tediffprozent = H|fzdiff
+..
+.formula M|tbuchartz = "icon:text"
+..
+.type integer xi ? _F|defined(U|xi)
+.formula U|xi = 0
+..
+!SHOWEDI
+.input "dfue/ABRUFZENTRALE.TAB.INIT"
+..
+.formula M|tedi.xi = 1|id
+.formula M|tabrufnummer.xi = 1|labruf
+.formula M|tabrufdatum.xi = 1|labrufd
+.formula M|tabruftyp.xi = "(1)"  ?  1|funktion <> "915"
+.formula M|tabruftyp.xi = "(2)"  ?  1|funktion =  "915"
+..
+!NZEILEN
+.load 1 line
+.continue EZEILEN ? _G|mehr
+.continue EARLY   ?  1|zn = 1  & _F|empty(M|tediffzeitraum)
+.continue NZEILEN ?  F|empty(1|abdattyp)
+.continue OTHER   ? _F|empty(M|terstertermin.xi)
+.continue FIRST
+!EARLY: old early warning system
+.formula U|xtdiff = "0"
+.formula U|xtdiff =  1|text24>>":"  ?  1|text24/"DI:*"
+.assign M|tedifwdiff.xi = U|xtdiff
+.continue NZEILEN
+!FIRST
+.formula M|terstertermin.xi = 1|nabdat
+.formula M|terstemenge.xi = 1|nabmge
+!OTHER
+.formula U|xhorizont = M|thorizont.xi
+.formula M|thorizont.xi = 1|nabdat                               ?  '1|nabdat:8' > 'U|xhorizont:8'
+.formula M|tvolumen.xi  = M|tvolumen.xi + 1|nabmge
+.. Critical schedules
+.formula M|trueckstand.xi = M|trueckstand.xi + 1|nabmge          ?  '1|abdattyp(L=":")' = "(Backlog)"
+.formula M|tsofortbedarf.xi = M|tsofortbedarf.xi + 1|nabmge      ?  '1|abdattyp(L=":")' = "(ImmediateRequirement)"
+..
+.. Add quantities in x-fields
+.input "dfue/ABRUFZENTRALE.TAB.MENGEN"
+.continue NZEILEN
+!EZEILEN
+..
+.. Put quantities into screen fields
+.input "dfue/ABRUFZENTRALE.TAB.SUMMEN"
+..
+!NEXTEDI
+.formula U|xi = xi +1
+.load 1 edifact
+.continue ENDEDI  ? _G|mehr ;  xi > 5
+.continue SHOWEDI
+!ENDEDI
+.load 1
+..
+.. Calculate Forecast Quality and Tracking Signal
+.input "dfue/ABRUFZENTRALE.TAB.KENNZAHLEN"
+..
+.. Assign Status
+.input "dfue/ABRUFZENTRALE.TAB.STATUS"
+.input "ABRUFZENTRALE.TAB.STATUS"      ?   M|kbindivstatus  &  F|foppath("ABRUFZENTRALE.TAB.STATUS") <> F|foppath("dfue/ABRUFZENTRALE.TAB.STATUS")
+..
+.. Remove rows with non-critical forecast schedules
+.continue ZEIGEN  ?    M|kbfilteralle
+.continue ZEIGEN  ?    M|kbfilterrueckstand &  U|xbrueckstandkritisch
+.continue ZEIGEN  ?    M|kbfilterfwdiff     &  U|xbfwdiffkritisch
+.continue ZEIGEN  ?    M|kbfilterfqgruen    & (M|tstatuskennz=M|kstatusgruen)
+.continue ZEIGEN  ?    M|kbfilterfqgelb     & (M|tstatuskennz=M|kkenngelb)
+.continue ZEIGEN  ?    M|kbfilterfqrot      & (M|tstatuskennz=M|kkennrot)
+.. Remove row
+.make screen line -O
+.continue  END
+!ZEIGEN
+..
+..*****************************************************************************
+!END
+.continue

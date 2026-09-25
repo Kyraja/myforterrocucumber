@@ -1,0 +1,117 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : RELRAL.BSTART.BV
+.. Autor          : fwester/cl
+.. Verantwortlich : cl 
+.. Kontrolle      : tiwe
+.. Funktion       : FÑhrt die BereichsprÅfungen durch und formuliert die
+.. Datenbankanfrage im Feld "select".
+.. Ablauf         : Button-vor-EFOP
+..
+.. Functionality  : Checks ranges and builds the database query in the item "select".
+.. Program flow   : Button before efop
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type P3:1 xinvoice ? _F|defined(M|eingehend)
+.type P4:1 xinvoice ?  F|defined(M|eingehend)
+.type AS193 xfiling
+.type text xorder
+.type bool xhasbookdate
+..
+.assign M|pos = 0
+..
+.copy M|mitpos = G|TRUE ? _F|empty(M|kprojekt)
+..
+.. Nothing to do while selection bar is active
+.continue PREPARE ? M|selektion
+..
+.. check range of dates if necessary
+.copy U|xhasbookdate = ('M|von' <> "" ; 'M|bis' <> "")
+.continue NUMBER ? _U|xhasbookdate
+.assign U|xinvoice = "$,,;budat=" + M|von:8 + "!" + M|bis:8 + ";@lesen=" + 'G|FALSE'
+.continue NUMBER ? G|mehr
+.error
+.cursor von
+.end 1
+..
+!NUMBER: check number/searchword range
+.continue BUILD ? F|empty(M|vonbeleg) & F|empty(M|bisbeleg)
+.assign U|xinvoice = "$,,;@numsuch=" + M|vonbeleg + "!" + M|bisbeleg + ";@lesen=" + 'G|FALSE'
+.continue BUILD ? G|mehr
+.error
+.cursor vonbeleg
+.end 1
+..
+!BUILD: create query
+.assign M|select = "$,,"
+..
+.. add default criterion for document type invoice & add "stlaart" | "vorganga" if its not empty
+.formula M|select = M|select + ";ktyp==5"
+.formula M|select = M|select + ";stlaart=" + M|kstlaart    ?  _F|empty(M|kstlaart)
+.formula M|select = M|select + ";vorganga=" + M|vorganga   ?  _F|empty(M|vorganga)  
+..
+.. setting filing mode
+.continue ALIVE ? M|aktive & _M|ablage
+.continue FILED ? M|ablage & _M|aktive
+..
+.. filing mode is both
+.assign U|xfiling = "(Both)"
+.continue CRITERI
+..
+!ALIVE: filing mode is alive
+.assign U|xfiling = "(Active)"
+.assign U|xorder = "budat"
+.continue CRITERI
+..
+!FILED: filing mode is filed
+.assign U|xfiling = "(Filed)"
+.continue CRITERI
+..
+!CRITERI: add criterion for invoice recipient
+.continue BOOKDATE ? F|empty(M|nurkunde)
+.continue INCOME ? F|defined(M|eingehend)
+..
+.. select outgoing invoices
+.formula U|xorder = "reempf," + U|xorder ? U|xfiling = "(Active)"
+.formula M|select = M|select + ";reempf=" + M|nurkunde^id
+.continue BOOKDATE
+..
+!INCOME: select incoming invoices
+.formula U|xorder = "resteller," + U|xorder ? U|xfiling = "(Active)"
+.formula M|select = M|select + ";resteller=" + M|nurkunde^id
+..
+!BOOKDATE: add criterion for booking date
+.continue NUMBSW ? _U|xhasbookdate
+.formula M|select = M|select + ";budat=" + 'M|von:8' + "!" + 'M|bis:8'
+..
+!NUMBSW: add criterion for number or searchword if neccessary
+.continue REPRSNT ? F|empty(M|vonbeleg) & F|empty(M|bisbeleg)
+..
+.formula M|select = M|select + ";@numsuch="
+.formula M|select = M|select + (M|vonbeleg * "+#X") + "!" + (M|bisbeleg * "+#X")
+..
+!REPRSNT: add criterion for representative
+.continue EXNUM ? F|defined(M|eingehend)
+.continue SUPPORT ? F|empty(M|nurvertreter)
+.formula M|select = M|select + ";vertret=" + M|nurvertreter^id
+..
+!SUPPORT: add criterion for supporter
+.continue PREPARE ? F|empty(M|nurbetreuer)
+.formula M|select = M|select + ";betreuer=" + M|nurbetreuer^id
+.continue PREPARE
+..
+!EXNUM: External number of purchasing document
+.continue PREPARE ? F|empty(M|kebeleg)
+.formula M|select = M|select + ";ebeleg==" + M|kebeleg * "+#X"
+..
+!PREPARE: prepare new query
+.formula M|select = M|select + ";@ablageart=" + U|xfiling ? _M|selektion
+.formula M|select = M|select + ";@ordnung=" + U|xorder    ? _F|empty(U|xorder)
+.assign M|stufe = 1
+.input "ev/RELRAL.INIT.SUMMEN"
+.input "is/TABLEEREN"
+..*****************************************************************************
+!END
+.continue

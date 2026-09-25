@@ -1,0 +1,233 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : APAPIER.TAB
+.. Datum/Date     : 20.03.05
+.. Version        : 2005
+.. Autor/Author   : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+..
+.. Funktion       : Tabellen-FOP fr Infosystem APAPIER
+..                  Dient zum Drucken der Arbeitspapiere mit JasperReport
+..
+.. Functionality  : Printing shop floor papers with JasperReport
+..
+.. Ablauf         : Holt einen Betriebsauftrag und fllt Kopf- und Tabellen-
+..                  felder fr den Jasper-Druck
+..
+.. Program flow   : Select work order
+..
+.. Includes       :
+..  include fe/APAPIER.ELEM
+..*****************************************************************************
+.set trans -
+.type text  xag         ? _F|defined(U|xag)
+.type text  xta         ? _F|defined(U|xta)
+.type bool  xraus       ? _F|defined(U|xraus)
+.type text  xsel        ? _F|defined(U|xsel)
+.type text  xplatzlager ? _F|defined(U|xplatzlager)
+.type text  xtaeinh     ? _F|defined(U|xtaeinh)
+.type integer   xnewpage    ? _F|defined(U|xnewpage)
+.type bool  xbkzeile    ? _F|defined(U|xbkzeile)
+..
+.continue ERROR          ?  F|empty(M|banummer)
+.select add M|banummer
+.continue ERROR1         ? _G|mehr
+.continue ERROR          ? _F|empty(H|ag)
+..
+.copy M|basvorhanden = G|FALSE
+.copy M|bmatvorhanden = G|FALSE
+.copy U|xbkzeile = G|FALSE
+..
+.formula M|banummer = H|nummer
+.formula M|vom      = H|vom
+.copy M|mgr    = H|mgr
+.formula M|mge      = H|mge
+.formula M|status   = H|status
+.formula M|verw     = H|verw
+.formula U|xag      = H|ag
+.formula M|datum    = G|datum
+.formula M|barcode  = H|lres^rueckdoku^barcode ? F|empty(M|barcode)
+.assign  M|artikel  = H|art
+.assign M|basisartikel = H|art^basisartikel
+.assign M|projekt   = H|projekt
+..
+.add H|art^id
+.copy M|artle     = D|le
+.formula M|artzeichn   = D|zeichn
+.assign M|artwstoff = D|wstoff ? G|mehr
+.formula M|artsuch     = D|such
+.formula M|artnum      = D|nummer
+.copy U|xbkzeile  = G|TRUE   ? D|ozeilen = 0
+..
+.. Fertigungsvorschlag
+.select add lres
+.continue END ? _G|mehr
+..
+.formula M|tsterm    = H|tsterm
+.formula M|tterm     = H|tterm
+..
+.. Tabelle leeren
+.make screen line -- ? M|tzeilen > 0
+..
+.. zur ersten Reservierung
+.select add eres
+.continue END                      ? _G|mehr
+.copy U|xbkzeile  = G|FALSE  ?  G|mehr
+.formula U|xnewpage = 0
+..
+!FOPKOPF: individual FOP for header fields
+.input "fe/FOPKOPFAPAPIER"
+.continue END   ? U|xbkzeile
+..
+!START: Informationen aus dem BA
+.continue ZEILE ?  H|anzahl = 0 & H|amge = 0
+.. nicht relevante Reservierungen berspringen
+.continue ZEILE ? _H|relevant
+..
+.copy U|xbkzeile = G|FALSE
+..
+!MACHZEILE
+.make screen line +O
+.formula M|newpage = U|xnewpage
+..
+.continue KEINARTIKEL           ? _H|elart = 1 & _H|elart = 4
+.. Artikel oder Lohnfertigung (elart = 1 / elart = 4)
+.copy M|bmatvorhanden = G|TRUE
+.copy M|elart = H|elart
+.formula M|menge   = H|menge
+.formula M|menge   = H|elanzahl ? H|elem^packmit
+.formula M|tgesmge = H|frgmge
+.formula M|lge     = H|lge
+.formula M|breite  = H|breite
+.copy M|ze         = H|ze
+.formula M|vpos    = H|vpos
+.formula M|anzahl  = H|anzahl
+.formula M|ttsterm = H|tsterm
+.formula M|ttterm  = H|tterm
+.formula M|ptext   = H|ptext
+.formula M|lgr     = H|lgr
+.copy M|lme   = H|lme    ? M|elart = 1
+.copy M|bme   = H|bme    ? M|elart = 1
+.. Position nicht andrucken - Koppelprodukte und Umbauartikel auf Materialschein und Entnahmeliste
+.copy M|posnoprint = "1"  ? F|equals(H|kompeig,"(Coproduct)")
+.copy M|posnoprint = "1"  ? F|equals(H|kompeig,"(ConversionProduct)")
+.formula M|kompeig = H|kompeig ? F|equals(M|posnoprint, "1") 
+..
+.. Artikelinformationen
+.add H|elem^id
+.input "fe/APAPIER.ELEM"
+.add
+..
+.add H|platz^id
+.continue WEITER  ? _G|mehr
+.assign M|platzsuch = D|id
+.formula M|platzname   = D|sucherw
+..
+.add D|lager^id
+.continue NAECHST ? _G|mehr
+.assign M|lagersuch = D|id
+..
+!WEITER: Positionstext / Item description
+.formula M|ptext = H|ptext
+..
+!MZ: Materialzuordnung / material allocation
+.reserve fifo
+.assign M|mzid  = H|id
+..
+!FIFO:
+.select fifo
+.continue ZEILE
+..
+!KEINARTIKEL: Fertigungsmittel oder Arbeitsgang / Means of Production or Operation
+.continue KEINFERTIG ? _H|elart = 2
+..
+.. Fertigungsmittel (elart = 2)
+.copy M|elart  = H|elart
+.formula M|menge    = H|anzahl
+.formula M|tgesmge  = H|anzahl
+.formula M|vpos     = H|vpos
+.formula M|ptext    = H|ptext
+..
+.add H|elem^id
+.input "fe/APAPIER.ELEM"
+..
+.add D|platz^id
+.continue NAECHST ? _G|mehr
+.assign M|platzsuch = D|id
+..
+.add D|lager^id
+.continue NAECHST ? _G|mehr
+.assign M|lagersuch = D|id
+..
+!NAECHST
+.formula U|xplatzlager = M|lagersuch + "/" + M|lagersuch
+.add
+.continue ZEILE
+..
+!KEINFERTIG: Arbeitsgang / Operation (elart = 3)
+.make screen line -O ? _H|aschein
+.continue ZEILE         ? _H|aschein
+.add H|elem^id
+.continue MARKE         ? _G|mehr
+.copy M|elart = H|elart
+.input "fe/APAPIER.ELEM"
+.add
+..
+!MARKE
+.formula M|lge     = H|lge
+.formula M|breite  = H|breite
+.copy M|lme   = H|zr
+.copy M|bme   = H|ze
+.formula M|menge   = H|anzahl
+.formula M|tgesmge = H|vzeit
+.formula M|anzahl  = H|anzahl
+.formula M|ttsterm = H|tsterm
+.formula M|ttterm  = H|tterm
+.formula M|vpos    = H|vpos
+.formula M|ptext   = H|ptext
+.formula M|lgr     = H|lgr
+..
+.add H|mgr
+.continue AS                  ? _G|mehr
+.formula M|mgrnum  = D|nummer
+.formula M|mgrsuch = D|such
+.formula M|mgrname = D|sucherw
+.assign M|abtlg = D|abtlg ?  G|mehr
+.add
+..
+!AS: Arbeitsschein
+.add H|as
+.continue ZEILE     ? _G|mehr
+.formula M|asnum   = D|nummer
+.copy M|basvorhanden = G|TRUE   ? _F|empty(M|asnum)
+.formula M|kasnum  = M|asnum
+.formula M|tgesmge = D|vzeit
+.add
+..
+!ZEILE
+.continue HOLEZEILE                    ? _H|aschein & H|elart = 3
+..  individual FOP for table fields
+.input "fe/FOPZEILEAPAPIER"            ?  H|anzahl > 0 ; H|amge > 0
+..
+!HOLEZEILE
+.select line
+.formula U|xnewpage = U|xnewpage + 1
+.continue END  ? _G|mehr
+.continue START
+..
+!END: individual FOP for fields after the table
+.input "fe/FOPENDEAPAPIER"
+.continue
+..
+!ERROR
+.error Bitte w„hlen Sie einen Betriebsauftrag.
+.formula M|banummer = ""
+.cursor banummer
+.end 1
+..
+!ERROR1
+.error Gew„hlter Betriebsauftrag existiert nicht mehr.
+.formula M|banummer = ""
+.cursor banummer
+.end 1

@@ -1,0 +1,142 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Author         : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  : 
+..*****************************************************************************
+.set trans -
+..
+..!meta M|=fb/ZM
+..
+.formula M|adatum = "."
+.formula M|edatum = "."
+..
+.continue END ? F|empty(M|jahr) ; F|empty(M|intervall)
+..
+.type AS60 xintervall ? _F|defined(U|xintervall)
+.type integer xstart ? _F|defined(U|xstart)
+.type integer xende ? _F|defined(U|xende)
+.type GD xdstartdate ? _F|defined(U|xdstartdate)
+.type GD xdenddate ? _F|defined(U|xdenddate)
+.type bool freiePeriode ? _F|defined(U|freiePeriode)
+..
+.formula U|xdstartdate = "."
+..
+.. Ohne Jahr keine frei definierbaren Geschschaeftsmonate
+.copy U|freiePeriode = G|false
+.load 1 company 'F|formatstr("$,,@zeilen=1;gjahr={1}", M|jahr)'
+.continue SKIP ? _G|mehr
+.load 1 line '1|selzeile'
+.continue SKIP ? _G|mehr
+.copy U|freiePeriode = 1|frdefgm
+.load 1
+..
+!SKIP
+..*****************************************************************************
+.copy U|xintervall = M|intervall
+..
+.continue MFP ? U|xintervall = "(Monthly)" & U|freiePeriode
+.continue QFP ? U|xintervall = "(Quarterly)" & U|freiePeriode
+.continue YFP ? U|xintervall = "(Annually)" & U|freiePeriode
+..
+.continue M ? U|xintervall = "(Monthly)"
+.continue Q ? U|xintervall = "(Quarterly)"
+.continue Y ? U|xintervall = "(Annually)"
+..
+.continue END
+..*****************************************************************************
+!MFP
+..*****************************************************************************
+.continue END ? M|periode > 12 ; M|periode < 1
+..
+.formula U|xstart = M|periode
+.formula U|xende = M|periode
+..
+.continue SETFP
+..*****************************************************************************
+!QFP
+..*****************************************************************************
+.continue END ? M|periode > 4 ; M|periode < 1
+..
+.formula U|xstart = M|periode * 3 - 2
+.formula U|xende = M|periode * 3
+..
+.continue SETFP
+..*****************************************************************************
+!YFP
+..*****************************************************************************
+.continue END ? M|jahr < 1995
+..
+.formula U|xstart = 1
+.formula U|xende = 12
+..
+.continue SETFP
+..
+..*****************************************************************************
+!SETFP
+..*****************************************************************************
+.select year 'M|jahr' 'U|xstart' 'U|xende'
+.continue END ? _G|mehr
+.copy M|adatum = G|adatum
+.copy M|edatum = G|edatum
+..
+.continue END
+..*****************************************************************************
+!M
+..*****************************************************************************
+.continue END ? M|periode > 12 ; M|periode < 1
+..
+.. set year
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdstartdate, "GD8")' method=set field=YEAR amount='M|jahr' return=xdstartdate
+.. set start date to first day of month
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdstartdate, "GD8")' method=set field=DAY_OF_MONTH amount=1 return=xdstartdate
+.. set month
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdstartdate, "GD8")' method=set field=MONTH amount='M|periode' return=xdstartdate
+.. set end date to last day of month
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdstartdate, "GD8")' method=setActualMaximum field=DAY_OF_MONTH return=xdenddate
+..
+.continue SET
+..*****************************************************************************
+!Q
+..*****************************************************************************
+.continue END ? M|periode > 4 ; M|periode < 1
+..
+.. set year
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdstartdate, "GD8")' method=set field=YEAR amount='M|jahr' return=xdstartdate
+.. set month
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdstartdate, "GD8")' method=set field=MONTH amount='F|condexpr(M|periode=1, 1, F|condexpr(M|periode=2, 4, F|condexpr(M|periode=3, 7, 10)))' return=xdstartdate
+.. set start date to first day of month
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdstartdate, "GD8")' method=set field=DAY_OF_MONTH amount=1 return=xdstartdate
+.. set start month to start of quarter
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdstartdate, "GD8")' method=set field=MONTH amount='F|round(F|expr(F|ceiling(F|month(U|xdstartdate)/3)*3-2),0)' return=xdstartdate
+.. set end month to end of quarter
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdstartdate, "GD8")' method=add field=MONTH amount=2 return=xdenddate
+.. set end date to last day of month
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdenddate, "GD8")' method=setActualMaximum field=DAY_OF_MONTH return=xdenddate
+..
+.continue SET
+..*****************************************************************************
+!Y
+..*****************************************************************************
+.continue END ? M|jahr < 1995
+..
+.. set year
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdstartdate, "GD8")' method=set field=YEAR amount='M|jahr' return=xdstartdate
+.. set start date to first day of year
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdstartdate, "GD8")' method=set field=DAY_OF_YEAR amount=1 return=xdstartdate
+.. set end date to last day of year
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdstartdate, "GD8")' method=setActualMaximum field=DAY_OF_YEAR return=xdenddate
+..
+.continue SET
+..*****************************************************************************
+!SET
+..*****************************************************************************
+.copy M|adatum = U|xdstartdate
+.copy M|edatum = U|xdenddate
+..
+.continue END
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

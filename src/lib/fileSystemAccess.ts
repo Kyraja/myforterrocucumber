@@ -28,6 +28,46 @@ import { openDb, IDB_FILE_HANDLES_STORE } from './idb';
 
 const IDB_HANDLE_KEY = 'rootDirectoryHandle';
 const IDB_FOP_HANDLE_KEY = 'fopDirectoryHandle';
+const IDB_RECENT_WORKSPACES_KEY = 'recentWorkspaces';
+const MAX_RECENT_WORKSPACES = 8;
+
+export interface RecentWorkspace {
+  name: string;
+  handle: FileSystemDirectoryHandle;
+  lastOpened: string;
+}
+
+export async function loadRecentWorkspaces(): Promise<RecentWorkspace[]> {
+  try {
+    const db = await openDb();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_FILE_HANDLES_STORE, 'readonly');
+      const req = tx.objectStore(IDB_FILE_HANDLES_STORE).get(IDB_RECENT_WORKSPACES_KEY);
+      req.onsuccess = () => { db.close(); resolve(Array.isArray(req.result) ? req.result as RecentWorkspace[] : []); };
+      req.onerror = () => { db.close(); resolve([]); };
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function saveRecentWorkspace(handle: FileSystemDirectoryHandle): Promise<RecentWorkspace[]> {
+  const existing = await loadRecentWorkspaces();
+  const filtered = existing.filter((w) => w.name !== handle.name);
+  const updated: RecentWorkspace[] = [
+    { name: handle.name, handle, lastOpened: new Date().toISOString() },
+    ...filtered,
+  ].slice(0, MAX_RECENT_WORKSPACES);
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_FILE_HANDLES_STORE, 'readwrite');
+    tx.objectStore(IDB_FILE_HANDLES_STORE).put(updated, IDB_RECENT_WORKSPACES_KEY);
+    tx.oncomplete = () => { db.close(); resolve(updated); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+const IDB_SHARED_SETTINGS_HANDLE_KEY = 'sharedSettingsDirectoryHandle';
+const HIDDEN_EXPLORER_FOLDERS = new Set(['.cucumbergnerator-settings', '.fopanalyzer']);
 
 /** Save the FOP directory handle to IndexedDB */
 export async function saveFopDirectoryHandle(handle: FileSystemDirectoryHandle): Promise<void> {
@@ -63,6 +103,44 @@ export async function clearFopDirectoryHandle(): Promise<void> {
     tx.objectStore(IDB_FILE_HANDLES_STORE).delete(IDB_FOP_HANDLE_KEY);
     tx.oncomplete = () => db.close();
   } catch { /* ignore */ }
+}
+
+/** Save the shared settings directory handle to IndexedDB */
+export async function saveSharedSettingsDirectoryHandle(handle: FileSystemDirectoryHandle): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_FILE_HANDLES_STORE, 'readwrite');
+    tx.objectStore(IDB_FILE_HANDLES_STORE).put(handle, IDB_SHARED_SETTINGS_HANDLE_KEY);
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
+/** Load a previously saved shared settings directory handle from IndexedDB */
+export async function loadSharedSettingsDirectoryHandle(): Promise<FileSystemDirectoryHandle | null> {
+  try {
+    const db = await openDb();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_FILE_HANDLES_STORE, 'readonly');
+      const req = tx.objectStore(IDB_FILE_HANDLES_STORE).get(IDB_SHARED_SETTINGS_HANDLE_KEY);
+      req.onsuccess = () => { db.close(); resolve(req.result ?? null); };
+      req.onerror = () => { db.close(); resolve(null); };
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** Clear the saved shared settings directory handle */
+export async function clearSharedSettingsDirectoryHandle(): Promise<void> {
+  try {
+    const db = await openDb();
+    const tx = db.transaction(IDB_FILE_HANDLES_STORE, 'readwrite');
+    tx.objectStore(IDB_FILE_HANDLES_STORE).delete(IDB_SHARED_SETTINGS_HANDLE_KEY);
+    tx.oncomplete = () => db.close();
+  } catch {
+    // ignore
+  }
 }
 
 /** Check if the File System Access API is available (Chrome/Edge only) */
@@ -171,7 +249,7 @@ export async function createFeatureFile(
   const writable = await fileHandle.createWritable();
   const featureName = name.replace(/\.feature$/, '');
   const guid = makeFeatureGuid('', featureName);
-  await writable.write(`@${guid}\nFeature: ${featureName}\n`);
+  await writable.write(`@guid-${guid}\nFeature: ${featureName}\n`);
   await writable.close();
   return fileHandle;
 }
@@ -182,6 +260,54 @@ export async function deleteFile(
   name: string,
 ): Promise<void> {
   await parentHandle.removeEntry(name);
+}
+
+/**
+ * Duplicate a file in the same directory.
+ *
+ * Naming scheme:
+ * - `name.ext` -> `name (copy).ext`
+ * - if already present -> `name (copy 2).ext`, `name (copy 3).ext`, ...
+ *
+ * @param parentHandle - Directory that contains the source file
+ * @param sourceName - Existing file name to duplicate
+ * @returns Handle + name of the created duplicate file
+ */
+export async function duplicateFile(
+  parentHandle: FileSystemDirectoryHandle,
+  sourceName: string,
+): Promise<{ fileHandle: FileSystemFileHandle; fileName: string }> {
+  const sourceFileHandle = await parentHandle.getFileHandle(sourceName);
+  const sourceFile = await sourceFileHandle.getFile();
+  const content = await sourceFile.text();
+
+  const dotIndex = sourceName.lastIndexOf('.');
+  const hasExtension = dotIndex > 0;
+  const baseName = hasExtension ? sourceName.slice(0, dotIndex) : sourceName;
+  const extension = hasExtension ? sourceName.slice(dotIndex) : '';
+
+  const exists = async (fileName: string): Promise<boolean> => {
+    try {
+      await parentHandle.getFileHandle(fileName);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  let duplicateName = `${baseName} (copy)${extension}`;
+  let counter = 2;
+  while (await exists(duplicateName)) {
+    duplicateName = `${baseName} (copy ${counter})${extension}`;
+    counter++;
+  }
+
+  const duplicateHandle = await parentHandle.getFileHandle(duplicateName, { create: true });
+  const writable = await duplicateHandle.createWritable();
+  await writable.write(content);
+  await writable.close();
+
+  return { fileHandle: duplicateHandle, fileName: duplicateName };
 }
 
 /**
@@ -308,6 +434,8 @@ export async function readDirectoryTree(
 
   for await (const [name, handle] of dirHandle.entries()) {
     if (handle.kind === 'directory') {
+      // Hide internal app metadata folders from the test/sidebar explorer UI.
+      if (HIDDEN_EXPLORER_FOLDERS.has(name)) continue;
       const path = parentPath ? `${parentPath}/${name}` : name;
       const subDirHandle = await dirHandle.getDirectoryHandle(name);
       const children = await readDirectoryTree(subDirHandle, path);

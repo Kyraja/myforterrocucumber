@@ -1,0 +1,524 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           :     CREATE.BANKIMPORT
+.. Date           :     18/11/2014
+.. Version        :     1.0     
+.. Author         :     rasc
+.. Copyright      :
+.. Functionality  :     Create File for Bankimport
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xtsel            ? _F|defined(U|xtsel)
+.type text U|xttmp            ? _F|defined(U|xttmp)
+.type text U|xttmp1           ? _F|defined(U|xttmp1)
+.type text U|xtzeile          ? _F|defined(U|xtzeile)
+.type text U|xtwort           ? _F|defined(U|xtwort)
+.type text U|xtbudat          ? _F|defined(U|xtbudat)
+.type text U|xtvdat           ? _F|defined(U|xtvdat)
+..
+.. ----------------------------------------------------------
+.. Ausgabedateien und Pfade.
+.. ----------------------------------------------------------
+.type text U|xtexportdat      ? _F|defined(U|xtexportdat)
+.type text U|xtprotdat        ? _F|defined(U|xtprotdat)
+.type text U|xtauspfad        ? _F|defined(U|xtauspfad)
+.type text U|xtsys            ? _F|defined(U|xtsys)
+.type integer  U|xizaehl1     ? _F|defined(U|xizaehl1)
+.type integer  U|xizaehl2     ? _F|defined(U|xizaehl2)
+..
+.. ----------------------------------------------------------
+.. U|xizaeausg    - ZÑhlt die in die Datei ausgegebenen Zeilen.
+.. U|xizaezzob    - ZÑhlt die im Zahlungsobligo durchlaufenen Zeilen.
+.. ----------------------------------------------------------
+.type integer  U|xizaeausg    ? _F|defined(U|xizaeausg)
+.type integer  U|xizaezzob    ? _F|defined(U|xizaezzob)
+..
+.. ----------------------------------------------------------
+.. Kontoauszugsdaten
+.. U|xiktoazu  - Nummer des Kontoauszugs.
+.. U|xiktoabl  - Nummer des Kontoauszugsblattes.
+.. U|xiktoabm  - Ab der Anzahl wird Blattzahl fÅr lfd. Nr. erhîht.
+.. U|xdvdat    - Valutadatum fÅr Kontoauszug
+.. U|xivdatz   - Valutadatum au Abas + U|x-Tage fÅr Kto-Auszug.
+.. ----------------------------------------------------------
+.type I5    U|xiktoazu        ? _F|defined(U|xiktoazu)
+.type I5    U|xiktoabl        ? _F|defined(U|xiktoabl)
+.type integer   U|xiktoabm    ? _F|defined(U|xiktoabm)
+.type GD2   U|xdvdat          ? _F|defined(U|xdvdat)
+..
+.type integer   U|xivdatz     ? _F|defined(U|xivdatz)
+..
+.. Kontodaten
+.type text U|xtkonum          ? _F|defined(U|xtkonum)
+.type text U|xtiban           ? _F|defined(U|xtiban)
+.type text U|xtkowaehr        ? _F|defined(U|xtkowaehr)
+.. Bankdaten
+.type text U|xtbank           ? _F|defined(U|xtbank)
+.type text U|xtbname          ? _F|defined(U|xtbname)
+.type text U|xtstaat          ? _F|defined(U|xtstaat)
+.type text U|xtort            ? _F|defined(U|xtort)
+.type text U|xtiident         ? _F|defined(U|xtiident)
+.type text U|xtnident         ? _F|defined(U|xtnident)
+.type text U|xtnident2        ? _F|defined(U|xtnident2)
+.type text U|xtlaiw           ? _F|defined(U|xtlaiw)
+.type text U|xtiso2           ? _F|defined(U|xtiso2)
+.. Bankverbindung der öberweisungszeile
+.type text U|xtzbverb         ? _F|defined(U|xtzbverb)
+.type text U|xtzbank          ? _F|defined(U|xtzbank)
+.type text U|xtzkoinh         ? _F|defined(U|xtzkoinh)
+.type R9.2 U|xrzsaldo         ? _F|defined(U|xrzsaldo)
+.type text U|xtzrefnr         ? _F|defined(U|xtzrefnr)
+..
+.. -------------------- ENDBLOCK --------------------
+..
+.formula U|xtexportdat  = "tmp/SWIFTMT940.TXT"
+.formula U|xtprotdat    = "tmp/SWIFTMT940PROT.TXT"
+.formula U|xtauspfad    = "win/tmp/"
+.formula U|xiktoazu     = 25
+.formula U|xiktoabl     = 1
+.formula U|xiktoabm     = 3
+.formula U|xivdatz      = 4
+..
+.select screen head
+..
+.continue NOBUDAT       ? F|empty(M|budat)
+.continue NOGEGBV       ? F|empty(M|fabverb)
+..
+.formula U|xtiban       = M|fabverb^iban
+.formula U|xtkowaehr    = M|fabverb^kowaehr
+.formula U|xtkonum      = M|fabverb^konum
+.formula U|xtbname      = M|fabverb^name
+.formula U|xtstaat      = M|fabverb^staat
+.formula U|xtort        = M|fabverb^ort
+.formula U|xtiident     = M|fabverb^iident
+.formula U|xtnident     = M|fabverb^nident
+.formula U|xtnident2    = M|fabverb^nident2
+.formula U|xtlaiw       = M|fabverb^laiw
+.formula U|xtiso2       = M|fabverb^iso2
+..
+.. Zeilen aus Zahlungsobligo in Datei ausgeben.
+.. U|xrzsaldo    - Anfangssaldo aus Bankkonto fÅr Berechnung lfd. Saldo.
+.. ----------------------------------------------------------
+.output NEW 'U|xtexportdat'
+.input DATEI.F
+.output NEW 'U|xtprotdat'
+.input DATEI.F
+..
+.set DECPOINT ,
+.formula U|xizaehl2     = 0
+.formula U|xizaehl1     = 0
+..
+.formula U|xizaeausg    = 0
+.formula U|xizaezzob    = 0
+.formula U|xtbudat      = 'M|budat:8'
+.formula U|xrzsaldo     = M|zasaldo
+..
+.select screen head
+.select screen line
+..
+!LOOP:
+.continue ELOOP         ? _G|mehr
+..
+.formula U|xizaezzob    = U|xizaezzob + 1
+..
+.continue NEXT          ? M|bubetr = 0
+..
+.output ADDEDTO 'U|xtexportdat'
+.formula U|xizaeausg    = U|xizaeausg + 1
+..
+.formula U|xizaehl2     = U|xizaehl2 + 1
+.formula U|xizaehl1     = U|xizaehl1 + 1
+..
+.. nur in Zeile 1 am Anfang vewendet.
+.. da sonst je Zeile ein Auszug erzeugt wird.
+.. :20:  Auftragsreferenznummer - nicht verwendet.
+.. :21:  Bezugsreferenznummer   - nicht verwendet.
+.. ----------------------------------------------------------
+.formula U|xtzeile = ":20:W"
+?'U|xtzeile'            ?  U|xizaezzob = 1
+.formula U|xtzeile = ":21:W"
+?'U|xtzeile'            ?  U|xizaezzob = 1
+..
+.. :25:  Eigene Bankverbindung aufbereiten.
+.. :28C: Kontoauszugsnummer, BlÑtter aufbereiten.
+.. ----------------------------------------------------------
+.formula U|xtzeile      = ":25:" + 'U|xtnident' + "/" + 'U|xtkonum'
+'U|xtzeile'
+.formula U|xiktoabl     = U|xiktoabl + 1 ? (U|xizaeausg//U|xiktoabm = 0)
+.formula U|xtzeile      = ":28C:" + 'U|xiktoazu' + "/" + 'U|xiktoabl'
+'U|xtzeile'
+..
+.. Saldo vor Ausgabe der Position ermitteln.
+.. :60M: bei Zwischensaldo
+.. :60F: bei Anfangssaldo (erste ausgegebene Zeile)
+..   Subfeld 1 - Soll/Haben
+..   Subfeld 2 - Buchungsdatum JJMMTT (zentrales Buchungsdatum)
+..   Subfeld 3 - WÑhrung (3 Zeichen) setzen. Hier KontowÑhrung.
+.. ----------------------------------------------------------
+.formula U|xtzeile      = ":60F:" ? U|xizaeausg = 1
+.formula U|xtzeile      = ":60M:" ? U|xizaeausg > 1
+.formula U|xtzeile      = 'U|xtzeile' + "C" ? U|xrzsaldo < 0
+.formula U|xtzeile      = 'U|xtzeile' + "D" ? U|xrzsaldo >= 0
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtbudat'>>6
+.formula U|xtwort       = U|xtkowaehr + "   "
+.formula U|xtwort       = U|xtwort << 3
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtwort'
+.formula U|xtwort       = U|xrzsaldo
+.formula U|xtwort       = U|xrzsaldo * -1 ? U|xrzsaldo < 0
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtwort'
+'U|xtzeile'
+..
+.. :61: Umsatzzeile definieren
+..   Subfeld 1 - Valutadatum festlegen (abas Zeile Valutadatum).
+..               Das Datum wird um U|xivdatz erhîht.
+..               Das Format wird in JJMMTT gewandelt.
+..   Subfeld 2 - Buchungsdatum festlegen (abas Zeile Valutadatum).
+..               Das Datum wird um U|xivdatz erhîht.
+..               Das Format wird in MMTT gewandelt.
+..   Subfeld 3 - Soll oder Haben und evtl. Storno festlegen.
+..               In AbhÑngigkeit vom Buchungsbetrag.
+..               Beachte: S/H betreffen das Geldtransitkonto
+..               nicht Bankkonto daher S/H vertauscht fÅr C/D.
+..   Subfeld 4 - Leer. Wird nicht verwendet.
+..   Subfeld 5 - WÑhrungsbetrag.
+..   Subfeld 6 - BuchungsschlÅssel. Wenn leer "N   "
+..   Subfeld 7 - Referenz.
+.. ----------------------------------------------------------
+.formula U|xtzeile      = ":61:"
+.formula U|xdvdat       = M|vdat + U|xivdatz
+.formula U|xtvdat       = 'U|xdvdat:8'
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtvdat'>>6 + 'U|xtvdat'>>4
+.formula U|xtzeile      = 'U|xtzeile' + "D"  ? (M|sh = "S" & M|bubetr > 0)
+.formula U|xtzeile      = 'U|xtzeile' + "C"  ? (M|sh = "H" & M|bubetr > 0)
+.formula U|xtzeile      = 'U|xtzeile' + "RD" ? (M|sh = "S" & M|bubetr < 0)
+.formula U|xtzeile      = 'U|xtzeile' + "RC" ? (M|sh = "H" & M|bubetr < 0)
+.formula U|xtwort       = 'M|bubetr'
+.formula U|xtwort       = 'M|bubetr' * -1 ? M|bubetr < 0
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtwort'
+.formula U|xtwort       = "N000"
+.formula U|xtzeile      = 'U|xtzeile' + U|xtwort+ "\\/ext123456_NO"
+..
+.. Subfeld 7 Referenz
+.. Wenn Scheck = Schecknummer.
+..
+..formula U|xttmp       = 'U|xttmp' + "/" + 'M|schecknum'  ? M|form = "Scheck"
+..formula U|xttmp       = 'U|xttmp' + "/" + "ext123456_NO" ? M|form <> "Scheck"
+'U|xtzeile'
+..
+.. :56: Mehrzweckzeile.
+..   Subfeld 1 - GeschÑftsvorfallcode fÅllen.
+..               051 - öberweisung?
+..   Subfeld 2 - Buchungstext (?00)
+..               Hierzu in Buchung absteigen.
+..   Subfeld 3 - nicht verwendet
+..   Subfeld 4 - Verwendungszweck (?20 - ?29)
+..   Subfeld 5 - Bankverbindung fÅllen.
+..                 Kontodaten und Bankdaten separat holen.
+..
+.. ----------------------------------------------------------
+.formula U|xtzeile      = ":86:"
+.formula U|xtzeile      = 'U|xtzeile' + "051"
+..
+.continue NOREBU        ? F|empty(M|rebu)
+..
+.formula U|xtzeile      = 'U|xtzeile' + "?00" + 'M|rebu^text'
+..
+!NOREBU
+.formula U|xtzeile      = 'U|xtzeile' + "?20" + 'M|num'    ? M|ebeleg = ""
+.formula U|xtzeile      = 'U|xtzeile' + "?20" + 'M|ebeleg' ? M|ebeleg <> ""
+.formula U|xtzeile      = 'U|xtzeile' + "?21" + 'M|vzweck' ? M|vzweck <> ""
+.formula U|xtzeile      = 'U|xtzeile' + "?22" + 'M|num'    ? M|ebeleg <> ""
+.formula U|xtzeile      = 'U|xtzeile' + "?23" + 'M|text'   ? M|text   <> ""
+..
+.. ?32 ermitteln und ausgeben.
+..
+.continue NOBVERB       ? F|empty(M|kobverb) & F|empty(M|bverb)
+..
+.. <mit Bankverbindung>
+.. Bankverbindung fÅr die öberweisung ermitteln.
+.formula U|xtzbverb     = 'M|kobverb'
+.formula U|xtzbverb     = 'M|bverb^id' ? M|bverb <> ""
+..
+.formula U|xtsel        = "$,,id = " + 'U|xtzbverb' + ";@gruppe = 2"
+.select BankData 'U|xtsel'
+.continue ZBVAUS        ? _G|mehr
+.formula U|xtzeile      = 'U|xtzeile' + "?30"  + 'H|nident'
+.formula U|xtzeile      = 'U|xtzeile' + "?31" + 'H|konum'
+.formula U|xtzkoinh     = 'H|konto^name'
+.formula U|xtzeile      = 'U|xtzeile' + "?32"  + 'U|xtzkoinh'
+..
+.continue BVERB
+..
+!NOBVERB: ohne Bankverbindung
+.formula M|referenz     = M|konto^namebspr                      ? F|empty(M|referenz)
+.formula U|xtzeile      = 'U|xtzeile' + "?32"  + 'M|referenz'   ? M|referenz <> ""
+..
+!BVERB
+'U|xtzeile'
+..
+.. ----------------------------------------------------------
+.. Saldo nach Ausgabe der Position ermitteln.
+.. :62M: bei Zwischensaldo
+.. :62F: bei Schlu·saldo (nach letzter ausgegebener Zeile)
+..       Zuerst Schlu·saldo ermitteln.
+.. ----------------------------------------------------------
+.formula U|xrzsaldo     = U|xrzsaldo + (M|bubetr * -1) ? M|sh = "S"
+.formula U|xrzsaldo     = U|xrzsaldo + M|bubetr        ? M|sh = "H"
+.formula U|xtzeile      = ":62M:"
+..
+.formula U|xtzeile      = 'U|xtzeile' + "C" ? U|xrzsaldo <  0
+.formula U|xtzeile      = 'U|xtzeile' + "D" ? U|xrzsaldo >= 0
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtbudat'>>6
+.formula U|xtwort       = U|xtkowaehr + "   "
+.formula U|xtwort       = U|xtwort << 3
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtwort'
+.formula U|xtwort       = U|xrzsaldo
+.formula U|xtwort       = U|xrzsaldo * -1 ? U|xrzsaldo < 0
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtwort'
+'U|xtzeile'
+..
+.. Protokolldatei ausgeben
+.output ADDEDTO 'U|xtprotdat'
+'M|konto';'M|num';'M|tterm';'M|vom';'M|ofbetr';'M|bubetr';'M|sh';'U|xrzsaldo';'M|ebeleg';
+..
+!NEXT
+.select screen line
+.continue LOOP
+..
+!ELOOP
+.. Erzeugte Datei Zeichsatz umwandeln.
+.formula U|xtsys        = "s3_conv 11 " + 'U|xtexportdat'
+.system 'U|xtsys' background
+..
+.formula U|xtsys        = "cp " + 'U|xtexportdat' + " " + 'U|xtauspfad'
+.system 'U|xtsys' background
+.formula U|xtsys        = "cp " + 'U|xtprotdat' + " " + 'U|xtauspfad'
+.system 'U|xtsys' background
+..
+.continue END           ? _(1=2)
+..
+!DATAUSG
+.select screen line
+.continue EDATAUSG      ? _G|mehr
+..
+.formula U|xizaezzob    = U|xizaezzob + 1
+.continue DATAUSG       ? M|bubetr = 0
+..
+.output ADDEDTO 'U|xtexportdat'
+.formula U|xizaeausg    = U|xizaeausg + 1
+..
+.formula U|xizaehl2     = U|xizaehl2 + 1
+.formula U|xizaehl1     = U|xizaehl1 + 1
+..
+.. ----------------------------------------------------------
+.. Zeilenweise in Datei im Ausgabeformat schreiben.
+.. ----------------------------------------------------------
+.. :20:  Auftragsreferenznummer - nicht verwendet.
+.. :21:  Bezugsreferenznummer   - nicht verwendet.
+.. ----------------------------------------------------------
+.formula U|xtzeile      = ":20:W"
+'U|xtzeile'
+.formula U|xtzeile      = ":21:W"
+'U|xtzeile'
+..
+.. ----------------------------------------------------------
+.. :25:  Eigene Bankverbindung aufbereiten.
+.. :28C: Kontoauszugsnummer, BlÑtter aufbereiten.
+.. ----------------------------------------------------------
+.formula U|xtzeile      = ":25:" + 'U|xtnident' + "/" + 'U|xtkonum'
+'U|xtzeile'
+.formula U|xiktoabl     = U|xiktoabl + 1 ? (U|xizaeausg//xiktoabm = 0)
+.formula U|xtzeile      = ":28C:" + 'U|xiktoazu' + "/" + 'U|xiktoabl'
+'U|xtzeile'
+..
+.. ----------------------------------------------------------
+.. Saldo vor Ausgabe der Position ermitteln.
+.. :60M: bei Zwischensaldo
+.. :60F: bei Anfangssaldo (erste ausgegebene Zeile)
+..   Subfeld 1 - Soll/Haben
+..   Subfeld 2 - Buchungsdatum JJMMTT (zentrales Buchungsdatum)
+..   Subfeld 3 - WÑhrung (3 Zeichen) setzen. Hier KontowÑhrung.
+.. ----------------------------------------------------------
+.formula U|xtzeile      = ":60F:" ? U|xizaeausg = 1
+.formula U|xtzeile      = ":60M:" ? U|xizaeausg > 1
+.formula U|xtzeile      = 'U|xtzeile' + "C" ? U|xrzsaldo < 0
+.formula U|xtzeile      = 'U|xtzeile' + "D" ? U|xrzsaldo >= 0
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtbudat'>>6
+.formula U|xtwort       = U|xtkowaehr + "   "
+.formula U|xtwort       = U|xtwort << 3
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtwort'
+.formula U|xtwort       = U|xrzsaldo
+.formula U|xtwort       = U|xrzsaldo * -1 ? U|xrzsaldo < 0
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtwort'
+'U|xtzeile'
+..
+.. ----------------------------------------------------------
+.. :61: Umsatzzeile definieren
+..   Subfeld 1 - Valutadatum festlegen (abas Zeile Valutadatum).
+..               Das Datum wird um U|xivdatz erhîht.
+..               Das Format wird in JJMMTT gewandelt.
+..   Subfeld 2 - Buchungsdatum festlegen (abas Zeile Valutadatum).
+..               Das Datum wird um U|xivdatz erhîht.
+..               Das Format wird in MMTT gewandelt.
+..   Subfeld 3 - Soll oder Haben und evtl. Storno festlegen.
+..               In AbhÑngigkeit vom Buchungsbetrag.
+..               Beachte: S/H betreffen das Geldtransitkonto
+..               nicht Bankkonto daher S/H vertauscht fÅr C/D.
+..   Subfeld 4 - Leer. Wird nicht verwendet.
+..   Subfeld 5 - WÑhrungsbetrag.
+..   Subfeld 6 - BuchungsschlÅssel. Wenn leer "N   "
+..   Subfeld 7 - Referenz.
+.. ----------------------------------------------------------
+.formula U|xtzeile      = ":61:"
+.formula U|xdvdat       = M|vdat + U|xivdatz
+.formula U|xtvdat       = 'U|xdvdat:8'
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtvdat'>>6 + 'U|xtvdat'>>4
+.formula U|xtzeile      = 'U|xtzeile' + "D"  ? (M|sh = "S" & M|bubetr > 0)
+.formula U|xtzeile      = 'U|xtzeile' + "C"  ? (M|sh = "H" & M|bubetr > 0)
+.formula U|xtzeile      = 'U|xtzeile' + "RD" ? (M|sh = "S" & M|bubetr < 0)
+.formula U|xtzeile      = 'U|xtzeile' + "RC" ? (M|sh = "H" & M|bubetr < 0)
+.formula U|xtwort       = 'M|bubetr'
+.formula U|xtwort       = 'M|bubetr' * -1 ? M|bubetr < 0
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtwort'
+.formula U|xtwort       = "N   "
+.formula U|xtzeile      = 'U|xtzeile' + U|xtwort+ "\\/ext123456_NO"
+..
+.. Subfeld 7 Referenz
+.. Wenn Scheck = Schecknummer.
+..
+..formula U|xttmp        = 'U|xttmp' + "/" + 'M|schecknum'  ? M|form = "Scheck"
+..formula U|xttmp        = 'U|xttmp' + "/" + "ext123456_NO" ? M|form <> "Scheck"
+'U|xtzeile'
+..
+.. ----------------------------------------------------------
+.. :56: Mehrzweckzeile.
+..   Subfeld 1 - GeschÑftsvorfallcode fÅllen.
+..               051 - öberweisung?
+..   Subfeld 2 - Buchungstext (?00)
+..               Hierzu in Buchung absteigen.
+..   Subfeld 3 - nicht verwendet
+..   Subfeld 4 - Verwendungszweck (?20 - ?29)
+..   Subfeld 5 - Bankverbindung fÅllen.
+..                 Kontodaten und Bankdaten separat holen.
+..
+.. ----------------------------------------------------------
+.formula U|xtzeile      = ":86:"
+.formula U|xtzeile      = 'U|xtzeile' + "051"
+..
+.select entry 'M|rebu' ? M|rebu <> ""
+.continue KREBU ? (_G|mehr ; M|rebu = "")
+.formula U|xtzeile      = 'U|xtzeile' + "?00" + 'H|text'
+..
+!KREBU
+.formula U|xtzeile      = 'U|xtzeile' + "?20" + 'M|num'    ? M|ebeleg = ""
+.formula U|xtzeile      = 'U|xtzeile' + "?20" + 'M|ebeleg' ? M|ebeleg <> ""
+.formula U|xtzeile      = 'U|xtzeile' + "?21" + 'M|vzweck' ? M|vzweck <> ""
+.formula U|xtzeile      = 'U|xtzeile' + "?22" + 'M|num'    ? M|ebeleg <> ""
+.formula U|xtzeile      = 'U|xtzeile' + "?23" + 'M|text'   ? M|text   <> ""
+..
+.continue ZBVERBOK      ? (M|kobverb <> "" ; M|bverb <> "")
+..BOX
+..Zeile 'U|xizaezzob', Rechnung 'M|num', Konto 'M|konto' besitzt keine gÅltige Bankverbindung.
+..Abarbeitung wird fortgesetzt.
+..
+.formula M|referenz     = M|konto^namebspr                      ? F|empty(M|referenz)
+.formula U|xtzeile      = 'U|xtzeile' + "?32"  + 'M|referenz'   ? M|referenz <> ""
+.continue ZBVAUS
+..
+!ZBVERBOK
+.. Bankverbindung fÅr die öberweisung ermitteln.
+.formula U|xtzbverb     = 'M|kobverb'
+.formula U|xtzbverb     = 'M|bverb^id' ? M|bverb <> ""
+..
+.formula U|xtsel        = "$,,id = " + 'U|xtzbverb' + ";@gruppe = 2"
+.select BankData 'U|xtsel'
+.continue ZBVAUS        ? _G|mehr
+.formula U|xtzeile      = 'U|xtzeile' + "?30" + 'H|konum'
+.formula U|xtzkoinh     = 'H|koinh'
+.formula U|xtzbank      = 'H|bank^id'
+..
+.formula U|xtsel        = "$,,id = " + 'U|xtzbank' + ";@gruppe = 1"
+.select BankData 'U|xtsel'
+.continue ZBVAUS        ? _G|mehr
+.formula U|xtzeile      = 'U|xtzeile' + "?31"  + 'H|nident'
+.formula U|xtzeile      = 'U|xtzeile' + "?32"  + 'U|xtzkoinh'
+..
+!ZBVAUS
+'U|xtzeile'
+..
+.. ----------------------------------------------------------
+.. Saldo nach Ausgabe der Position ermitteln.
+.. :62M: bei Zwischensaldo
+.. :62F: bei Schlu·saldo (nach letzter ausgegebener Zeile)
+..       Zuerst Schlu·saldo ermitteln.
+.. ----------------------------------------------------------
+.formula U|xrzsaldo     = U|xrzsaldo + (M|bubetr * -1) ? M|sh = "S"
+.formula U|xrzsaldo     = U|xrzsaldo + M|bubetr        ? M|sh = "H"
+.formula U|xtzeile      = ":62M:"
+..
+.formula U|xtzeile      = 'U|xtzeile' + "C" ? U|xrzsaldo <  0
+.formula U|xtzeile      = 'U|xtzeile' + "D" ? U|xrzsaldo >= 0
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtbudat'>>6
+.formula U|xtwort       = U|xtkowaehr + "   "
+.formula U|xtwort       = U|xtwort << 3
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtwort'
+.formula U|xtwort       = U|xrzsaldo
+.formula U|xtwort       = U|xrzsaldo * -1 ? U|xrzsaldo < 0
+.formula U|xtzeile      = 'U|xtzeile' + 'U|xtwort'
+'U|xtzeile'
+..
+.. ----------------------------------------------------------
+.. Protokolldatei ausgeben
+.. ----------------------------------------------------------
+.output ADDEDTO 'U|xtprotdat'
+'M|konto';'M|num';'M|tterm';'M|vom';'M|ofbetr';'M|bubetr';'M|sh';'U|xrzsaldo';'M|ebeleg';
+..
+.continue DATAUSG
+..
+.. ----------------------------------------------------------
+.. Zeilen aus Zahlungsobligo wurden ausgegeben.
+.. ----------------------------------------------------------
+!EDATAUSG
+.. Erzeugte Datei Zeichsatz umwandeln.
+.formula U|xtsys        = "s3_conv 11 " + 'U|xtexportdat'
+.system 'U|xtsys' background
+.. ----------------------------------------------------------
+.. Erzeugte Dateien in win/tmp Verzeichnis kopieren.
+.. Bereits vorhandene Dateien werden ohne Nachfrage Åberschrieben.
+.. ----------------------------------------------------------
+.formula U|xtsys        = "cp " + 'U|xtexportdat' + " " + 'U|xtauspfad'
+.system 'U|xtsys' background
+.formula U|xtsys        = "cp " + 'U|xtprotdat' + " " + 'U|xtauspfad'
+.system 'U|xtsys' background
+.continue END
+..
+!ERROR
+.box
+1<>2
+.continue END
+..
+!NOGEGBV: keine eigene Bankverbindung im Geldtransitkonto
+.box
+Geben Sie eine Bankverbindung ein!
+Der Export wird beendet
+.continue END
+..
+!NOBUDAT: kein Buchungsdatum
+.box
+Geben Sie ein Buchungsdatum ein!
+Der Export wird beendet.
+.continue END
+..
+!END
+.continue

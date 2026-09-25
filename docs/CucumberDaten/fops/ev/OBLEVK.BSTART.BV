@@ -1,0 +1,157 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : OBLEVK.BSTART.BV
+.. Autor          : tg/fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Bestimmt aus den Eingabefeldern die Datenbankanfrage.
+.. Ablauf         : Button-vor-EFOP
+..
+.. Functionality  : Creates database query from the input fields.
+.. Program flow   : Before button efop
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type text xpvon xpbis xord
+..
+.continue DATES ? M|lio
+..
+.. Check document ID no./searchword range
+.type ID3:1 xdocument  ? F|defined(M|ano) ; F|defined(M|auo) ; F|defined(M|reov)
+.type ID4:1 xdocument  ? F|defined(M|afo) ; F|defined(M|beo) ; F|defined(M|reoe)
+.assign U|xdocument = "$,,;@gruppe=1;@numsuch=" + M|belegvon + "!" + M|belegbis + ";@lesen=" + 'G|FALSE'
+.continue ERROR1 ? _G|mehr
+.continue SELECT
+..
+!DATES: Check date range
+.continue ERROR2 ? _F|empty(M|belegbis) & M|belegbis < M|belegvon
+..
+!SELECT
+.formula M|select = "!" ? F|empty(M|select)
+..
+.. clear table
+.make screen line -- ? M|tzeilen > 0
+..
+.. Goto END while using a selection bar
+.continue END ? M|selektion
+..
+.. Equal for all
+.formula U|xord = ""
+.formula M|select = "$,,;@ablageart=" + M|aarts
+..
+.continue FROMTO ? F|empty(M|vorgartaz)
+.formula M|select = M|select + F|formatstr(";{1}={2}", F|condexpr(M|lio, "kopf^vorgartaz", "vorgartaz"), M|vorgartaz^id)
+..
+!FROMTO
+.continue STAFF ? F|empty(M|belegvon) & F|empty(M|belegbis)
+.continue RANGE ? _M|lio
+.formula M|select = M|select + ";tterm=" + 'M|belegvon:8' + "!" + 'M|belegbis:8'
+.continue STAFF
+..
+!RANGE: Range of numbers, searchwords
+.formula U|xord = ";@ordnung=nummer"
+.formula M|select = M|select + ";@numsuch=" + M|belegvon + "!" + M|belegbis
+..
+!STAFF: Internal staff reference
+.continue PRODUCT ? F|empty(M|kzeich)
+.formula M|select = M|select + F|formatstr(";{1}=={2}", F|condexpr(M|lio, "kopf^zeich", "zeich"), M|kzeich)
+..
+!PRODUCT: Add product while query outstanding deliveries
+.continue PROJECT ? F|empty(M|artikel)
+.formula M|select = M|select + ";art==" + M|artikel^id ? M|lio
+..
+!PROJECT: Add project while query outstanding deliveries
+.continue ALTPOS ? F|empty(M|projekt) ; _M|lio
+.formula M|select = M|select + ";projekt=" + M|projekt^id
+..
+!ALTPOS: Ignore alternative items while query outstanding deliveries
+.continue DATNR ? M|mitalternativpos ; _M|lio
+.formula M|select = M|select + ";alternativpos=0"
+..
+!DATNR: Specials for sales (3) and purchasing (4)
+.continue SALES    ? M|datnr = 3
+.continue PURCHAS  ? M|datnr = 4
+.continue FATAL
+..
+!SALES: Commitments of sales
+.formula U|xord = ";@ordnung=ktyp,kunde,vom" ? F|empty(U|xord)
+.continue RECHEMP ? M|reo
+.continue RECHEMP ? F|empty(M|kkuli)
+.formula M|select = M|select + ";kl==" + M|kkuli^id
+..
+!RECHEMP: Invoice recipient
+.continue REPRESE ? F|empty(M|kkuli2)
+.formula M|select = M|select + F|formatstr(";{1}={2}", F|condexpr(M|lio, "kopf^reempf", "reempf"), M|kkuli2^id)
+..
+!REPRESE: Representative
+.continue SONDER ? F|empty(M|kvertret)
+.formula M|select = M|select + F|formatstr(";{1}={2}", F|condexpr(M|lio, "kopf^vertret", "vertret"), M|kvertret^id)
+.continue SONDER
+..
+!PURCHAS: Commitments of purchase
+.formula M|select = M|select + ";ebeleg==" + M|kebeleg ? F|defined(M|kebeleg)
+..
+.formula U|xord = ";@ordnung=ktyp,lief,vom" ? F|empty(U|xord)
+.continue PARTNER ? _F|defined(M|ausschr)
+.continue PARTNER ? F|empty(M|ausschr)
+.formula M|select = M|select + ";ausschr==" + M|ausschr^id
+..
+!PARTNER
+.continue RECHERS ? M|reo
+.continue RECHERS ? F|empty(M|kkuli)
+.formula M|select = M|select + ";kl==" + M|kkuli^id
+..
+!RECHERS: Invoice to
+.continue SONDER ? F|empty(M|kkuli2)
+.formula M|select = M|select + F|formatstr(";{1}={2}", F|condexpr(M|lio, "kopf^resteller", "resteller"), M|kkuli2^id)
+..
+!SONDER: Type restriktions
+.continue ANKOTYP ? M|anafo ; M|aubeo
+.continue LIKOTYP ? M|lio
+.continue REOTYP  ? M|reo
+.continue FOLLOW
+..
+!ANKOTYP
+.formula M|select = M|select + ";typ==" + M|kotyps
+.continue FOLLOW
+..
+!LIKOTYP
+.formula M|select = M|select + ";kotyp==" + M|kotyps
+.continue FOLLOW
+..
+!REOTYP
+.formula M|select = M|select + ";ktyp=" + 'G|ABKO' + "!" + 'G|LIKO'
+..
+!FOLLOW: Add options
+.continue GROUP2 ? M|lio
+.formula M|select = M|select + ";@gruppe=1"
+.continue ORDER ?  M|reo
+.continue ORDER ? _M|wvdat
+.formula M|select = M|select + ";wvorlage=" + 'G|TRUE' + ";@ordnung=tterm"
+.continue END
+..
+!ORDER: Add order rules
+.formula M|select = M|select + U|xord
+.continue END
+..
+!GROUP2: Special setting for outstanding deliveries
+.formula M|select = M|select + ";@ordnung=tterm,artikel^gruppe;@gruppe=2;aktiv=1"
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+!FATAL
+.error -number 1111
+.end 1
+..
+!ERROR1: Wrong range!
+.. kernel shows eror message
+.error
+.cursor belegvon 0
+.end 1
+..
+!ERROR2: Wrong range!
+.cursor belegvon 0
+.error Untergrenze ist gr”áer als Obergrenze.
+.end 1

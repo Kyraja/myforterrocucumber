@@ -1,0 +1,151 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LAGWERTSTICHVORL
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : male
+.. Copyright      : (c) 1990 - 2012 ABAS Software AG
+.. Funktion       : Zwischenlîsung zum Lagerwert zum Stichtag
+..                  Datengrundlage
+.. FOP erzeugt Datei im Arbeitsbereich mf welche Åber das IS LAGWERTSTICHVORL
+.. ausgewertet wird.
+..
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text   xtestdatei    ? _F|defined(U|xtestdatei)
+.type integer    ximonat       ? _F|defined(U|ximonat)
+.type GD     xvon          ? _F|defined(U|xvon)
+.type bool   xmonatsende   ? _F|defined(U|xmonatsende)
+.type text   xtdat         ? _F|defined(U|xtdat)
+.type text   xtdat1        ? _F|defined(U|xtdat1)
+.type text   xsys          ? _F|defined(U|xsys)
+.type text   xselect       ? _F|defined(U|xselect)
+.type text   xselect2      ? _F|defined(U|xselect2)
+.type text   xtselect      ? _F|defined(U|xtselect)
+.type text   xbem3         ? _F|defined(U|xbem3)
+.type M7.3   xkonsimge     ? _F|defined(U|xkonsimge)
+.type M7.3   xbewmge       ? _F|defined(U|xbewmge)
+.type bool   xkonsi        ? _F|defined(U|xkonsi)
+.type PS39:2 xkonsilg      ? _F|defined(U|xkonsilg)
+.type ID10   xbewlj        ? _F|defined(U|xbewlj)
+.type ID10   xgeblj        ? _F|defined(U|xgeblj)
+.type bool   xbbewss       ? _F|defined(U|xbbewss)
+..
+.type GD2    U|xdate       ? _F|defined(U|xdate)
+..
+.formula U|xdate        = M|qflagdate        ?  F|defined(M|qflagdate)
+.formula U|xdate        = G|datum            ? _F|defined(M|qflagdate)
+......formula U|xdate        = "31.10.14"
+..
+.. Erzeuge Testdatei fuer nicht erfolgreichen Durchlauf.
+.formula U|xtestdatei  = "mf/LAGWERTERROR"
+.output new 'U|xtestdatei'
+.set trans +
+.input DATEI.F
+Nicht erfolgreich durchlaufen!
+.output
+..
+.set trans -
+.copy U|xbbewss     = G|FALSE
+.copy U|xmonatsende = G|FALSE
+..
+.. Monatsende prÅfen
+.formula U|ximonat = F|month(U|xdate)
+.formula U|xvon = U|xdate + 1
+.copy U|xmonatsende = G|TRUE ? F|month(U|xvon) <> U|ximonat
+...formula U|xtdat  = "mf/T"+'U|xdate:8'+"."+'G|sekundenz'+".LAGERWERT.DAT" 
+...formula U|xtdat1 = "mf/M"+'U|xdate:8'+"."+'G|sekundenz'+".LAGERWERT.DAT"  ? U|xmonatsende
+.formula U|xtdat  = "mf/T"+'U|xdate:8'+"."+"LAGERWERT.DAT" 
+.formula U|xtdat1 = "mf/M"+'U|xdate:8'+"."+"LAGERWERT.DAT"  ? U|xmonatsende
+..
+.output new 'U|xtdat'
+.input DATEI.F
+'G|progvers' - 'U|xdate' - 'G|zeit'
+Artikel#Artikel-ID#Artikelwarengruppe#Artikel-Warengruppe-Lagerbestandskonto#Artikel-Warengruppe bestanddsgefuehrt#Artikel Bewertungsverfahren Einkauf#Artikel-Warengruppe-Bewertungsverfahren Einkauf#Artikel-Gesamtbestand#Artikel-Inlandswaehrung#Artikel-LE#Lagergruppe#Lagergruppen-ID#Gesamtmenge in LE#Zugangs-Lagergruppe(Umbuchen)#Zugangs-Lagergruppen-ID#Lager#Lager-ID#Platz#Platz-ID#Artikel-Mischpreis#Verbrauchsfolgedatum#Zuordnungsnummer#Bewertungsdatum#Verweis auf LJ (Bewertung)#Bewertungsmenge#Verweis auf das LJ der Bewertungsmenge aus dem Zugang#Charge#Gebindeeinheit#Umrechnungsfaktor#Menge in Gebindeeinheit#Verweis auf LJ#Letzter Einstandspreis#Verweis auf LJ der Zugangsmenge#Verbrauchsfolgedatum#Verwendung#laufende Zeilennummer#Bewertungsinfos#Konsi#bsart#Reserve#Reserve#
+.output
+..
+.. entspricht SchlÅssel "Einzelmengen_eines_Artikels"
+.formula U|xselect = "$,,"
+.formula U|xselect = U|xselect + "artikel<>`"
+.formula U|xselect = U|xselect + ";lgruppe<>`"
+.formula U|xselect = U|xselect + ";lgruppe^zkonsilg=n"
+.formula U|xselect = U|xselect + ";pflag=TRUE;@ordnung=artikel,lgruppe,lager,platz;@ablageart=beides"
+.formula U|xselect = U|xselect + ";@zeilen=ja"
+..
+.select squantity 'U|xselect'
+.continue ENDE ? _G|mehr
+..
+!ZEILE
+.select line 'H|selzeile'
+.continue ENDE ? _G|mehr
+..
+.. Umlagerung aus Konsilagergruppe?
+.copy U|xkonsi    = G|FALSE
+.copy U|xkonsi    = H|platz^lgruppe^zkonsilg  
+.assign U|xkonsilg  = H|platz^lgruppe^id      ?  U|xkonsi
+.continue NOKONSI                             ? _U|xkonsi
+.formula U|xselect2 = "$,,artikel="+H|artikel^id+";lgruppe="+U|xkonsilg^id+";platz="+H|lj^platz^id+";pflag=TRUE;@zeilen=ja;@ordnung=artikel,lgruppe,lager,platz;@ablageart=beides"
+.load 3 squantity 'U|xselect2'
+.continue NOKONSI ? _G|mehr
+.load 3 line '3|selzeile'
+.continue NOKONSI ? _G|mehr
+.formula U|xkonsimge = 3|bewmge * 3|gebf - 3|gebmge * 3|gebf
+..
+!NOKONSI
+.copy U|xbewlj = H|bewlj^id  ? _F|empty(H|bewlj)
+.copy U|xgeblj = H|lj^id     ? _F|empty(H|lj)
+.continue BEWSS1                   ? _F|empty(H|bewlj)
+.continue BEWSS1                   ? _F|empty(H|lj) & H|platz^lgruppe^zkonsilg
+.continue AUSGABE   ? F|empty(H|lj)
+..
+!BEWSS1: Hauptsatz
+.copy U|xbbewss = G|FALSE
+.formula U|xbewlj= H|lj^id
+.formula U|xbewlj= H|bewlj^id ? _F|empty(H|bewlj)
+.formula U|xtselect = "$,,ppsrefid=" + 'U|xbewlj' + ";historisch=FALSE;beistelldaten=nein;@ablageart=beides;@gruppe=1;@ordnung=ppsref.rÅckwÑrts,bewzeitp.rÅckwÑrts"
+.load 2 valuation 'U|xtselect'
+.formula U|xbem3 = ""
+.continue AUSGABE ? _G|mehr
+.formula U|xbewmge = H|bewmge * H|gebf
+.. Konsi-Bewertmenge
+.formula U|xbewmge = U|xkonsimge ? U|xkonsi & H|lgruppe^id <> U|xkonsilg^id
+.continue EINTRAGEN
+..
+!BEWSS2: Nebensatz
+.copy U|xbbewss = G|TRUE
+.formula U|xtselect  = "$,,ppsrefid=" + 'U|xbewlj' + ";historisch=FALSE;beistelldaten=ja;@ablageart=beides;@gruppe=1;@ordnung=ppsref.rÅckwÑrts,bewzeitp.rÅckwÑrts"
+.load 2 valuation 'U|xtselect'
+.formula U|xbewmge   = H|bewmge * H|gebf  ? G|mehr
+.continue EINTRAGEN                        ? G|mehr
+.continue LMENGE
+..
+!AUSGABE
+.set trans +
+.formula U|xbem3 = "Kein Bewertungsdatensatz vorhanden. Mischpreis aus Artikel."
+.set trans -
+.output addedto 'U|xtdat'
+'H|artikel'#'H|artikel^id'#'H|artikel^aufgrp^id'#'H|artikel^aufgrp^bestand^id'#'H|artikel^aufgrp^befuehr(L="0")'#'H|artikel^ekbewverf'#'H|artikel^aufgrp^ekbewverf'#'H|artikel^bestand'#'H|artikel^inlwaehr'#'H|artikel^le(L="0")'#'H|lgruppe'#'H|lgruppe^id'#'H|lemge'#'H|lgruppe2'#'H|lgruppe2^id'#'H|lager'#'H|lager^id'#'H|platz'#'H|platz^id'#'H|artikel^mpr'#'H|bewdat'#'H|bewlj^id'#'H|bewmge'#'H|beworig^id'#'H|charge^id'#'H|geb(L="0")'#'H|gebf'#'H|gebmge'#'H|lj^id'#'H|lpr'#'H|orig^id'#'H|verfdat'#'H|verw'#'H|zn'##########'U|xbem3'#'H|zuord'#'U|xkonsi(L="0")'#'F|value(H|artikel^bsart, "AU79")'#Reserve#Reserve#
+.continue BEWSS2                       ? _U|xbbewss
+.continue LMENGE
+..
+!EINTRAGEN
+.output addedto 'U|xtdat'
+'H|artikel'#'H|artikel^id'#'H|artikel^aufgrp^id'#'H|artikel^aufgrp^bestand^id'#'H|artikel^aufgrp^befuehr(L="0")'#'H|artikel^ekbewverf'#'H|artikel^aufgrp^ekbewverf'#'H|artikel^bestand'#'H|artikel^inlwaehr'#'H|artikel^le(L="0")'#'H|lgruppe'#'H|lgruppe^id'#'H|lemge'#'H|lgruppe2'#'H|lgruppe2^id'#'H|lager'#'H|lager^id'#'H|platz'#'H|platz^id'#'H|artikel^mpr'#'H|bewdat'#'H|bewlj^id'#'U|xbewmge'#'H|beworig^id'#'H|charge^id'#'H|geb(L="0")'#'H|gebf'#'H|gebmge'#'H|lj^id'#'H|lpr'#'H|orig^id'#'H|verfdat'#'H|verw'#'H|zn'#'2|id'#'2|ursache'#'2|lbstatus'#'2|nachfolger'#'2|beistelldaten'#'2|buart'#'2|mge'#'2|bewpr'#'2|wert'#'U|xbem3'#'H|zuord'#'U|xkonsi(L="0")'#'F|value(H|artikel^bsart, "AU79")'#Reserve#Reserve#
+.continue BEWSS2                       ? _U|xbbewss
+.continue LMENGE
+..
+!LMENGE
+.select squantity
+.continue ENDE ? _G|mehr
+.continue ZEILE
+..
+..*****************************************************************************
+!ENDE: Erfolgreich durchlaufen! Testdatei loeschen
+.formula U|xsys = "rm -f " + U|xtestdatei
+.system 'U|xsys' background
+.formula  U|xsys = "cp " + U|xtdat + " " + U|xtdat1   ? U|xmonatsende
+.system 'U|xsys' background                              ? U|xmonatsende
+..
+!END
+.continue

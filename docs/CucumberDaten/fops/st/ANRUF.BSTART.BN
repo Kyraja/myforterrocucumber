@@ -1,0 +1,97 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ANRUF.BSTART.BN
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : xg
+.. Funktion       :
+.. Normiert die Telefonnummer, formuliert und startet die Datenbankanfrage und
+.. oeffnet fuer den Fall eines Treffers die jeweilige Stammdatenmaske.
+.. Mehrstufige Anfrage: Stufe 1/2  -> Kundenanfrage       (tele/mtele)
+..                      Stufe 3/4  -> Lieferantenanfrage  (tele/mtele)
+..
+.. Ablauf         : Button-nach-EFOP
+..
+.. Functionality  :
+.. Normalizes phone contact, formulates and executes database query. If only one hit
+.. is found, this program will open the master file mask for this contact.
+.. Multi-level query:   level 1/2  -> query for customers (tele/mtele)
+..                      level 3/4  -> query for suppliers (tele/mtele)
+..
+.. Program flow   : After button efop
+...Includes       :
+.. include st/ANRUF.SEL
+.. include st/ANRUF.TBUCALLER.BN
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type integer  XIMAX      ? _F|defined(U|XIMAX)
+.type integer  XISTEP     ? _F|defined(U|XISTEP)
+.type text xttelnr    ? _F|defined(U|xttelnr)
+.type bool xbisnorm   ? _F|defined(U|xbisnorm)
+.type bool xbselmobil ? _F|defined(U|xbselmobil)
+..
+.. Initializations
+.formula M|stufe = 0
+.formula U|XIMAX = 4
+.formula U|XISTEP = 1
+..
+.. new query -> clear table
+.make screen line -- ? M|tzeilen > 0
+..
+.. normalize phone contact
+.formula U|xttelnr = M|kttelnr
+.input "is/NORM.TELNR"
+.continue ERROR1 ? _U|xbisnorm
+..
+.formula M|ktnorm = U|xttelnr
+.continue END ? F|empty(U|xttelnr)
+..
+!START: start multi-level query
+.formula M|stufe = M|stufe + U|XISTEP
+.continue ANALYSE ? M|stufe > U|XIMAX
+..
+.. spreading to levels:
+.copy U|xbselmobil = G|FALSE ? M|stufe = 1 ; M|stufe = 3
+.copy U|xbselmobil = G|TRUE  ? M|stufe = 2 ; M|stufe = 4
+.continue KUNDE  ? M|stufe = 1 ; M|stufe = 2
+.continue LIEFER ? M|stufe = 3 ; M|stufe = 4
+.continue ERROR2
+..
+!KUNDE: configure query for customers
+.formula M|grliste = "0:1.2.6.7"
+.continue HOL
+..
+!LIEFER: configure query for suppliers
+.formula M|grliste = "1:1.2"
+.continue HOL
+..
+.. hier koennen noch weitere eingefuegt werden, z.B. ZDs
+..
+!HOL: formulate query
+.input "st/ANRUF.SEL"
+.. start database query
+.input "is/HOL.LISTE"
+.. next level
+.continue START
+..
+!ANALYSE: Reaktion nach Datenbankanfrage
+.continue ERROR3 ? M|tzeilen = 0
+.input "st/ANRUF.TBUCALLER.BN" ? M|tzeilen = 1
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1
+.error -line 0 -field M|kttelnr -message Normierung der Telefonnummer fehlgeschlagen!
+.end 1
+..
+!ERROR2
+.error -message Nicht definierte Holstufe!
+.end 1
+..
+!ERROR3
+.error -line 0 -field M|kttelnr -message Telefonnummer wurde nicht gefunden!
+.end 1

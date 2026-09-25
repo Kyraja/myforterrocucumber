@@ -1,0 +1,308 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : STOCKTAKINGDIFF.TAB
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  :
+..*****************************************************************************
+..
+.set trans -
+.type text    xtselect  ? _F|defined(U|xtselect)
+.type real4   xmgediff  ? _F|defined(U|xmgediff)
+.type P56:2   xzlsnr    ? _F|defined(U|xzlsnr)
+.type P56:2   xzlnr     ? _F|defined(U|xzlnr)
+.type text    xsel      ? _F|defined(U|xsel)
+.type text    xtsuch    ? _F|defined(U|xtsuch)
+.type bool    xbmehrtreffer ? _F|defined(U|xbmehrtreffer)
+.type R12.2   xrbewwert    ? _F|defined(U|xrbewwert)
+.type M7.3    xrmge        ? _F|defined(U|xrmge) 
+.type bool    xbfertig     ? _F|defined(U|xbfertig)
+.type R1.3    xrproz       ? _F|defined(U|xrproz)
+.type M7.3    xrrangeoben  ? _F|defined(U|xrrangeoben)
+.type M7.3    xrrangeunten ? _F|defined(U|xrrangeunten)
+.type text    xtzliste     ? _F|defined(U|xtzliste)
+..
+.continue QUERY  ? _F|empty(M|zlvon) ; _F|empty(M|zlbis)
+.formula M|anhang = M|anhang + M|zlsnr + ","   ? M|banhaengen
+.assign U|xzlnr = M|zlsnr
+..
+!ZAEHLPOS: ZÑhllistenzeilen / inventory sheet lines
+.formula U|xtselect = "$,,"
+.formula U|xtselect = U|xtselect + ";end<>n;zlsnr=+" + 'U|xzlnr'  ?  U|xzlnr^end
+.formula U|xtselect = U|xtselect + ";end=n;zlsnr=" + 'U|xzlnr'    ? _U|xzlnr^end
+.formula U|xtselect = U|xtselect + ";@ablageart=(Both);@gruppe=1;@ordnung=zlsnr,posnr"
+.load 1 stocktaking 'U|xtselect'
+.continue LOOP1
+..
+!QUERY: Define query: SchlÅssel definiert fÅr lebendig oder abgelegt
+.continue ERROR1 ? _F|isvalue('M|zlvon', "N56")
+.continue ERROR2 ? _F|isvalue('M|zlbis', "N56")
+.formula U|xtselect = "$,,;@numsuch=" + M|zlvon + "!" + M|zlbis
+.formula U|xtselect = U|xtselect + ";@ablageart="+'M|ablage'+";@gruppe=2"
+.load 2 stocktaking 'U|xtselect'
+.continue END                      ? _G|mehr
+.assign U|xzlnr  =  2|nummer       ? _2|end
+.assign U|xzlnr = "+" + '2|nummer' ?  2|end
+.continue ZAEHLPOS
+..
+!ZAEHLKOPF
+.load 2 stocktaking
+.continue END                      ? _G|mehr
+.assign U|xzlnr = 2|nummer         ? _2|end
+.assign U|xzlnr = "+" + '2|nummer' ?  2|end
+.continue ZAEHLPOS
+..
+!LOOP1
+.continue ZAEHLKOPF ? _G|mehr & (_F|empty(M|zlvon) ; _F|empty(M|zlbis))
+.continue END       ? _G|mehr & _F|empty(M|zlsnr)
+.continue STOCKT ? _((_(1|istdummy)) ; ((1|istdummy) & (M|bidiffmitdummys)))
+..
+.continue MAKELINE ? _M|banhaengen
+..
+!MASKEND
+.select screen line 'M|tzeilen'
+..
+!MAKELINE
+.make screen line +O
+.formula U|xrmge = 0
+.formula U|xrbewwert    = 0 
+.copy U|xbfertig = G|false
+.assign M|tzlsnr    = 1|zlsnr
+..Bestandsabschluss erfolgt
+.copy M|bestandsabschluss = 1|bend
+.formula M|tposnr   = 1|posnr
+.copy M|tartikel    = 1|artikel
+.formula M|ttename  = 1|artikel^namebspr
+.formula M|tbpr     = 1|bpr
+..PrÅfen, ob genauer Preis nach Bestandabschluss verfÅgbar
+..öber LJ-Eintrag den Preis aus Bewertung ermitteln
+.continue NOBEND ? _M|bestandsabschluss
+..Preis nur aus der ZÑhlliste nehmen wenn Preis aus ZÑhlliste gesetzt ist
+.continue PRZL            ? M|preisauszl
+.copy U|xbmehrtreffer = G|false
+.formula U|xtzliste = 1|zlsnr
+.formula U|xtzliste = F|regreplace(U|xtzliste,"[\+]","")
+.formula U|xtsuch = "LI." + 'U|xtzliste'
+.formula U|xtselect = "$,,nummer=;such="+'U|xtsuch'+";artikel="+'1|artikel^id'+";platz="+'1|platz^id'+";detursache=(StockadjustmentStocktaking);"
+.formula U|xtselect = U|xtselect + "verw=="+'1|verw'+";"       ? _F|empty(1|verw)
+.formula U|xtselect = U|xtselect + "verw=`;"                ? F|empty(1|verw) & _1|vzaehlen
+.formula U|xtselect = U|xtselect + "projekt="+'1|projekt^id'+";" ? _F|empty(1|projekt)  & F|sysinfo(18)^projekt
+.formula U|xtselect = U|xtselect + "projekt=`;"              ? F|empty(1|projekt) & _1|vzaehlen & F|sysinfo(18)^projekt
+.formula U|xtselect = U|xtselect + "fert="+'1|lffert^id'+";"     ? _F|empty(1|lffert)
+.formula U|xtselect = U|xtselect + "me="+'1|gebeinh'+";"      ? _F|empty(1|gebeinh)
+.load 3 journal 'U|xtselect'
+.continue NOLJ ? _G|mehr
+.load 3 journal
+.copy U|xbmehrtreffer = G|true  ? G|mehr
+.copy U|xbmehrtreffer = G|false ? _G|mehr
+.load 3 journal 'U|xtselect'
+.continue NOLJ ? _G|mehr
+.continue MEHRERE ? U|xbmehrtreffer
+.continue EINTREF ? _U|xbmehrtreffer
+!MEHRERE
+..Vereinfachtes ZÑhlen oder Chargen
+.continue MEHLOOP ? 1|vzaehlen
+.continue MEHLOOP ? _F|empty(1|charge) 
+.continue NOZUORD 
+..prÅfen, wo die Charge im LJ steht
+!MEHLOOP
+.continue CHARGE ? _F|empty(1|charge)
+.continue VZAEHL ? 1|vzaehlen
+!CHARGE
+..Charge mit normalem ZÑhlen
+.load 3 line
+.continue NEXTLJ ? _G|mehr
+.continue CHGEFUND ? 3|mge < 0  & 3|vcharge^id = 1|charge^id
+.continue CHGEFUND ? 3|mge > 0  & 3|ncharge^id = 1|charge^id
+.continue CHGEFUND ? 3|mge = 0  & 3|vcharge^id = 1|charge^id
+.continue NEXTLJ
+!VZAEHL
+..beim vereinfachten ZÑhlen kînnen durch eine Zeile in der ZÑhliste mehrere LJ-EintrÑge entstehen
+..fÅr diese LJ-EintrÑge mÅssen die Bewertungen gefunden werden
+.. die Bewertungspreise werden zusammenaddiert (U|xrbewwert) und dann durch die Anzahl der Mengen (U|xrmge ) geteilt
+.. wenn alle LJ-EintrÑge durchlaufen sind, steht xbfertig auf G|true
+.continue EINTREF 
+!NEXTLJ
+.load 3 journal
+.continue MEHLOOP ? G|mehr
+.copy U|xbfertig = G|true ? 1|vzaehlen
+.continue SUMME  ? U|xbfertig
+.continue NOZUORD
+!CHGEFUND
+!EINTREF
+.formula U|xtselect = "$,,nummer=;such=;bewvorgang="+'3|id'+";historisch=false;beistelldaten=;@richtung=(Backwards);@ablageart=(Both);@gruppe=1;"
+.load 4 valuation 'U|xtselect'
+.continue NOBEW ? _G|mehr
+.formula U|xrbewwert    = U|xrbewwert + 4|bewwert ? 1|vzaehlen
+.formula U|xrmge        = U|xrmge  + 4|mge      ? 1|vzaehlen
+.continue NEXTLJ                       ? 1|vzaehlen
+.formula M|tbpr = 4|bewpr               ? _1|vzaehlen
+!SUMME
+.continue NOZUORD ? U|xrmge = 0  & U|xbfertig
+.formula M|tbpr = U|xrbewwert / U|xrmge    ? 1|vzaehlen & U|xbfertig
+.set trans +
+.formula M|preisinfo = "aus Bewertung"
+.set trans -
+.continue ENDPREIS
+!PRZL
+!NOLJ
+!NOBEW
+!NOZUORD
+.set trans +
+.formula M|preisinfo = "aus ZÑhlliste" 
+.set trans -
+.continue ENDPREIS
+!NOBEND
+.set trans +
+.formula M|preisinfo = "aus ZÑhlliste, vorlÑufig"
+.set trans -
+.continue ENDPREIS
+!ENDPREIS 
+.formula M|tabw     = 1|abw
+.. GezÑhlte Menge in ZÑhlbestand (Gebindeeinheit)
+.formula M|tnbest   = 1|nbest
+.formula M|tgebeinh = 1|gebeinh ? _F|empty(1|gebeinh)
+.copy M|tlplatz     = 1|platz
+.formula M|tgebf    = 1|gebf
+.formula M|tleeinh  = 1|leeinh
+.copy M|tcharge     = 1|charge
+.formula M|ttcharge = 1|tcharge
+.. Bestand in Gebindeeinheit zum Inventurzeitpunkt
+.formula M|tibest   = 1|ibest
+.. Schwelle nach oben und nach unten ausrechnen
+.continue NORANGE ? M|abwprozent = 0
+.formula U|xrproz = M|abwprozent / 100
+.formula U|xrrangeoben  = M|tibest + (U|xrproz * M|tibest) 
+.formula U|xrrangeunten = M|tibest - (U|xrproz * M|tibest) 
+.continue RANERR ? M|tnbest  < U|xrrangeunten
+.continue RANERR ? M|tnbest  > U|xrrangeoben
+.continue RANOK
+!RANOK: Neuer Bestand liegt innerhalb der Range, diese Zeilen entfernen
+.make screen line -O  
+.continue STOCKT          
+!RANERR: Neuer Bestand liegt au·erhalb der Range, diese Zeilen anzeigen
+!NORANGE
+.formula M|verwend  = 1|verw
+..
+!BESTAND: BestÑnde in LE umrechnen / convert stock into stock units
+.type M9.3 xibest      ? _F|defined(U|xibest)
+.type M9.3 xibestle    ? _F|defined(U|xibestle)
+.type M9.3 xnbest      ? _F|defined(U|xnbest)
+.type M9.3 xnbestlevgl ? _F|defined(U|xnbestlevgl)
+.. ZÑhlbestand in LE
+.formula M|tnbestle    = M|tnbest * M|tgebf
+.. Buchbestand in LE zum Inventurzeitpunkt
+.formula U|xibestle    = M|tibest * M|tgebf
+.continue IBEST        ? _((M|bbasisnull) & (1|ibest < 0.0))
+.formula U|xmgediff    = M|tnbestle
+.continue BBASISNULL
+..
+!IBEST
+.formula U|xmgediff    = M|tnbestle - U|xibestle
+..
+!BBASISNULL
+.formula U|xnbestlevgl = M|tnbest * M|tgebf
+.. Mengen-Diff in LE
+.formula M|tmgediffle  = U|xmgediff
+.. nach Bestandsabschluss: Zeilen ohne Bewertung und mit Mengenabweichung entfernen
+.. kormanu in der ZÑhllistenposition steht in diesem Fall auf ja
+.make screen line -O  ? U|xmgediff <> 0 & 1|kormanu & 1|bend
+.continue STOCKT      ? U|xmgediff <> 0 & 1|kormanu & 1|bend
+..Zeilen ohne Mengenabweichung entfernen
+.make screen line -O ? U|xmgediff = 0 & M|bnurabweichungen
+.continue STOCKT     ? U|xmgediff = 0 & M|bnurabweichungen 
+..
+.. erst Standard, dann Artikel, dann ZÑhlliste
+.assign M|awgruppe = M|wgruppe
+.assign M|awgruppe = M|tartikel^aufgrp      ? _F|empty(M|tartikel^aufgrp)
+.assign M|abestand = M|bestand
+.. wenn Artikel Fremdbeschaffung oder Lohnfertigung
+.assign M|abestand = M|awgruppe^bestausekso ? _F|empty(M|tartikel^aufgrp^bestausekso) & (F|value(M|tartikel^bsart, "AS79") = "(ExternalProcurement)" ; F|value(M|tartikel^bsart, "AS79") = "(Subcontracting)")
+.. wenn Artikel Eigenfertigung
+.assign M|abestand = M|awgruppe^bestausfert ? _F|empty(M|tartikel^aufgrp^bestausfert) & F|value(M|tartikel^bsart, "AS79") = "(InhouseProduction)"
+.continue NOWAREHOUSE ? _F|equals(M|tartikel^bsart, "(Relocation)")
+.. wenn Artikel Umlagern, dann Lagergruppeneigenschafften prÅfen:
+.. externe Lagergruppeneigenschaften prÅfen    -> welche Lagergruppe?
+.formula U|xsel ="$,,art=" + M|tartikel^id + ";@gruppe=3;@ablageart=(Active)"
+.load 6 modificationlock nowait warehousedata 'U|xsel'
+..
+!WAREHOUSE
+.continue NOWAREHOUSE ? _G|mehr
+.continue LOAD        F|value(6|bsart, "AS79") <> "(InhouseProduction)" & F|value(6|bsart, "AS79") <> "(ExternalProcurement)"
+.continue AUSGABE
+..
+!LOAD
+.load 6 modificationlock nowait warehousedata
+.continue WAREHOUSE
+..
+!AUSGABE
+.assign M|abestand = M|awgruppe^bestausfert ? _F|empty(M|tartikel^aufgrp^bestausfert) & F|value(6|bsart, "AS79") = "(InhouseProduction)"
+.assign M|abestand = M|awgruppe^bestausekso ? _F|empty(M|tartikel^aufgrp^bestausekso) & F|value(6|bsart, "AS79") = "(ExternalProcurement)"
+..
+!NOWAREHOUSE
+.assign M|abestand       = 1|bestko               ? _F|empty(1|bestko)
+..
+.. Mengenabweichung
+.assign M|akontomgeabw = M|kontozumgeabw          ?  M|tmgediffle > 0
+.assign M|akontomgeabw = M|kontoabmgeabw          ?  M|tmgediffle < 0
+.assign M|akontomgeabw = M|awgruppe^bvausinventzu ?  M|tmgediffle > 0 & _F|empty(M|awgruppe^bvausinventzu)
+.assign M|akontomgeabw = M|awgruppe^bvausinventab ?  M|tmgediffle < 0 & _F|empty(M|awgruppe^bvausinventab)
+.assign M|akontomgeabw = 1|gvko                   ? _F|empty(1|gvko)
+.. Preisabweichung
+.assign M|akontopreisabw = M|kontopreisabw
+.assign M|akontopreisabw = M|awgruppe^bewdiff    ? _F|empty(M|awgruppe^bewdiff)
+.assign M|akstelle       = M|kstelle
+.assign M|akstelle       = M|awgruppe^wgkst      ? _F|empty(M|tartikel^aufgrp^wgkst)
+.assign M|akstelle       = 1|kstelle             ? _F|empty(1|kstelle)
+..
+!WERTE: 
+.. Buchwert: Bewertungspreis in InlandswÑhrung pro LE * Bestand in LE zum Inventurdatum
+.formula M|tiwert = (M|tbpr * U|xibestle):2
+.. Inventurwert: Bewertungspreis in InlandswÑhrung pro LE * Insgesamt gezÑhlter Bestand in LE
+.formula M|tnwert = (M|tbpr * M|tnbestle):2
+.. Inventurwert neu:  Inventurwert * Zuschlag/Abwertung in %
+.formula M|tnwertneu = (M|tbpr * M|tnbestle * (100 + M|tabw) / 100.0):2
+.. Preisabweichung: 
+.formula M|tabwert = M|tnwertneu - M|tnwert
+.. Mengenabweichung in Wert-Differenz / difference of value
+.formula M|twertdiff = M|tnwertneu - M|tiwert
+..
+.. Kopfsummen bilden / total of header fields
+.. Summe Buchwert
+.formula M|kiwert       = M|kiwert    + M|tiwert
+.. Summe Inventurwert
+.formula M|knwert       = M|knwert    + M|tnwert
+.. Summe Inventurwert neu 
+.formula M|knwertneu    = M|knwertneu + M|tnwertneu
+.. Summe Preisabweichung = Summe aus: Abgewerteter Inventurwert - Inventurwert
+.formula M|kabwert      = M|kabwert   + M|tabwert
+.. Inventurwert - Buchwert
+.formula M|kwertdiff    = M|kwertdiff + M|twertdiff
+.. Summe negativer Differenzen
+.formula M|ksumnegdiff  = M|ksumnegdiff  + M|twertdiff ? M|twertdiff < 0
+.. Summe positiver Differenzen
+.formula M|ksumposdiff  = M|ksumposdiff  + M|twertdiff ? M|twertdiff > 0
+.colour -background 'M|warnfarbe' twertdiff 'M|aktzeile' ? M|twertdiff<>0
+..
+.. 0 = kein Gruppenwechsel, 1 = Gruppenwechsel
+.formula M|drgrpw = 1        ? M|tzlsnr <> U|xzlsnr
+.assign U|xzlsnr = M|tzlsnr
+..
+!STOCKT
+.load 1 stocktaking 
+.continue LOOP1
+..
+!END
+.assign M|zlsnr = "" ? M|banhaengen
+.continue
+..
+!ERROR1
+.error Bitte Nummer eintragen!
+.formula M|zlvon = ""
+.end 1
+..
+!ERROR2
+.error Bitte Nummer eintragen!
+.formula M|zlbis = ""
+.end 1

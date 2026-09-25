@@ -1,0 +1,229 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : LBU.EV
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : Allgemeines Event-FOP des Infosystems LBU
+..  Functionality  : Common event FOP of the Infosystem LBU
+..  Includes       :
+..
+.. include is/DBCHOOSER
+..*****************************************************************************
+..
+.set trans -
+..
+..-----------------------------------------------------------------------------
+.. Header fields
+..-----------------------------------------------------------------------------
+.continue COOBJ          ? G|evtvar = "koobj" & G|evtartengl ="FIELD_EXIT"
+.continue DATEI          ? G|evtvar = "vdn" ; G|evtvar = "vgr" ; G|evtvar = "vtab"
+.continue BATCHCHOOSE    ? (G|evtartengl ="FIELD_EXIT")   & (G|evtvar ="vgr" ; G|evtvar = "vdn" ; G|evtvar = "vtab")
+.continue PERIOD         ? G|evtvar ="anfm" ; G|evtvar = "endm"
+.continue PERIOD         ? G|evtvar ="anfj" ; G|evtvar = "endj"
+.continue PERIOD         ? G|evtvar ="von"  ; G|evtvar = "bis"
+.continue START          ? (G|evtartengl ="BUTTON_BEFORE") & (G|evtvar ="bstart")
+.continue BUART          ? (G|evtartengl ="FIELD_EXIT")   & (G|evtvar ="buart" ; G|evtvar = "buartalle")
+.continue SEL            ? (G|evtartengl ="BUTTON_AFTER")& (G|evtvar ="bsel")
+.continue RANGE          ? G|evtartengl ="FIELD_EXIT" & G|evtvar = "bevon"
+.continue RANGE          ? G|evtartengl ="FIELD_EXIT" & G|evtvar = "bebis"
+.continue ACCOUNT        ? G|evtartengl ="FIELD_EXIT" & G|evtvar = "konto"
+.continue TOUCHED        ? G|evtartengl ="FIELD_EXIT" & G|evtvar = "ktokvertaufl"
+..
+..-----------------------------------------------------------------------------
+.. Table fields
+..-----------------------------------------------------------------------------
+.continue BELEG   ? (G|evtartengl ="BUTTON_AFTER")& (G|evtvar ="bbeleg")
+.continue TOUCHED
+..
+..*****************************************************************************
+!COOBJ
+..*****************************************************************************
+.assign M|kst = M|koobj
+.continue END ? G|mehr
+.assign M|projekt = M|koobj
+.continue END
+..
+..*****************************************************************************
+!DATEI: Menu to choose database
+..*****************************************************************************
+.formula M|buart = "(FinancialEntry)"
+.input "is/DBCHOOSER"
+.continue DATEI2
+..
+..*****************************************************************************
+!ACCOUNT
+..*****************************************************************************
+.continue END ? F|empty(M|konto)
+.formula M|bevon = ""
+.formula M|bebis = ""
+.formula M|vdn   = M|konto^dnr
+.formula M|vgr   = M|konto^gruppe
+.formula M|buart = "(FinancialEntry)"
+.formula M|buart = "(StatisticalEntry)"  ? _(F|empty(M|konto^stata) ; F|equals(M|konto^stata, "(EuroOpening)"))
+.input "is/DBCHOOSER"
+.continue TOUCHED
+..
+..*****************************************************************************
+!RANGE
+..*****************************************************************************
+.formula   M|konto = ""
+.continue TOUCHED
+..
+..*****************************************************************************
+!BATCHCHOOSE
+..*****************************************************************************
+.formula M|buart = "(FinancialEntry)"
+.input "is/DBCHOOSER"
+.continue DATEI2
+..
+..*****************************************************************************
+!DATEI2
+..*****************************************************************************
+.formula M|konto = ""  ? M|konto^dnr <> M|vdn ; M|konto^gruppe <> M|vgr
+.formula M|esaldo     = 0.0
+.formula M|sollsum    = 0.0
+.formula M|habensum   = 0.0
+.formula M|bewegsaldo = 0.0
+.formula M|bevon  = ""
+.formula M|bebis  = ""
+.formula M|select = "!"
+.formula M|buartalle = G|true     ? M|vdn = 60 &  M|vgr = 1
+.formula M|buartalle = G|true     ? M|vdn = 5  & (M|vgr = 4 ; M|vgr = 2)
+.formula M|buartalle = G|true     ? M|vdn = 68 &  M|vgr = 9
+.continue BUART
+..
+..*****************************************************************************
+!BUART: statistical and financial entries selected ?
+..*****************************************************************************
+..
+.. M|buartn == 70 -> financial
+.. M|buartn == 83 -> statistical
+.. M|buartalle == true -> all
+..
+.protection        buart    ?  M|buartalle
+.protection -reset buart    ? _M|buartalle
+..
+.continue TOUCHED
+..
+..*****************************************************************************
+!PERIOD: period changed
+..*****************************************************************************
+.input "fb/IS.SETPERIOD"
+.continue TOUCHED
+..
+..*****************************************************************************
+!TOUCHED: Parameter changed
+..*****************************************************************************
+.copy M|bese   = G|false
+.input "is/TABLEEREN"
+.formula M|ktokvertaufl = G|false ? F|empty(M|vtab) ; M|vdn<>5 ; M|vgr<>1
+.protection        ktokvertaufl        ? _F|empty(M|vtab) ; M|vdn<>5 ; M|vgr<>1
+.protection -reset ktokvertaufl        ? _F|empty(M|vtab) & M|vdn=5 & M|vgr=1
+.formula M|esaldo     = 0.0
+.formula M|sollsum    = 0.0
+.formula M|habensum   = 0.0
+.formula M|bewegsaldo = 0.0
+.continue END
+..
+..*****************************************************************************
+!START: Start button pressed
+..*****************************************************************************
+.input "is/DBCHOOSER"  ? F|empty(M|konto)
+.input "is/RANGECHECK" ? F|empty(M|konto)
+..
+.formula M|select = M|bevon +"!"+ M|bebis  ?  F|empty(M|konto)
+.formula M|select = "$,id=" + 'M|konto^id' ? _F|empty(M|konto)
+.formula M|bese   = G|false
+..
+.set setofbooks 'M|bukreis^bknr'
+.continue ACCRANGE ? M|datnr = 68
+.continue STDAT
+..
+..*****************************************************************************
+!ACCRANGE: Account range
+..*****************************************************************************
+.type text xxlbuffer
+.formula U|xxlbuffer = "5"
+.formula M|bese    =  G|false
+.. Eine Abfrage von "von!bis" liefert nicht die Ergebnisse aus einem HÅlsenpuffer
+.formula M|select  = "$,@gruppe=" + F|tostring(F|eval(M|vgr + 16)) ? M|vdn = 68
+.formula M|select  = M|select + ";@numsuch=" + 'M|bevon' + "!" + 'M|bebis
+..
+.. account ranges
+.formula M|grp     = F|power(2, (M|vgr+16))
+.continue STDAT
+..
+..*****************************************************************************
+!STDAT: Start output (init)
+..*****************************************************************************
+..
+.select year 'M|endj' "1" 'M|endm'
+..
+.set currency 'M|buwaehr'
+.set outcurr 'M|buwaehr'
+..
+.continue HOLEN
+..
+..Init
+.formula M|esaldo     = 0
+.formula M|sollsum    = 0
+.formula M|habensum   = 0
+.formula M|bewegsaldo = 0
+.formula M|stufe      = 0
+.formula M|altber     = ""
+.formula M|modulo     = 0
+..
+..*****************************************************************************
+!HOLEN
+..*****************************************************************************
+.formula M|select ="!"       ? (M|select ="")
+.input "is/TABLEEREN"
+.formula M|esaldo     = 0.0
+.formula M|sollsum    = 0.0
+.formula M|habensum   = 0.0
+.formula M|bewegsaldo = 0.0
+.input "is/HOL.LISTE"
+.continue END
+..
+..*****************************************************************************
+!SEL: Selection bar invoked
+..*****************************************************************************
+.formula M|bevon    =""
+.formula M|bebis    =""
+.formula M|datnr    = M|vdn
+.formula G|evtfeldneu ="%"
+.input "is/AUSWAHL"
+.formula M|bese     =_(M|select ="!")
+.input "is/TABLEEREN"
+.formula M|esaldo     = 0.0
+.formula M|sollsum    = 0.0
+.formula M|habensum   = 0.0
+.formula M|bewegsaldo = 0.0
+.continue STDAT
+..
+..*****************************************************************************
+!BELEG: Show voucher
+..*****************************************************************************
+.command -parallel 'M|tvkekre^id' ? + 'M|tvkekre' <> 0
+.continue END ?  + 'M|tvkekre' <> 0
+.type P87:9 xcallparam
+.formula   U|xcallparam = "59028" ? 'M|ursache(L=":")' = "(MaterialValuationWarehouseStock)"
+.formula   U|xcallparam = "59031" ? 'M|ursache(L=":")' = "(MaterialValuationWIPLev)"
+.formula   U|xcallparam = "59029" ? 'M|ursache(L=":")' = "(ProductionActivity)"
+.formula   U|xcallparam = "59030" ? 'M|ursache(L=":")' = "(ProductionActivityInventoryUP)"
+.continue NOEKVK ? F|empty(U|xcallparam)
+.input "st/CALLPARAM.EXEC"
+.continue END
+..
+..*****************************************************************************
+!NOEKVK: No voucher (invoice) available
+..*****************************************************************************
+.box(0,0) Beachte!
+ Es existiert kein Beleg fÅr diese Buchungsursache 
+.continue END
+..
+..*****************************************************************************
+!END: End
+..*****************************************************************************
+.continue

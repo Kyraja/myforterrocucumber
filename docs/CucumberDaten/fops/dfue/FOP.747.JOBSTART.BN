@@ -1,0 +1,84 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : FOP.747.JOBSTART.BN
+.. Autor          : mage
+.. Verantwortlich : teamdelivery
+.. Kontrolle      : 
+.. Funktion       : Programm zum Starten des Exports
+.. Functionality  : Program for starting of export
+..*****************************************************************************
+.set trans -
+..
+.type text xtsys          ? _F|defined(U|xtsys)
+.type text xtedilog       ? _F|defined(U|xtedilog)
+.type text xtproglog      ? _F|defined(U|xtproglog)
+.type bool xbedi          ? _F|defined(U|xbedi)
+.type bool xbprog         ? _F|defined(U|xbprog)
+.type text xtlenprogress1 ? _F|defined(U|xtlenprogress1)
+.type text xtlenedi1      ? _F|defined(U|xtlenedi1)
+.type text xtlenedi2      ? _F|defined(U|xtlenedi2)
+.type text xtlenprogress2 ? _F|defined(U|xtlenprogress2)
+.type integer xi1             ? _F|defined(U|xi1)
+.type integer xi2             ? _F|defined(U|xi2)
+.type integer xidiff          ? _F|defined(U|xidiff)
+.type text xttmpdat       ? _F|defined(U|xttmpdat)
+..
+.formula U|xtedilog  = "java/log/edi/edi.log"
+.formula U|xtproglog = "java/log/edi/progress.log"
+..
+.formula U|xbedi  = G|false
+.formula U|xbprog = G|false
+.formula U|xbedi  = G|true ? F|fileexists(xtedilog)
+.formula U|xbprog = G|true ? F|fileexists(xtproglog)
+..
+.formula U|xttmpdat = "rmtmp/X" + 'G|versionneu' + ".TMP"
+.continue PROGLOG ? _U|xbedi
+..
+.formula U|xtsys = "wc -l " + U|xtedilog + " >" + U|xttmpdat
+.system 'U|xtsys'
+.select from 'U|xttmpdat' U|xtlenedi1
+..
+!PROGLOG
+.continue CALL ? _U|xbprog
+.formula U|xtsys = "wc -l " + U|xtproglog + " >" + U|xttmpdat
+.system 'U|xtsys'
+.select from
+.select from 'U|xttmpdat' U|xtlenprogress1
+..
+!CALL
+.formula U|xtsys = "s3java.sh de.abas.edi.JEdi -configfile " + M|konfdat + " -id " + 'M|nummer' + " -p " + 'G|einmalpw'
+.. Optionen
+.. -jedplogging
+..
+.set trans +
+Starte Export 'G|datum' 'G|zeit'
+.system 'U|xtsys'
+..
+Export beendet 'G|datum' 'G|zeit'
+.set trans -
+.formula U|xtsys = "wc -l " + U|xtedilog + " >" + U|xttmpdat
+.system 'U|xtsys'
+..
+.select from
+.select from 'U|xttmpdat' U|xtlenedi2
+.formula U|xtsys = "wc -l " + U|xtproglog + " >" + U|xttmpdat
+.system 'U|xtsys'
+.select from
+.select from 'U|xttmpdat' U|xtlenprogress2
+..
+.formula U|xi1 = U|xtlenprogress1 ? U|xbprog
+.formula U|xi2 = U|xtlenprogress2
+.formula U|xidiff = U|xi2 - U|xi1
+..
+progress.log:
+.formula U|xtsys = "tail -" + 'U|xidiff' + " " + U|xtproglog
+.system 'U|xtsys'
+..
+.formula U|xi1 = U|xtlenedi1 ? U|xbedi
+.formula U|xi2 = U|xtlenedi2
+.formula U|xidiff = U|xi2 - U|xi1
+edi.log:
+.formula U|xtsys = "tail -" + 'U|xidiff' + " " + U|xtedilog
+.system 'U|xtsys'
+..
+.continue

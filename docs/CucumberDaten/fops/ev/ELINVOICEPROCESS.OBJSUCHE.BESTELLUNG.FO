@@ -1,0 +1,204 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICEPROCESS.OBJSUCHE.BESTELLUNG.FO
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text xsel   ? _F|defined(U|xsel)
+.type text xtext  ? _F|defined(U|xtext)
+..
+.formula M|button1 = M|gruenz
+.formula M|button7 = M|gruenz
+..<META M|='ev/ELINVOICEPROCESS'>
+..<META 1|='P4:2'>
+..
+.continue END    ?  F|empty(M|ExchangedDocumentID) & F|empty(M|BuyerReference)
+.continue ERROR2 ?  F|empty(M|ExchangedDocumentID) & F|empty(M|BuyerReference) & F|empty(M|BuyerOrderReferencedDocument)
+..
+.. Aufruf: ev/ELINVOICEPROCESS.OBJSUCHE.ORDER.PROCESS.FO
+.type text searchfop ? _F|defined(U|searchfop)
+.formula U|searchfop = "ev/ELINVOICEPROCESS.OBJSUCHE.ORDER.PROCESS.FO"
+..
+.. Parameter-Felder 
+.type text xsuchnummer    ? _F|defined(U|xsuchnummer)
+.type text xsuchfrzeich   ? _F|defined(U|xsuchfrzeich)
+.. bereits ermittelte BusinessPartner
+.type VP5 xsuchlieferant ? _F|defined(U|xsuchlieferant)
+.type VP5 xsuchresteller ? _F|defined(U|xsuchresteller)
+..
+.. Ergebnis-Felder
+.type VP23 xgefundenVP22 ? _F|defined(U|xgefundenVP22)
+.type text xtsuchfehler ? _F|defined(U|xtsuchfehler)
+..
+.. PARAMETER FöR SUCH-AUFRUF **************************************************
+.formula U|xsuchnummer = M|BuyerOrderReferencedDocument 
+.formula U|xsuchnummer = M|BuyerReference         ?  F|empty(U|xsuchnummer)
+.formula U|xgefundenVP22 = M|eigbestell^id        ? _F|empty(M|eigbestell)
+.. gebucht
+.copy M|lsueb =  _M|eigbestell^uebertr            ? _F|empty(M|eigbestell)
+.copy M|lsfakt = G|FALSE                          ? _F|empty(M|eigbestell)
+.copy M|bmehrerelief = G|FALSE                    ? _F|empty(M|eigbestell)
+.continue ERROR3                                  ? _F|empty(M|eigbestell) & U|xgefundenVP22^lief^id <> M|lieferant^id
+.formula U|xsuchfrzeich = M|ExchangedDocumentID
+.formula U|xsuchlieferant = M|lieferant^id 
+.formula U|xsuchresteller = ""
+..
+.input 'U|searchfop'      ?  F|empty(M|bestellung) & F|empty(M|eigbestell)
+.println 'U|xtsuchfehler' ? _F|empty(U|xtsuchfehler)
+.copy M|bausbe = G|FALSE
+.copy M|bausls = G|FALSE
+.copy M|bbeleganfuegen = G|FALSE
+.copy M|breneu = G|FALSE
+.copy M|bausrlsre = G|FALSE
+..
+.continue ERROR ? F|empty(U|xgefundenVP22)
+.assign M|bestellung = U|xgefundenVP22
+.continue RECH ? F|empty(M|bestellung)
+.assign M|vorgang = U|xgefundenVP22
+.formula M|bem = M|bestellung^bem
+.assign M|zbed = M|bestellung^zbed
+.formula M|button7 = M|orangez ? F|empty(M|zbed) & _F|empty(M|SpecifiedTradePaymentTerms)
+.formula M|button7 = M|rotz    ? F|empty(M|zbed) & _F|empty(M|SpecifiedTradePaymentTerms) & F|empty(M|SpecifiedTradePaymentTermsDueDateDateTime)
+.protection zbed 0
+.protection -reset zbed 0 ?  F|empty(M|zbed) & _F|empty(M|SpecifiedTradePaymentTerms)
+.. Werte aus der Bestellung zur Hilfe bei der Rechnungsfreigabe
+.formula M|sumnettobestellung = M|bestellung^sumnetto 
+.. Rechnung aus Bestellung
+.copy M|bausbe = G|TRUE
+..
+.copy M|bmehrerelief = G|FALSE
+.. Gibt es (mindestens) einen lebendigen Lieferschein zu dieser Bestellung?
+.formula U|xsel = "$,,;okopf="+'M|bestellung^id' + ";stornopartnervorg=`;lief="+'M|lieferant^id'+";vom="+'M|bestellung^vom'+"!.;lsart=(PackingSlip);typ=(PackingSlip);@gruppe=23;@ablageart=(Both);@richtung=(Backwards)"
+.. bei Gutschriften, sind die Lieferscheine abgelegt
+.continue LOAD1 ? _M|ExchangedDocumentTypeCode = "81" & _M|ExchangedDocumentTypeCode = "381"
+.formula U|xsel = "$,,;okopf="+'M|bestellung^id' + ";stornopartnervorg=`;lief="+'M|lieferant^id'+";vom="+'M|bestellung^vom'+"!.;lsart=(PackingSlip);typ=(PackingSlip);ablagef=(Yes);@gruppe=23;@ablageart=(Both);@richtung=(Backwards)"
+..
+!LOAD1
+.load 1 purchasing 'U|xsel'
+.continue BEGUTSCHR ? _G|mehr & (M|ExchangedDocumentTypeCode = "81" ; M|ExchangedDocumentTypeCode = "381")
+.continue RECH      ? _G|mehr
+.assign M|liefek = 1|id
+.formula M|bem = 1|bem
+.formula M|sumnettoliefer = 1|sumnetto
+.copy M|lsfakt = M|liefek^fakt ? _F|empty(M|liefek)
+.. LS gebucht?
+.copy M|lsueb = _M|liefek^uebertr
+.copy M|bausls = G|TRUE  ? M|lsfakt & M|lsueb
+.. daher Rechnung aus Bestellung auf FALSE setzen
+.copy M|bausbe = G|FALSE ? M|bausls
+.continue ERROR4 ? _M|lsueb & M|lsfakt
+..
+.continue FAKT ? _(M|ExchangedDocumentTypeCode = "81" ; M|ExchangedDocumentTypeCode = "381")
+.. fÅr Gutschriften prÅfen, ob es zu diesem LS einen RLS gibt
+.formula U|xsel = "$,,;nummer=;okopf="+'M|liefek^id' + ";lief="+'M|lieferant^id'+";lsart=(ReturnPackingSlip);typ=(PackingSlip);@gruppe=23;@ablageart=(Both)"
+.load 2 purchasing 'U|xsel'
+.formula M|sumnettoliefer = 2|sumnetto ? G|mehr
+.copy M|bausls = G|FALSE               ? G|mehr
+.copy M|bausbe = G|FALSE               ? G|mehr
+.copy M|bbeleganfuegen = G|FALSE       ? G|mehr
+.copy M|bausrlsre = G|TRUE             ? G|mehr
+.assign M|vorgang = 2|id               ? G|mehr
+.continue FAKT                         ? G|mehr
+..
+!LSGUTSCHR: fÅr Gutschriften prÅfen, ob es zu diesem LS eine gebuchte RE gibt
+.continue BEGUTSCHR ? M|bausbe
+.formula U|xsel = "$,,;nummer=;okopf="+'M|liefek^id' + ";vorganga=(Invoice);typ=(Invoice);@gruppe=24;ablagef=(Yes);@ablageart=(Both)"
+.load 3 purchasing 'U|xsel'
+.assign M|vorgang = 3|id               ? G|mehr
+.copy M|bausls = G|FALSE               ? G|mehr
+.copy M|bausbe = G|FALSE               ? G|mehr
+.copy M|bbeleganfuegen = G|FALSE       ? G|mehr
+.copy M|bausrlsre = G|TRUE             ? G|mehr
+.continue FAKT
+.. 
+!BEGUTSCHR: fÅr Gutschriften prÅfen, ob es zu BE eine gebuchte RE gibt
+.formula U|xsel = "$,,;nummer=;okopf="+'M|vorgang^id' + ";vorganga=(Invoice);typ=(Invoice);@gruppe=24;ablagef=(Yes);@ablageart=(Both)"
+.load 3 purchasing 'U|xsel'
+.assign M|rechnungek = 3|id            ? G|mehr
+.assign M|vorgang = 3|id               ? G|mehr
+.copy M|bausls = G|FALSE               ? G|mehr
+.copy M|bausbe = G|FALSE               ? G|mehr
+.copy M|bbeleganfuegen = G|FALSE       ? G|mehr
+.copy M|bausrlsre = G|TRUE             ? G|mehr
+..
+.. fÅr Gutschriften prÅfen, ob es zu dieser RE einen RLS gibt
+.formula U|xsel = "$,,;nummer=;okopf="+'M|rechnungek^id' + ";lief="+'M|lieferant^id'+";lsart=(ReturnPackingSlip);typ=(PackingSlip);@gruppe=23;@ablageart=(Both)"
+.load 4 purchasing 'U|xsel'
+.assign M|rlsek = 4|id ? G|mehr
+.assign M|vorgang =  4|id ? G|mehr
+.copy M|bausls = G|FALSE               ? G|mehr
+.copy M|bausbe = G|FALSE               ? G|mehr
+.copy M|bbeleganfuegen = G|FALSE       ? G|mehr
+.copy M|bausrlsre = G|TRUE             ? G|mehr
+.continue FAKT
+..
+!FAKT
+.. bei Gutschriften raus 
+.continue END ? M|ExchangedDocumentTypeCode = "81" ; M|ExchangedDocumentTypeCode = "381"
+.continue END ? _M|lsfakt
+.. 
+!MEHRERELS
+.load 1 purchasing
+.continue END                   ? _G|mehr & (M|bausls ; M|bbeleganfuegen)
+.continue RECHLS                ? _G|mehr
+.copy M|bmehrerelief = G|TRUE
+.formula M|sumnettoliefer = M|sumnettoliefer + 1|sumnetto 
+.assign M|vorgang = ""
+.formula M|liefek = ""
+.copy M|bbeleganfuegen = G|TRUE
+.copy M|bausbe = G|FALSE
+.copy M|bausls = G|FALSE
+.copy M|bausrlsre = G|FALSE
+.continue MEHRERELS
+..
+!RECH: Art der Rechnungserstellung ermitteln
+.assign M|vorgang = M|liefek  ? M|bausls
+.copy M|breneu = G|TRUE ? F|empty(M|liefek) & F|empty(M|bestellung)
+.continue END           ? M|breneu
+..
+!RECHLS:
+.copy M|bausls = G|TRUE ? _F|empty(M|liefek) & M|lsfakt & M|lsueb
+.note Nettosummen passen nicht zusammen, daher die Rechnung nach Erstellung aus Lieferschein bitte manuell prÅfen! ? M|sumnettoliefer <> M|TaxBasisTotalAmount
+.continue END           ? M|bausls
+.copy M|bausbe = G|TRUE ? _F|empty(M|bestellung)
+.note Nettosummen passen nicht zusammen, daher die Rechnung nach Erstellung aus Bestellung bitte manuell prÅfen! ? M|sumnettobestellung <> M|TaxBasisTotalAmount
+.continue END           ?  M|bausbe
+.copy M|breneu = G|TRUE ? _M|bausls & _M|bausbe
+..
+..*****************************************************************************
+!END
+.assign M|vorgang = M|liefek      ? M|bausls
+.assign M|vorgang = M|bestellung  ? M|bausbe
+.continue
+..
+!ERROR
+.copy M|breneu = G|TRUE
+.formula U|xtext = F|formatstr("Zu {1} konnte keine Bestellung mit dieser Bestellnummer ermittelt werden.", 'M|BuyerOrderReferencedDocument')  ? _F|empty(M|BuyerOrderReferencedDocument)
+.formula U|xtext = F|formatstr("Zu {1} konnte keine Bestellung mit dieser Bestellnummer ermittelt werden.", 'M|ExchangedDocumentID')           ? _F|empty(M|ExchangedDocumentID)
+.formula M|fctext = 'M|fctext' + ";" + 'U|xtext'
+.println 'U|xtsuchfehler'    ? _F|empty(U|xtsuchfehler)
+.formula M|button1 = M|orangez
+.formula M|button7 = M|orangez ? F|empty(M|zbed) & _F|empty(M|SpecifiedTradePaymentTerms)
+.formula M|button7 = M|rotz    ? F|empty(M|zbed) & _F|empty(M|SpecifiedTradePaymentTerms) & F|empty(M|SpecifiedTradePaymentTermsDueDateDateTime)
+.continue
+..
+!ERROR2
+.copy M|breneu = G|TRUE                                
+.formula U|xtext = F|formatstr("Keinerlei Bestellinformationen in der XML-DAtei enthalten."
+.formula M|fctext = 'M|fctext' + ";" + 'U|xtext'
+.println 'U|xtsuchfehler' ? _F|empty(U|xtsuchfehler)
+.formula M|button1 = M|orangez
+.formula M|button7 = M|orange ? F|empty(M|zbed) & _F|empty(M|SpecifiedTradePaymentTerms)
+.formula M|button7 = M|rotz   ? F|empty(M|zbed) & _F|empty(M|SpecifiedTradePaymentTerms) & F|empty(M|SpecifiedTradePaymentTermsDueDateDateTime)
+.continue
+..
+!ERROR3
+.error -message 'F|formatstr("Lieferant {1} aus Bestellung {2} passt nicht zum Lieferanten {3}.", M|eigbestell^lief^nummer, M|eigbestell^nummer, M|lieferant^nummer)'
+.end 1
+.. 
+!ERROR4
+.error -message 'F|formatstr("Rechnung aus Lieferschein ist gesetzt, aber Lieferschein {1} ist noch nicht gebucht.", M|liefek^nummer)'
+.end 1

@@ -1,0 +1,417 @@
+..!interpreter english
+..@@BEGINHEAD
+..========================================================================
+..==
+..==  Name              : FABDIFF
+..==
+..==  Pfad              : dfue
+..==
+..==  Funktion          : Ausgabe Differenzreport VDA-/ODETT-
+..==                      Feinabrufe
+..==
+..==  Erstellungsdatum  : 26.05.1998
+..==
+..==  Autor             : alltrotec GmbH, Matthias Schrîder
+..==
+..==  Verantwortlich    : mh
+..==
+..==  notwendige Pfade  : dfue
+..==
+..==  Menuepunkte       :
+..==
+..==  Bitte wÑhlen Sie die Methode zur Identifikation des aktuellen Feinabrufs
+..==  - Kundenartikelnummer, Werk, Abladestelle, VerwendungsschlÅssel
+..==  - Rahmenauftrags- und / oder Kunden-EKS-Ident-Nr.
+..==  - Ende
+..==
+..==  WÑhlen Sie die weitere Verarbeitungsmethode fÅr den gewÑhlten Feinabruf
+..==  - Letzten Abruf des identifizierbaren EKS-Rahmens fÅr Differenzliste verwenden
+..==  - GewÑhlten Abruf fÅr Differenzliste verwenden
+..==
+..==  Maskenprioritaet
+..==  bei EFOP          :
+..==
+..==  Besonderheiten    : Parameter an FABDIFF.DRUCK:
+..==                      - Identnummer des EKS-EDI-Datensatzes des aktuell
+..==                        gewÑhlten letzten Feinabrufes zu einem
+..==                        EKS-Rahmenauftrag (num, Datensatz ist geholt !)
+..==
+..========================================================================
+.set trans +
+..@@ENDHEAD
+..
+.input ARB
+..
+.. variable definitions
+..@@BEGINVARDEFS
+..====================================================
+..... procedure stack pointer .....
+.type integer   xprocsp
+..>> Abschlu·- / Bestell-Nummer
+.type text       xabbenr
+..>> aktuelle EKS-EDI-Identnummer
+.type text       xactedinum
+..>> Datenart Abruf: 511, NAD, 551, SH, PUS
+.type text       xdatenart
+..>> Name des DFUE-Programms
+.type text       xdfueprog
+..>> Name des DFUE-Unterprogramms
+.type text       xdfueuprog
+..>> Name des VKAUV-Unterprogramms DFUE / DU .IMP.INI
+.type text       xduimpini
+..>> GTIN-Artikelnummer
+.type text       xgtin
+..>> 1. SuchschlÅssel EDI
+.type text       xedisuchschluessel1
+..>> Kunden-Fortschrittszahl
+.type integer    xeinfzahl
+..>> Identnummer der EKS-Rahmen-Artikels
+.type text       xideksart
+..>> Identnummer des EKS-Rahmenauftrags
+.type text       xideksrah
+..>> Identnummer des EKS-Auftrages
+.type text       xideksvor
+..>> globaler Schalter, ob Protokoll erweitert
+.type bool       xistfproterw
+..>> 1. Schalter, ob nach Holen Satz vorhanden
+.type bool       xistsatz1
+..>> Zeichen des Kunden
+.type text       xkdzeich
+..>> Datum Feinabruf
+.type GD         xlabrufd
+..>> Kundenartikelnummer
+.type text       xkuartnr
+..>> Datum letzer Lieferscheineingang
+.type GD         xleinlida
+..>> Nummer letzer Lieferscheineingang
+.type text       xleinlief
+..>> Name der permanenten Protokoll-Datei
+.type text       xnfprotokoll
+..>> Name der Erweiterung der Protokoll-Datei
+.type text       xnfprotokollerw
+..>> Identnummer EKS-Rahmen
+.type text       xranum
+..>> Suchwort EKS-Rahmen
+.type text       xrasuch
+..>> Benennung EKS-Rahmen
+.type text       xraname
+..>> ID Selektionsleiste
+.type text       xselektionslei
+..>> Identnummer SEL-ED-FAB
+.type text       xSELEDFABId
+..>> Identnummer SEL-ED-PUS
+.type text       xSELEDPUSId
+..>> Richtung "rÅckwÑrts" fÅr Selektionsleiste aus LG
+.atext xSELSORTRUECK 2644
+..>> Richtung "vorwÑrts" fÅr Selektionsleiste aus LG
+.atext xSELSORTVORW 2643
+..>> Identnummer SEL-VK-REI
+.type text       xSELVKREIId
+..>> Identnummer SEL-VK-REE
+.type text       xSELVKREIIdGTIN
+..>> SYS-Befehl
+.type text       xsybefehl
+..>> TMP-Verzeichnis
+.type text       xtmpdir
+..====================================================
+..@@ENDVARDEFS
+..
+.. initialize procedure stack pointer
+.formula xprocsp = 0
+.. alle variablen mÅssen definiert sein, sonst bricht das programm ab
+.set demand -
+.set cancel -
+..
+.. ----------------------------------------
+.continue EPROCDEF
+.. procedure definitions
+!EPROCDEF: ----- end procedure definitions -----
+.. ----------------------------------------
+..
+..  Initialisierung dynamische globale Variablen
+..>> Name des DFUE-Programms (tname aus ARB)
+.formula xdfueprog = tname
+..>> Name des DFUE-Unterprogramms
+.formula xdfueuprog = tname
+.formula xistfproterw = false
+..>> vorÅbergehendes Verzeichnis temporÑre Dateien in "."
+.formula xtmpdir = ""
+..>> Name der Protokoll-Datei Erweiterung
+.formula xnfprotokollerw = xtmpdir + "XDAV.IMP." + panummer + ".TMP"
+..
+.output new 'xnfprotokollerw'
+.length 1
+.right 80
+.tablerecord
+..
+.output new WERF.WEG
+..
+..>> Test VKAUV-Unterprogramms DFUE.IMP.INI
+..**ok,07.01.2003 (Test von DFUE.IMP.INI wurde entfernt)
+..**ok,07.01.2003 (xarb wurde entfernt)
+.formula xduimpini = "dfue/DFUE.IMP.INI"
+..
+.formula xdfueuprog = xduimpini
+..
+.input 'xduimpini'
+..
+..
+!REPT001: ==============================
+.formula xedinum = ""
+..
+.. >> MenÅauswahl fÅr Identifikation des aktuellen Feinabrufs
+.output terminal
+.input BILD.F
+'tname' - Ausgabe Differenzliste fÅr VDA-/ODETT-Feinabrufe
+
+..
+.menu WÑhlen Sie die Methode zur Auswahl des Feinabrufs
+Åber Rahmenauftrag (mit Artikel-Nr, Werk, Abladestelle, VerwendungsschlÅssel)
+Åber EDI-Datensatz (mit Feinabruf-Nr, Artikel-Nr, Kunde, Werk, Abladestelle)
+Ende
+....
+..
+..
+.. =====   CASE001   =====
+.continue BRK001 ? _(menu = 1)
+.. >> MenÅauswahl 1: Holen EKS-Rahmenauftrag und -EDI-Datensatz
+.formula xselektionslei = "%,,;@gruppe=2;@ablage=(3);@zeilen=(0);0:kopf<>`;artikel=;kunde=;kopf^werk=;kopf^ablstelle=;kopf^verwschl=;kopf^abschlnr=;.kotyp=(BlanketOrder)"
+.select sales 'xselektionslei'
+..
+..
+.continue EL001 ? _(mehr)
+.. IF001
+.formula xranum  = 'kopf^num3'
+.formula xrasuch = 'kopf^such3'
+.formula xraname = 'kopf^betreff'
+.formula xptext = ptext<<";"
+..
+..
+.continue EL002 ? G|false
+.. IF002
+..
+.continue EL003 ? _(xptext<> "")
+.. IF003
+.select edifact 'xptext'
+..
+.. >> öberspringen EDIFACT-DELJIT-PUS
+..
+.continue EL004 ? _(mehr)
+.. IF004
+..
+.continue EL005 ? _(datenart = "PUS")
+.. IF005
+.formula xedisuchschluessel1 = "$,,;@gruppe=0;@ablage=(1);@zeilen=(0);vorart=3;imex=IM;sinhouse=800;fcode=0;status=0;@ordnung=nummer.(1);nummer=!" + 'num' + ";ideksrah=" + ideksrah + ";idkundeab=" + idkundeab
+.select edifact 'xedisuchschluessel1'
+.formula xdatenart = "PUS"
+..
+..
+!LOOP001: ==============================
+.continue ELOP001 ? _((mehr) & (xdatenart = "PUS"))
+.formula xdatenart = datenart
+..
+..
+.continue EL006 ? _(xdatenart = "PUS")
+.. IF006
+.select edifact
+..
+!EL006
+.. FI006
+..
+.continue LOOP001
+!ELOP001: ==============================
+..
+!EL005
+.. FI005
+..
+!EL004
+.. FI004
+..
+.formula xistsatz1 = mehr
+..
+..
+.continue EL007 ? _(xistsatz1)
+.. IF007
+.continue FI007
+!EL007
+.. >> Testergebnis negativ: Fehlermeldung
+..>>
+.box Fehler
+
+ Rahmenauftrag:
+
+ 'xranum  ' 'xrasuch ' 'xraname'
+
+ hat Eintrag eines eingegangenen Feinabrufs
+ fÅr nicht existierenden EDI-Datensatz !
+
+..
+..
+!FI007
+..
+.continue FI003
+!EL003
+.. >> Testergebnis negativ: Fehlermeldung
+..>>
+.box Fehler
+ FÅr den Rahmenauftrag-ID: 'xranum  ', Suchwort: 'xrasuch'
+ ist kein eingegangener Feinabruf vorhanden!
+.formula xistsatz1 = false
+..
+!FI003
+..
+.continue FI002
+!EL002
+.. >> Testergebnis negativ: Fehlermeldung
+..>>
+.box Fehler
+
+ GewÑhltes Objekt:
+
+ 'xranum  ' 'xrasuch ' 'xraname'
+
+ ist kein Rahmenauftrag !
+ (Parameter "Rahmen" in Selektions-Leiste auf "ja" lassen)
+
+..
+..
+!FI002
+..
+.continue FI001
+!EL001
+.formula xistsatz1 = false
+..
+!FI001
+..
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(menu = 2)
+.. >> MenÅauswahl 2: Holen letzten EKS-EDI-Datensatz eines Rahmens
+.. Åber EDI-Datensatz (mit Feinabruf-Nr, Artikel-Nr, Kunde, Werk, Abladestelle)
+.formula xselektionslei = "%,,;@gruppe=0;@ablage=(1);@zeilen=(0);nummer=;ideksart=;labruf=;idkundeab=;werk=;ablstelle=;verwschl=;abbenr=;ideksrah=;sinhouse=800;vorart=3;imex=IM"
+.select edifact 'xselektionslei'
+..
+..
+.continue EL008 ? _(mehr)
+.. IF008
+.. >> Testergebnis positiv: Holen letzten Feinabruf aus EKS-EDI-Datenbank
+.formula xedisuchschluessel1 = "$,,;@gruppe=0;@ablage=(1);@zeilen=(0);@ordnung=nummer.(1);vorart=3;imex=IM;sinhouse=800;fcode=0;status=0;ideksrah=" + ideksrah + ";idkundeab=" + idkundeab
+.select edifact 'xedisuchschluessel1'
+..
+..>>    öberspringen EDIFACT-DELJIT-PUS:
+.formula xdatenart = "PUS"
+..
+..
+!LOOP002: ==============================
+.continue ELOP002 ? _((mehr) & (xdatenart = "PUS"))
+.formula xdatenart = datenart
+..
+..
+.continue EL009 ? _(xdatenart = "PUS")
+.. IF009
+.select edifact
+..
+!EL009
+.. FI009
+..
+.continue LOOP002
+!ELOP002: ==============================
+..
+..
+.continue EL010 ? _(mehr)
+.. IF010
+.select edifact 'num'
+..
+!EL010
+.. FI010
+..
+!EL008
+.. FI008
+..
+.formula xistsatz1 = mehr
+..
+.continue ESAC001
+!BRK002
+.end .
+..
+!ESAC001: =====   ENDCASE   =====
+..
+..
+.continue EL011 ? _(xistsatz1)
+.. IF011
+.input DRUCKER
+..
+!EL011
+.. FI011
+..
+..
+!LOOP003: ==============================
+.continue ELOP003 ? _(xistsatz1)
+.. >> Verarbeitung aller gewÑhlten EKS-EDI-DatensÑtze (Feinabrufe)
+.formula xactedinum = num
+..
+.input FABDIFF.DRUCK
+..
+..
+.continue EL012 ? _(geraet = "")
+.. IF012
+..
+.continue EL013 ? _(grafik)
+.. IF013
+.box Liste beendet
+
+ Weiter ...
+
+..
+..
+.continue FI013
+!EL013
+.output terminal ...
+..
+!FI013
+..
+!EL012
+.. FI012
+..
+.select edifact
+..
+..>>    öberspringen EDIFACT-DELJIT-PUS:
+.formula xdatenart = "PUS"
+..
+..
+!LOOP004: ==============================
+.continue ELOP004 ? _((mehr) & (xdatenart = "PUS"))
+.formula xdatenart = datenart
+..
+..
+.continue EL014 ? _(xdatenart = "PUS")
+.. IF014
+.select edifact
+..
+!EL014
+.. FI014
+..
+.continue LOOP004
+!ELOP004: ==============================
+..
+..
+.continue EL015 ? _(mehr)
+.. IF015
+.formula xistsatz1 = mehr & (num <> xactedinum)
+..
+.continue FI015
+!EL015
+.formula xistsatz1 = mehr
+..
+!FI015
+..
+.continue LOOP003
+!ELOP003: ==============================
+..
+.continue REPT001 ? _((menu <> 1) & (menu <> 2))
+..
+.formula xsybefehl = "rm -f " + xnfprotokollerw + " 1> ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+..
+.end .
+..

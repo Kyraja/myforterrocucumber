@@ -1,0 +1,146 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : USTVA.AUFLOES
+.. Date           : 02/25/2015
+.. Version        : 1.0
+.. Author         : RASC
+.. Copyright      :
+.. Functionality  : Umsatzsteuerkonten auflîsen + USt-Zahllast bezahlen
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type P68:1 U|xkob      ? _F|defined(U|xkob)
+.type P5:1  U|xkto      ? _F|defined(U|xkto)
+.type P5:1  U|xgeg      ? _F|defined(U|xgeg)
+.type GD2   U|xdate     ? _F|defined(U|xdate)
+.type text  U|xtcmd     ? _F|defined(U|xtcmd)
+.type text  U|xtedp     ? _F|defined(U|xtedp)
+.type text  U|xtout     ? _F|defined(U|xtout)
+.type text  U|xterr     ? _F|defined(U|xterr)
+.type GJ    U|xyear     ? _F|defined(U|xjear)
+.type integer U|xmonth  ? _F|defined(U|xmonth)
+.type real  U|xrsoll    ? _F|defined(U|xrsoll)
+.type real  U|xrhaben   ? _F|defined(U|xrhaben)
+.type real  U|xrsaldo   ? _F|defined(U|xrsaldo)
+.type real  U|xrbetr    ? _F|defined(U|xtbetr)
+.type integer U|xiz     ? _F|defined(U|xiz)
+..
+.assign U|xkob          = "USTVA"
+.assign U|xkto          = "38400"
+.assign U|xgeg          = "18100"
+.continue NOKOB         ? F|empty(U|xkob)
+.continue NOKTO         ? F|empty(U|xkto)
+.continue NOGEG         ? F|empty(U|xgeg)
+..
+.formula U|xdate        = 'M|qflagdate:8'  ? F|defined(M|qflagdate)
+.formula U|xdate        = G|datum:8      ? F|empty(U|xdate)
+.....formula U|xdate        = "30.11.14"
+..
+.formula U|xyear        = 'F|year(U|xdate)'
+.formula U|xmonth       = F|month(U|xdate)
+..
+.file -TEMPNAME U|xtedp
+.file -TEMPNAME U|xtout
+.file -TEMPNAME U|xterr
+.output NEW 'U|xtedp'
+.input DATEI.F
+#!EDP_TESTFLAG2=1
+#!EDP_DATE='U|xdate:8'
+#!database=6
+#!group=0
+#!action=new
+..kustart/A138/66=nicht steuerbar
+beleg;beldat;budat;text;kustart;\
+konto;ewbetr;ewhbetr;ustva;
+USTVA;'U|xdate:8';'U|xdate:8';Umbuchung UST-VA;(66);\
+..
+.formula U|xiz          = 0
+.formula U|xrsaldo      = 0
+.formula U|xtcmd        = "$,@database=68;@group=17;such==USTVA"
+.load 0 nolock object 'U|xtcmd'
+.continue NOKOB         ? _G|mehr
+!KOBZ
+.load 0 nolock line
+.continue KOBE          ? _G|mehr
+..
+.continue KOBZ          ? F|empty(0|konto)
+.continue KOBZ          ? _0|konto^dnr=5
+..
+.select nolock object '0|konto^id'
+.continue NOVKZ         ? _G|mehr
+.select year 'U|xyear' 'U|xmonth' 'U|xmonth'
+.continue NOVKZ         ? _G|mehr
+..
+.formula U|xrbetr       = H|s.U|xmonth - H|h.U|xmonth
+.continue KOBZ          ? U|xrbetr = 0
+.formula U|xrsoll       = 0
+.formula U|xrhaben      = 0
+.formula U|xrhaben      = U|xrbetr      ? U|xrbetr > 0
+.formula U|xrsoll       = -U|xrbetr     ? U|xrbetr < 0
+.formula U|xrsaldo      = U|xrsaldo + H|s.U|xmonth - H|h.U|xmonth
+..
+'0|konto^id';'U|xrsoll';'U|xrhaben';(0,0,0);\
+.formula U|xiz          = U|xiz + 1
+.continue KOBZ
+..
+!KOBE
+.continue NOOUT         ? U|xiz = 0
+.formula U|xrsoll       = 0
+.formula U|xrhaben      = 0
+.formula U|xrsoll       = U|xrsaldo     ? U|xrsaldo > 0
+.formula U|xrhaben      = -U|xrsaldo    ? U|xrsaldo < 0
+'U|xkto';'U|xrsoll';'U|xrhaben';(0,0,0);
+..
+..nun noch die Auszahlung 10 Tage spÑter im Folgemonat
+.formula U|xdate        = U|xdate + 10
+.formula U|xyear        = 'F|year(U|xdate)'
+.formula U|xmonth       = F|month(U|xdate)
+..
+USTVA;'U|xdate';'U|xdate';UST-VZ 'U|xyear'/'U|xmonth';(66);\
+'U|xgeg';'U|xrsoll';'U|xrhaben';(0,0,0);\
+'U|xkto';'U|xrhaben';'U|xrsoll';(0,0,0);
+.output
+..
+.formula U|xtcmd        = "edpimport.sh -p abas123 -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.continue END           ? F|filesize(U|xterr) = 0
+..
+....error "Die Buchung konnte nicht erzeugt werden!"
+....edi -READONLY 'U|xteout'
+....edi -READONLY 'U|xterr'
+.continue END
+..
+!NOKOB
+....error "Der Kontenbereich USTAV ist nicht vorhanden!
+.continue END
+..
+!NOKTO
+....error "Das Verrechnungskonto fÅr die Umsatzsteuer 38400 ist nicht vorhanden!"
+.continue END
+..
+!NOGEG
+....error "Das Bankkonto 18100 ist nicht vorahnden!"
+.continue END
+..
+!NOVKZ
+....error "FÅr das Konto '0|konto' konnten die Verkehrszahlen nicht ermittelt werden!"
+.continue END
+..
+!NOOUT
+....error "Es konnten keine Verkehrszahlen fÅr die beteiligten Konten ermittelt werden!"
+.continue END
+..
+!END
+.continue

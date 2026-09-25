@@ -1,0 +1,111 @@
+..!interpreter english translate
+..*****************************************************************************
+..
+..  FOP-Name       : la/FOP.CHART.PLAN
+..  Datum          : 08.03.2001
+..  Version        : 1.0
+..  Autor          : Margit D”hler
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..
+..  Funktion       :
+..
+..  Ablauf         :
+..
+..*****************************************************************************
+..
+.... Artikelstamm - Bestandskurve (Plankarte)
+.... ximax Tage aus Plankarte
+..
+..*****************************************************************************
+.set trans -
+... nur in GUI m”glich
+.end 0 ? _G|grafik
+.............................................................................
+.type text  xttitel
+.type M7.3  xrmge
+.type date xdterm
+.type M7.3  xrpmge
+.type date xdpterm
+.type integer   xi1 xi2 xi3 ximax
+.............................................................................
+.input "ARB"
+.... maximale Anzahl Tage
+.formula U|ximax = 50
+.formula U|xi1 = 0
+!INI:
+.type M7.3 xrb.xi1 xrz.xi1 xra.xi1
+.type date xd.xi1
+.formula U|xi1 = U|xi1 + 1
+.continue INI ? U|xi1 <= U|ximax
+.............................................................................
+.continue START
+!E0:
+.end 0
+
+!START:
+.select parts 'M|id'
+.continue E0 ? _G|mehr
+.formula U|xrb0 = H|gbest
+.formula U|xi1 = 0
+!PLAN:
+.select planchart
+.continue DATEN ? _G|mehr ; U|xi1 >= U|ximax
+.continue WR    ? H|dnr=121
+.continue PLAN  ? H|dnr=40
+.formula U|xdpterm = H|tterm
+.formula U|xrpmge  = H|limge
+.continue PLAN1
+!WR:  rollierende Planwerte
+.continue PLAN   ? H|mgeabweich <=0.0
+.formula U|xdpterm = H|vondat
+.formula U|xrpmge  = H|mgeabweich
+!PLAN1
+.continue PLAN2 ? U|xdpterm = U|xdterm
+.formula U|xi2 = U|xi1
+.formula U|xi1 = U|xi1 + 1
+.formula U|xrb.U|xi1 = U|xrb.U|xi2
+.formula U|xdterm = U|xdpterm
+.formula U|xd.U|xi1 = U|xdpterm
+!PLAN2:
+.formula U|xrmge = U|xrpmge
+.formula U|xrmge = U|xrmge * H|lehe ? H|typ = G|arpos
+.formula U|xrb.U|xi1 = U|xrb.U|xi1 + U|xrmge ? H|typ <> G|reserv & H|typ <> G|rollwr
+.formula U|xrb.U|xi1 = U|xrb.U|xi1 - U|xrmge ? H|typ = G|reserv ; H|typ = G|rollwr
+.formula U|xrz.U|xi1 = U|xrz.U|xi1 + U|xrmge ? H|typ <> G|reserv & H|typ <> G|rollwr
+.formula U|xra.U|xi1 = U|xra.U|xi1 + U|xrmge ? H|typ = G|reserv ; H|typ = G|rollwr
+.continue PLAN
+
+!DATEN:
+.formula U|xi2 = 0
+.set separator #
+.chart -INIT
+.chart -PARAM -CHARTTYPE BAR
+.chart -PARAM -3D NO
+.set trans +
+.formula U|xttitel = "Bestandskurve in" + " " + 'M|le'
+.set trans -
+.chart -PARAM -TITLECHART 'U|xttitel'
+.chart -PARAM -MARKERX "aktuell"
+!DAT2:
+.formula U|xi2 = U|xi2 + 1
+.continue DAT3 ? U|xi2 > U|xi1
+.chart -PARAM -MARKERX 'U|xd.U|xi2'
+.continue DAT2
+!DAT3:
+.formula U|xi3 = 0
+!DAT4
+.formula U|xi3 = U|xi3 + 1
+.formula U|xi2 = 0
+.chart -STARTVALUES "Bestandskurve" ? U|xi3 = 1
+.chart -STARTVALUES "geplante Zug„nge"  ? U|xi3 = 2
+.chart -STARTVALUES "geplante Abg„nge"  ? U|xi3 = 3
+!DAT5:
+.chart -VALUE 'U|xrb.U|xi2' ? U|xi3 = 1
+.chart -VALUE 'U|xrz.U|xi2' ? U|xi3 = 2
+.chart -VALUE 'U|xra.U|xi2' ? U|xi3 = 3
+.formula U|xi2 = U|xi2 + 1
+.continue DAT5 ? U|xi2 <= U|xi1
+.continue DAT4 ? U|xi3 < 3
+.chart -SHOW chart 0
+.continue E0

@@ -1,0 +1,558 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : POSTINVOICE.EV
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  :
+..
+...Include
+.. include is/TAB.MARK
+.. include is/COPY.FREETEXT
+..*****************************************************************************
+.set trans -
+.type DVM2       xtmpfile     ? _F|defined(U|xtmpfile)
+.type DVM2       xtmpfile2    ? _F|defined(U|xtmpfile2)
+.type text       xtmpfileout  ? _F|defined(U|xxtmpfileout)
+.type text       xtmpfileerr  ? _F|defined(U|xxtmpfileerr)
+.type text       xtcmd        ? _F|defined(U|xtcmd)
+.type text       xtout        ? _F|defined(U|xtout)
+.type text       xterr        ? _F|defined(U|xterr)
+.type text       xterr2       ? _F|defined(U|xterr2)
+.type text       xtline       ? _F|defined(U|xtline)
+.type DVM2       origftext    ? _F|defined(U|origftext)
+.type DVM2       copyftext    ? _F|defined(U|copyftext)
+.type integer    xdelzeile    ? _F|defined(U|xdelzeile)
+.type P5:1       xkonto       ? _F|defined(U|xkonto)
+.type RU         xhbetrag     ? _F|defined(U|xhbetrag)
+.type RU         xbetrag      ? _F|defined(U|xbetrag)
+.type PS58:15    xstrgl       ? _F|defined(U|xstrgl)
+.type P5:2.4.8.9 xkstelle     ? _F|defined(U|xkstelle)
+.type P58:1      xsteuerschl  ? _F|defined(U|xsteuerschl)
+.type A145       xkarta       ? _F|defined(U|xkarta)
+.type P54:1      xustva       ? _F|defined(U|xustva)
+.type bool       xbkonto      ? _F|defined(U|xbkonto)
+.type bool       xbhbetrag    ? _F|defined(U|xbhbetrag)
+.type bool       xbbetrag     ? _F|defined(U|xbbetrag)
+.type bool       xbstrgl      ? _F|defined(U|xbstrgl)
+.type bool       xbkstelle    ? _F|defined(U|xbkstelle)
+.type bool       xbsteuerschl ? _F|defined(U|xbsteuerschl)
+.type bool       xbkarta      ? _F|defined(U|xbkarta)
+.type bool       xmindest     ? _F|defined(U|xmindest)
+.type bool       xbustva      ? _F|defined(U|xbustva)
+..
+.. Header
+.continue EKVK       ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "bverkauf"
+.continue EKVK       ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "beinkauf"
+.continue VERKAUF    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "vkvorg"
+.continue EINKAUF    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "ekvorg"
+.continue KUNDE      ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "kunde"
+.continue LIEF       ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "lief"
+.continue BSTART     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+.continue VORBUCHEN  ? G|evtartengl = "BUTTON_AFTER" & (G|evtvar = "rebueinzel" ; G|evtvar = "rebuchen")
+.continue MARK       ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "markieren"
+.continue DEMARK     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "demarkieren"
+.continue DATUM      ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "datef"
+.continue DATET      ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "datet"
+.continue ALLE       ? G|evtartengl = "BUTTON_AFTER" & (G|evtvar = "aufklappen" ; G|evtvar = "zuklappen")
+.continue TABLEEREN  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "rechnung"
+.continue TABLEEREN  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "gutschrift"
+.continue TABLEEREN  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "anzahlung"
+.continue TABLEEREN  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "barzahlung"
+..
+.. Table
+.continue TABMARK    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "tmark"
+.continue DETAIL2    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tdetail" & M|tdetail = "icon:minus_black"
+.continue DETAIL1    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tdetail" & M|tdetail = "icon:plus_black"
+.continue END
+..
+!EPI
+.file -tempname U|xtmpfile2
+.file -tempname U|xtmpfileout
+.file -tempname U|xtmpfileerr
+..
+.output new 'U|xtmpfileout'
+.input "DATEI.F"
+.output
+.. epi-Script erstellen
+.. hbetrag ist BuchungswÑhrung
+.output new 'U|xtmpfile2'
+.input "DATEI.F"
+LGN||'G|einmalpw'|||||-
+SET||DISPLAYMODE|LANGINDEP|
+?EDI|2|VIEW|3|NUMSW|'M|tvkvorg'| ? M|bverkauf
+?EDI|2|VIEW|4|NUMSW|'M|tekvorg'| ? M|beinkauf
+SUB|3|2|0|buvo
+GFV|3|*|konto,hbetrag,sbetrag,zstrgl,kstelle,steuer,karta,ustva
+CAN|3
+CAN|2
+END
+.output
+..
+.formula U|xtcmd = "epi -I "+'U|xtmpfile2' 
+.formula U|xtcmd = 'U|xtcmd' + " -O "+'U|xtmpfileout'
+.formula U|xtcmd = 'U|xtcmd' + " 2> "+'U|xtmpfileerr'
+.system 'U|xtcmd' background
+.copy U|xmindest = G|FALSE
+.continue ERROR9  ? _G|mehr
+.continue ERROR10 ? F|empty(U|xtmpfileout)
+..
+.formula U|xkonto = ""
+.formula U|xhbetrag = 0
+.formula U|xbetrag = 0
+.formula U|xstrgl = ""
+.formula U|xkstelle = ""
+.formula U|xsteuerschl = ""
+.formula U|xkarta = ""
+.formula U|xustva = ""
+..
+!LINESEL
+.select from 'U|xtmpfileout' U|xtline^
+.continue MAKE      ? _G|mehr & _U|xmindest & (G|evtvar = "aufklappen" ; G|evtvar = "tdetail")
+.continue ALLESAUF  ? _G|mehr &  U|xmindest & G|evtvar = "aufklappen"
+.continue COLOR     ? _G|mehr
+.. weiter, wenn 1. Zeichen kein D
+.continue LINESEL ?  F|strindex('U|xtline', "D") <> 1
+.. weiter, wenn 3. Zeichen 1
+.continue LINESEL ?  F|strindex('U|xtline', "1", 1) = 5
+.continue LINESEL ?  F|strindex('U|xtline', "2", 1) = 5 & F|equals(M|tvkvorg^vorganga, "(CashPayment)") & M|bverkauf
+.continue LINESEL ?  F|strindex('U|xtline', "3", 4) = 5 & F|equals(M|tvkvorg^vorganga, "(CashPayment)") & M|bverkauf
+.continue LINESEL ?  F|strindex('U|xtline', "2", 1) = 5 & F|equals(M|tekvorg^vorganga, "(CashPayment)") & M|beinkauf
+.continue LINESEL ?  F|strindex('U|xtline', "3", 4) = 5 & F|equals(M|tekvorg^vorganga, "(CashPayment)") & M|beinkauf
+..
+.copy U|xbkonto = G|FALSE
+.copy U|xbhbetrag = G|FALSE
+.copy U|xbbetrag = G|FALSE
+.copy U|xbstrgl = G|FALSE
+.copy U|xbkstelle = G|FALSE
+.copy U|xbsteuerschl = G|FALSE
+.copy U|xbkarta = G|FALSE 
+.copy U|xbustva = G|FALSE        
+.copy U|xbkonto = G|TRUE      ? F|strindex('U|xtline', "konto") = 7
+.copy U|xbhbetrag = G|TRUE    ? F|strindex('U|xtline', "hbetrag") = 7
+.copy U|xbbetrag = G|TRUE     ? F|strindex('U|xtline', "sbetrag") = 7
+.copy U|xbstrgl = G|TRUE      ? F|strindex('U|xtline', "zstrgl") = 7
+.copy U|xbkstelle = G|TRUE    ? F|strindex('U|xtline', "kstelle") = 7
+.copy U|xbsteuerschl = G|TRUE ? F|strindex('U|xtline', "steuer") = 7
+.copy U|xbkarta = G|TRUE      ? F|strindex('U|xtline', "karta") = 7
+.copy U|xbustva = G|TRUE      ? F|strindex('U|xtline', "ustva") = 7
+.formula U|xtline = U|xtline >> "|" 
+.formula U|xtline = U|xtline >> "|" 
+.formula U|xtline = U|xtline >> "|" 
+.formula U|xtline = U|xtline >> "|"
+.formula U|xkonto      = U|xtline << "|" ? U|xbkonto
+.formula U|xhbetrag    = U|xtline << "|" ? U|xbhbetrag
+.formula U|xbetrag     = U|xtline << "|" ? U|xbbetrag
+.formula U|xstrgl      = U|xtline << "|" ? U|xbstrgl
+.formula U|xkstelle    = U|xtline << "|" ? U|xbkstelle
+.formula U|xsteuerschl = U|xtline << "|" ? U|xbsteuerschl
+.formula U|xkarta      = U|xtline << "|" ? U|xbkarta
+.formula U|xustva      = U|xtline << "|" ? U|xbustva
+.. jetzt pro Zeile konto, hbetrag, strgl, kstelle, steuer und karta eintragen und in xkonto, xhbetrag, xstrgl usw. aus 4. Wert merken
+.. dann .make screen line +O die fÅnf Variablen eintragen
+.continue LINESEL ? _U|xbustva 
+.copy U|xmindest = G|TRUE
+.make screen line +O 
+.formula M|konto = U|xkonto
+.formula M|sumnettoinl = U|xhbetrag        ?  (F|empty(U|xkarta) ; _F|equals(U|xkarta, "(TaxAccount)")) & U|xbetrag = 0 & M|bverkauf
+.formula M|steuerinl = U|xhbetrag          ?  F|equals(U|xkarta, "(TaxAccount)") & U|xbetrag = 0 & M|bverkauf
+.formula M|sumnettoinl = U|xbetrag * (-1)  ?  (F|empty(U|xkarta) ; _F|equals(U|xkarta, "(TaxAccount)")) & U|xhbetrag = 0 & M|bverkauf
+.formula M|steuerinl = U|xbetrag * (-1)    ?  F|equals(U|xkarta, "(TaxAccount)") & U|xhbetrag = 0 & M|bverkauf
+.formula M|sumnettoinl = U|xhbetrag * (-1) ?  (F|empty(U|xkarta) ; _F|equals(U|xkarta, "(TaxAccount)")) & U|xbetrag = 0 & M|beinkauf
+.formula M|steuerinl = U|xhbetrag * (-1)   ?  F|equals(U|xkarta, "(TaxAccount)") & U|xbetrag = 0 & M|beinkauf
+.formula M|sumnettoinl = U|xbetrag         ?  (F|empty(U|xkarta) ; _F|equals(U|xkarta, "(TaxAccount)")) & U|xhbetrag = 0 & M|beinkauf
+.formula M|steuerinl = U|xbetrag           ?  F|equals(U|xkarta, "(TaxAccount)") & U|xhbetrag = 0 & M|beinkauf
+.formula M|strgl = U|xstrgl^kopf^id
+.formula M|kstelle = U|xkstelle       ? U|xkstelle <> "*"
+.formula M|kstelle = 'U|xkstelle^id'  ? U|xkstelle = "*"
+.formula M|steuerschl = U|xsteuerschl
+.formula M|proz = U|xstrgl^psatz ? _F|empty(M|steuerinl)
+.formula M|ustva = U|xustva
+.colour -background 'M|farbe' sumnettoinl 'M|aktzeile'
+.colour -background 'M|farbe' steuerinl 'M|aktzeile'
+.colour -background 'M|farbe' strgl 'M|aktzeile'
+.colour -background 'M|farbe' proz 'M|aktzeile'
+.colour -background 'M|farbe' konto 'M|aktzeile'
+.colour -background 'M|farbe' kstelle 'M|aktzeile'
+.colour -background 'M|farbe' steuerschl 'M|aktzeile'
+.colour -background 'M|farbe' ustva 'M|aktzeile'
+.protection tmark 'M|aktzeile'
+.continue LINESEL
+..
+!ALLE    
+.select screen header
+.continue ALLESAUF   ? G|evtvar = "aufklappen"
+.continue ALLESZU    ? G|evtvar = "zuklappen"
+..
+!ALLESAUF
+.select screen line
+.continue COLOR    ? _G|mehr
+.continue ALLESAUF ? F|empty(M|tdetail) ; M|tdetail = "icon:minus_black"
+.continue DETAIL1  ? M|tdetail = "icon:plus_black"
+.continue COLOR
+..
+!ALLESZU
+.select screen line
+.continue COLOR   ? _G|mehr
+.continue ALLESZU ? F|empty(M|tdetail) ; M|tdetail = "icon:plus_black" 
+.continue DETAIL2 ? M|tdetail = "icon:minus_black"
+.continue COLOR   
+..
+!DETAIL1
+.formula M|tdetail = "icon:minus_black"
+.continue EPI 
+..
+!DETAIL2
+.formula M|tdetail = "icon:plus_black"
+.continue DELETE
+..
+!MAKE
+.load 3 sales 'M|tvkvorg'       ? M|bverkauf
+.load 3 purchasing 'M|tekvorg'  ? M|beinkauf
+.continue ERROR7            ? _G|mehr
+..
+!LOAD3LINE
+.load 3 line 
+.continue ALLESAUF       ? G|evtvar = "aufklappen" & _G|mehr
+.continue COLOR          ? _G|mehr
+.continue LOAD3LINE      ? F|empty(3|konto)
+.continue MAKELINE
+..
+!MAKELINE
+.make screen line +O
+.assign M|tvkvorg = 3|kopf  ? M|bverkauf
+.assign M|tekvorg = 3|kopf  ? M|beinkauf
+.formula M|netto = 3|pwert  ? _(3|typ = 10 ; 3|typ = 51)
+.formula M|steuer = 3|pwert ? 3|typ = 10 ; 3|typ = 51
+.assign M|strgl = 3|strgl
+.formula M|proz = 3|proz     ? 3|typ = 10 ; 3|typ = 51
+.copy M|konto = 3|konto
+.copy M|kstelle = 3|kstelle
+.copy M|steuerschl = 3|psteuer
+.copy M|ewekurs = 3|kopf^ewkurs
+.formula M|sumnettoinl = 3|pwert * 3|kopf^ewkurs ? _(3|typ = 10 ; 3|typ = 51)
+.formula M|steuerinl = 3|pwert * 3|kopf^ewkurs   ?   3|typ = 10 ; 3|typ = 51
+.formula M|ustva = 3|konto^ustva
+..
+.colour -background 'M|farbe' sumnettoinl 'M|aktzeile'
+.colour -background 'M|farbe' steuerinl 'M|aktzeile'
+.colour -background 'M|farbe' strgl 'M|aktzeile'
+.colour -background 'M|farbe' proz 'M|aktzeile'
+.colour -background 'M|farbe' konto 'M|aktzeile'
+.colour -background 'M|farbe' kstelle 'M|aktzeile'
+.colour -background 'M|farbe' steuerschl 'M|aktzeile'
+.colour -background 'M|farbe' ustva 'M|aktzeile'
+.protection tmark 'M|aktzeile'
+.continue LOAD3LINE
+..
+!DELETE
+.formula U|xdelzeile = M|aktzeile + 1
+.continue COLOR   ? U|xdelzeile > M|tzeilen
+.select screen header
+.select screen line 'U|xdelzeile'
+.continue ALLESZU ? G|evtvar = "zuklappen" & _G|mehr
+.continue COLOR   ? _G|mehr
+..
+!DELLINE
+.continue DETAIL2 ? G|evtvar = "zuklappen" & M|tdetail = "icon:minus_black"
+.continue ALLESZU ? G|evtvar = "zuklappen" & M|tdetail = "icon:plus_black"
+.continue COLOR   ? _F|empty(M|tdetail)
+.continue MAKEDEL ?  F|empty(M|tdetail) & F|empty(M|vorganga)
+.continue COLOR   
+..
+!MAKEDEL
+.make screen line -O
+.continue DELLINE 
+..
+!DATUM: Datum von
+.continue TABLEEREN
+..
+!DATET: Datum bis
+.continue ERROR6              ? 'M|datet:8' < 'M|datef:8' & _F|empty(M|datet)
+.continue TABLEEREN
+..
+!COLOR: Farben refreshen nach jedem Auf- und Zuklappen
+.select screen header
+!COLLINE
+.select screen line  
+.continue END ? _G|mehr
+.colour -background 'M|farbe' sumnettoinl 'M|aktzeile' ? F|empty(M|tdetail)
+.colour -background 'M|farbe' steuerinl 'M|aktzeile'   ? F|empty(M|tdetail)
+.colour -background 'M|farbe' strgl 'M|aktzeile'       ? F|empty(M|tdetail)
+.colour -background 'M|farbe' konto 'M|aktzeile'       ? F|empty(M|tdetail)
+.colour -background 'M|farbe' proz 'M|aktzeile'        ? F|empty(M|tdetail)
+.colour -background 'M|farbe' kstelle 'M|aktzeile'     ? F|empty(M|tdetail)
+.colour -background 'M|farbe' steuerschl 'M|aktzeile'  ? F|empty(M|tdetail)
+.colour -background 'M|farbe' ustva 'M|aktzeile'       ? F|empty(M|tdetail)
+.colour -background -1 -1 -1 sumnettoinl 'M|aktzeile'  ? _F|empty(M|tdetail)
+.colour -background -1 -1 -1 steuerinl 'M|aktzeile'    ? _F|empty(M|tdetail)
+.colour -background -1 -1 -1 strgl 'M|aktzeile'        ? _F|empty(M|tdetail)
+.colour -background -1 -1 -1 konto 'M|aktzeile'        ? _F|empty(M|tdetail)
+.colour -background -1 -1 -1 proz 'M|aktzeile'         ? _F|empty(M|tdetail)
+.colour -background -1 -1 -1 kstelle 'M|aktzeile'      ? _F|empty(M|tdetail)
+.colour -background -1 -1 -1 steuerschl 'M|aktzeile'   ? _F|empty(M|tdetail)
+.colour -background -1 -1 -1 ustva 'M|aktzeile'        ? _F|empty(M|tdetail)
+.continue COLLINE
+..
+!TABMARK
+.formula M|summenetto = M|summenetto + M|sumnettoinl    ?  M|tmark
+.formula M|summesteuer = M|summesteuer + M|steuerinl    ?  M|tmark
+.formula M|summebrutto = M|summebrutto + M|sumbruttoinl ?  M|tmark
+.formula M|summenetto = M|summenetto - M|sumnettoinl    ? _M|tmark
+.formula M|summesteuer = M|summesteuer - M|steuerinl    ? _M|tmark
+.formula M|summebrutto = M|summebrutto - M|sumbruttoinl ? _M|tmark
+.continue END
+..
+!MARK
+.assign M|mark = "(SelectAll)"
+.input "is/TAB.MARK"
+.. Summen bilden
+.formula M|summenetto = 0
+.formula M|summesteuer = 0
+.formula M|summebrutto = 0
+.select screen header
+..
+!SUMLINE
+.select screen line
+.continue END ? _G|mehr
+.continue SUMLINE ? _M|tmark
+.formula M|summenetto = M|summenetto + M|sumnettoinl
+.formula M|summesteuer = M|summesteuer + M|steuerinl
+.formula M|summebrutto = M|summebrutto + M|sumbruttoinl
+.continue SUMLINE
+..
+!DEMARK
+.assign M|mark = "(DeselectAll)"
+.input "is/TAB.MARK"
+.formula M|summenetto = 0
+.formula M|summesteuer = 0
+.formula M|summebrutto = 0
+.continue END
+..
+!VORBUCHEN
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+.file -tempname U|xterr2
+..
+.continue ALLEBU ? G|evtvar = "rebuchen"
+.continue BUCHEN ? G|evtvar = "rebueinzel"
+
+!ALLEBU
+.select screen header
+.continue END     ? _G|mehr
+..
+!SELLINE: Diese Rechnung buchen
+.select screen line
+.continue END     ? _G|mehr
+.. wenn nicht markiert, dann Åberspringen
+.continue SELLINE ? _M|tmark
+.. wenn schon gebucht, dann Åberspringen
+.continue SELLINE ? _F|empty(M|ophist) ; _F|empty(M|rebu)
+.continue OUTPUT
+..
+!BUCHEN: beim aus der Zeile buchen, braucht man Zeile nicht markieren
+.continue ERROR5 ? _F|empty(M|ophist) ; _F|empty(M|rebu)
+..
+!OUTPUT
+.output new 'U|xtmpfile'
+.input "DATEI.F"
+..
+# Rechnung buchen
+?#!database=3             ? M|bverkauf
+?#!database=4             ? M|beinkauf
+#!group=24
+#!charset=eks
+#!edp_lockbehavior=nowait
+#!action=update
+?num3;ueb                 ? M|bverkauf
+?num4;ueb                 ? M|beinkauf
+?'M|tvkvorg^id';true      ? M|bverkauf
+?'M|tekvorg^id';true      ? M|beinkauf
+..
+!EDP
+.output
+.formula M|hinweis = ""
+.formula U|xtcmd = "edpimport.sh -I "+'U|xtmpfile'+" -p " + 'G|einmalpw'
+.formula U|xtcmd = 'U|xtcmd' + " 1> "+'U|xtout'
+.formula U|xtcmd = 'U|xtcmd' + " 2> "+'U|xterr2'
+.system 'U|xtcmd' background
+..
+.continue OK ? G|mehr
+.formula U|xtcmd = "sed " + 'G|apostroph' + "s/^.*): //" + 'G|apostroph' + " " +'U|xterr2' +" >" + 'U|xterr'
+.system 'U|xtcmd' background
+.continue ERROR8 ? _G|mehr
+..
+.. Hinweistext fÅllen
+.protection -reset hinweis 'M|aktzeile'
+.formula U|origftext = ""
+.formula U|copyftext = ""
+.assign U|origftext = "U|xterr"
+.assign U|copyftext = "M|hinweis"
+.input "is/COPY.FREETEXT"
+.protection hinweis 'M|aktzeile'
+.formula M|ticon = M|fehler
+.continue END                   ? G|evtvar = "rebueinzel"
+.continue SELLINE
+..
+!OK 
+.formula M|rebueinzel = ""
+.protection tmark 'M|aktzeile'
+.formula M|select = "$,,typ=(Invoice);id="+'M|tvkvorg^id'  ?  M|bverkauf
+.formula M|select = "$,,typ=(Invoice);id="+'M|tekvorg^id'  ?  M|beinkauf
+.formula M|select = M|select + ";@ablageart=(Filed)"
+.load 1 sales 'M|select'        ?  M|bverkauf
+.load 1 purchasing 'M|select'   ?  M|beinkauf
+.continue ERROR4                ? _G|mehr
+.copy M|uebertr = 1|ueb
+.assign M|ophist = 1|ophist       ?  F|empty(1|zbedvert)
+.assign M|ophist = 1|opverteiler  ? _F|empty(1|zbedvert)
+.copy M|rebu = 1|ophist^rebu
+.formula M|ticon = M|buchenerfolgt
+.continue END                   ? G|evtvar = "rebueinzel"
+.continue SELLINE
+..
+!BSTART
+.formula M|summenetto = 0
+.formula M|summesteuer = 0
+.formula M|summebrutto = 0
+..
+.continue ERROR3  ? _M|anzahlung & _M|rechnung & _M|barzahlung & _M|gutschrift & M|bverkauf & F|empty(M|vkvorg)
+.continue ERROR3  ? _M|anzahlung & _M|rechnung & _M|barzahlung & _M|gutschrift & M|beinkauf & F|empty(M|ekvorg)
+.. Build query
+.formula M|select = "$,,"
+.formula M|select = M|select + ";typ=(Invoice)"       ? (F|empty(M|vkvorg) & M|bverkauf) ; (F|empty(M|ekvorg) & M|beinkauf)
+.formula M|select = M|select + ";id=" + M|vkvorg^id  ? _F|empty(M|vkvorg) & M|bverkauf
+.formula M|select = M|select + ";id=" + M|ekvorg^id  ? _F|empty(M|ekvorg) & M|beinkauf
+.. Buchung offen
+.formula M|select = M|select + ";uebertr=1" 
+.. Kunde / Lieferant
+.formula M|select = M|select + ";kl=" + M|kunde^id    ? _F|empty(M|kunde) &  M|bverkauf
+.formula M|select = M|select + ";kl=" + M|lief^id     ? _F|empty(M|lief)  & M|beinkauf
+.continue ABLAGE   ? F|empty(M|datef) & F|empty(datet)
+.formula M|select = M|select + ";vom==" + 'M|datef:8'                     ? 'M|datef:8' = 'M|datet:8'
+.formula M|select = M|select + ";vom=" + 'M|datef:8' + "!" + 'M|datet:8'  ? 'M|datef:8' <> 'M|datet:8'
+..
+!ABLAGE
+.formula M|select = M|select + ";@ordnung=nummer"
+.formula M|grliste = "3:1"  ?  M|bverkauf
+.formula M|grliste = "4:1"  ?  M|beinkauf
+.select group  'M|grliste' 'M|select'
+..
+!TAB
+.continue END   ? _G|mehr
+.continue INPUT ? _F|empty(M|vkvorg) ; _F|empty(M|ekvorg)
+.continue NEXT  ? F|equals(H|vorganga, "(Downpayment)") & _M|anzahlung     
+.continue NEXT  ? F|equals(H|vorganga, "(Invoice)") & _M|rechnung
+.continue NEXT  ? F|equals(H|vorganga, "(CashPayment)") & _M|barzahlung
+.continue NEXT  ? F|equals(h|vorganga, "(CreditNoteCommercial)") & _M|gutschrift
+..
+!INPUT
+.input 'M|tab'  ? _F|empty(M|tab)
+..
+!NEXT
+.select continue
+.continue TAB
+..
+!KUNDE
+.formula M|vkvorg = "" ? _F|empty(M|kunde)
+.continue TABLEEREN
+..
+!LIEF
+.formula M|ekvorg = "" ? _F|empty(M|lief)
+.continue TABLEEREN
+..
+!VERKAUF: prÅfen, ob Vorgang abgelegt und ungebucht
+.copy M|rechnung = G|TRUE ? _M|rechnung & F|empty(M|vkvorg) & _M|anzahlung & _M|barzahlung & _M|gutschrift
+.continue TABLEEREN ? F|empty(M|vkvorg)
+.continue ERROR2    ? M|vkvorg^ablagef
+.continue ERROR1    ? M|vkvorg^ueb
+.formula M|kunde = M|vkvorg^kunde
+.continue TABLEEREN
+..
+!EINKAUF: prÅfen, ob Vorgang abgelegt und ungebucht
+.copy M|rechnung = G|TRUE ? _M|rechnung & F|empty(M|ekvorg) & _M|anzahlung & _M|barzahlung & _M|gutschrift
+.continue TABLEEREN ? F|empty(M|ekvorg)
+.continue ERROR2    ? M|ekvorg^ablagef
+.continue ERROR1    ? M|ekvorg^ueb
+.formula M|lief = M|ekvorg^lief
+.continue TABLEEREN
+..
+!EKVK
+.copy M|beinkauf = G|FALSE ?  M|beinkauf & G|evtvar = "bverkauf"
+.copy M|bverkauf = G|FALSE ?  M|bverkauf & G|evtvar = "beinkauf"
+.copy M|bverkauf = G|TRUE  ? _M|beinkauf & _M|bverkauf
+..
+.continue VK               ?  M|bverkauf
+.assign P|maskkontextfop = "Einkauf"
+.formula M|vkvorg = ""
+.formula M|kunde = ""
+.continue TABLEEREN
+..
+!VK
+.formula M|ekvorg = ""
+.formula M|lief = ""
+.assign P|maskkontextfop = "Verkauf"
+.continue TABLEEREN
+..
+!TABLEEREN
+.input "is/TABLEEREN"
+.formula M|summenetto = 0
+.formula M|summesteuer = 0
+.formula M|summebrutto = 0
+.continue END
+..
+!ERROR1
+.error Vorgang ist bereits gebucht.
+.continue SETCURSOR
+..
+!ERROR2
+.error Vorgang ist bereits abgelegt.
+.continue SETCURSOR
+..
+!SETCURSOR
+.formula M|vkvorg = "" ? G|evtvar = "vkvorg"
+.cursor vkvorg         ? G|evtvar = "vkvorg"
+.formula M|ekvorg = "" ? G|evtvar = "ekvorg"
+.cursor ekvorg         ? G|evtvar = "ekvorg"
+.. 
+!ERROR3 
+.error Bitte eine Rechnungsart oder einen Vorgang wÑhlen.
+.end 1
+..
+!ERROR4
+.error Keine gebuchte Rechnung gefunden!
+.end 1
+..
+!ERROR5
+.error Vorgang bereits verbucht!
+.end 1
+..
+!ERROR6
+.error Bis-Datum ist kleiner als Von-Datum.
+.formula M|datet = ""
+.end 1
+..
+!ERROR7
+.error Keine Vorgangszeilen vorhanden.
+.formula M|tdetail = ""
+.end 1
+..
+!ERROR8
+.error sed-Aufruf gescheitert!
+.end 1
+..
+!ERROR9
+.note epi-Aufruf gescheitert!
+Fehlerdatei: 'U|xtmpfileerr'
+.input 'U|xtmpfileerr'
+...continue MAKE
+.end 1 
+..
+!ERROR10
+.note "Finanzbuchung zeigen" konnte nicht gestartet werden, deshalb werden alle Rechnungszeilen aufgelistet.
+.continue MAKE 
+..
+..*****************************************************************************
+!END
+.continue

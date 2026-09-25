@@ -1,0 +1,570 @@
+..!interpreter english declaration noabbrev
+.. at 2017-01-23, 16:34
+.set trans -
+..========================================================================
+..==  Name              : FOP.VSATZ.EVENT
+..==  Pfad              : allpstart
+..==  Funktion          : Maskenevents Leistungsart/Verrechnungsatz
+..==  Erstellungsdatum  : 21.07.07
+..==  Autor             : alltrotec GmbH/CP
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..==
+..========================================================================
+.input DATEI.F
+.input "allpstart/LART.KONFIG.INI"
+..====================================================
+.type integer   xijahr xi00 xi01 xi02 xi03 xi04 xi05 xi06
+.type GJ        xgjahr
+.type text      xhlp xtsel xtprot
+.type bool      xbbewkrok xbkoreok xb00
+..====================================================
+.type integer   xprocsp      ? _F|defined(U|xprocsp)
+.set demand -
+.continue EPROCDEF
+!PROC001: ----- Pruefung -----
+.copy U|xbbewkrok = G|true
+.copy U|xbkoreok  = G|true
+.continue EL001 ? _(G|evtkommd = G|kaktname14)
+.set trans +
+.formula U|xhlp = "Fehler"
+.set trans -
+.file -tempname U|xtprot
+.output new 'U|xtprot'
+.input DATEI.F
+'G|kommandochar'box 'U|xhlp'
+.formula U|xtsel = "$,,ygjahr=" + 'M|ygjahr' + ";ybstd=" + 'M|ybstd'
+.formula U|xtsel = U|xtsel + ";ykstelle=" + M|ykstelle^id   ? _F|empty(M|ykstelle)
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrversatz' 'U|xtsel'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL002 ? _((M|ybkore) & (0|ybkore))
+.copy U|xbkoreok = G|false
+.output addedto 'U|xtprot'
+.set trans +
+Es darf nur einen Datensatz fÅr >> Verwendung Kostenrechnung << geben.
+.set trans -
+!EL002
+.formula U|xi00 = 1
+!LOOP002: ==============================
+.continue ELOP002 ? _(F|defined(0|ybbewkr.U|xi00))
+.continue EL003 ? _((M|ybbewkr.U|xi00) & (0|ybbewkr.U|xi00))
+.copy U|xbbewkrok = G|false
+.output addedto 'U|xtprot'
+.set trans +
+Es darf nur einen Datensatz fÅr >> Verwendung Bewertung 'U|xi00' << geben.
+.set trans -
+!EL003
+.formula U|xi00 = U|xi00 + 1
+.continue LOOP002
+!ELOP002: ==============================
+.load 0 continue
+.continue LOOP001
+!ELOP001: ==============================
+.output new WERF.WEG
+.continue EL004 ? _((_(U|xbbewkrok)) ; (_(U|xbkoreok)))
+.continue EL005 ? _(G|evtart = "maskpruef")
+.output addedto 'U|xtprot'
+.set trans +
+
+Speichern nicht mîglich.
+.set trans -
+!EL005
+.input 'U|xtprot'
+.formula U|xtsel = "%,,nummer=;ygjahr==" + 'M|ygjahr' + ";ybstd=" + 'M|ybstd(L=":")'
+.formula U|xtsel = U|xtsel + ";ykstelle==" + M|ykstelle^id  ? _F|empty(M|ykstelle)
+.formula U|xtsel = U|xtsel + ";ybkore=;ybbewkr1=;ybbewkr2=;ybbewkr3=;ybbewkr4=;ybbewkr5=;@autostart=(Yes);@gruppe=" + 'U|xygrversatz'
+.formula U|xhlp = "command -parallel <(ProjectSuiteMasterData)> " + U|xtsel + " <(View)>"
+.'U|xhlp'
+!EL004
+!EL001
+.continue 'xprocst.xprocsp'
+!PROC002: ----- leeren -----
+.copy    M|ybkore = G|false
+.formula U|xi00   = 1
+!LOOP003: ==============================
+.continue ELOP003 ? _(F|defined(M|ybbewkr.U|xi00))
+.copy    M|ybbewkr.U|xi00 = G|false
+.formula U|xi00           = U|xi00 + 1
+.continue LOOP003
+!ELOP003: ==============================
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Periode -----
+.formula U|xi00 = G|menue
+.formula U|xi01 = G|menue
+!REPT001: ==============================
+.formula U|xi01 = U|xi01 + 1
+.continue EL006 ? _(_(F|protected(M|yvsf.U|xi01, M|aktzeile)))
+.formula M|yvsf.xi01 = M|yvsf.U|xi00
+.formula M|yvsv.xi01 = M|yvsv.U|xi00
+!EL006
+.continue REPT001 ? _(U|xi01 = 12)
+.continue 'xprocst.xprocsp'
+!PROC004: ----- FehlendeLeistungsartenNachtragen -----
+.copy U|xb00 = G|false
+.load 9 group 'U|xydbgrlart' 'F|expr("$,,@filingmode=(Active)")'
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.select screen line 'F|expr("$,,yleiart==" + 9|id)'
+.continue EL007 ? _(_(G|mehr))
+.select screen line 'M|tzeilen'
+.make screen line +O
+.assign  M|yleiart  = 9|id
+.copy    M|yvland   = G|inland
+.continue EL008 ? _(G|evtart = "maskpruef")
+.continue EL009 ? _(_(U|xb00))
+.output TERMINAL
+.set trans +
+ergÑnze fehlende Leistungsart(en)
+.set trans -
+.copy U|xb00 = G|true
+!EL009
+        >> '9|nummer' - '9|namebspr'
+!EL008
+!EL007
+.load 9 continue
+.continue LOOP004
+!ELOP004: ==============================
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "feldaus")
+.formula U|xhlp    = G|evtvar
+!LOOP005: ==============================
+.continue ELOP005 ? _(U|xhlp / "*(09)")
+.formula U|xhlp = U|xhlp >> -1
+.continue LOOP005
+!ELOP005: ==============================
+.continue BRK002 ? _(U|xhlp = "ybstd")
+.continue EL010 ? _(F|empty(M|ygjahr))
+.set trans +
+.box Fehler
+Bitte tragen Sie erst das GeschÑftsjahr ein.
+.set trans -
+.copy M|ybstd = G|false
+.continue FI010
+!EL010
+.continue EL011 ? _((M|ybstd) & (_(F|empty(M|ykstelle))))
+.set trans +
+.box Fehler
+In einem Standarddatensatz darf die Kostenstelle nicht gefÅllt sein.
+.set trans -
+.copy M|ybstd = G|false
+.continue FI011
+!EL011
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+!FI011
+!FI010
+.continue ESAC002
+!BRK002
+.continue BRK003 ? _(U|xhlp = "ykstelle")
+.continue EL012 ? _(_(F|empty(M|ygjahr)))
+.continue EL013 ? _(_(M|ybstd))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+.continue FI013
+!EL013
+.set trans +
+.box Fehler
+Die Kostenstelle darf nicht in einen Standarddatensatz fÅr ein GeschÑftsjahr eingetragen werden.
+.set trans -
+.formula M|ykstelle = ""
+!FI013
+.continue FI012
+!EL012
+.set trans +
+.box Fehler
+Bitte tragen Sie erst das GeschÑftsjahr ein.
+.set trans -
+.formula M|ykstelle = ""
+!FI012
+.continue ESAC002
+!BRK003
+.continue BRK004 ? _(U|xhlp = "ybkore")
+.continue EL014 ? _(F|empty(M|ygjahr))
+.set trans +
+.box Fehler
+Bitte tragen Sie erst das GeschÑftsjahr ein.
+.set trans -
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC002
+!RET003
+.formula xprocsp = xprocsp - 1
+.continue FI014
+!EL014
+.continue EL015 ? _(((M|ybstd) & (F|empty(M|ykstelle))) ; ((_(M|ybstd)) & (_(F|empty(M|ykstelle)))))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC001
+!RET004
+.formula xprocsp = xprocsp - 1
+.continue FI015
+!EL015
+.set trans +
+.box Fehler
+Bitte GÅltigkeit vollstÑndig ausfÅllen.
+.set trans -
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC002
+!RET005
+.formula xprocsp = xprocsp - 1
+!FI015
+!FI014
+.continue ESAC002
+!BRK004
+.continue BRK005 ? _(U|xhlp = "ybbewkr")
+.continue EL016 ? _(F|empty(M|ygjahr))
+.set trans +
+.box Fehler
+Bitte tragen Sie erst das GeschÑftsjahr ein.
+.set trans -
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC002
+!RET006
+.formula xprocsp = xprocsp - 1
+.continue FI016
+!EL016
+.continue EL017 ? _(((M|ybstd) & (F|empty(M|ykstelle))) ; ((_(M|ybstd)) & (_(F|empty(M|ykstelle)))))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC001
+!RET007
+.formula xprocsp = xprocsp - 1
+.continue FI017
+!EL017
+.set trans +
+.box Fehler
+Bitte GÅltigkeit vollstÑndig ausfÅllen.
+.set trans -
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC002
+!RET008
+.formula xprocsp = xprocsp - 1
+!FI017
+!FI016
+.continue ESAC002
+!BRK005
+.continue BRK006 ? _(U|xhlp = "yleiart")
+.formula M|yvland   = ""
+.formula U|xi01     = 0
+!REPT002: ==============================
+.formula U|xi01      = U|xi01 + 1
+.formula M|yvsf.U|xi01 = 0
+.formula M|yvsv.U|xi01 = 0
+.continue REPT002 ? _(U|xi01 = 12)
+.continue EL018 ? _(_(F|empty(M|yleiart)))
+.select screen line 'F|expr("$,,yleiart==" + M|yleiart^id + ";zn<>" + F|tostring(M|aktzeile))'
+.continue EL019 ? _(G|mehr)
+.set trans +
+.box Fehler
+Diese Leistungsart ist bereits in der Tabelle vorhanden.
+.set trans -
+.select screen line 'G|evtzeile'
+.formula M|yleiart = ""
+.continue
+!EL019
+.select screen line 'G|evtzeile'
+.copy M|yvland = G|inland
+.continue EL020 ? _(F|empty(M|ygjahr))
+!REPT003: ==============================
+.set trans +
+.read "GeschÑftsjahr eingeben " M|ygjahr
+.set trans -
+.continue REPT003 ? _(_(F|empty(M|ygjahr)))
+!EL020
+.formula U|xtsel = "$,,ygjahr=" + 'M|ygjahr' + ";ybstd=(Yes);@filingmode=(Active)"
+.load 0 group 'U|xydbgrversatz' 'U|xtsel'
+.continue EL021 ? _((_(F|empty(M|ykstelle))) & (G|mehr))
+.continue EL022 ? _(G|mehr)
+.load 0 line 'F|expr("$,,yleiart==" + M|yleiart^id)'
+.continue EL023 ? _(G|mehr)
+.formula U|xi01 = 0
+!REPT004: ==============================
+.formula U|xi01        = U|xi01 + 1
+.formula M|yvsf.U|xi01 = 0|yvsf.U|xi01
+.formula M|yvsv.U|xi01 = 0|yvsv.U|xi01
+.continue REPT004 ? _(U|xi01 = 12)
+!EL023
+.continue FI022
+!EL022
+.set trans +
+.box Hinweis
+Standarddatensatz fÅr das gewÑhlte GeschÑftsjahr kann nicht gefunden werden.
+VerrechnungssÑtze sind manuell einzutragen.
+.set trans -
+!FI022
+!EL021
+!EL018
+.continue ESAC002
+!BRK006
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK001
+.continue BRK007 ? _(G|evtart = "buttonnach")
+.continue BRK008 ? _(G|evtvar = "ybulade")
+.continue EL024 ? _(_(G|evtkommd = G|kaktname12))
+.continue EL025 ? _(F|empty(M|ygjahr))
+.set trans +
+.box Fehler
+Bitte tragen Sie erst das GeschÑftsjahr ein.
+.set trans -
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC002
+!RET009
+.formula xprocsp = xprocsp - 1
+.continue FI025
+!EL025
+.continue EL026 ? _(((M|ybstd) & (F|empty(M|ykstelle))) ; ((_(M|ybstd)) & (_(F|empty(M|ykstelle)))))
+.continue EL027 ? _(M|ygjahr = F|firstfy())
+.set trans +
+.box Fehler
+'M|ygjhar' ist das erste GeschgÑftsjahr.
+.set trans -
+.continue FI027
+!EL027
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ygjahr=="   + F|prevfy(M|ygjahr)
+.formula U|xtsel = U|xtsel + ";ybstd=="    +'M|ybstd(L="0")'
+.formula U|xtsel = U|xtsel + ";ykstelle==" + M|ykstelle^id      ? _F|empty(M|ykstelle)
+.formula U|xtsel = U|xtsel + ";ybkore=="   +'M|ybkore(L="0")'
+.formula U|xtsel = U|xtsel + ";ybbewkr1==" +'M|ybbewkr1(L="0")'
+.formula U|xtsel = U|xtsel + ";ybbewkr2==" +'M|ybbewkr2(L="0")'
+.formula U|xtsel = U|xtsel + ";ybbewkr3==" +'M|ybbewkr3(L="0")'
+.formula U|xtsel = U|xtsel + ";ybbewkr4==" +'M|ybbewkr4(L="0")'
+.formula U|xtsel = U|xtsel + ";ybbewkr5==" +'M|ybbewkr5(L="0")'
+.load 0 group 'U|xydbgrversatz' 'U|xtsel'
+.continue EL028 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC004
+!RET010
+.formula xprocsp = xprocsp - 1
+.select screen header
+.select screen line
+!LOOP006: ==============================
+.continue ELOP006 ? _(G|mehr)
+.continue EL029 ? _(_(F|empty(M|yleiart)))
+.load 0 line 'F|expr("$,,yleiart==" + M|yleiart^id)'
+.continue EL030 ? _(G|mehr)
+.formula U|xi01 = 0
+!REPT005: ==============================
+.formula U|xi01      = U|xi01 + 1
+.continue EL031 ? _(_(F|protected(M|yvsf.xi01, M|aktzeile)))
+.formula M|yvsf.xi01 = 0|yvsf12
+.formula M|yvsv.xi01 = 0|yvsv12
+!EL031
+.continue REPT005 ? _(U|xi01 = 12)
+!EL030
+!EL029
+.select screen line
+.continue LOOP006
+!ELOP006: ==============================
+.continue FI028
+!EL028
+.set trans +
+.box Fehler
+Kein Datensatz aus dem Vorjahr entsprechend den Kriterien gefunden.
+.set trans -
+!FI028
+!FI027
+.continue FI026
+!EL026
+.set trans +
+.box Fehler
+Bitte GÅltigkeit vollstÑndig ausfÅllen.
+.set trans -
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC002
+!RET011
+.formula xprocsp = xprocsp - 1
+!FI026
+!FI025
+!EL024
+.continue ESAC003
+!BRK008
+.continue BRK009 ? _(G|evtvar = "ybuueb")
+.continue EL032 ? _(_(G|evtkommd = G|kaktname12))
+.set trans +
+.menu Periodenwerte f/v in Folgemonate Åbernehmen
+Januar      >>
+Februar     >>
+MÑrz        >>
+April       >>
+Mai         >>
+Juni        >>
+Juli        >>
+August      >>
+September   >>
+Oktober     >>
+November    >>
+.set trans -
+.continue EL033 ? _(_(G|menue = 0))
+.select screen header
+.select screen line
+!LOOP007: ==============================
+.continue ELOP007 ? _(G|mehr)
+.continue EL034 ? _(_(F|empty(M|yleiart)))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC003
+!RET012
+.formula xprocsp = xprocsp - 1
+!EL034
+.select screen line
+.continue LOOP007
+!ELOP007: ==============================
+!EL033
+!EL032
+.continue ESAC003
+!BRK009
+.continue BRK010 ? _(G|evtvar = "ytbulade")
+.continue EL035 ? _(_(G|evtkommd = G|kaktname12))
+.continue EL036 ? _(F|empty(M|ygjahr))
+.set trans +
+.box Fehler
+Bitte tragen Sie erst das GeschÑftsjahr ein.
+.set trans -
+.continue FI036
+!EL036
+.continue EL037 ? _(((M|ybstd) & (F|empty(M|ykstelle)) & (_(F|empty(M|yleiart)))) ; ((_(M|ybstd)) & (_(F|empty(M|ykstelle))) & (_(F|empty(M|yleiart)))))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ygjahr=="   + F|prevfy(M|ygjahr)
+.formula U|xtsel = U|xtsel + ";ybstd=="    +'M|ybstd(L="0")'
+.formula U|xtsel = U|xtsel + ";ykstelle==" + M|ykstelle^id      ? _F|empty(M|ykstelle)
+.formula U|xtsel = U|xtsel + ";ybkore=="   +'M|ybkore(L="0")'
+.formula U|xtsel = U|xtsel + ";ybbewkr1==" +'M|ybbewkr1(L="0")'
+.formula U|xtsel = U|xtsel + ";ybbewkr2==" +'M|ybbewkr2(L="0")'
+.formula U|xtsel = U|xtsel + ";ybbewkr3==" +'M|ybbewkr3(L="0")'
+.formula U|xtsel = U|xtsel + ";ybbewkr4==" +'M|ybbewkr4(L="0")'
+.formula U|xtsel = U|xtsel + ";ybbewkr5==" +'M|ybbewkr5(L="0")'
+.formula U|xtsel = U|xtsel + ";yleiart=="  + M|yleiart^id
+.load 0 group 'U|xydbgrversatz' 'U|xtsel'
+.continue EL038 ? _(G|mehr)
+.load 0 line '0|selzeile'
+.continue EL039 ? _(G|mehr)
+.formula U|xi01 = 0
+!REPT006: ==============================
+.formula U|xi01      = U|xi01 + 1
+.continue EL040 ? _(_(F|protected(M|yvsf.xi01, M|aktzeile)))
+.formula M|yvsf.xi01 = 0|yvsf12
+.formula M|yvsv.xi01 = 0|yvsv12
+!EL040
+.continue REPT006 ? _(U|xi01 = 12)
+!EL039
+.continue FI038
+!EL038
+.set trans +
+.box Fehler
+Kein Datensatz aus dem Vorjahr entsprechend den Kriterien gefunden.
+.set trans -
+!FI038
+.continue FI037
+!EL037
+.set trans +
+.box Fehler
+Bitte GÅltigkeit und Leistungsart ausfÅllen.
+.set trans -
+!FI037
+!FI036
+!EL035
+.continue ESAC003
+!BRK010
+.continue BRK011 ? _(G|evtvar = "ytbuueb")
+.continue EL041 ? _(_(G|evtkommd = G|kaktname12))
+!REPT007: ==============================
+.set trans +
+.menu Periodenwerte f/v in Folgemonate Åbernehmen
+Januar      >>
+Februar     >>
+MÑrz        >>
+April       >>
+Mai         >>
+Juni        >>
+Juli        >>
+August      >>
+September   >>
+Oktober     >>
+November    >>
+.set trans -
+.continue REPT007 ? _(G|menue > 0)
+.continue EL042 ? _(_(G|menue = 0))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET013" 
+.continue PROC003
+!RET013
+.formula xprocsp = xprocsp - 1
+!EL042
+!EL041
+.continue ESAC003
+!BRK011
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC001
+!BRK007
+.continue BRK012 ? _(G|evtart = "maskpruef")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET014" 
+.continue PROC001
+!RET014
+.formula xprocsp = xprocsp - 1
+.continue EL043 ? _((_(U|xbbewkrok)) ; (_(U|xbkoreok)))
+.error(0)
+.end 2
+.continue FI043
+!EL043
+.continue EL044 ? _(M|ybstd)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET015" 
+.continue PROC004
+!RET015
+.formula xprocsp = xprocsp - 1
+!EL044
+!FI043
+.continue ESAC001
+!BRK012
+.continue BRK013 ? _(G|evtart = "maskende")
+.continue EL045 ? _(_(G|evtkommd = G|kaktname12))
+.set trans +
+.formula U|xhlp = "Achtung!"
+.box -button yes:no -title 'U|xhlp'
+Sollen die geÑnderten Werte in den Leistungsmeldungen aktualisiert werden?
+.set trans -
+.continue EL046 ? _(G|box = G|boxyes)
+.input "allpstart/SERVICE.COST.ACTIVITYREPORT"
+!EL046
+!EL045
+.continue ESAC001
+!BRK013
+!ESAC001: =====   ENDCASE   =====
+.continue

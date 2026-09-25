@@ -1,0 +1,195 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EVVORGANG.ABASDMS.IDX
+.. Autor          : kop
+.. Verantwortlich : teamreport
+.. Kontrolle      : lei
+.. Funktion       : Erzeugt Indexdatei fÅr abas-DMS
+.. Functionality  : Creates index file for abas-DMS
+..*****************************************************************************
+.. includes ev/EVVORGANG.ABASDMS.IDX.KOPF
+.. includes ev/EVVORGANG.ABASDMS.IDX.TAB
+..*****************************************************************************
+.set trans -
+.type text xt            ? _F|defined(U|xt)
+.type text xartprefix    ? _F|defined(U|xartprefix)
+.type text xvorgtyp      ? _F|defined(U|xvorgtyp)
+.type bool xbthis        ? _F|defined(U|xbthis)
+.type bool xbauls        ? _F|defined(U|xbauls)
+.type P155:1 xausschr    ? _F|defined(U|xausschr)
+.type bool xpro          ? _F|defined(U|xpro)
+.type VID99 xid          ? _F|defined(U|xid)
+.type bool xhaspos       ? _F|defined(U|xhaspos)
+.type VP5  xkuli         ? _F|defined(U|xkuli)
+.type VP5  xinvoicer     ? _F|defined(U|xinvoicer)
+.type VP5  xgoodsr       ? _F|defined(U|xgoodsr)
+.type P59  xcharge       ? _F|defined(U|xcharge)
+.type VP10 xkopf         ? _F|defined(U|xkopf)
+.type VPK2 xorig         ? _F|defined(U|xorig)
+..
+.input "dms/FIND.CONTEXT"
+..
+.set trans +
+.formula U|xartprefix = "Alternative"
+.set trans -
+..
+.copy U|xbthis  = G|FALSE
+.copy U|xbauls  = G|FALSE
+.copy U|xpro    = G|FALSE
+.copy U|xhaspos = G|FALSE
+.formula U|xvorgtyp = ""
+..
+.file -tempname U|xt
+..
+.output new 'U|xt' -encoding "UTF-8"
+.input "DATEI.F"
+.copy    U|xausschr    = U|xid^ausschr
+..
+.continue VERKAUF ? U|xid^dnr = 3
+..
+.select purchasing 'U|xid'
+.formula U|xvorgtyp = "Einkauf"
+.continue BELENDE
+..
+!VERKAUF
+.select sales 'U|xid'
+.formula U|xvorgtyp = "Verkauf"
+..
+!BELENDE
+.input "STD.ABASDMS.IDX"
+?BelDat='H|vom(L="0")' ? F|defined(H|vom)
+..
+.continue NOERECH            ? H|dnr <> 3 ; U|xid^ktyp <> G|reko
+.continue NOERECH            ? _H|erechok 
+.continue NOERECH            ? _H|druck 
+.continue NOERECH            ? H|uebertr
+.continue NOERECH            ? U|xdmsbelegart^dmsemail
+ReMail='H|erechmail'
+ReSpr='H|sprai'
+MailKz=0
+..
+!NOERECH
+.continue EBELEG ? H|dnr = 4 & H|ktyp = 4
+.continue EBELEG ? H|dnr = 4 & H|ktyp = 5
+..
+FBelNr='H|frzeich'
+.continue KULIDATA
+!EBELEG
+FBelNr='H|ebeleg'
+..
+!KULIDATA
+.. Kunden-/Lieferantendaten
+.assign U|xkuli = U|xid^kl
+.input "st/KULI.ABASDMS.IDX"
+..
+.assign U|xinvoicer=U|xid^kl2      ? F|defined(U|xid^kl2)
+.assign U|xgoodsr=U|xid^warenempf  ? F|defined(U|xid^warenempf)
+.input "RECIPIENTS.ABASDMS.IDX"
+..
+.continue NOTDND       ? _F|defined(M|dndbetreff)
+.continue NOTDND       ?  F|empty(M|dndbetreff)
+Betreff='M|dndbetreff'
+.continue INFO
+!NOTDND
+.continue NODOKARCH    ? _F|defined(M|betreff)
+.continue NODOKARCH    ?  F|empty(M|betreff)
+Betreff='M|betreff'
+.continue INFO
+..
+!NODOKARCH
+.continue INFO         ? _F|defined(H|betreff)
+?Betreff='H|betreff'   ? _F|empty(H|betreff)
+!INFO
+Info='H|atext'
+?Waehrung='H|waehr'       ? H|dnr = 3
+?Waehrung='H|erfwaehr'    ? H|dnr = 4
+BruBet='H|sumbrutto'
+NetBet='H|sumnetto'
+.. Ausschreibungsnummer
+.continue KOPFENDE                   ? U|xvorgtyp = "Verkauf"
+?EKAusNr='U|xausschr^nummer'         ? _F|empty(U|xausschr)
+?AbasEGID='U|xausschr^id'            ? _F|empty(U|xausschr)
+!KOPFENDE
+.. I-File
+.input "ev/EVVORGANG.ABASDMS.IDX.KOPF"
+..
+.select line
+..
+!POSANF
+.continue NOPOS  ? _G|mehr & _ U|xhaspos
+.continue ENDE   ? _G|mehr
+.continue POSAUS ? _H|artex^gruppe = 4
+.continue POSAUS ? H|artex^gruppe = 4 & F|equals(H|artex^zptyp, "(SOPOItemPOS)")
+.continue POSAUS ? H|artex^gruppe = 4 & F|equals(H|artex^zptyp, "(MinimumOrderValueItem)")
+.continue POSAUS ? H|artex^gruppe = 4 & F|equals(H|artex^zptyp, "(Text)")
+.continue POSAUS ? H|artex^gruppe = 4 & F|equals(H|artex^zptyp, "(NeutralItem)")
+.continue EPOSAUS
+..
+!POSAUS
+.copy U|xhaspos = G|TRUE
+POS-ANF
+.continue ENDSPROD ? F|empty(H|serprod)
+SPrNr='H|serprod^nummer'
+SPrSuch='H|serprod^such'
+SPrBez='H|serprod^name'
+?ESerNr='H|serprod^tcharge' ? _F|empty(U|xid^serprod^tcharge)
+!ENDSPROD
+abasaid='H|artex^id'
+ArtNr='H|artex^nummer'
+ArtSuch='H|artex^such'
+?ArtBez='H|artex^name'                    ? _H|alternativpos
+?ArtBez='U|xartprefix' 'H|artex^name'     ?  H|alternativpos 
+?FArtNr='H|zkuartnr' ? H|artikel^gruppe = 1 & U|xvorgtyp = "Verkauf"
+?FArtNr='H|bstnr'    ? H|artikel^gruppe = 1 & U|xvorgtyp = "Einkauf"
+PosBet='H|pwert'
+?AbasPRID='H|projekt^id'             ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+?ProjNr='H|projekt^nummer'           ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+?ProjSuch='H|projekt^such'           ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+?ProjBez='H|projekt^name'            ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+.continue ENDTECH ? _F|defined(H|techniker)
+.continue ENDTECH ? F|empty(H|techniker)
+TechNr='H|techniker^nummer'
+TechBez='H|techniker^name'
+TechId='H|techniker^id'
+!ENDTECH
+..
+.copy U|xcharge=H|charge
+.copy U|xcharge=H|serprod^charge ? F|empty(U|xcharge) & _F|empty(H|serprod^charge)
+.continue ENDLOT   ? F|empty(U|xcharge)
+CharNr='U|xcharge^nummer'
+CharID='U|xcharge^id'
+CharEx='U|xcharge^exnum'
+CharBez='U|xcharge^name'
+!ENDLOT
+..
+.assign U|xkopf = U|xid^id
+.assign U|xorig = ""
+.. erster Durchlauf fÅr Vorgang aus EVVORGANG (orig = leer)
+.input "EVVORGANG.KETTE.IDX"
+.assign U|xkopf = ""
+.. Zuweisung des origs
+.assign U|xorig = H|orig^id
+.. Angebot, Bestellung, Chance
+.assign U|xorig = H|zrahmenpos^id ?  F|empty(H|orig) & (H|kotyp = 2 ; H|kotyp = 3 ; H|kotyp = 36) & _F|empty(H|zrahmen)
+.. Stufe 0: Selektion mit orig = gefÅllt
+.input "EVVORGANG.KETTE.IDX"
+..
+!POSEND: I-File
+.input "ev/EVVORGANG.ABASDMS.IDX.TAB"
+POS-END
+..
+!EPOSAUS
+.select line
+.continue POSANF
+.continue ENDE ? _U|xhaspos
+..
+!NOPOS
+POS-ANF
+.assign U|xkopf = U|xid^id
+.assign U|xorig = ""
+.input "EVVORGANG.KETTE.IDX"
+POS-END
+.continue ENDE
+..
+!ENDE
+.system 'F|expr("crlf+ < " + U|xt + " >" + U|xxmldata)' background

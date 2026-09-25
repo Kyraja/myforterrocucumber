@@ -1,0 +1,113 @@
+..!interpreter german translate noabbrev
+..*****************************************************************************
+.. Name           : FVFREIGEBEN.AUTOFREI.BN
+.. Date           : 05.12.14
+.. Version        : 2014r3n02
+.. Author         : chbo
+.. Copyright      : (c) 2014 SABA International
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+..
+.art int xicount                           ? F|defined( U|xtcount )   = G|False
+.art int xitotal                           ? F|defined( U|xitotal )   = G|False
+.art text xtdatei                          ? F|defined( U|xtdatei )   = G|False
+.art text xtkomm                           ? F|defined( U|xtkomm )    = G|False
+.art text xtedplog                         ? F|defined( U|xtedplog )  = G|False
+.art text xtedpcopy                        ? F|defined( U|xtedpcopy ) = G|False
+.art text xtcopyedp                        ? F|defined( U|xtcopyedp ) = G|False
+..
+..
+..-- Counter fr Tabellenzeilen und Vorschl„ge zu rckmelden
+.formel U|xicount = 0
+.formel U|xitotal = 0
+..
+..-- Ende wenn berhaupt keine Zeilen in der Tabelle
+.weiter KEINEZEILEN                          ? M|tzeilen = 0
+.weiter RELOAD                               ? M|reload = G|True
+..
+..-- Kopf holen
+.hole maske kopf
+..
+..-- Logdatei definineren
+.formel U|xtedplog   = "tmp/FVFREIGEBEN." + 'G|versionneu' + ".EDP.LOG"
+.formel U|xtedpcopy  = "tmp/FVFREIGEBEN." + 'G|versionneu' + ".EDP.COPY"
+..
+..-- Tempdatei fr das EDP-Import-Kommando vorbereiten
+.datei -tempname U|xtdatei
+.eingabe DATEI.F
+.ausgabe auf 'U|xtdatei'
+#!EDP_TESTFLAG2=1
+#!EDP_DATE='M|dienstag:8'
+
+sn
+..
+..
+!MZEILE
+.formel U|xicount = U|xicount + 1
+.hole maske zeile 'U|xicount'
+..-- Zeile/FV freigeben nur wenn nocht nicht freigegeben
+.weiter MZEILE                               ? M|freigegeben = G|True
+'M|fv^id'
+.formel U|xitotal = U|xitotal + 1
+.weiter EDP                                  ? U|xicount = M|tzeilen
+.weiter MZEILE
+..
+..
+!EDP
+..-- Freigeben ber EDP nur wenn es Fertigugsvorschl„ge gibt rckzumelden
+.weiter SUCCESS ? U|xitotal = 0
+..
+.formel U|xtkomm = "edpimport.sh -a RELEASE -I " + 'U|xtdatei' + " 2> " + 'U|xtedplog' + " -p abas123"
+.. 'U|xtkomm'
+.. .edit 'U|xtdatei'
+.system 'U|xtkomm' hinter
+.weiter ERROR                               ? G|mehr = G|False
+.weiter SUCCESS
+..
+..
+!SUCCESS
+.hinweis -sofort Keine Fertigungsvorschl„ge freizugeben!                    ? U|xitotal = 0
+.hinweis -sofort 'U|xitotal' Fertigungsvorschlag erfolgreich freigegeben.   ? U|xitotal = 1
+.hinweis -sofort 'U|xitotal' Fertigungsvorschl„ge erfolgreich freigegeben.  ? U|xitotal > 1
+.formel M|reload = G|True
+.weiter ENDE
+..
+..
+!ERROR
+.hinweis -sofort EDP-Datei 'U|xtdatei' konnte nicht importiert werden!
+..    dh/17.2.formel U|xtcopyedp = "cp " + 'U|xtedpdatei' + " " + 'U|xtedpcopy'
+.formel U|xtcopyedp = "cp " + 'U|xtdatei' + " " + 'U|xtedpcopy'
+.system 'U|xtcopyedp' HINTER
+.formel M|reload = G|True
+.weiter ENDE
+..
+..
+!WOCHE
+.hinweis -sofort Bitte aktuelle Woche eingeben!
+.weiter ENDE
+..
+..
+!KEINEZEILEN
+.hinweis -sofort Keine Fertigungsvorschl„ge freizugeben! Tabelle ist leer!
+.weiter ENDE
+..
+..
+!RELOAD
+.hinweis -sofort Die Tabelle zuerst mit Klick auf Starttaste aktualisieren!
+.weiter ENDE
+..
+..
+!ENDE
+.weiter

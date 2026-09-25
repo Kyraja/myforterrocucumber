@@ -1,0 +1,79 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : VSTATUS.BFUSS
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+..
+.. Funktion       : Die Verwendung fuer die ausgewaehlte Beschaffung
+..                  wird von HOL.VSTATUS nur einstufig aufgeloest.
+..                  Der Berichtsfuss geht die Tabelle durch und geht
+..                  jetzt die Stufen nach oben weiter, indem er zu jeder
+..                  Beschaffung die frueheste zugeordnete Reservierung weiter-
+..                  verfolgt (vor-Verweis) (diese Reservierung
+..                  ist mit pfad=TRUE markiert), sofern anzstufen noch
+..                  nicht erreicht ist.
+..                  Zum Laden der neuen Zeilen wird wiederum
+..                  das Tabellenzeigfop verwendet.
+..
+..                  Dieses "nichtlineare" Zeilenfuellen funktioniert
+..                  natuerlich nur bei Bildschirmausgabe
+..
+.. Ablauf         : Berichtsfuss-EFOP
+..
+...Includes       :
+.. include  la/BSTATUS.FARBE
+.. include  la/VSTATUS.DET
+..*****************************************************************************
+.set trans -
+..
+.type integer    xbfi xbfstl
+..
+.. Fertigungsliste nach weiterverfolgbaren Reservierungen durchsuchen
+.. xbfi     aktuell untersuchte  Tabellenzeile
+.. xbfstl   weiterzuverfolgende  Tabellenzeile
+.formula U|xbfi      =  0
+.formula U|xbfstl    =  0
+..
+!STL: Stueckliste, Reservierungen weiterverfolgen
+.formula U|xbfi      =  U|xbfi+1
+.continue ESTL    ?  U|xbfi > M|tzeilen
+..
+.select screen line  'U|xbfi'
+.continue NSTL    ?  M|elart=0
+.. naechste Beschaffung gefunden. Muss eine vorherige RES verfolgt werden ?
+.continue NSTL    ?  U|xbfstl=0
+!AUFLOES: Zeile xbfstl muss verfolgt werden.
+.. Der Bedarfsverursacher wird an Zeile xbfstl angefuegt.
+.formula U|xbfi      =  U|xbfstl
+.select screen line  'U|xbfstl'
+.formula M|bstl       = +1
+.formula M|aufzu      = "icon:folder_opened"
+.. hier wird der Bedarfsverursacher angefuegt
+.select add M|reserv
+.continue ENDHOL  ? _G|mehr
+.formula M|stufe     =  M|tbaumstufe + 1
+.select add H|vor
+.continue ENDHOL  ? _G|mehr
+.input 'M|tab'    ?  M|tab<>""  & (M|alle ; H|limge > 0.0)
+..
+!ENDHOL: Alles geholt, Untersuchung mit der Folgezeile von xbfi fortsetzen
+.formula  U|xbfstl   =  0
+.continue STL
+
+!NSTL
+.input "la/VSTATUS.DET" ? _F|defined(bstatus) & M|detail
+.continue               ? _F|defined(bstatus) & M|letzte
+.continue STL           ? _(M|bstl=-1 & M|pfad)
+.. diese Zeile soll weiter aufgeloest werden, wenn anzstufen noch nicht erreicht
+.formula U|xbfstl = U|xbfi     ? M|tbaumstufe < M|anzstufen
+.continue STL
+
+!ESTL
+.continue AUFLOES ?  U|xbfstl<>0
+..*****************************************************************************
+!END
+.. Tabelle ab erste Zeile einfaerben
+.select screen line 1 ? M|tzeilen>0
+.input "la/BSTATUS.FARBE"
+.continue

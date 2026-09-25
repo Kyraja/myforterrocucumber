@@ -1,0 +1,107 @@
+..!interpreter english translate
+..*****************************************************************************
+.. FOP-Name       : W.RECHPROT
+.. Autor          : mh/ok
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Protokoll der ausgehenden Rechnungen, VDA und EDIFACT
+.. Functionality  : print log of outgoing invoices, VDA and EDIFACT
+..*****************************************************************************
+.set trans -
+..
+.type text xtsel
+..
+.type text  xrenum
+.type date xredat
+.type text  xrebetr
+..
+.. temporary file
+.type text xtwediprot
+.file -tempname T|xtwediprot
+.output new 'T|xtwediprot'
+.input "DATEI.F"
+..
+.. branch by type of invoice: EDIFACT or VDA
+.continue VDA     ?  M|edinr^such = "VKREVA"
+.continue EDI     ?  M|edinr^such = "VKREEA"
+.continue END
+..
+..
+!VDA
+.formula T|xtsel = "$,,;@gruppe=0;text1==500;@zeilen=(1);nummer==" + 'M|edinr^nummer'
+.select edifact 'T|xtsel'
+.continue END     ? _T|mehr
+.select line 'selzeile'
+.continue END     ? _T|mehr
+.continue VDAROW
+..
+!NEXTVDA
+.select edifact
+.continue SORT    ? _T|mehr
+.select line 'selzeile'
+.continue SORT    ? _T|mehr
+..
+!VDAROW
+.. use ''-tostring for date field
+.. one record type 500 contains all date for an invoice item
+.formula T|xrenum  =  H|text3
+.formula T|xredat  = 'H|text4'
+.formula T|xrebetr =  H|text6
+.. append to file
+'T|xrenum'#'T|xredat'#'T|xrebetr'#
+.continue NEXTVDA
+..
+..
+!EDI
+.formula T|xtsel = "$,,;@gruppe=0;text1=100!300;@zeilen=(1);nummer==" + 'M|edinr^nummer'
+.select edifact 'T|xtsel'
+.continue END     ? _T|mehr
+.select line 'selzeile'
+.continue END     ? _T|mehr
+.continue EDIROW
+..
+!NEXTEDI
+.select edifact
+.continue SORT    ? _T|mehr
+.select line 'selzeile'
+.continue SORT    ? _T|mehr
+..
+!EDIROW
+.. use ''-tostring to convert values to text
+.. data for one invoice item is spread across records types 100 + 101 + 300
+.. only write invoice item to file, when record 300 is reached
+.formula T|xrenum  = 'H|text3'           ?  'H|text1'="100"
+.formula T|xredat  = 'H|text3'           ?  'H|text1'="101"
+.formula T|xrebetr = 'H|text4'           ?  'H|text1'="300"
+?'T|xrenum'#'T|xredat'#'T|xrebetr'#     ?  'H|text1'="300"
+.continue NEXTEDI
+..
+..
+!SORT
+.output
+.input DRUCKER            ? _G|edp
+.output terminal               ?  G|edp
+.input BLANKOB.F
+.page 1
+.up
+.page 1
+'txname'                      'datum'
+.set trans +
+Seite: 'seite'
+
+ RECHNUNGS-PROTOKOLL
+ ===================
+
+ EDI-Datensatz: 'M|edinr' Datum: 'M|edinr^erfass'  Debitor: 'M|edinr^idkunderab'
+
+ RE-Nr     RE-Datum Rechnungsbetrag
+ --------- -------- ---------------
+.set trans -
+!AUSG
+.select from 'T|xtwediprot' xrenum # xredat # xrebetr #
+.continue END     ? _T|mehr
+ 'xrenum ' 'xredat' '      xrebetr'
+.continue AUSG
+..*****************************************************************************
+!END
+.continue

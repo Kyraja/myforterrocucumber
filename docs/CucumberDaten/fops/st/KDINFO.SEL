@@ -1,0 +1,331 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KDINFO.SEL
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Validiert, erzeugt und startet die Datenbankanfrage.
+.. Ablauf         : Unterprogramm
+..
+.. Functionality  : Validates, creates and starts query.
+.. Program flow   : Subroutine
+..*****************************************************************************
+.set trans -
+..
+.. Check validation of dates
+.continue ERROR1 ? M|kdstart > M|kdbisstart & (_F|empty(M|kdstart) & _F|empty(M|kdbisstart))
+..
+.. Clear table
+.make screen line -- ? M|tzeilen > 0
+..
+.. Declarations
+.type integer   xistep
+.type integer   xitmpindex
+.type bool  xbkeyword
+.type bool  xbperson
+.type bool  xbstartdat
+.type VID99 xperson
+..
+.. Representatives
+.type integer xiindex
+.type integer xizeigen
+.type text xtvertnrfeld.xiindex
+..
+.. Initializations
+.copy U|xbstartdat = _F|empty(M|kdstart) ; _F|empty(M|kdbisstart)
+.formula U|xtvertnrfeld.U|xiindex = M|kbedien^id ? _F|empty(M|kbedien)
+..
+.. Do we have to use other keys then the default?
+.copy U|xbkeyword = _(F|empty(M|ktschlagvon) & F|empty(M|ktschlagbis))
+.copy U|xbperson = _F|empty(M|knumkusa)
+.continue STEP ? _U|xbperson
+.assign U|xperson = M|knumkusa^id
+.assign U|xperson = M|knumsaku^id ? _M|kbeleg & M|istsachkd
+..
+!STEP: Set start, end and step of query
+.formula U|xistep = 1
+.formula M|holstart = 0
+.formula M|holend = 0
+.continue CUINFO ? F|defined(M|kbkdinfo)
+..
+.. Things we have to do while executing vendor information centre
+.formula M|holstart = 2 ? M|kbvorgaenge
+.formula M|holstart = 10 ? M|kbprojekte
+.formula M|holstart = 11 ? M|kbaktionen & _M|kbprojekte
+..
+.formula M|holend = 9  ? M|kbvorgaenge
+.formula M|holend = 10 ? M|kbprojekte & _M|kbaktionen
+.formula M|holend = 11 ? M|kbaktionen
+.continue INIT
+..
+!CUINFO: Things we have to do while executing customer information centre
+.formula M|holstart = 2 ? M|kbvorgaenge
+.formula M|holstart = 9 ? M|kbshipping & _(M|kbblanket ; M|kboffer ; M|kbweb; M|kborder ; M|kbdelivery ; M|kbinvoice)
+.formula M|holstart = 10 ? M|kbprojekte
+.formula M|holstart = 11 ? M|kbaktionen & _M|kbprojekte
+.formula M|holstart = 12 ? M|kbseroffer & M|holstart = 0
+.formula M|holstart = 13 ? M|kbserorder & M|holstart = 0
+.formula M|holstart = 14 ? M|kbreporder & M|holstart = 0
+.formula M|holstart = 15 ? M|kbserreserv & M|holstart = 0
+..
+.formula M|holend = 9 ? M|kbvorgaenge
+.formula M|holend = 8 ? M|kbvorgaenge & _M|kbshipping
+.formula M|holend = 10 ? M|kbprojekte & _M|kbaktionen
+.formula M|holend = 11 ? M|kbaktionen
+.formula M|holend = 12 ? M|kbseroffer
+.formula M|holend = 13 ? M|kbserorder
+.formula M|holend = 14 ? M|kbreporder
+.formula M|holend = 15 ? M|kbserreserv
+..
+!INIT: Init selection pattern
+.formula M|select = "$,,;@ordnung=nummer"
+..
+!REPRESENT: Loop for representatives
+.continue END ? M|stufe = 0 & M|kbvert & (U|xizeigen > U|xiindex)
+.formula M|kvertg = U|xtvertnrfeld.U|xizeigen ? _F|empty(M|kbedien)
+..
+.. Set query level
+.formula M|stufe = M|holstart ? G|evtvar = "bstart" & G|evtartengl = "BUTTON_AFTER"
+..
+!START: Start loop for query
+.continue SETVERT ? M|stufe = 0 & M|kbvert & (U|xizeigen <= U|xiindex)
+.continue END ? M|stufe = 0 & _M|kbvert
+.. bei Vertretungen Vorg„nge und Projekte nur einmal zeigen
+.formula M|stufe = 11 ? U|xizeigen > 0
+..
+.. Reinitilizations for the query loop
+.formula M|select = "$,,;@ordnung=nummer"
+..
+!DATBASE: Set database for query
+.continue FILE118 ? M|stufe = 15
+.continue FILE055 ? M|stufe = 9
+.continue FILE086 ? M|stufe = 10 ; M|stufe = 11
+.continue FILE003 ? F|defined(M|kbkdinfo) & M|stufe >= 1 & M|stufe <= 8
+.continue FILE003 ? M|stufe = 12 ; M|stufe = 13 ; M|stufe = 14
+.continue FILE004 ? F|defined(M|kblfinfo) & M|stufe >= 1 & M|stufe <= 8
+.continue FATAL
+..
+!FILE118: Service reservations
+.assign M|dn = "(ServiceReservation)"
+.formula M|grliste = F|formatstr("{1}:1", M|datnr)
+.formula M|select = M|select + ";@gruppe=1"
+.continue RESERVE
+..
+!FILE055: Shipping documents
+.continue ITERATE ? F|defined(M|kblfinfo)
+.continue ITERATE ? _M|kbshipping
+.continue ITERATE ? M|knumkusa^gruppe = 6 ; M|knumkusa^gruppe = 7
+.assign M|dn = "(ShipOrder)"
+.formula M|grliste = F|formatstr("{1}:1", M|datnr)
+.formula M|select = M|select + ";@gruppe=1"
+.continue SHIPPING
+..
+!FILE086: Process management
+.assign M|dn = "(Transaction)"
+.continue DB86GR1 ? M|stufe = 10
+.continue DB86GR2 ? M|stufe = 11
+.continue FATAL
+..
+!DB86GR1: Projects
+.continue ITERATE ? _M|kbprojekte
+.formula M|grliste = F|formatstr("{1}:1", M|datnr)
+.formula M|select = M|select + ";@gruppe=1"
+.continue TRIGGER ? U|xbperson
+.continue NUMBER
+..
+!DB86GR2: Activities
+.continue ITERATE ? _M|kbaktionen
+.formula M|grliste = F|formatstr("{1}:2", M|datnr)
+.formula M|select = M|select + ";@gruppe=2"
+.continue TRIGGER ? U|xbperson
+.continue NUMBER
+..
+!FILE003: Sales documents
+.assign M|dn = "(Sales)"
+.formula M|grliste = F|formatstr("{1}:1", M|datnr)
+.formula M|select = M|select + ";@gruppe=1"
+.continue DOCUMENT
+..
+!FILE004: Purchasing documents
+.assign M|dn = "(Purchasing)"
+.formula M|grliste = F|formatstr("{1}:1", M|datnr)
+.formula M|select = M|select + ";@gruppe=1"
+.continue DOCUMENT
+..
+!DOCUMENT: Documents in sales and purchasing distinguished by their types
+.continue ANKO  ? M|stufe = 2
+.continue RAHKO ? M|stufe = 3
+.continue CHKO  ? M|stufe = 4
+.continue WAKO  ? M|stufe = 5
+.continue ABKO  ? M|stufe = 6
+.continue LIKO  ? M|stufe = 7
+.continue REKO  ? M|stufe = 8
+.continue SERAN ? M|stufe = 12
+.continue SERAB ? M|stufe = 13
+.continue REPAB ? M|stufe = 14
+.continue FATAL
+..
+!ANKO: Add condition for offers
+.continue ITERATE ? _M|kboffer
+.formula M|select = M|select + ";ktyp=" + 'G|ANKO'
+.continue PERSON
+..
+!RAHKO: Add conditon for blanket orders
+.continue ITERATE ? _M|kbblanket
+.continue ITERATE ? F|defined(M|kbkdinfo) & M|knumkusa^gruppe = 6 ; M|knumkusa^gruppe = 7
+.formula M|select = M|select + ";ktyp=" + 'G|RAKO'
+.continue KEYWORD ? _U|xbperson
+.continue PERSON
+..
+!CHKO: Add condition for opportunities
+.continue ITERATE ? _M|kbopport
+.continue ITERATE ? F|defined(M|kblfinfo)
+.formula M|select = M|select + ";ktyp=" + 'G|CHKO'
+.continue PERSON
+..
+!WAKO: Add condition for weborders
+.continue ITERATE ? F|defined(M|kblfinfo)
+.continue ITERATE ? _M|kbweb
+.formula M|select = M|select + ";ktyp=" + 'G|WAKO'
+.continue PERSON
+..
+!ABKO: Add condition for orders
+.continue ITERATE ? _M|kborder
+.continue ITERATE ? F|defined(M|kbkdinfo) & M|knumkusa^gruppe = 6 ; M|knumkusa^gruppe = 7
+.formula M|select = M|select + ";ktyp=" + 'G|ABKO'
+.continue PERSON
+..
+!LIKO: Add condition for delivery notes
+.continue ITERATE ? _M|kbdelivery
+.continue ITERATE ? F|defined(M|kbkdinfo) & M|knumkusa^gruppe = 6 ; M|knumkusa^gruppe = 7
+.formula M|select = M|select + ";ktyp=" + 'G|LIKO'
+.continue PERSON
+..
+!REKO: Add condition for invoices
+.continue ITERATE ? _M|kbinvoice
+.continue ITERATE ? F|defined(M|kbkdinfo) & M|knumkusa^gruppe = 6 ; M|knumkusa^gruppe = 7
+.formula M|select = M|select + ";ktyp=" + 'G|REKO'
+.continue PERSON
+..
+!SERAN: Add condition for service offers
+.continue ITERATE ? _M|kbseroffer
+.formula M|select = M|select + ";ktyp=" + 'G|SNKO'
+.continue PERSON
+..
+!SERAB: Add condition for service orders
+.continue ITERATE ? _M|kbserorder
+.continue ITERATE ? F|defined(M|kbkdinfo) & M|knumkusa^gruppe = 6 ; M|knumkusa^gruppe = 7
+.formula M|select = M|select + ";ktyp=" + 'G|SBKO'
+.continue PERSON
+..
+!REPAB: Add condition for repair orders
+.continue ITERATE ? _M|kbreporder
+.continue ITERATE ? F|defined(M|kbkdinfo) & M|knumkusa^gruppe = 6 ; M|knumkusa^gruppe = 7
+.formula M|select = M|select + ";ktyp=" + 'G|SRKO'
+.continue PERSON
+..
+!RESERVE: Add condition for customer while query service reservations
+.continue ITERATE ? _M|kbserreserv
+.formula M|select = M|select + ";kunde=" + M|knumkusa^id ? _F|empty(M|knumkusa)
+.continue DATE
+..
+!PERSON: Add condition for customer or supplier
+.continue KEYWORD ? _U|xbperson
+.formula M|select = M|select + ";reempf=" ? F|defined(M|kbkdinfo) & _M|kbeleg
+.formula M|select = M|select + ";resteller=" ? F|defined(M|kblfinfo) & _M|kbeleg
+.formula M|select = M|select + ";kl=" ? M|kbeleg
+.formula M|select = M|select + U|xperson
+.continue KEYWORD
+..
+!SHIPPING: Shipping orders
+.continue CUSTOMER ? U|xbperson
+.continue NUMBER
+..
+!CUSTOMER: Add condition for customer
+.formula M|select = M|select + ";kunde=" + M|knumkusa^id
+.continue KEYWORD
+..
+!NUMBER: Add condition for numbers
+.formula M|select = M|select + ";nummer=!"
+.continue KEYWORD ? M|stufe = 9
+.continue INTEXT
+..
+!TRIGGER: Add condition for trigger
+.formula M|select = M|select + ";ursache=" + U|xperson
+.continue INTEXT
+..
+!INTEXT: Add internal/external constraint
+.. no constraint if both switches are on/off
+.continue KEYWORD ? M|kbintern = M|kbextern
+.formula M|select = M|select + ";intern=" + 'G|TRUE' ? M|kbintern
+.formula M|select = M|select + ";intern=" + 'G|FALSE' ? M|kbextern
+..
+!KEYWORD: Add condition for key word
+.continue DATE ? _U|xbkeyword
+.formula M|select = M|select + ";schlag=" + (M|ktschlagvon  * "+#X") + "!" + (M|ktschlagbis  * "+#X")
+..
+!DATE: Add condition for range of date
+.continue FILING ? _U|xbstartdat
+.continue STARTDATE ? M|stufe = 10 ; M|stufe = 11 
+.continue ENTRYDATE ? M|stufe >= 2 & M|stufe <= 9 ; M|stufe >= 12 & M|stufe <= 15
+.continue FATAL
+..
+!STARTDATE: Add condition for start date
+.formula M|select = M|select + ";start=" + 'M|kdstart:8' + "!" + 'M|kdbisstart:8'
+.continue FILING
+..
+!ENTRYDATE: Add condition for entry date
+.formula M|select = M|select + ";erfass="+ 'M|kdstart:8' + "!" + 'M|kdbisstart:8'
+.continue FILING
+..
+!FILING: Add condition for all filing types
+.continue NOFILING ? _M|kbabl
+.formula M|select = M|select + ";@ablageart=(Both)"
+.continue GETDATA
+..
+!NOFILING: Add condition for living data records
+.formula M|select = M|select + ";ablagef==" + 'G|FALSE' + ";@ablageart=(Active)"
+..
+!GETDATA: Start to query
+.input "is/HOL.LISTE" ? M|stufe >= M|holstart & M|stufe <= M|holend
+..
+!ITERATE: Iterate counter for level of query
+.formula M|stufe = M|stufe + U|xistep
+.formula M|stufe = 0 ? M|stufe > M|holend
+.continue START
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+!SETVERT: Get representatives for current user for each query level
+.load 4 employee 'F|expr("$,,;vertvon=" + U|xtvertnrfeld.U|xizeigen)'
+.formula U|xizeigen = U|xizeigen + 1
+..
+!BREAK
+.continue REPRESENT ? _G|mehr
+..
+.formula U|xitmpindex = 0
+..
+!COMPARE: Check if it is a new representative
+.continue PLUS ? U|xiindex < U|xitmpindex
+.continue NEXT ? 4|id = U|xtvertnrfeld.U|xitmpindex
+.formula U|xitmpindex = U|xitmpindex + 1
+.continue COMPARE
+
+!PLUS: Add new representative
+.formula U|xiindex = U|xiindex + 1
+.type text xtvertnrfeld.xiindex ? _F|defined(U|xtvertnrfeld.U|xiindex)
+.formula U|xtvertnrfeld.U|xiindex = 4|id
+..
+!NEXT: Get known representatives
+.load 4 employee
+.continue BREAK
+..*****************************************************************************
+..
+!ERROR1: Illegal date area!
+.error -line 0 -field M|kdstart -message Ungltiger Startdatumsbereich!
+.end 1
+..
+!FATAL: Unexspected programming error
+.error -number 1111
+.end 1

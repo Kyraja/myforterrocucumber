@@ -1,0 +1,62 @@
+..!interpreter english translate
+..*****************************************************************************
+..
+..  FOP-Name       : DISPOSERV.LG
+..  Datum          : 23.01.00
+..  Version        : 9.4
+..  Autor          : es
+..  Verantwortlich : dglintz
+..  Kontrolle      : bheim
+..
+..  Funktion       : Dispo permanent im Hintergrund laufen lassen.
+..
+..  Ablauf         : Der Erstaufruf erfolgt aus disposerv.sh heraus mit:
+..                      batchlg.sh DISPOSERV.LG  (siehe disposerv.sh +)
+..                   Dabei hinterlegt DISPOSERV.LG die eigene PID und
+..                   beendet sich, indem es den Lader DISPOSERV.LES aufruft.
+..                   Dieser Lader ruft seinerseits wieder DISPOSERV.LG auf.
+..
+..                   Beim Folgeaufruf
+..                   (aus dem Lader DISPOSERV.LES) inspiziert
+..                   DISPOSERV.LG die Datei DISPOSERV.PAR und beendet sich,
+..                   indem es den naechsten Dispolauf aufruft.
+..
+..                   In DISPOSERV.PAR zaehlt DISPOSERV.LG ausserdem, wie oft er
+..                   die Dispo schon gestartet hat.
+..
+..                   Jeweils beim Ueberschreiten von 10000 Zeilen wird der
+..                   erste Teil der Protokolldatei la/MTFJ beiseitegelegt
+..                   (la/MTFJ.OLD).
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.type integer  xn
+.type text xpid xkom
+.system "test -f la/DISPOSERV.PAR"
+.continue START ? _mehr
+.select from "la/DISPOSERV.PAR" xpid xn
+.continue START ? _mehr
+..
+.. FOLGEAUFRUF
+..
+.formula xn=xn+1
+.system "fsplit.sh -l 10000 la/MTFJ OLD" background ? (xn//10)=0
+.select from
+.output new "la/DISPOSERV.PAR"
+.length 1
+'pid'  'xn'
+.output terminal
+.. Disposition starten (Kommando 8)
+.end 'kkomname8'
+..
+!START:
+.. ERSTAUFRUF
+.output new "la/DISPOSERV.PAR"
+.length 1
+'pid'  0
+.output terminal
+.. Laderskript la/DISPOSERV.LES aufrufen (Kommando 16)
+.formula xkom = kkomname16 + " " + "la/DISPOSERV.LES"
+.end 'xkom'

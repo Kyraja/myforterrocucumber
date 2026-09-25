@@ -1,0 +1,163 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : la/INV.SET.BEWPR
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Unterprogramm des FOPs la/INV.SET.BPR
+..                : H|-Puffer ZÑhlliste
+..                  D|-Puffer Artikel
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.set cancel -
+.type text  xinfosysout  ? _F|defined(U|xinfosysout)
+.type text  xinfosyserr  ? _F|defined(U|xinfosyserr)
+.type text  xtsys        ? _F|defined(U|xtsys)
+.type R11.4 xbewpr       ? _F|defined(U|xbewpr)
+.type integer   xanzzeilen   ? _F|defined(U|xanzzeilen)
+.type text  xartikel     ? _F|defined(U|xartikel)
+.type R13.2 xsumme       ? _F|defined(U|xsumme)
+.type M12.3 xsumkmge     ? _F|defined(U|xsumkmge)
+.type I4    xint         ? _F|defined(U|xint)
+.type bool  xmehr        ? _F|defined(U|xmehr)
+.type bool  xbsuccess    ? _F|defined(U|xbsuccess)
+.type bool  xberst       ? _F|defined(U|xberst)
+.type K2    xstdbewverf  ? _F|defined(U|xstdbewverf)
+.type bool  xbstdbewverf ? _F|defined(U|xbstdbewverf)
+.type integer   xi           ? _F|defined(U|xi)
+.type integer   xend         ? _F|defined(U|xend)
+.type integer   xz           ? _F|defined(U|xz)
+..
+.continue MPR ? U|xbmischpreis
+.file -tempname U|xinfosysout
+.file -tempname U|xinfosyserr
+..
+.continue WEITER            ? U|xberst
+.formula U|xi = 1
+.copy U|xberst = G|TRUE
+.. Bewertungsverfahren der Standardwarengruppe
+.copy U|xstdbewverf = F|sysinfo(7)^wgruppe^ekbewverf
+..
+.. Bewertungskonfiguration prÅfen
+.type text   xtfirmensel   ? _F|defined(U|xtfirmensel)
+.formula U|xtfirmensel = "$,,@gruppe=15;@autostart=ja"
+.load 9 company 'U|xtfirmensel'
+.error Keine Bewertungskonfiguration ? _G|mehr
+.continue WEITER                                ? _G|mehr
+..
+!LADE
+.load 9 line
+.continue WEITER                                ? _G|mehr
+.continue LADE ? _9|verfverw
+.. Treffer bei "FIFO" in Kombination mit "Vorgangspreis"
+.continue TREFF ? F|equals(9|bewab, "(EarliestAcquisitionFIFO)") & F|equals(9|bewzu, "(TransactionPrice)")
+.. Treffer bei "LIFO" in Kombination mit "Vorgangspreis"
+.continue TREFF ? F|equals(9|bewab, "(LastAcquisitionLIFO)") & F|equals(9|bewzu, "(TransactionPrice)")
+.. Treffer bei "Preis des Zugangs" in Kombination mit "Vorgangspreis"
+.continue TREFF ? F|equals(9|bewab, "(ReceiptPrice)") & F|equals(9|bewzu, "(TransactionPrice)")
+.continue LADE
+..
+!TREFF
+.type bool xbbewverf.xi  ? _F|defined(U|xbbewverf.xi)
+.type K2   xbewverf.xi   ? _F|defined(U|xbewverf.xi)
+.copy U|xbewverf.xi    = 9|bewverf
+.copy U|xbbewverf.xi   = G|TRUE
+.copy U|xbstdbewverf = G|TRUE ? U|xstdbewverf = U|xbewverf.xi
+.formula U|xi = U|xi + 1
+.continue LADE
+..
+!WEITER
+.formula U|xend = U|xi - 1
+.formula U|xz = U|xend
+.continue MPR ? U|xz = 0
+.. pruefen, ob Artikel Bewertungsverfahren LIFO/FIFO/Preis des Zugangs hat. Nur dann IS nutzen
+.. ansonsten zu !MPR springen
+.. 1. Bewertungsverfahren aus Artikel
+.. 2. Bewertungsverfahren aus Warengruppe des Artikels
+.. 3. Bewertungsverfahren aus Standardwarengruppe
+..
+!BEW
+.continue BEWWG    ? D|ekbewverf = 0
+..
+!ZAEHL
+.continue INFOSYS  ? D|ekbewverf = U|xbewverf.xz
+.formula U|xz = U|xz - 1
+.continue ZAEHL ? U|xz > 0
+.continue MPR
+..
+!BEWWG: Verfahren aus Warengruppe ausschlaggebend
+.formula U|xz = U|xend
+.continue BEWSTD   ? F|empty(D|aufgrp)
+!IZAEHL
+.continue INFOSYS  ? D|aufgrp^ekbewverf = U|xbewverf.xz
+.formula U|xz = U|xz - 1
+.continue IZAEHL ? U|xz > 0
+.continue MPR
+..
+!BEWSTD: keine Warengruppe im Artikel -> Bewertungsverfahren der Standardwarengruppe
+.continue INFOSYS  ? U|xbstdbewverf
+.continue MPR
+..
+!INFOSYS: IS LAGERWERTAKTUELL wird aufgerufen
+.formula U|xtsys = F|expr("edpinfosys.sh -P -s 'artikel=" + D|id + "#bstart' -f - -k ozeilen,artikel,summe,sumkmge -N 10396 -o nummode=raw -t '#' > " + xinfosysout + " 2> " + xinfosyserr)
+.system 'U|xtsys' password background
+..
+.formula U|xbsuccess = G|mehr
+.input 'U|xinfosyserr'                     ? _U|xbsuccess
+.error Aufruf Åber edpinfosys gescheitert!  ? _U|xbsuccess
+.end 1                                      ? _U|xbsuccess
+..
+.. Zeile auslesen
+.file -test -open U|xint 'U|xinfosysout'
+.error Datei mit Lagerwertdaten konnte nicht geîffnet werden!  ? _G|mehr
+.end 1                                                         ? _G|mehr
+.file -read U|xint U|xanzzeilen # U|xartikel # U|xsumme # U|xsumkmge #
+.file -close U|xint
+.continue MPR  ? U|xanzzeilen = 0
+.continue MPR  ? U|xsumkmge <= 0 ; U|xsumme <= 0
+.formula U|xbewpr = U|xsumme / U|xsumkmge
+.formula H|nbpr   = U|xbewpr
+.formula H|bpr    = U|xbewpr
+.continue OPENED ? G|evtartengl = "NO_EVENT" & U|xbopened
+.continue CLOSED ? G|evtartengl = "NO_EVENT" & U|xbclosed
+.continue OPENED ? G|evtmaske = 65 & (G|evtartengl = "SCREEN_EXIT" ; G|evtartengl = "SCREEN_EXIT_KERNEL" ; G|evtartengl = "SCREEN_END") & G|evtkommd = G|kaktname3
+.continue CLOSED ? G|evtmaske = 66 & (G|evtartengl = "SCREEN_EXIT" ; G|evtartengl = "SCREEN_EXIT_KERNEL" ; G|evtartengl = "SCREEN_END") & G|evtkommd = G|kaktname1
+..
+!OPENED
+.continue SCHLUSS ? F|empty(U|xzaehlliste)
+.output addedto 'U|xzaehlliste'
+.. x1              # x2     # x3        # x4             # x5         # x6            # x7              # x8    # x9         # x10 # x11    # x12  # x13 # x14 #
+.. ZÑhllistenzeile   Pos-Nr   Charge-ID   Chargennummer    Artikel-ID   Artikelnummer   Artikelsuchwort   Platz   Gebeinheit   LE    Faktor   nbpr   bpr   verw
+'H|id'#'H|posnr'#'H|charge^id'#'H|charge^nummer'#'D|id'#'D|nummer'#'D|such'#'H|platz'#'H|gebeinh'#'H|leeinh'#'H|gebf'#'H|nbpr'#'H|bpr'#'H|verw'#
+.output
+.continue SCHLUSS
+..
+!CLOSED
+.continue SCHLUSS ? F|empty(U|xabschluss)
+.output addedto 'U|xabschluss'
+.. x1              # x2     # x3        # x4             # x5         # x6            # x7              # x8    # x9         # x10 # x11    # x12  # x13 # x14 #
+.. ZÑhllistenzeile   Pos-Nr   Charge-ID   Chargennummer    Artikel-ID   Artikelnummer   Artikelsuchwort   Platz   Gebeinheit   LE    Faktor   nbpr   bpr   verw
+'H|id'#'H|posnr'#'H|charge^id'#'H|charge^nummer'#'D|id'#'D|nummer'#'D|such'#'H|platz'#'H|gebeinh'#'H|leeinh'#'H|gebf'#'H|nbpr'#'H|bpr'#'H|verw'#
+.output
+.continue SCHLUSS
+..
+!SCHLUSS
+.file -close U|xint
+.continue END
+..
+!MPR: Ersatzweise den Mischpreis aus Artikel verwenden
+.formula H|nbpr = 0
+.formula H|nbpr = D|mpr ? D|mpr > 0
+.formula H|bpr  = 0
+.formula H|bpr  = D|mpr ? D|mpr > 0
+.continue END ? U|xbmischpreis
+.continue OPENED ? G|evtartengl = "NO_EVENT" & U|xbopened
+.continue CLOSED ? G|evtartengl = "NO_EVENT" & U|xbclosed
+.continue OPENED ? G|evtmaske = 65 & (G|evtartengl = "SCREEN_EXIT" ; G|evtartengl = "SCREEN_EXIT_KERNEL" ; G|evtartengl = "SCREEN_END") & G|evtkommd = G|kaktname3
+.continue CLOSED ? G|evtmaske = 66 & (G|evtartengl = "SCREEN_EXIT" ; G|evtartengl = "SCREEN_EXIT_KERNEL" ; G|evtartengl = "SCREEN_END") & G|evtkommd = G|kaktname1
+..
+!END
+.rewrite
+.set cancel +
+.continue

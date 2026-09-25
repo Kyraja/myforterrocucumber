@@ -1,0 +1,116 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICEPROCESS.RENEU
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  : EK-Eingangsrechnungen (Lieferanten) erfassen
+..*****************************************************************************
+.set trans -
+.type text    xtcmd     ? _F|defined(U|xtcmd)
+..
+.select screen header
+.formula M|IssueDateTime = "." ? F|empty(M|IssueDateTime)
+..
+.continue GUTSCHRIFT ? F|equals(M|vorganga, "(CreditNoteCommercial)")
+..
+!RECHNUNG
+.. zaform: A175: šberweisung (Transfer), Lastschrift (DebitNote), Scheck (Check), Wechsel (BillOfExchange), Sonstiges (Other), Leer (EmptyEntry)
+#!database=4:24
+#!action=NEW
+#!charset=eks
+#!dontchange=~
+?num4;ebeleg;lief;resteller;*ftext;zaform;bverb;vom;tterm;ident;leidat;bem\  ?  M|bewlei & F|empty(M|zbed)
+?num4;ebeleg;lief;resteller;*ftext;zaform;bverb;vom;tterm;ident;bem\         ? _M|bewlei & F|empty(M|zbed)
+?num4;ebeleg;lief;resteller;*ftext;zaform;bverb;vom;zbed;ident;leidat;bem\   ?  M|bewlei & _F|empty(M|zbed)
+?num4;ebeleg;lief;resteller;*ftext;zaform;bverb;vom;zbed;ident;bem\          ? _M|bewlei & _F|empty(M|zbed)
+artex;mge;preis;ljtext1;pwert;kstelle;konto
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';'M|notizen';'M|zaform(L="0")';~;'M|IssueDateTime';'M|tterm';'M|edifact^nummer';'M|DeliveryDateTime';'M|bem'\   ?  M|bewlei & 'M|kobverb' = 'M|resteller^bverb' & F|empty(M|zbed)
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';'M|notizen';'M|zaform(L="0")';~;'M|IssueDateTime';'M|tterm';'M|edifact^nummer';'M|bem'\                        ? _M|bewlei & 'M|kobverb' = 'M|resteller^bverb' & F|empty(M|zbed)
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';'M|notizen';'M|zaform(L="0")';'M|kobverb';'M|IssueDateTime';'M|tterm';'M|edifact^nummer';'M|DeliveryDateTime';'M|bem'\ ?  M|bewlei & 'M|kobverb' <> 'M|resteller^bverb' & F|empty(M|zbed)
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';'M|notizen';'M|zaform(L="0")';'M|kobverb';'M|IssueDateTime';'M|tterm';'M|edifact^nummer';'M|bem'\                      ? _M|bewlei & 'M|kobverb' <> 'M|resteller^bverb' & F|empty(M|zbed)
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';'M|notizen';'M|zaform(L="0")';~;'M|IssueDateTime';'M|zbed';'M|edifact^nummer';'M|DeliveryDateTime';'M|bem'\   ?  M|bewlei & 'M|kobverb' = 'M|resteller^bverb' & _F|empty(M|zbed)
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';'M|notizen';'M|zaform(L="0")';~;'M|IssueDateTime';'M|zbed';'M|edifact^nummer';'M|bem'\                        ? _M|bewlei & 'M|kobverb' = 'M|resteller^bverb' & _F|empty(M|zbed)
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';'M|notizen';'M|zaform(L="0")';'M|kobverb';'M|IssueDateTime';'M|zbed';'M|edifact^nummer';'M|DeliveryDateTime';'M|bem'\ ?  M|bewlei & 'M|kobverb' <> 'M|resteller^bverb' & _F|empty(M|zbed)
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';'M|notizen';'M|zaform(L="0")';'M|kobverb';'M|IssueDateTime';'M|zbed';'M|edifact^nummer';'M|bem'\                      ? _M|bewlei & 'M|kobverb' <> 'M|resteller^bverb' & _F|empty(M|zbed)
+..
+!SELLINE
+.select screen line
+.continue REZUPOS  ? _G|mehr
+.continue SELLINE  ? M|zeilentyp<>0
+.continue SELLINE  ? _F|protected(M|bzusatz, M|aktzeile)
+?'M|artikel^id';'M|BilledQuantity';'M|NetPriceProductTradePrice:2';'M|ljtext1';~;'M|kstelle';'M|konto'\ ?  _(F|empty(kstelle) & F|empty(M|konto))
+?'M|artikel^id';'M|BilledQuantity';'M|NetPriceProductTradePrice:2';'M|ljtext1';~;~;~\                   ?  F|empty(kstelle) & F|empty(M|konto)
+.continue SELLINE
+..
+!REZUPOS
+.select screen header
+.continue OUTPUT ? _G|mehr
+..
+!REZUPLINE
+.select screen line
+.continue OUTPUT ? _G|mehr
+.continue REZUPLINE ? _M|bzusatz
+?'M|artikel^id';'M|BilledQuantity';~;~;'M|LineTotalAmount';'M|kstelle';'M|konto'\ ? M|zeilentyp = 0 & _(F|empty(kstelle) & F|empty(M|konto))
+?'M|artikel^id';'M|BilledQuantity';~;~;'M|LineTotalAmount';~;~\                   ? M|zeilentyp = 0 &  F|empty(kstelle) & F|empty(M|konto)
+?'M|artikel^id';~;~;~;'M|ChargeActualAmount';'M|kstelle';'M|konto'\               ? M|zeilentyp = 2 & _(F|empty(kstelle) & F|empty(M|konto))
+?'M|artikel^id';~;~;~;'M|ChargeActualAmount';~;~                  \               ? M|zeilentyp = 2 &  F|empty(kstelle) & F|empty(M|konto)
+.continue REZUPLINE
+..
+!GUTSCHRIFT
+.. Bei der Auswahl "Ohne Lagerbewegung" drfen keine Artikelpositionen mit bestandsgefhrter Warengruppe hinzugefgt werden
+.. Generell nur Zusatzpositionen vom Typ AU/BE-Position -> immer A. Platzhalter verwenden?
+#!database=4:24
+#!action=NEW
+#!charset=eks
+#!dontchange=~
+?num4;ebeleg;lief;resteller;fakt;**ftext;zaform;bverb;vom;tterm;ident;leidat;bem\ ?  M|bewlei & F|empty(M|zbed)
+?num4;ebeleg;lief;resteller;fakt;**ftext;zaform;bverb;vom;tterm;ident;bem\        ? _M|bewlei & F|empty(M|zbed)
+?num4;ebeleg;lief;resteller;fakt;**ftext;zaform;bverb;vom;zbed;ident;leidat;bem\ ?  M|bewlei & _F|empty(M|zbed)
+?num4;ebeleg;lief;resteller;fakt;**ftext;zaform;bverb;vom;zbed;ident;bem\        ? _M|bewlei & _F|empty(M|zbed)
+artex;mge;preis;ljtext1;pwert;kstelle;konto
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';FALSE;'M|notizen';'M|zaform(L="0")';-;'M|IssueDateTime';'M|SpecifiedTradePaymentTermsDueDateDateTime';'M|edifact^nummer';'M|DeliveryDateTime';'M|bem'\ ?  M|bewlei & 'M|kobverb' = 'M|resteller^bverb' & F|empty(M|zbed)
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';FALSE;'M|notizen';'M|zaform(L="0")';-;'M|IssueDateTime';'M|SpecifiedTradePaymentTermsDueDateDateTime';'M|edifact^nummer';'M|bem'\                      ? _M|bewlei & 'M|kobverb' = 'M|resteller^bverb' & F|empty(M|zbed)
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';FALSE;'M|notizen';'M|zaform(L="0")';'M|kobverb';'M|IssueDateTime';'M|SpecifiedTradePaymentTermsDueDateDateTime';'M|edifact^nummer';'M|DeliveryDateTime';'M|bem'\   ?  M|bewlei & 'M|kobverb' <> 'M|resteller^bverb' & F|empty(M|zbed)
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';FALSE;'M|notizen';'M|zaform(L="0")';'M|kobverb';'M|IssueDateTime';'M|SpecifiedTradePaymentTermsDueDateDateTime';'M|edifact^nummer';'M|bem'\                        ? _M|bewlei & 'M|kobverb' <> 'M|resteller^bverb' & F|empty(M|zbed)
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';FALSE;'M|notizen';'M|zaform(L="0")';-;'M|IssueDateTime';'M|zbed';'M|edifact^nummer';'M|DeliveryDateTime';'M|bem'\ ?  M|bewlei & 'M|kobverb' = 'M|resteller^bverb' & _F|empty(M|zbed)
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';FALSE;'M|notizen';'M|zaform(L="0")';-;'M|IssueDateTime';'M|zbed';'M|edifact^nummer';'M|bem'\                      ? _M|bewlei & 'M|kobverb' = 'M|resteller^bverb' & _F|empty(M|zbed)
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';FALSE;'M|notizen';'M|zaform(L="0")';'M|kobverb';'M|IssueDateTime';'M|zbed';'M|edifact^nummer';'M|DeliveryDateTime';'M|bem'\   ?  M|bewlei & 'M|kobverb' <> 'M|resteller^bverb' & _F|empty(M|zbed)
+?~;'M|ExchangedDocumentID';'M|lieferant^id';'M|resteller^id';FALSE;'M|notizen';'M|zaform(L="0")';'M|kobverb';'M|IssueDateTime';'M|zbed';'M|edifact^nummer';'M|bem'\                        ? _M|bewlei & 'M|kobverb' <> 'M|resteller^bverb' & _F|empty(M|zbed)
+..
+!WGLINE
+.select screen line
+.continue ZUPOST  ? _G|mehr
+.continue WGLINE  ? M|zeilentyp<>0 
+.. Zeilentyp Zu-/Abschl„ge mssen noch korrekt eingefgt werden
+'M|artikel^id';'M|BilledQuantity';'M|NetPriceProductTradePrice:2';'M|ljtext1';~;~;~\ 
+.continue WGLINE
+..
+!ZUPOS
+.select screen header
+.continue OUTPUT ? _G|mehr
+..
+!ZUPLINE
+.select screen line
+.continue OUTPUT ? _G|mehr
+.continue ZUPLINE ? _M|bzusatz
+?'M|artikel^id';'M|BilledQuantity';~;~;'M|LineTotalAmount';'M|kstelle';'M|konto'\ ? M|zeilentyp = 0
+?'M|artikel^id';~;~;~;~;'M|ChargeActualAmount';'M|kstelle';'M|konto'\             ? M|zeilentyp = 2
+.continue ZUPLINE
+..
+!OUTPUT
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR ? _G|mehr
+..
+..*****************************************************************************
+!END
+.continue 
+..
+!ERROR
+.formula U|xtcmd = "sed " + 'G|apostroph' + "s/^.*): //" + 'G|apostroph' + " " +'U|xterr' +" >" + 'U|xterr2'
+.system 'U|xtcmd' background
+.input 'U|xterr2'
+.error -message Rechnung erstellen gescheitert!
+.end 1
+

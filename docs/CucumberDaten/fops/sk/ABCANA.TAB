@@ -1,0 +1,198 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ABCANA.TAB
+.. Datum          : 14.03.2007
+.. Version        : 2007r1
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : erst Mischpreis aus dem Journal, dann Mischpreis aus
+..                  Artikelstamm, dann Einstandspreis aus Artikelstamm
+..
+.. Ablauf         :
+..
+.. Functionality  :
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+.set trans -
+.type ID2    xid      ? _F|defined(U|xid)
+.type text   xaname   ? _F|defined(U|xaname)
+.type R11.3  xrgmge   ? _F|defined(U|xrgmge)
+.type R8.2   xrres    ? _F|defined(U|xrres)
+.type R8.2   x2pl     ? _F|defined(U|x2pl)
+.type R8.2   xrkum    ? _F|defined(U|xrkum)
+.type bool   xberst   ? _F|defined(U|xberst)
+.type integer xizaehl ? _F|defined(U|xizaehl)
+.type real   xrart    ? _F|defined(U|xrart)
+.type R3.2   xrp1     ? _F|defined(U|xrp1)
+.type R3.2   xrp2     ? _F|defined(U|xrp2)
+.type R11.3  xmge     ? _F|defined(U|xmge)
+.type ARTR52100 xums  ? _F|defined(U|xums)
+.type text   xtsys    ? _F|defined(U|xtsys)
+.type text   xxwvon   ? _F|defined(U|xxwvon)
+.type text   xxwnach  ? _F|defined(U|xxwnach)
+.type gd2    xxwdat   ? _F|defined(U|xxwdat)
+.type R11.4  xpreis   ? _F|defined(U|xpreis)
+.type integer xi1     ? _F|defined(U|xi1)
+.type integer xi2     ? _F|defined(U|xi2)
+.type text   xsel     ? _F|defined(U|xsel)
+.type text   xlgruppe ? _F|defined(U|xlgruppe)
+.type K2     xekbewverf    ? _F|defined(U|xekbewverf)
+.type A1     xbewab        ? _F|defined(U|xbewab)
+.type text   xtfirmensel   ? _F|defined(U|xtfirmensel)
+..
+.. es wird nur nach einer Lagergruppe gesucht und ausgewertet
+.continue ? H|lgruppe^id <> M|klgruppe^id  & M|elgruppe & M|eauswert
+..
+.assign U|xlgruppe = H|lgruppe
+.. öbergabewerte fÅr awk-Skript
+.. alle Lagergruppen
+.formula U|xi1 = "0"     ? M|algruppe
+.. eine Lagergruppe
+.formula U|xi1 = "1"     ? M|elgruppe
+.. Auswertung Åber alle Lagergruppen
+.formula U|xi2 = "0"     ? M|aauswert
+.. Auswertung Åber eine Lagergruppe
+.formula U|xi2 = "1"     ? M|eauswert
+..
+.copy U|xberst = G|TRUE
+.set thoussep
+.set decpoint
+..
+.add H|art
+.continue ? _G|mehr
+.assign U|xid  = D|id
+.formula U|xaname = D|namebspr
+.formula U|xpreis = ""
+..
+.continue BSART ?  _(F|equals(M|preiseb, "(ValuationPrice)") ; F|equals(M|preisea, "(ValuationPrice)"))
+.. Bewertungsverfahren ermitteln:
+.. 1. Bewertungsverfahren aus Artikel (D|-Puffer)
+.. 2. Bewertungsverfahren aus Warengruppe des Artikels
+.. 3. Bewertungsverfahren aus Standardwarengruppe
+.type K2     xekbewverf    ? _F|defined(U|xekbewverf)
+.formula U|xekbewverf = ""
+..
+!ARTIKEL
+.continue WARENGR                             ?  D|ekbewverf = 0
+.assign U|xekbewverf = D|ekbewverf
+.continue FIRMSEL
+..
+!WARENGR
+.continue EKBEWART                            ?  D|aufgrp^ekbewverf = 0
+.assign U|xekbewverf = D|aufgrp^ekbewverf
+.continue FIRMSEL
+..
+!EKBEWART
+.assign U|xekbewverf = F|sysinfo(7)^wgruppe^ekbewverf
+..
+!FIRMSEL
+.formula U|xtfirmensel = "$,,@gruppe=15;@autostart=ja;verfverw=TRUE;bewverf=" + 'U|xekbewverf'
+.load 9 company 'U|xtfirmensel'
+.set trans +
+.error Keine Bewertungskonfiguration ? _G|mehr
+.continue BSART      ? _G|mehr
+.load 9 line '9|selzeile'
+.error Keine Bewertungskonfiguration ? _G|mehr
+.set trans -
+.continue BSART      ? _G|mehr
+.assign U|xbewab   = 9|bewab
+..
+!BSART
+.continue                ?  F|equals(D|bsart, "(Subcontracting)")
+.continue EIGENFERTIGUNG ?  F|equals(D|bsart, "(InhouseProduction)")
+.continue KAUFTEIL       ? _F|equals(D|bsart, "(InhouseProduction)")
+.continue
+..
+!KAUFTEIL
+.. Einkaufspreis
+.. Umrechnung  Gebindeeinheit
+.formula U|xpreis = D|epr / D|lege            ? F|equals(M|preisea, "(PurchasePrice)") & D|epe1 = D|ge
+.. Umrechnung  Verpackungseinheit
+.formula U|xpreis = D|epr / D|leve            ? F|equals(M|preisea, "(PurchasePrice)") & D|epe1 = D|ve
+.. Umrechnung Verkaufshandelseinheit
+.formula U|xpreis = D|epr / D|vlehe           ? F|equals(M|preisea, "(PurchasePrice)") & D|epe1 = D|vhe
+.. Umrechnung Verkaufspreiseinheit
+.formula U|xpreis = D|epr * D|vpehe / D|vlehe ? F|equals(M|preisea, "(PurchasePrice)") & D|epe1 = D|vpe
+.. Umrechnung Einkaufshandelseinheit
+.formula U|xpreis = D|epr / D|elehe           ? F|equals(M|preisea, "(PurchasePrice)") & D|epe1 = D|ehe
+.. Umrechnung Einkaufspreiseinheit
+.formula U|xpreis = D|epr * D|epehe / D|elehe ? F|equals(M|preisea, "(PurchasePrice)") & D|epe1 = D|epe
+.. Umrechnung Lagereinheit
+.formula U|xpreis = D|epr * D|fepe / D|feple  ? F|equals(M|preisea, "(PurchasePrice)") & D|epe1 = D|le
+.. Mischpreis
+.formula U|xpreis = D|mpr                     ? F|equals(M|preisea, "(MixedPrice)")
+.. Verkaufspreis
+.formula U|xpreis = D|vpr * D|vpehe / D|vlehe ? F|equals(M|preisea, "(SalesPrice)")
+.. Letzter Einstandspreis
+.formula U|xpreis = D|lpr                     ? F|equals(M|preisea, "(LastCostPrice)")
+.. Bewertungspreis
+.formula U|xpreis = H|bewpr                   ? F|equals(M|preisea, "(ValuationPrice)")
+.formula U|xpreis = 0                         ? U|xsumewert = 0  & F|equals(M|preisea, "(ValuationPrice)")
+.formula U|xpreis = U|xsumgwert / U|xsumewert ? U|xsumewert <> 0 & F|equals(M|preisea, "(ValuationPrice)")
+.. Bewertung an und Mischpreis
+.formula U|xpreis = D|mpr                     ? F|equals(M|preisea, "(ValuationPrice)") &  F|value(U|xbewab, "AS1") = "(MixedPrice)"
+..
+!NEXT
+.formula U|xxwvon = G|inland
+.formula U|xxwvon = D|eland                   ? F|equals(M|preisea, "(PurchasePrice)")
+.formula U|xxwvon = D|vland                   ? F|equals(M|preisea, "(SalesPrice)")
+.continue UMRECH
+..
+!EIGENFERTIGUNG
+.. Umrechnung  Gebindeeinheit
+.formula U|xpreis = D|epr / D|lege            ? F|equals(M|preiseb, "(PurchasePrice)") & D|epe1 = D|ge
+.. Umrechnung  Verpackungseinheit
+.formula U|xpreis = D|epr / D|leve            ? F|equals(M|preiseb, "(PurchasePrice)") & D|epe1 = D|ve
+.. Umrechnung Verkaufshandelseinheit
+.formula U|xpreis = D|epr / D|vlehe           ? F|equals(M|preiseb, "(PurchasePrice)") & D|epe1 = D|vhe
+.. Umrechnung Verkaufspreiseinheit
+.formula U|xpreis = D|epr * D|vpehe / D|vlehe ? F|equals(M|preiseb, "(PurchasePrice)") & D|epe1 = D|vpe
+.. Umrechnung Einkaufshandelseinheit
+.formula U|xpreis = D|epr / D|elehe           ? F|equals(M|preiseb, "(PurchasePrice)") & D|epe1 = D|ehe
+.. Umrechnung Einkaufspreiseinheit
+.formula U|xpreis = D|epr * D|epehe / D|elehe ? F|equals(M|preiseb, "(PurchasePrice)") & D|epe1 = D|epe
+.. Umrechnung Lagereinheit
+.formula U|xpreis = D|epr * D|fepe / D|feple  ? F|equals(M|preiseb, "(PurchasePrice)") & D|epe1 = D|le
+.formula U|xpreis = D|mpr                     ? F|equals(M|preiseb, "(MixedPrice)")
+.formula U|xpreis = D|vpr * D|vpehe / D|vlehe ? F|equals(M|preiseb, "(SalesPrice)")
+.formula U|xpreis = D|lpr                     ? F|equals(M|preiseb, "(LastCostPrice)")
+.formula U|xpreis = H|mpr                      ? F|equals(M|preiseb, "(ValuationPrice)")
+.formula U|xpreis = 0                          ? U|xsumewert = 0 & F|equals(M|preiseb, "(ValuationPrice)")
+.formula U|xpreis = U|xsumgwert / U|xsumewert  ? U|xsumewert <> 0 & F|equals(M|preiseb, "(ValuationPrice)")
+.formula U|xpreis = D|mpr                      ? F|equals(M|preiseb, "(ValuationPrice)") & F|value(U|xbewab, "AS1") = "(MixedPrice)"
+..
+.formula U|xxwvon = G|inland
+.formula U|xxwvon = D|eland                   ? F|equals(M|preiseb, "(PurchasePrice)")
+.formula U|xxwvon = D|vland                   ? F|equals(M|preiseb, "(SalesPrice)")
+..
+!UMRECH
+.continue VERBRAUCH                           ? U|xxwvon = M|auswaehr
+..
+.formula U|xpreis = F|fxamount(M|auswaehr,U|xpreis,H|budat,U|xxwvon,G|false)
+..
+!VERBRAUCH
+.continue  ? M|kauf  & _M|eigen &  F|equals(D|bsart, "(InhouseProduction)")
+.continue  ? M|eigen & _M|kauf  & _F|equals(D|bsart, "(InhouseProduction)")
+.add
+..
+.. Menge aus dem Journal / journal-record
+.formula U|xmge  = H|mge
+.. Verbrauch, xpreis je nach Wahl im IS
+.formula U|xums = H|mge * U|xpreis
+.formula U|xums = U|xsumewert * U|xpreis ? (F|equals(M|preisea, "(ValuationPrice)") ; F|equals(M|preiseb, "(ValuationPrice)"))
+.formula U|xmge = U|xsumewert ? (F|equals(M|preisea, "(ValuationPrice)") ; F|equals(M|preiseb, "(ValuationPrice)"))
+.formula U|xrres = 0.00
+..
+.output addedto 'U|xtd1'
+.input "DATEI.F"
+..keine Umlagerungen mit vkzakt = false berÅcksichtigen
+.continue NOTLIST ? H|ekumlag & _H|vkzakt
+?'U|xid'#xx#'U|xmge'#'U|xums'#1#'U|xpreis'#'U|xi1'#'U|xi2'#'U|xlgruppe'#'H|bewpr'#'H|budat'#  ? _F|defined(5|id)
+?'U|xid'#yy#'U|xmge'#'U|xums'#1#'U|xpreis'#'U|xi1'#'U|xi2'#'U|xlgruppe'#'H|bewpr'#'H|budat'#  ?  F|defined(5|id)
+!NOTLIST
+.copy U|xbdurch = G|TRUE
+.output
+.continue

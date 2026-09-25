@@ -1,0 +1,297 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : RELRAL.TAB
+.. Autor          : fwester/cl
+.. Verantwortlich : cl 
+.. Kontrolle      : tiwe
+.. Funktion       : Erzeugt Rechnungs- und Rechnungspositionszeilen.
+.. Ablauf         : Tabellen-EFOP
+..
+.. Functionality  : Creates table rows for invoices and items of invoices.
+.. Program flow   : Table efop
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type realx    xrkurs      ? _F|defined(U|xrkurs)
+.type realx    xrpre       ? _F|defined(U|xrpre)
+.type realx    xrre        ? _F|defined(U|xrre)
+.type realx    xrst        ? _F|defined(U|xrst)
+.type realx    xrsi        ? _F|defined(U|xrsi)
+.type text     xmark       ? _F|defined(U|xmark)
+.type realx    xamount     ? _F|defined(U|xamount)
+.type realx    xiwbuamount ? _F|defined(U|xiwbuamount)
+.type integer  xdocrow     ? _F|defined(U|xdocrow)
+.type integer  xposrow     ? _F|defined(U|xposrow)
+.type ID94:1   xiwbu       ? _F|defined(U|xiwbu)
+.type ID94:1   xland       ? _F|defined(U|xland)
+.type ID94:1   xauswaehr   ? _F|defined(U|xauswaehr)
+.type RP7.6    xrate       ? _F|defined(U|xrate)
+.type IP1      xrundung    ? _F|defined(U|xrundung)
+.type real     xroffen     ? _F|defined(U|xroffen)
+.type integer  xstufe      ? _F|defined(U|xstufe)
+..
+.. Initializations
+.assign U|xrre = 0.0
+.assign U|xrpre   = 0.0
+.assign U|xrst = 0.0
+.assign U|xrsi = 0.0
+.assign U|xroffen = 0.0
+..
+.formula U|xrundung = M|auswaehr^nkst
+.continue START      ? M|stufe = 1
+..
+.. load invoice of this row to get its positions
+.select object 'M|beleg^id'
+.continue END        ? _G|mehr
+.assign U|xdocrow = G|evtzeile
+..
+!START: only invoices allowed
+.continue END        ? H|typ <> 5
+..
+.continue NOOI       ? _M|mitops
+.continue NOOI       ?  F|empty(H|op)
+.formula U|xroffen = F|fxamount(M|auswaehr, H|op^redm, G|datum, H|op^iwbu)
+.formula U|xroffen = U|xroffen * (-1) ? (F|equals(H|op^sh, "(Debit)") & H|dnr = 3) ; (F|equals(H|op^sh, "(Credit)") & H|dnr = 4)
+..
+!NOOI: No open items
+.assign U|xrkurs    = H|kurs
+.copy U|xiwbu     = H|iwbu
+.copy U|xland     = H|land
+.copy U|xauswaehr = M|auswaehr
+.formula   U|xrate     = F|fxrate(M|auswaehr,H|budat,H|iwbu)
+.continue READROW    ? M|stufe = 2
+.continue HEADROW    ? F|defined(M|eingehend)
+..
+.. exchange commission from header into output currency
+.assign U|xmark   = "BACK1"
+.assign U|xamount = 0.0
+.. Provisionsbetrag
+.assign U|xamount = H|prob
+.continue AMOUNT     ? U|xamount <> 0.0
+..
+!BACK1
+.formula U|xrpre   = U|xamount
+.formula U|xamount = 0.0
+.continue HEADROW
+..
+!READROW
+.select line
+.continue ADDTTLS ? _G|mehr
+.continue READROW ? _F|empty(M|kprojekt) & (M|kprojekt^id <> H|projekt^id)
+.continue READROW ? H|mge = 0.0 & H|pwert = 0.0
+..
+.. calculate position value into output currency
+.assign U|xmark   = "BACK2"
+.assign U|xamount = H|pwert
+.continue AMOUNT
+..
+!BACK2: calculate totals of invoice (realx)
+.formula U|xrre = U|xrre + U|xamount ? _(H|typ = G|zspos ; H|typ = G|supos ; H|typ = G|trpos ; H|typ = G|espos ; H|typ = G|sipos ; H|typ = G|stpos)
+.formula U|xrst = U|xrst + U|xamount ? H|typ = G|stpos
+.formula U|xrsi = U|xrsi + U|xamount ? H|typ = G|sipos
+.continue READROW ? M|stufe = 1 & _M|mitpos
+.continue READROW ? H|typ = G|zspos ; H|typ = G|supos ; H|typ = G|trpos ; H|typ = G|espos ; H|typ = G|stpos ; H|typ = G|sipos
+..
+!TABROW: create a postion row
+.formula M|pos = M|pos + 1
+.make screen line +O
+.assign M|tbaumstufe = 2
+.copy M|ophist = H|kopf^ophist
+.. show details of the position
+.continue ERAL                      ? F|defined(M|ausgehend)
+.continue TINVOIC                   ? F|empty(H|kopf^resteller)
+..
+.. Invoice from
+.copy M|kunde2 = H|kopf^resteller
+.continue TINVOIC
+..
+!ERAL: Invoice to
+.continue TREPRES                   ? F|empty(H|kopf^reempf)
+.copy M|kunde2 = H|kopf^reempf
+.continue TREPRES
+..
+!TREPRES: representative
+.continue TSTAFF                    ? F|empty(H|kopf^vertret)
+.copy M|vertreter = H|kopf^vertret
+..
+!TSTAFF
+.continue TINVOIC                   ? F|empty(H|kopf^betreuer)
+.copy M|betreuer = H|kopf^betreuer
+..
+!TINVOIC
+.formula   M|tofbetr   = U|xroffen
+.formula   M|toffen    =_F|empty(M|tofbetr)
+.assign M|vom       = H|kopf^vom
+.assign M|beleg     = H|kopf^id
+.assign M|tvorganga  = H|treart
+.assign M|budat     = H|kopf^budat
+.copy M|stlaart     = H|kopf^stlaart
+.assign M|basisartikel = H|art^basisartikel
+.assign M|artikel   = H|art
+.assign M|projekt = H|projekt
+.copy M|konto     = H|konto
+.formula   M|ptext     = H|ptext
+.formula M|arname      = H|art^sucherw
+.formula M|tterm       = H|kopf^tterm
+.copy M|kstelle   = H|kstelle 
+.assign M|menge     = H|mge
+.formula M|anzahlung = 0
+.formula M|anzahlung = 1 ? F|equals(H|art^kategorie, "(Downpayment)")
+.copy M|intrarel    = H|intrarel
+.assign M|proz      = H|proz
+.copy M|hei       = H|he
+.copy M|pei       = H|pe
+.assign M|vgpreis   = H|preis
+.assign M|vgpwert   = H|pwert
+.copy M|vgwaehr   = U|xland
+.copy M|waehr     = M|auswaehr
+.assign M|pwert     = U|xamount
+.copy M|rebrutto  = H|kobrutto
+.continue NBRUTTO                     ? _M|rebrutto
+.assign M|pwert     = 0.0
+.assign M|brutto    = U|xamount
+..
+!NBRUTTO
+.continue READROW                     ? F|defined(M|eingehend)
+.assign M|pros      = H|pros
+.continue READROW
+..
+!HEADROW: create a row for whole invoice
+.make screen line +O
+.assign U|xdocrow    = M|aktzeile
+.assign M|tbaumstufe = 1
+.copy M|ophist = H|ophist
+..
+.continue WITHPOS                   ? M|mitpos
+.assign M|tbaumstat = "+"
+.continue DETAILS
+..
+!WITHPOS: document is visualized with its positions
+.assign M|tbaumstat = "-"
+..
+!DETAILS: show details of the invoice
+.continue RAL                       ? F|defined(M|ausgehend)
+..
+.. Show details of the incoming invoice
+.continue INVOICE                   ? F|empty(H|resteller)
+.copy M|kunde2 = H|resteller
+.continue INVOICE
+..
+!RAL: show details of outgoing invoice
+.continue REPREST                   ? F|empty(H|reempf)
+.copy M|kunde2 = H|reempf
+..
+!REPREST: representative
+.continue STAFFER                   ? F|empty(H|vertret)
+.copy M|vertreter = H|vertret
+..
+!STAFFER
+.continue INVOICE                   ? F|empty(H|betreuer)
+.copy M|betreuer = H|betreuer
+..
+!INVOICE
+.formula   M|tofbetr  = U|xroffen
+.formula   M|toffen   =_F|empty(M|tofbetr)
+.assign M|vom      = H|vom
+.assign M|beleg    = H|id
+.assign M|tvorganga = H|vorganga
+.formula M|ebeleg  = H|ebeleg  ? F|defined(H|ebeleg)
+.copy M|stlaart     = H|stlaart
+.formula   M|betreff  = H|betreff
+.assign M|budat    = H|budat
+.formula   M|tterm    = H|tterm
+.copy M|rebrutto = H|brutto
+..
+.. use name of product to mark row as total
+.set trans +
+.assign M|arname = "*** SUMME RECHNUNG ***"        ?  F|empty(M|kprojekt)
+.assign M|arname = "*** Projektbezogene Summe ***" ? _F|empty(M|kprojekt)
+.set trans -
+..
+.. currencys
+.copy M|vgwaehr = H|land
+.copy M|waehr   = M|auswaehr
+.continue READROW
+..
+!AMOUNT: rate of the invoice
+.assign U|xiwbuamount = U|xamount / U|xrkurs
+.assign U|xamount     = U|xiwbuamount ? U|xauswaehr = U|xiwbu & U|xiwbu <> U|xland
+.assign U|xamount     = U|xamount     ? U|xauswaehr = U|xland
+.assign U|xamount     = F|round(U|xrate*U|xiwbuamount,U|xrundung) ? U|xauswaehr<>U|xland & U|xauswaehr<>U|xiwbu
+.continue 'U|xmark'
+..
+!ADDTTLS: add totals from positions to invoice
+.assign U|xposrow = M|aktzeile
+.select screen line 'U|xdocrow'
+.continue FATAL ? _G|mehr
+..
+.. totals of invoice (R13.2)
+.continue BRUTTO ? M|rebrutto
+..
+.. Item value is netto, item value is netto + tax
+.assign M|steuer = U|xrst
+.assign M|pwert  = U|xrre
+.assign M|brutto = M|pwert + M|steuer
+.continue STUFE
+..
+!BRUTTO: Item value is brutto and netto is item value - tax
+.assign M|steuer = U|xrsi
+.assign M|brutto = U|xrre
+.assign M|pwert = M|brutto - M|steuer
+.continue STUFE
+..
+!STUFE
+.continue DELETE ? M|pwert=0 & M|steuer=0 & M|brutto=0 & _F|empty(M|kprojekt)
+.continue STUFE2
+..
+!DELETE 
+.formula U|xstufe = M|stufe
+.make screen line -O
+.continue END   ? M|tzeilen = 0
+.assign U|xposrow = M|aktzeile 
+.continue REPOS ? U|xstufe = 2
+.continue END
+..
+!STUFE2
+.continue REPOS ? M|stufe = 2
+..
+.. calculate totals in header / Landart des Rechnungsempf„ngers
+.continue EC   ? _F|equals(M|beleg^stlaart, "(Domestic)")
+.. inland
+.formula M|ssi = M|ssi + M|steuer
+.formula M|sbi = M|sbi + M|brutto
+.formula M|sni = M|sni + M|pwert
+.continue EC
+..
+!EC: EC country / Landart des Rechnungsempf„ngers
+.continue OVERSEA ? _F|equals(M|beleg^stlaart, "(EUCountry)")
+.formula M|sse = M|sse + M|steuer
+.formula M|sbe = M|sbe + M|brutto
+.formula M|sne = M|sne + M|pwert
+.continue OVERSEA
+..
+!OVERSEA: overseas / Landart des Rechnungsempf„ngers
+.continue TOTALS ? _F|equals(M|beleg^stlaart, "(NonEU)")
+.formula M|ssa = M|ssa + M|steuer
+.formula M|sba = M|sba + M|brutto
+.formula M|sna = M|sna + M|pwert
+.continue TOTALS
+..
+!TOTALS
+.formula M|sng  = M|sni + M|sne + M|sna
+.formula M|ssg  = M|ssi + M|sse + M|ssa
+.formula M|sbg  = M|sbi + M|sbe + M|sba
+.continue REPOS ? F|defined(M|eingehend)
+.assign M|prob = M|prob + U|xrpre  ? U|xrpre <> 0
+..
+!REPOS: repositioning to last line of invoice
+.select screen line 'U|xposrow'
+.continue FATAL ? _G|mehr
+..*****************************************************************************
+!END
+.continue
+..
+!FATAL
+.error -number 1111
+.end 1

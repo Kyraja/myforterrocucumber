@@ -1,0 +1,88 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDI.DO.OSEARCH.CUSTOMERCONTACT
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : carue
+.. Functionality  : Finds customer contact (unloading point) for edi messages
+..                  in abas, updates edi message with number of customer contact
+..*****************************************************************************
+.set trans -
+..
+.. Required: edi message in H buffer
+.continue NOEDI ? _F|defined(H|edinachr)
+.continue NOTYPE ? F|empty(H|edinachr)
+..
+.. Lock Edi message!
+.select lock edifact 'H|id'
+.continue NOLOCK ? _G|mehr ; _G|gesperrt
+..
+.. Must fix using EDISEARCH
+.continue NOSAB ? F|empty(H|werk) ; F|empty(H|ablstelle)
+..
+.. Find customer contact / unloading point
+..
+.. 1st) get customer contact from blanket order blanket order
+.continue ENDSAB1 ? F|empty(H|ideksrah)
+.load 2 sales 'F|formatstr("$,,;@gruppe=1;nummer=={1};ktyp=(BlanketOrder)", H|ideksrah)'
+.continue ENDSAB1 ? _G|mehr
+.load 1 customer '2|kunde^id'
+.continue ENDSAB1 ? _G|mehr
+.continue SABEDI
+!ENDSAB1
+..
+.. 2nd) find customer contact by number
+.continue ENDSAB2 ? F|empty(H|idkundesab)
+.load 1 customer 'F|formatstr("$,,;@gruppe=2;such=={1}", H|idkundesab)' ? F|isvalue('H|idkundesab', "SW0")
+.load 1 customer 'F|formatstr("$,,;@gruppe=2;nummer=={1}", H|idkundesab)' ? F|isvalue('H|idkundesab', "N0")
+.continue ENDSAB2 ? _G|mehr
+.continue SABEDI
+!ENDSAB2
+..
+.. 3rd) find customer contact by firm, plant, unloading point (check for duplicate!)
+.load 2 customer 'F|formatstr("$,,;@gruppe=2;firma^such={1};werk=={2};ablstelle=={3};@ablageart=(Active)", H|idkundeab, H|werk, H|ablstelle)'  ? F|isvalue('H|idkundeab', "SW0")
+.load 2 customer 'F|formatstr("$,,;@gruppe=2;firma^nummer={1};werk=={2};ablstelle=={3};@ablageart=(Active)", H|idkundeab, H|werk, H|ablstelle)' ? F|isvalue('H|idkundeab', "N0")
+.continue ENDSAB3 ? _G|mehr
+.load 1 customer '2|id'
+.load 2 customer
+.. drop buffer 1 if duplicate is found!
+.load 1 ? G|mehr
+!ENDSAB3
+.continue NOSAB ? _F|defined(1|id)
+..
+.. Compare unloading point informaton of customer contact (buffer 1) with information in edi message (buffer h)
+!SABEDI
+.continue NOSAB ?  1|werk      <> H|werk
+.continue NOSAB ?  1|ablstelle <> H|ablstelle
+.continue NOSAB ?  F|isvalue('H|idkundeab', "SW0") & 1|firma^such <> H|idkundeab 
+.continue NOSAB ?  F|isvalue('H|idkundeab', "N0")  & 1|firma^nummer <> H|idkundeab 
+.. Success
+.formula H|idkundesab = 1|nummer
+.continue SABENDE
+!NOSAB
+.. No Success!
+.formula H|fcode = 50
+.formula H|status = 4
+!SABENDE
+.rewrite
+..
+.. release buffers
+.load 1 ? F|defined(1|id)
+.load 2 ? F|defined(2|id)
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!NOLOCK
+.error Das Sperren des EDI-Datensatzes 'H|nummer' ist gescheitert.
+.end 1
+..
+!NOEDI
+.error Fehler bei Start der Objektsuche: Kein EDI-Datensatz angegeben.
+.end 1
+..
+!NOTYPE
+.error Fehler bei Start der Objektsuche: EDI-Datensatz 'H|nummer' hat keinen Nachrichten-Eintrag.
+.end 1

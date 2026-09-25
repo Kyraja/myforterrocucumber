@@ -1,0 +1,100 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           :     PAYMENT.OUTGOING.WEEKLY   
+.. Date           :     11/11/2014
+.. Version        :     1.0
+.. Author         :     rasc
+.. Copyright      :     
+.. Functionality  :     Outgoing payment weekly
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xtdat       ? _F|defined(U|xtdat)
+.type text U|xterrdat    ? _F|defined(U|xterrdat)
+.type text U|xtcom       ? _F|defined(U|xtcom)
+.type text U|xtcmd      ? _F|defined(U|xtcmd)
+.type text U|xtedp      ? _F|defined(U|xtedp)
+.type text U|xtout      ? _F|defined(U|xtout)
+.type text U|xterr      ? _F|defined(U|xterr)
+.type text U|xtref      ? _F|defined(U|xtref)
+.type GD2  U|xdate      ? _F|defined(U|xdate)
+..
+.formula U|xdate        = 'M|qflagdate:8'         ?  F|defined(M|qflagdate)
+.formula U|xdate        = 'G|datum:8'             ? _F|defined(M|qflagdate)
+.....formula U|xdate        = "07.11.14"
+..
+.formula U|xtdat = "tmp/PAYOUT.WEEK."+'G|versionneu'
+.formula U|xterrdat = 'U|xtdat'+".ERR"
+.file -TEMPNAME U|xtout
+.....
+.output NEW 'U|xtdat'
+.input DATEI.F
+#!database=101
+#!group=2
+#!action=NEW
+#!report=REF
+#!EDP_LANG='P|spr'
+.input "owinstall/HEAD.EDP"
+zaterm;gkonto;kozabetrplus;opladen;
+'U|xdate:8';14600;'G|true';;
+.output
+.input "owinstall/EDP.EXECUTE.OUT"
+..
+.continue ERROR         ? F|filesize(U|xterrdat) > 0
+.select from
+!SELFROM
+.select from 'U|xtout' U|xtref^
+.continue ERROR         ? F|empty(U|xtref) ; 'U|xtref'="(0,0,0)"
+..
+!PAY
+.formula U|xtdat = "tmp/PAYOUT.WEEK2."+'G|versionneu'
+.formula U|xterrdat = 'U|xtdat'+".ERR"
+.output NEW 'U|xtdat'
+.input DATEI.F
+#!EDP_LANG=D
+#!database=4
+#!action=payment
+#!menuchoice=(TransferOutgoingPayments)
+.input "owinstall/HEAD.EDP"
+id;zavorschl;
+;'U|xtref';
+.output
+.input "owinstall/EDP.EXECUTE"
+..
+.continue ERROR         ? F|filesize(U|xterrdat) > 0
+..
+.formula U|xtdat = "tmp/PAYOUT.WEEK3."+'G|versionneu'
+.formula U|xterrdat = 'U|xtdat'+".ERR"
+
+.output NEW 'U|xtdat'
+.input DATEI.F
+#!EDP_LANG=D
+#!database=4
+#!action=payment
+#!menuchoice=(DebitOutstandingItems)
+#!firsttabfld=tabnr
+#!dontchange=-
+.input "owinstall/HEAD.EDP"
+id;gkonto;beleg;beldat;budat;bezahlt;bubis;tabnr;1:konto;0:kladen;
+;18100;EUR;'U|xdate:8';'U|xdate:8';ja;'U|xdate:8';+1;14600;;
+.output
+.input "owinstall/EDP.EXECUTE"
+.continue END           ? F|filesize(U|xterrdat) = 0
+..
+!ERROR
+.continue END           ? G|edp
+.....edi -READONLY 'U|xterr'
+.continue END
+..
+!END
+.continue

@@ -1,0 +1,117 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name              : BSTATUS.SSTL
+.. Autor             : cl
+.. Verantwortlich    : tiwe
+.. Kontrolle         : cl
+.. Funktion          : Stueckliste Artikel
+.. Ablauf            : HOL-FOP fuer Artikel-Stueckliste in BSTATUS
+..
+...Includes
+.. include st/GETICONPART
+..*****************************************************************************
+.set trans -
+.type PS39:2  xintlg   ? _F|defined(xintlg)
+.type PS39:2  xlgruppe ? _F|defined(xlgruppe)
+.type ARTR51001   xgesmge  ? _F|defined(xgesmge)
+.type GD2     xkonddat ? _F|defined(xkonddat)
+.type integer     xstufe   ? _F|defined(xstufe)
+.type ARTR51000    xmge     ? _F|defined(xmge)
+.type VPKS1   xtartid    ? _F|defined(xtartid) 
+.type ID39:2  xtlgid     ? _F|defined(xtlgid)
+..
+.copy U|xintlg   = F|sysinfo(10)^intlgruppe
+.continue LINE  ? _F|empty(M|reserv)
+..
+!NEXT: get and check mask row SSTL
+.formula U|xstufe = M|tbaumstufe + 1
+.select parts 'M|elem^id'
+.continue END      ? _G|mehr
+.formula H|gesmge     = M|rmge
+.formula H|konddat    = M|konddat
+.formula H|lgruppean  = M|lgruppe
+.formula U|xmge       = M|rmge
+.continue HEAD
+..
+!LINE: get parts list of actual mask row BSTATUS
+.formula U|xstufe = M|tbaumstufe + 1
+.load 7 object 'M|reserv^id'
+.. get part by its warehouse group
+.select parts '7|artikel^id'
+.continue END      ? _G|mehr
+.continue END      ?  7|mge < 0
+..
+.. limge ist bei abgelegten Vorg„ngen leer
+.formula H|gesmge     = 7|mge
+.formula H|lgruppean  = 7|lgruppe
+.formula H|konddat    = 7|tterm
+.formula U|xmge       = 7|mge ? M|kvkopf^ablagef
+..
+!HEAD
+.continue END          ? H|tzeilen = 0
+.continue WGROUP       ? _F|equals(H|bsart, "(Relocation)")
+.select line 1
+.continue WGROUP       ? H|elem^id <> H|id
+.. skip destination warehouse group, continue with source warehouse group
+.copy H|lgruppean = H|umllg
+..
+!WGROUP
+.select header
+.continue END      ? H|tzeilen = 0
+..
+!ZEILE: base element has table. Transfer it into the main buffer
+.select line
+.continue END      ? _G|mehr
+.. Kopfbedingungen erfllen
+.continue ZEILE    ? _M|bmitag & H|elart = 3
+.continue ZEILE    ? _M|bmitfm & H|elart = 2
+.continue ZEILE    ? _H|relevant & M|brelevant
+..
+.. call table EFOP for each parts list row
+.make screen line +O
+.continue STUFE ? F|empty(G|bvkenn)
+.formula M|vart = "F" ? H|typ=G|FEVOR
+.formula M|vart = "L" ? G|bvkenn="L"
+.formula M|vart = "S" ? G|bvkenn="S"
+.formula M|vart = "B" ? F|equals(H|bsart, "(ExternalProcurement)")
+.formula M|vart = "U" ? F|equals(H|bsart, "(Relocation)")
+.formula M|vart = "E" ? F|equals(H|bsart, "(Subcontracting)")
+..
+!STUFE
+.formula M|vart = ""  ? F|empty(G|bvkenn)
+.formula M|tbaumstufe   = U|xstufe
+.formula M|stufe        = U|xstufe
+.formula M|aufzu        = "icon:plus_black" ? M|ansasl & F|empty(M|aufzu) & H|elex^ozeilen > 0
+.assign  M|elem         = H|elex
+.copy M|lgruppe    = H|lgruppean
+.copy M|lgruppe    = U|xintlg ? F|empty(H|lgruppean)
+.assign U|xtartid    = M|elem^id
+.assign U|xtlgid     = M|lgruppe
+.input "st/GETICONPART"
+.formula M|ticonz    = U|xticon
+.formula M|rmge         = H|gesamtm
+.formula M|rmge         = U|xmge * H|anzahl        ? F|empty(M|rmge)
+.formula M|dispo        = H|dispo
+.formula M|vart         = ""       ? F|empty(M|dispo)
+.copy M|bsart      = H|elex^bsart
+.copy M|he         = H|le  ? H|elart <> 3
+.formula M|laenge       = H|lge
+.copy M|ellme      = H|ellme  ? M|laenge <> 0
+.formula M|breite       = H|breite
+.copy M|elbme      = H|elbme  ? M|breite <> 0
+.formula M|anzahl       = H|anzahl
+.copy M|mle        = H|melle   ? M|anzahl <> 0
+.copy M|filter     = H|filter
+.copy M|filtervgl  = H|filtervgl
+.copy M|filtervgl2 = H|filtervgl2
+.copy M|relevant   = H|relevant
+.continue NOTEIL                   ?  H|elart = 2 ; H|elart = 3
+.copy M|wstoff = H|wstoff    ? _F|empty(H|wstoff)
+.formula M|zeichn   = H|zeichn
+..
+!NOTEIL
+.continue ZEILE
+..
+..*****************************************************************************
+!END
+.continue

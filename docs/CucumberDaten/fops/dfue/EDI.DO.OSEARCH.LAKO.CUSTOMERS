@@ -1,0 +1,96 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDI.DO.OSEARCH.LAKO.CUSTOMERS
+.. Author         : dsch
+.. Verantwortlich : dsch
+.. Kontrolle      : mh
+.. Functionality  : Finds the sender (main customer) for edi messages from type
+..                  carrier account in abas, updates edi message with number of
+..                  the sender
+..*****************************************************************************
+.set trans -
+..
+.type text xtcustomer ? _F|defined(U|xtcustomer)
+.type text xdfehler   ? _F|defined(U|xdfehler)
+..
+.formula U|xtcustomer = ""
+.formula U|xdfehler = "rmtmp/X.ERR." + pid + ".TMP"
+..
+.input "DATEI.F"
+.output new 'U|xdfehler'
+..
+.. Required: edi message in H buffer
+.continue NOEDI  ? _F|defined(H|edinachr)
+.continue NOTYPE ?  F|empty(H|edinachr)
+..
+.. Lock Edi message!
+.select lock edifact 'H|id'
+.continue NOLOCK ? _G|mehr ; _G|gesperrt
+..
+!SENDER
+.select line
+.continue FEHLER ? _G|mehr & F|empty(U|xtcustomer)
+.continue RETURN ? _G|mehr
+.continue SENDER ? _H|text1 = "UNBI"
+..
+.. Hier kann die Nummer oder die GLN stehen
+..
+.formula U|xtcustomer = H|text3
+..
+.. Verify Customer in abas
+.continue CUST2 ?  F|empty(U|xtcustomer)
+.continue CUST2 ? _F|isvalue('U|xtcustomer',"N0")
+..
+.load 1 customer 'F|formatstr("$,,;@gruppe=1.2;nummer=={1}", U|xtcustomer)'
+.continue CUST2 ? _G|mehr
+.formula H|idkundeab = 1|nummer
+.formula H|glkundeab = ""
+.formula H|werk = ""
+.formula H|ablstelle = ""
+.formula H|partner = 1|id
+.continue RETURN
+..
+!CUST2
+.continue FEHLER ? F|empty(U|xtcustomer)
+.load 1 customer 'F|formatstr("$,,;@gruppe=1.2;gln=={1}", U|xtcustomer)'
+.continue FEHLER ? _G|mehr
+.formula H|glkundeab = U|xtcustomer
+.formula H|idkundeab = 1|nummer
+.formula H|werk = ""
+.formula H|ablstelle = ""
+.formula H|partner = 1|id
+..
+.continue RETURN
+..
+..
+!FEHLER
+.set trans +
+Der Kunde aus dem EDI-Datensatz 'H|nummer', aus der Satzart UNBI, wurde nicht gefunden.
+.set trans -
+..
+!NOCUST: No Success!
+.formula H|fcode  = 60
+.formula H|status = 4
+.formula H|ftext  = U|xdfehler
+..
+!RETURN
+.rewrite
+..
+.. release buffers
+.load 1 ? F|defined(1|id)
+..
+..*****************************************************************************
+!END
+.continue
+..
+!NOLOCK
+.error Das Sperren des EDI-Datensatzes 'H|nummer' ist gescheitert.
+.end 1
+..
+!NOEDI
+.error Fehler bei Start der Objektsuche: Kein EDI-Datensatz angegeben.
+.end 1
+..
+!NOTYPE
+.error Fehler bei Start der Objektsuche: EDI-Datensatz 'H|nummer' hat keinen Nachrichten-Eintrag.
+.end 1

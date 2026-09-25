@@ -1,0 +1,244 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : OBLEVK.TAB
+.. Autor          : tg/fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Erzeugt eine Tabellenzeile.
+.. Ablauf         : Tabellen-EFOP
+..
+.. Functionality  : Creates a table row.
+.. Program flow   : Table efop
+...Includes       :
+.. include ev/OBLEVK.CALC.EVPOS
+.. include vk/SCHED.MONITOR
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type bool  xdisponiert   ? _F|defined(U|xdisponiert)
+.type ARTR51000  xlimge   ? _F|defined(U|xlimge)
+.type ARTR51000  xremge   ? _F|defined(U|xremge)
+.type real  xrpwert       ? _F|defined(U|xrpwert)
+.type real  xrnwert       ? _F|defined(U|xrnwert)
+..
+.continue INKL  ? _M|aubeo
+.continue END   ?  M|bkabnrpo & _F|empty(H|abnrpo)
+..
+!INKL
+.formula M|inkl = (M|aubeo ; M|lio)
+.formula M|inkl =  M|inkllsre ? M|inkl
+..
+.. Never irrelevant types of item
+.continue END    ? _(H|typ = G|ARPOS ; H|typ = G|ZUPOS)
+.. Never allocated supplementary items
+.continue END    ? H|typ = G|ZUPOS & H|nwert = 0.0 & H|pwert <> 0.0
+.continue END    ? _F|empty(M|artikel) & M|artikel^id <> H|art^id
+.continue END    ? _F|empty(M|projekt) & M|projekt^id <> H|projekt^id
+.continue END    ? _M|mitalternativpos & H|alternativpos
+.. Which obligation?
+.continue LIO    ? M|lio
+.continue BRQ    ? M|rau ; M|anafo
+.continue REO    ? M|reo
+.continue ALL
+..
+!LIO: in purchasing case never items with einplan & mateinplan = FALSE
+.continue ALL    ? M|datnr = 3
+.continue ALL    ? H|typ = G|ARPOS & H|artikel^gruppe <> 1
+.continue END    ?  _H|einplan & _H|mateinplan
+.continue ALL
+..
+!BRQ: Outstanding blanket orders, requests and quotations
+.continue END    ? (0|objgruppe = 20)
+.continue ALL
+..
+!ALL: All but outstanding invoices
+.continue END    ? _F|empty(H|status)
+.continue END    ?  0|typa <> M|kotyp ; 0|abob
+.continue DARSTELLEN ? _M|lio & _M|aubeo
+.continue SCHEDMONITOR ?  F|defined(M|auo)
+.continue DARSTELLEN   ? F|defined(M|beo)
+.. Filter outstanding deliveries
+.continue END    ? _H|lirelev
+.continue END    ? _H|typ = G|ARPOS
+.continue END    ? _F|empty(H|status)
+.continue SCHEDE ? _F|defined(M|liov)
+..
+!SCHEDMONITOR
+.. calculate, whether current sales order item is scheduled completely
+.formula U|xdisponiert = H|einplan
+.continue SCHEDE ? _F|defined(M|bdisponiert)
+.continue SCHEDE ? _M|bdisponiert ; _H|einplan
+.. take a look in sales order production list: all items scheduled?
+.type VP29 xmonitor    ? _F|defined(U|xmonitor)
+.formula U|xmonitor = H|id
+.input "vk/SCHED.MONITOR"
+.formula U|xdisponiert = F|empty(U|xmonitor)
+..
+!SCHEDE
+.continue DARSTELLEN ?  M|aubeo
+.continue DARSTELLEN ? _M|bkrit
+.. Filter critical processes
+.input "FE.PAR"  ? _F|defined(U|xidelta)
+.continue EINK   ?  F|defined(M|lioe)
+.. item is definitively critical or not yet determined, whether item is critical
+.continue DARSTELLEN ? (H|fterm>H|tterm & H|fterm-H|tterm>U|xidelta) ; (H|einplan & _U|xdisponiert)
+.continue END
+..
+!EINK: Outstanding deliveries - Purchase
+.continue DARSTELLEN ? 'H|twterm'<>"" & H|fterm>H|twterm  & H|fterm - H|twterm>U|xidelta
+.continue DARSTELLEN ? 'H|twterm'<>"" & H|tterm>H|twterm  & H|tterm - H|twterm>U|xidelta
+.continue DARSTELLEN ? 'H|twterm'= "" & H|fterm>H|tterm   & H|fterm - H|tterm >U|xidelta
+.continue END
+..
+!REO: Outstanding invoices
+.. ATTENTION: Procedure ofob gurantees, that neutral invoice-relevant order items will not appear
+.continue END ? _H|rerelev
+.continue END ? _0|typ = G|ABKO & _0|typ = G|LIKO
+.continue END ?  0|typ = G|LIKO & _0|fakt
+.continue END ? _0|ofob
+.continue END ? H|limge = H|remge
+.continue DARSTELLEN
+..
+!DARSTELLEN: Zeilen fuellen, 0 = Kopf, H = Position
+.continue END ? (M|lio & H|limge = 0.0)
+.. No positions without value or outstanding quantities
+.continue INCL ? M|inkl ; M|reo
+.formula U|xlimge = H|limge
+.formula U|xremge = H|remge
+.continue CALCLTE ? H|kotyp <> G|ABKO
+.continue CALCLTE ? F|empty(H|kopf^fktaplan)
+.continue CALCLTE ? _F|equals(H|kategorie,"(Downpayment)")
+.formula U|xremge = H|fktaplanpos^anzpwert ?  F|empty(H|fktaplanpos^sumfakturiert) &  F|empty(H|fktaplanpos^sumgebucht) 
+.formula U|xremge = ""                     ?  F|empty(H|fktaplanpos^sumfakturiert) & _F|empty(H|fktaplanpos^sumgebucht)
+.formula U|xremge = H|remge - H|refrg      ? _F|empty(H|fktaplanpos^sumfakturiert)
+.continue CALCLTE
+..
+!INCL: With regard to unbooked documents
+.formula U|xlimge = H|limge - H|lifrg
+.formula U|xremge = H|remge - H|refrg
+.formula U|xremge = H|remge - H|limge - H|refrg + H|lifrg ? M|reo & H|rerelev & H|kotyp = G|ABKO
+..
+!CALCLTE: Calculate items
+.input "ev/OBLEVK.CALC.EVPOS" ? _M|lio
+.continue NEXT ? F|equals(H|kategorie,"(Downpayment)") & _F|empty(H|kopf^fktaplan)
+.continue END ? U|xlimge = 0.0 & U|xremge = 0.0 & U|xrnwert = 0.0 
+.continue END ? U|xlimge < 0.0 & U|xremge < 0.0 & U|xrnwert = 0.0 & M|lio
+.continue END ? M|reo & U|xremge = 0.0 & U|xrnwert = 0.0
+..
+!NEXT
+.type text    xkopf  ? _F|defined(U|xkopf)
+.type integer xikopf ? _F|defined(U|xikopf)
+.type real    xsum   ? _F|defined(U|xsum)
+..
+.continue END ? _F|empty(M|basisartikel) & 'M|basisartikel^id' <> 'H|art^basisartikel^id'
+.make screen line +O
+..
+.. Sales
+.continue EK ? H|dnr = 4
+.assign M|tkuli2   = 0|reempf
+.assign M|tvertret = 0|vertret
+.continue SONST
+..
+!EK: Purchasing
+.assign M|tkuli2 = 0|resteller
+.copy M|tausschr = 0|ausschr ? F|defined(M|tausschr)
+.formula M|ebeleg = 0|ebeleg ? M|reo
+..
+!SONST: Sales and purchasing
+.assign M|tkuli      = 0|kl
+.formula M|kopf      = 0|id
+.formula M|abnrpo    = H|abnrpo ? M|aubeo & _F|empty(H|abnrpo)
+.formula U|xikopf    = U|xikopf + 1       ? U|xkopf <> M|kopf
+.formula U|xsum      = U|xrnwert          ? U|xkopf <> M|kopf
+.formula M|sumnwert  = U|xrnwert          ? M|anafo & U|xkopf <> M|kopf
+.formula U|xsum      = U|xsum + U|xrnwert ? U|xkopf = M|kopf
+.formula M|sumnwert  = U|xsum             ? M|anafo & U|xkopf =  M|kopf
+.formula U|xkopf     = M|kopf
+.formula M|ikopf     = U|xikopf
+.formula M|evpos     = H|id
+.copy M|icoattdispo = H|icoattdispo ? M|kotyps = "(PurchaseOrder)"
+.assign M|lgruppe = H|lgruppe
+.formula M|tzeich    = 0|zeich
+.formula M|vom       = H|kovom
+.formula M|pnum      = H|pnum
+.copy M|alternativpos = H|alternativpos
+.assign M|tbasisartikel = H|art^basisartikel
+.assign M|art     = H|art
+.formula M|mge       = H|mge
+.copy M|vhe     = H|he
+.copy M|vpe     = H|pe
+.formula M|tterm     = H|tterm
+.copy M|tprojekt = H|projekt
+.formula M|limge     = U|xlimge
+.formula M|remge     = U|xremge
+..
+.continue SONDER ? M|lio
+.. Outstanding deliveries does not report prices
+.copy M|land    = 0|land
+.formula M|proz     = H|proz
+.continue VALUE     ? _F|equals(H|kategorie,"(Downpayment)")
+..
+.formula M|vorgrate = F|fxrate(M|auswaehr, G|datum, H|kopf^fktaplan^waehr)
+.formula M|remge    = F|round(M|vorgrate * M|remge, M|ausnkst)
+.continue VALUE ?   F|empty(H|fktaplanpos)
+.continue VALUE ? _(F|empty(H|fktaplanpos^faktico) & F|empty(H|fktaplanpos^gebuchtico) & F|empty(H|fktaplanpos^bezahltico))
+.formula U|xrpwert  = H|fktaplanpos^anzpwert
+.formula U|xrpwert  = F|round(M|vorgrate * U|xrpwert, M|ausnkst)
+.formula U|xrnwert  = H|fktaplanpos^anzpwert
+.formula U|xrnwert  = F|round(M|vorgrate * U|xrnwert, M|ausnkst)
+..
+!VALUE
+.formula M|pwert    = U|xrpwert
+.formula M|nwert    = U|xrnwert
+.formula M|preis    = H|preis
+.copy M|tauswaeh = M|auswaehr
+..
+.continue TOTAL   ? _H|alternativpos ; _F|defined(M|summealtpos)
+.. in outstanding offers/requests additionally keep sum of alternative items
+.formula M|summealtpos = M|summealtpos + M|nwert
+.continue SONDER
+..
+!TOTAL
+.continue NOFAKTURA  ? F|empty(H|fktaplanpos)
+.continue WITHOUT ? M|aubeo & F|equals(H|kategorie,"(Downpayment)") & F|empty(H|fktaplanpos^faktico) & F|empty(H|fktaplanpos^gebuchtico) & F|empty(H|fktaplanpos^bezahltico)
+..
+!NOFAKTURA
+.formula M|summe = M|summe + M|nwert
+.continue SONDER ? _F|defined(M|summeohne)
+.continue SONDER ?  H|typ = G|ZUPOS & F|equals(H|art^kategorie, "(Downpayment)")
+..
+.. in outstanding orders additionally keep old sum without downpayments
+.formula M|summeohne = M|summeohne + M|nwert
+.continue SONDER
+..
+!WITHOUT
+.formula M|summe = M|summe - M|nwert
+.continue SONDER
+..
+!SONDER: More special cases
+.formula M|twvdat    = 0|tterm     ? _M|reo
+.assign M|kstelle = H|kstelle   ?  M|aubeo ; M|lio ; M|reo
+.formula M|fterm     = H|fterm     ?  M|lio
+.formula M|twterm    = H|twterm    ? F|defined(M|lioe)
+.formula M|dispo     = H|dispo     ? F|defined(M|lioe)
+.formula M|verwend   = H|verw      ? F|defined(M|lioe)
+.continue SCHED2 ? F|defined(M|liov)
+.continue SCHED3 ? F|defined(M|auo)
+.continue END
+..
+!SCHED2: Special handling for scheduling (LIOV only)
+.formula M|tsterm = H|tsterm
+.add H|eres
+.continue SCHED3 ? _G|mehr
+.copy M|dispo = D|dispo 
+.continue SCHED3 ? H|art^id = D|art^id
+.. Set products does have an empty scheduling mode
+.assign M|dispo = ""
+..
+!SCHED3: Set values of items einplan and disponiert
+.copy M|einplan = H|einplan
+.formula M|disponiert = U|xdisponiert
+..*****************************************************************************
+!END
+.continue

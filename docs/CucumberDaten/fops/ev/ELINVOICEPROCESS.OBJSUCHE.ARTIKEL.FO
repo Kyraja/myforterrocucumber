@@ -1,0 +1,135 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICEPROCESS.OBJSUCHE.ARTIKEL.FO
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text   xtext           ? _F|defined(U|xtext)
+..
+..<META M|='ev/ELINVOICEPROCESS'>
+..<META 3|='P3:2'>
+..<META 4|='P2'>
+..
+.colour -background -1 -1 -1 artikel 'M|aktzeile' 
+..
+.continue END ? M|zeilentyp<>0
+.. 
+..*****************************************************************************
+.. Artikel identifizieren
+..*****************************************************************************
+..
+..<BLOCK> GTIN
+.continue EGTIN ? F|empty(M|GlobalID) 
+.. .continue EGTIN ? 'M|SpecifiedTradeProductSchemeId'<>"0088" & 'M|SpecifiedTradeProductSchemeId'<>"0060"
+.assign M|artikel = F|formatstr("$,,;@gruppe=1.5;gtin=={1}", M|GlobalID)
+.protection bzusatz 'M|aktzeile' ? _F|empty(M|artikel)
+.protection konto 'M|aktzeile'   ? F|protected(M|bzusatz, M|aktzeile)
+.protection kstelle 'M|aktzeile' ? F|protected(M|bzusatz, M|aktzeile)
+.continue END ? _F|empty(M|artikel)
+!EGTIN
+..</BLOCK>
+..
+..
+..<BLOCK> LIEF, BSTNR: Lieferanten-Artikel-Nummer 1..5
+.continue ELIART ? F|empty(M|SpecifiedTradeProductSellerAssignedID) ; F|empty(M|lieferant)
+.continue ELIART ? M|lieferant^dnr<>1
+.assign M|artikel = F|formatstr("$,,;@gruppe=1.5;lief=={1};bstnr=={2}", M|lieferant^id, M|SpecifiedTradeProductSellerAssignedID)
+.assign M|artikel = F|formatstr("$,,;@gruppe=1.5;lief2=={1};bstnr2=={2}", M|lieferant^id, M|SpecifiedTradeProductSellerAssignedID) ? F|empty(M|artikel)
+.assign M|artikel = F|formatstr("$,,;@gruppe=1.5;lief3=={1};bstnr3=={2}", M|lieferant^id, M|SpecifiedTradeProductSellerAssignedID) ? F|empty(M|artikel)
+.assign M|artikel = F|formatstr("$,,;@gruppe=1.5;lief4=={1};bstnr4=={2}", M|lieferant^id, M|SpecifiedTradeProductSellerAssignedID) ? F|empty(M|artikel)
+.assign M|artikel = F|formatstr("$,,;@gruppe=1.5;lief5=={1};bstnr5=={2}", M|lieferant^id, M|SpecifiedTradeProductSellerAssignedID) ? F|empty(M|artikel)
+.protection bzusatz 'M|aktzeile' ? _F|empty(M|artikel)
+.continue END ? _F|empty(M|artikel)
+!ELIART
+..</BLOCK>
+..
+..
+..<BLOCK> EBEZBSPR: Artikel-Einkaufsbezeichnung - WEGEN PRFORMANCE INAKTIV FöR STANDARD
+.continue EEBEZ
+.continue EEBEZ ? F|empty(M|SpecifiedTradeProductName) 
+.assign M|artikel = F|formatstr("$,,;@gruppe=1;ebezbspr=={1}", M|SpecifiedTradeProductName)
+.continue END ? _F|empty(M|artikel)
+!EEBEZ
+..</BLOCK>
+..
+..
+..TODO : Suchfelder fÅr Kunden-Artikel-Nummer entscheiden
+.. 
+..<BLOCK> KUARTNR: Kunden-Artikel-Nummer - WEGEN PRFORMANCE INAKTIV FöR STANDARD
+.continue EKUART
+.continue EKUART ? F|empty(M|SpecifiedTradeProductSellerAssignedID) ; F|empty(M|lieferant)
+.continue EKUART ? M|lieferant^dnr<>0
+..
+.load 3 nolock sales 'F|formatstr("$,,;@gruppe=2;kotyp=(BlanketOrder);ablagef=no;status=`;kopf^kunde={1};;zkuartnr=={2}", M|lieferant^id, M|SpecifiedTradeProductSellerAssignedID)'
+.continue RAHFI   ? _G|mehr
+.formula M|artikel = 3|artikel^id
+.protection bzusatz 'M|aktzeile' ? _F|empty(M|artikel)
+.load 3
+.continue EKUART
+..
+!RAHFI
+.load 3 nolock sales 'F|formatstr("$,,;@gruppe=2;kotyp=(BlanketOrder);ablagef=no;status=`;kopf^kunde2={1};zkuartnr=={2}", M|lieferant^id, M|SpecifiedTradeProductSellerAssignedID)' 
+.continue KUAKO   ? _G|mehr
+.formula M|artikel = 3|artikel^id
+.protection bzusatz 'M|aktzeile' ? _F|empty(M|artikel)
+.load 3
+.continue EKUART
+..
+!KUAKO
+.load 4 parts 'F|formatstr("$,,;@gruppe=6;kl={1};kuartnr=={2}", M|lieferant^id, M|SpecifiedTradeProductSellerAssignedID)' 
+.continue KUAFI   ? _G|mehr
+.formula M|artikel = 4|art^id
+.protection bzusatz 'M|aktzeile' ? _F|empty(M|artikel)
+.load 4 parts
+.continue END ? _G|mehr
+.formula M|artikel = ""
+.continue ERRDUP
+..
+!KUAFI
+.load 4 parts 'F|formatstr("$,,;@gruppe=6;kl={1};kuartnr=={2}", M|lieferant^id, M|SpecifiedTradeProductSellerAssignedID)' 
+.continue KUAREST ? _G|mehr
+.formula M|artikel = 4|art^id
+.protection bzusatz 'M|aktzeile' ? _F|empty(M|artikel)
+.load 4 parts
+.continue END ? _G|mehr
+.formula M|artikel = ""
+.continue ERRDUP
+..
+!KUAREST
+.load 4 parts 'F|formatstr("$,,;@gruppe=6;kuartnr=={1}", M|SpecifiedTradeProductSellerAssignedID)' 
+.continue EKUART ? _G|mehr
+.formula M|artikel = 4|art^id
+.protection bzusatz 'M|aktzeile' ? _F|empty(M|artikel)
+.load 4 parts
+.continue END ? _G|mehr
+.formula M|artikel = ""
+.continue ERRDUP
+!EKUART
+..</BLOCK>
+..
+.continue ERROR
+..
+..*****************************************************************************
+!END: Noch Warengruppe und BestandsfÅhrung ermitteln
+.copy M|wgruppe = M|artikel^wgruppe
+.copy M|wgruppe = F|sysinfo(7)^wgruppe ? F|empty(M|wgruppe)
+.copy M|befuehr = M|wgruppe^befuehr
+.continue
+..
+!ERROR
+.colour -background 'U|xabasyellow' artikel 'M|aktzeile' 
+.formula U|xtext = F|formatstr("Zur Artikelnummer/GTIN {1} konnte kein Artikel ermittelt werden.",'M|GlobalID')                              ? _F|empty(M|GlobalID)
+.formula U|xtext = F|formatstr("Zur Einkaufsbezeichnung {1} konnte kein Artikel ermittelt werden.",'M|SpecifiedTradeProductName')             ? _F|empty(M|SpecifiedTradeProductName)
+.formula U|xtext = F|formatstr("Zur Lieferantenartikelnummer {1} konnte kein Artikel ermittelt werden.",'M|SpecifiedTradeProductSellerAssignedID') ? _F|empty(M|SpecifiedTradeProductSellerAssignedID)
+.formula M|fctext = 'M|fctext' + ";" + 'U|xtext'
+.formula M|buttonartikel = M|rotz  
+.continue
+..
+!ERRDUP
+.formula U|xtext = F|formatstr("Mehrere Artikel zu Kundenartikelnummer {1} gefunden.", 'M|SpecifiedTradeProductSellerAssignedID')
+.formula M|fctext = 'M|fctext' + ";" + 'U|xtext'
+.formula M|buttonartikel = M|rotz
+.continue

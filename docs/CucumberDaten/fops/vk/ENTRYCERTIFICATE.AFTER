@@ -1,0 +1,75 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ENTRYCERTIFICATE.AFTER
+.. Author         : saac
+.. Verantwortlich : teamreport
+.. Kontrolle      : cl
+.. Functionality  : Erhaltene GelangensbestÑtigungen Åberspringen
+..                  ebenso ausgeschlossene LS
+..*****************************************************************************
+.set trans -
+.type text xtmpfile         ? _F|defined(U|xtmpfile)
+.type text xtout            ? _F|defined(U|xtout)
+.type text xterr            ? _F|defined(U|xterr)
+.type bool xbglbversandt    ? _F|defined(U|xbglbversandt)
+.type bool xempty           ? _F|defined(U|xempty)
+.type GD2  xglbversanddatum ? _F|defined(U|xglbversanddatum)
+..
+.. nicht mehr drucken, wenn erhalten oder ausgeschlossen
+.continue NOT ? M|berhalten
+.continue NOT ? M|bausgeschlossen
+.continue END ? P|vorschau
+..
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+.reserve
+.select modificationlock nowait sales 'M|lskopf^id'
+.continue UEBERTRAGEN  ? _G|mehr
+.continue UEBERTRAGEN  ? _G|gesperrt
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=3:23
+#!action=modify 
+#!charset=eks
+#!dontchange=~
+..
+.copy U|xbglbversandt = H|glbversandt
+.copy U|xempty = G|TRUE   ?  F|empty(H|glbversanddatum)
+.copy U|xempty = G|FALSE  ? _F|empty(H|glbversanddatum)
+.copy U|xglbversanddatum = H|glbversanddatum ? _F|empty(H|glbversanddatum)
+..
+.select
+id;glbversandt;glbversanddatum
+?'M|lskopf^id';1;~               ?  _U|xbglbversandt & _U|xempty
+?'M|lskopf^id';0;~               ?   U|xbglbversandt & _U|xempty
+?'M|lskopf^id';0;'G|datum'       ?   U|xbglbversandt &  U|xempty
+?'M|lskopf^id';1;'G|datum'       ?  _U|xbglbversandt &  U|xempty
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR  ? _G|mehr
+..
+.formula M|bversendet = U|xbglbversandt 
+.formula M|amversendet = U|xglbversanddatum ? _F|empty(U|xglbversanddatum)
+.formula M|amversendet = G|datum            ?  F|empty(U|xglbversanddatum)
+.select -
+..
+!UEBERTRAGEN
+.select
+.input "DOKUMENT.UEBERTRAGEN"
+..
+.continue END
+..
+!END
+.continue
+..
+!NOT
+.end 1
+..
+..
+!ERROR
+.input 'U|xterr'
+.error ZurÅckschreiben in den Lieferschein gescheitert!
+.end 1
+

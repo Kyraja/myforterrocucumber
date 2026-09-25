@@ -1,0 +1,253 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDICENTER.TAB.VORGANG
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+..
+.type text   xt1             ? _F|defined(U|xt1)
+.type text   xtsel           ? _F|defined(T|xtsel)
+.type text   xtsel1          ? _F|defined(T|xtsel1)
+.type text   xedllsnr        ? _F|defined(T|xedllsnr)
+.type GD2    xedllsdat       ? _F|defined(T|xedllsdat)
+..
+.. Rounding for early warning system
+.type text   xtfzdiffp       ? _F|defined(U|xtfzdiffp)
+.type realx  xrfzdiffp       ? _F|defined(U|xrfzdiffp)
+.type integer  xifzdiffp     ? _F|defined(U|xifzdiffp)
+..
+.. show cumulative quantity from blanket order
+.continue EFZAHL  ?  F|empty(H|ideksrah)  ;  F|empty(M|artnr)
+.load 0 sales 'H|ideksrah'
+.continue EFZAHL  ? _T|mehr
+!FZAHL
+.load 0 line
+.continue EFZAHL  ? _T|mehr
+.continue FZAHL   ?  0|art^id <> M|artnr^id
+.formula M|fzahl = 0|fzahl
+!EFZAHL
+..
+.. show forecast difference (internal field msg 000)
+.continue EFUNK   ?  H|funktion <> "F"
+.formula T|xtsel = "$,,;@gruppe=0;text1=000;nummer=" + 'M|edinr'
+.load 0 edifact 'T|xtsel'
+.continue EFUNK   ? _T|mehr
+.load 0 line '0|selzeile'
+.continue EFUNK   ? _T|mehr
+.continue EFUNK   ? F|empty(0|text24)
+.. Rounding for early warning system
+.formula U|xtfzdiffp = (0|text24 >> "DI:")
+.assign U|xrfzdiffp = U|xtfzdiffp
+.formula U|xifzdiffp =  U|xrfzdiffp
+.formula M|funktion  = 'U|xifzdiffp'  ? _F|empty(U|xifzdiffp)
+!EFUNK
+..
+..
+.. If possible use new "edi" fields in edi message and exit
+.assign M|vorgang = H|vkkopf^id ? _F|empty(H|vkkopf)
+.assign M|vorgang = H|planung ? _F|empty(H|planung)
+.continue END ? _F|empty(M|vorgang)
+..
+.. Fill (is)vorgang for "old" messages
+.. branch for message specific data
+.continue LAKO    ?  H|edinachr^nummer="2114"
+.continue EDL     ?  H|vorart = 27
+.continue EKLAB   ?  H|vorart = 69   ;  H|such   = "EKLAB"
+.continue SPED    ?  H|vorart = 25
+.continue RE      ?  H|vorart =  5
+.continue RE      ?  H|vorart =  52
+.continue EKLS    ?  H|vorart = 70
+.continue ATLAS   ?  H|vorart = 80
+.continue OTHER   ?  H|vorart =  3   &  H|datenart = "PUS"
+.continue OTHER   ?  H|vorart =  3   &  H|sinhouse = "500"
+.continue ORDERS  ?  H|vorart =  3   &  H|imex = "IM"
+.continue EKBE    ?  H|vorart =  3   &  H|imex = "EX"
+.continue OTHER
+..
+..
+!LAKO
+.continue END ? F|empty(H|ideksvor)
+.assign M|vorgang = "$,,;@datei=159;nummer=="+H|ideksvor
+.continue END
+..
+!EDL: EDL-Meldungen
+.continue END  ? _H|funktion = "36"
+..
+.. find product data
+.formula U|xtsel = "$,,;@gruppe=0;vorart=27;text1=ART1;@zeilen=(1);nummer=" + 'M|edinr'
+.load 0 edifact 'T|xtsel'
+.continue END  ? _T|mehr
+.load 0 line '0|selzeile'
+.continue END  ? _T|mehr
+.formula   M|kuartnr = 0|text4
+.assign M|artnr   = 0|text3
+..
+.. search edi message for ESP delivery note number  ( EDL-Lieferscheinnummer)
+.formula T|xtsel = "$,,;@gruppe=0;vorart=27;text1=RFH1;@zeilen=(1);nummer=" + 'M|edinr'
+.load 0 edifact 'T|xtsel'
+.continue END  ? _T|mehr
+.load 0 line '0|selzeile'
+.continue END  ? _T|mehr
+.formula T|xedllsnr = '0|text7'
+.assign T|xedllsdat = '0|text8'
+.continue END  ?  F|empty(T|xedllsnr)
+..
+.. search eks delivery note that matches ESP delivery note
+.formula T|xtsel = "$,,;@gruppe=1;ktyp=4;werk=" + 'H|werk' + ";edllsnr=" + T|xedllsnr
+.formula T|xtsel = T|xtsel + ";edllsdat=" + 'T|xedllsdat:8'      ? _F|empty(T|xedllsdat)
+.formula U|xtsel1 = U|xtsel + ";@ablageart=(2)"
+.load 0 sales 'T|xtsel'
+.load 0 sales 'U|xtsel1' ? _G|mehr
+.continue END  ? _T|mehr
+.formula M|vorgang  = 0|id
+.continue END
+..
+..
+!EKLAB: purchaseing forecaste / Einkauf-Lieferabrufe
+.assign M|rahmen = "$,,;@gruppe=1;@datenbank=4;nummer=="  + 'H|ideksrah'    ?  H|ideksrah <> ""
+.continue EEKVOR  ?  F|empty(H|labruf)
+.formula T|xtsel = "$,,;@gruppe=1;nummer=" + 'H|labruf'
+.formula T|xtsel1= "$,,;@gruppe=1;@ablageart=(2);nummer=" + 'H|labruf'
+.load 0 purchasing 'T|xtsel'
+.load 0 purchasing 'T|xtsel1'  ? _T|mehr
+.assign M|vorgang = 0|id  ?  T|mehr
+!EEKVOR
+..
+.. show supplier names
+.formula M|kunde     = H|idabkunde
+.formula M|kunde     = 'H|idabkunde' + ", W:" + 'H|werk' + ", A:" + 'H|ablstelle'  ? ('H|werk'<>"" ; 'H|ablstelle'<>"")
+.continue SUPLEER ? F|empty(H|idabkunde)
+.formula M|idkundeab = "1 " + 'H|idabkunde'
+.formula M|kdname    = M|idkundeab^such          ? M|idkundeab^gruppe=1
+.formula M|kdname    = M|idkundeab^firma^such    ? M|idkundeab^gruppe=2
+!SUPLEER
+..
+.. find product data
+.formula T|xtsel = "$,,;@gruppe=0;vorart=3;text1=ART1;@zeilen=(1);nummer=" + 'M|edinr'
+.load 0 edifact 'T|xtsel'
+.continue END  ? _T|mehr
+.load 0 line '0|selzeile'
+.continue END  ? _T|mehr
+.formula   M|kuartnr = 0|text3
+.assign M|artnr   = 0|text4
+.continue END
+..
+..
+!EKLS: Einkauf-Lieferschein
+.assign M|rahmen = "$,,;@gruppe=1;@datenbank=4;nummer=="  + 'H|ideksrah'    ?  H|ideksrah <> ""
+.formula xtsel = "$,,;@gruppe=1;nummer=" + 'H|labruf' + ";ident=" + 'M|edinr'
+.formula xtsel1= "$,,;@gruppe=1;@ablageart=(2);nummer=" + 'H|labruf' + ";ident=" + 'M|edinr'
+.load 0 purchasing 'xtsel'
+.load 0 purchasing 'xtsel1'    ? _T|mehr
+.assign M|vorgang = 0|id  ?  T|mehr
+.formula M|kunde = H|idabkunde
+.formula M|kunde = 'H|idabkunde' + ", W:" + 'H|werk' + ", A:" + 'H|ablstelle'  ? ('H|werk'<>"" ; 'H|ablstelle'<>"")
+.load 1 supplier 'M|kunde'
+.formula M|kdname = 1|such   ? mehr
+..
+.formula xtsel = "$,,;@gruppe=0;vorart=70;text1=ART1;@zeilen=(1);nummer=" + 'M|edinr'
+.load 0 edifact 'xtsel'
+.continue END ? _mehr
+.load 0 line '0|selzeile'
+.continue END ? _mehr
+.formula   M|kuartnr = 0|text4
+.assign M|artnr   = 0|text5
+.continue END
+..
+..
+!SPED: shipping order / Speditionsauftr„ge/Lieferscheine
+.formula M|kunde  =  H|idkundesab
+.formula M|kunde  = 'H|idkundeab' + ", W:" + 'H|werk' + ", A:" + 'H|ablstelle'  ? 'H|werk'<>"" ; 'H|ablstelle'<>""
+.. In der Selektion nummer== darf kein Abgelegt-Plus angegeben werden!
+.continue END  ?  F|empty(H|ideksvor)
+.formula T|xtsel  = "$,,;@gruppe=1;@datenbank=55;nummer==" + F|regreplaceall(H|ideksvor, "\+", "")
+.formula T|xtsel1 = "$,,;@gruppe=1;@ablageart=(2);@datenbank=55;nummer==" + F|regreplaceall(H|ideksvor, "\+", "")
+.assign M|vorgang = T|xtsel
+.assign M|vorgang = T|xtsel1  ? _T|mehr
+.continue END
+..
+..
+!RE: invoice / Rechnungen
+.formula   M|kunde        = H|idkunderab
+.assign M|idkunderab   = H|idkunderab             ? T|xbidkunderab
+.formula   M|kdname       = M|idkunderab^such        ? M|idkunderab^gruppe=1
+.assign M|rahmen       = "$,,;@gruppe=1;@datenbank=3;nummer==" + 'H|ideksrah'       ?  H|ideksrah <> ""
+.. edi invoice with several eks invoices does not have an entry for ideksvor
+.continue END  ?  F|empty(H|ideksvor)
+.. find eks invoice
+.formula T|xtsel  = "$,,;@gruppe=1;typ=(5);nummer=" + 'H|ideksvor' + ";kunde2=" + 'H|idkunderab'
+.formula T|xtsel1 = "$,,;@gruppe=1;typ=(5);@ablageart=(2);nummer=" + 'H|ideksvor' + ";kunde2=" + 'H|idkunderab'
+.load 0 sales 'T|xtsel'
+.load 0 sales 'T|xtsel1' ? _T|mehr
+.continue END  ? _T|mehr
+.assign M|vorgang = 0|id
+.formula   M|kunde   = 0|kunde2
+.formula   M|kunde   = 0|kunde2 + ", W:" + '0|werk' + ", A:" + '0|ablstelle' ? _F|empty(0|werk) ; _F|empty(0|ablstelle)
+.assign M|rahmen  = 0|rahmen
+.continue END
+..
+..
+!OTHER: try to fill M|vorgang for 'other' messages
+.continue END  ? _F|empty(M|vorgang)  ;  F|empty(H|ideksvor)  ;  ( M|imex/"EX*" & H|vorart<>23)  ;  ( H|vorart<>3 & H|vorart<>23 )
+.. mh, 05.03.2009: for message type "PUS", restrict type to "delivery note" (Lieferschein)
+.formula xtsel = "$,,;@gruppe=1;typ=(4);nummer=" + 'H|ideksvor'                    ?  M|edinr^datenart= "PUS"
+.formula xtsel = "$,,;@gruppe=1;nummer=" + 'H|ideksvor' + ";ident=" + 'M|edinr'    ?  M|edinr^datenart<>"PUS"
+.formula xtsel1=  U|xtsel + ";@ablageart=(2)"
+.load 0 sales 'xtsel'
+.load 0 sales 'xtsel1'    ? _T|mehr
+.assign M|vorgang = 0|id  ?  T|mehr
+.continue END
+..
+..
+!ATLAS
+.assign M|kdname = M|idkundeab^sucherw
+.continue END  ?  F|empty(H|ideksvor)
+.formula T|xtsel = "$,,;@gruppe=1;@ordnung=nummer;@ablageart=(2);nummer=" + H|ideksvor
+.formula T|xtsel = T|xtsel + ";laart=(NonEU)"
+.load 0 sales 'T|xtsel'
+.load 0 purchasing 'T|xtsel'   ? _T|mehr
+.continue END  ? _T|mehr
+.continue END  ?  0|ktyp <> liko  &  0|ktyp <> reko
+.assign M|vorgang = 0|id
+.assign M|kuartnr = 0|vstaat^such
+.continue END
+..
+..
+.. find sales order to edi messages
+.. complications
+..   *  several edi messages might refer to the same sales order
+..   *  either the order or the order confirmation have their idno entered
+..      in the "ident" field of the sales order
+..   *  order change messages have their idno not entered in the sales order
+..
+!ORDERS
+.continue END  ?  F|empty(H|ideksvor)
+.formula U|xt1 = ";nummer=" + H|ideksvor + ";kunde2=" + H|idkunderab + ";ident=" + 'M|edinr' + "!"
+.formula U|xt1 = ";nummer=" + H|ideksvor + ";kunde2=" + H|idkunderab + ";ident=!" + 'M|edinr'     ?  H|nachrtyp="ORDCHG"
+.formula U|xtsel  = "$,,;typ=(3);@gruppe=1;@ablageart=(1)" + U|xt1
+.formula U|xtsel1 = "$,,;typ=(3);@gruppe=1;@ablageart=(2)" + U|xt1
+.load 0 sales 'U|xtsel'
+.load 0 sales 'U|xtsel1' ? _G|mehr
+.continue END  ? _G|mehr
+.assign M|vorgang = 0|id
+.load 0
+.continue END
+..
+!EKBE
+.continue END ? F|empty(H|ideksvor)
+.formula U|xt1 = ";nummer=" + H|ideksvor + ";lief2=" + H|idkunderab + ";ident=" + 'M|edinr' + "!"
+.formula U|xtsel  = "$,,;typ=(3);@gruppe=1;@ablageart=(1)" + U|xt1
+.formula U|xtsel1 = "$,,;typ=(3);@gruppe=1;@ablageart=(2)" + U|xt1
+.load 0 purchasing 'U|xtsel'
+.load 0 purchasing 'U|xtsel1' ? _G|mehr
+.continue END  ? _G|mehr
+.assign M|vorgang = 0|id
+.load 0
+.continue END
+..
+..*****************************************************************************
+!END
+.continue

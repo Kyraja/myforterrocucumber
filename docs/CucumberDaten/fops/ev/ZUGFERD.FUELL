@@ -1,0 +1,407 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..
+..  FOP-Name       : ZUGFERD.FUELL
+..  Autor          : cl
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..
+..  Funktion       : EFOP zur Vorbelegung der ZUGFeRD-AufzÑhlungen in Rechnungen
+..
+..  Ablauf         : 
+..                   
+..
+..  Einsetzbar bei folgenden Events und Masken
+..# ZUGFeRD-Belegung der individuellen ZUGFeRD-AufzÑhlungen in VK-Rechnungen
+..36 neu      maskpruef  * * * [C] ZUGFERD.FUELL
+..36 Ñndern   maskpruef  * * * [C] ZUGFERD.FUELL
+..36 Rechnung maskpruef  * * * [C] ZUGFERD.FUELL
+..36 retoure  maskpruef  * * * [C] ZUGFERD.FUELL
+..36 storno   maskpruef  * * * [C] ZUGFERD.FUELL
+..
+..*****************************************************************************
+.set trans -
+.type text      xselect      ? _F|defined(U|xselect)
+.type P92:1     xabmodell    ? _F|defined(U|xabmodell)
+.type ID3       xmerkid      ? _F|defined(U|xmerkid)
+.type text      xformat      ? _F|defined(U|xformat)
+.type bool      xbhatartikel ? _F|defined(U|xbhatartikel)
+.type bool      xbhatposnr   ? _F|defined(U|xbhatposnr)
+..
+..
+.continue END   ? _F|sysinfo(18)^zugferd
+.continue END   ? M|dnr = 4
+.continue END   ? F|empty(M|kl2)
+..
+.assign P|spr = F|value(M|spr, "AS72")
+.formula U|xmerkid   = ""
+.formula U|xabmodell = ""
+.formula U|xselect = F|formatstr("$,,klnum={1};edinachraz=(ZUGFeRDInvoice);erlaubt=1;@gruppe=4;@zeilen=(Yes)", M|kl2^nummer)
+.load 6 customer 'U|xselect'
+.continue END   ? _G|mehr
+.load 6 line '6|selzeile'
+.continue END   ? _G|mehr
+.assign U|xabmodell = 6|ieabmodell^id
+.continue ERROR12                       ? F|empty(U|xabmodell)
+.formula U|xformat = 6|ieabmodell^request
+.continue ERROR13                       ? F|empty(U|xformat)
+..
+.. Betriebsdaten prÅfen: iban muss gefÅllt sein
+.continue ERROR21 ? F|empty(F|sysinfo(10)^iban)
+..
+.. Kopfinformationen prÅfen
+..
+.. Betreuer muss in Rechnung gefÅllt sein
+.continue ERROR1 ? F|empty(M|betreuer)
+..
+.. Telefonnummer des Betreuers muss gefÅllt sein
+.continue ERROR2 ? F|empty(M|betreuer^tele)
+..
+!VERSAND: bei X-Rechnung muss Versandadresse gefÅllt sein
+.continue ZVERT   ? U|xformat <> "xrechnung-cii"
+.continue LEITWEG ? _F|empty(M|ans2) & _F|empty(M|str2) & _F|empty(M|plz2) & _F|empty(M|nort2)
+.. Versandadresse ans2, str2, plz2 und nort2 prÅfen
+.continue ERROR22
+..
+!LEITWEG: bei X-Rechnung muss Leitweg-ID gefÅllt sein
+.continue ZVERT ? U|xformat <> "xrechnung-cii"
+..
+.continue NOLEITWEG ? _F|defined(M|leitwegid)
+.continue ERR27   ? F|empty(M|leitwegid) 
+.continue ZVERT
+..
+!NOLEITWEG
+.continue NOIDLEITWEG ? _F|defined(M|yleitwegid)
+.continue ERR27A    ?  F|empty(M|yleitwegid)
+.continue ZVERT
+..
+!NOIDLEITWEG
+.continue ERR27B ? F|empty(M|frzeich)
+..
+!ZVERT: Zahlungsverteiler muss leer sein
+.continue ERROR3 ? _F|empty(M|zbedvert)
+..
+.. E-Mail fÅr RechnungsempfÑnger muss gefÅllt sein
+.continue ERROR16 ? F|empty(M|kl2^erechmail)
+..
+.. ans fÅr RechnungsempfÑnger muss gefÅllt sein
+.continue ERROR18 ? F|empty(M|kl2^ans)
+..
+.. Bruttopreise nicht erlaubt
+.continue ERROR15 ? M|brutto
+..
+.continue RETYP ? _F|empty(M|zfduedatetyp)
+..
+!DATE: Typ fÅr Datum SteuerfÑlligkeit AZL20402
+.. Ausstellungsdatum des Rechnungsbelegs
+.assign M|zfduedatetyp = "(ZFDueDateTypeCode5)"
+..
+!RETYP: Rechnungstyp AZL20401
+.continue ZAHL  ? _F|empty(M|zfdoctyp)
+.. Handelsrechnung
+.assign M|zfdoctyp = "(ZFDocumentCodeType380)"  ? F|equals(M|vorganga, "(Invoice)")
+.. Rechnungskorrektur
+.assign M|zfdoctyp = "(ZFDocumentCodeType384)"  ? F|equals(M|vorganga, "(InvoiceCanceled)")
+.assign M|zfdoctyp = "(ZFDocumentCodeType384)"  ? F|equals(M|vorganga, "(CashPaymentReversal)")
+.. Handelsrechnung
+.assign M|zfdoctyp = "(ZFDocumentCodeType380)"  ? F|equals(M|vorganga, "(CashPayment)")
+.. Rechnungskorrektur
+.assign M|zfdoctyp = "(ZFDocumentCodeType384)"  ? F|equals(M|vorganga, "(CashPaymentCanceled)")
+.assign M|zfdoctyp = "(ZFDocumentCodeType384)"  ? F|equals(M|vorganga, "(CashPaymentReversal)")
+.assign M|zfdoctyp = "(ZFDocumentCodeType384)"  ? F|equals(M|vorganga, "(InvoiceReversal)")
+.. Vorauszahlungsrechnung
+.assign M|zfdoctyp = "(ZFDocumentCodeType386)"  ? F|equals(M|vorganga, "(Downpayment)")
+.assign M|zfdoctyp = "(ZFDocumentCodeType386)"  ? F|equals(M|vorganga, "(CancelationDownpayment)")
+.assign M|zfdoctyp = "(ZFDocumentCodeType386)"  ? F|equals(M|vorganga, "(CanceledDownpayment)")
+.. Gutschrift fÅr Waren oder Dienstleistungen
+.assign M|zfdoctyp = "(ZFDocumentCodeType381)"   ? F|equals(M|vorganga, "(CreditNoteCommercial)")
+.. Storno einer Gutschrift
+.assign M|zfdoctyp = "(ZFDocumentCodeType458)"  ? F|equals(M|vorganga, "(CanceledCreditNoteCommercial)")
+.assign M|zfdoctyp = "(ZFDocumentCodeType458)"  ? F|equals(M|vorganga, "(CancelationCreditNoteCommercial)")
+..
+!ZAHL: Zahlungsart AZL20406
+.continue BUTABELLE  ? _F|empty(M|zfpaymenttyp)
+.assign M|zfpaymenttyp = "(PaymentTypCode58)"   ? F|equals(M|zaform, "(Transfer)")
+.assign M|zfpaymenttyp = "(PaymentTypCode59)"   ? F|equals(M|zaform, "(DebitNote)")
+.assign M|zfpaymenttyp = "(PaymentTypCode20)"   ? F|equals(M|zaform, "(Check)")
+.assign M|zfpaymenttyp = ""                     ? F|equals(M|zaform, "(BillOfExchange)")
+.assign M|zfpaymenttyp = "(PaymentTypCode48)"   ? F|equals(M|zaform, "(CreditCard)")
+.assign M|zfpaymenttyp = ""                     ? F|equals(M|zaform, "(CashOnDelivery)")
+.assign M|zfpaymenttyp = ""                     ? F|equals(M|zaform, "(CashInAdvance)")
+.assign M|zfpaymenttyp = "(PaymentTypCode10)"   ? F|equals(M|zaform, "(CashPayment)")
+.assign M|zfpaymenttyp = ""                     ? F|equals(M|zaform, "(Other)")
+..
+.. ZUGFeRD Zahlungsart muss gefÅllt sein
+.continue ERROR19 ? F|empty(M|zfpaymenttyp)
+..
+!BUTABELLE 
+.. Button klicken, um Abschlusszeilen in Rechnung zu laden
+.formula M|bureabschluss = "" ? M|tzeilen > 0 & F|empty(M|stornopartnervorg) & F|modifiable(M|bureabschluss)
+.select screen header
+..
+.. Pruefen, ob mindestens eine Artikelposition vorhanden ist.
+.select screen line "$,1:typ=7"
+.formula U|xbhatartikel = G|TRUE ? G|mehr
+..
+.. Pruefen ob mindestens eine Positionsnummer vorhanden ist.
+.select screen line "$,pnum<>`"
+.formula U|xbhatposnr = G|TRUE ? G|mehr
+.. 
+.. Pruefen, ob bei Steuerbuchungsart "steuerbefreit" in der Steuerzeile der Grund fÅr die Steuerbefreiung gefÅllt ist.
+.continue USTID  ? _F|equals(M|ustart, "(TaxfreeNoTaxLines)")
+.select screen line "$,1:typ=10"
+.continue USTID   ? _G|mehr
+.assign M|zfvatexemp = M|strgl^zfvatexemp
+.continue ERROR30 ?  G|mehr & F|empty(M|zfvatexemp)
+.continue HEADER
+..
+!USTID: USTID muss im RechnungsempfÑnger gefÅllt sein
+.continue HEADER         ? _F|empty(M|kl2^ustid)
+.. aber nicht bei steuerfrei
+.continue HEADER         ? F|equals(M|ustart, "(TaxfreeNoTaxLines)")
+.. aber nicht fÅr Kunden aus DrittlÑndern (laart = Ausland)
+.continue HEADER         ? F|equals(M|kl2^laart, "(NonEU)")
+.. bei steuerrelevant die Steuerzeile prÅfen!
+.continue STEUERRELEVANT ? F|equals(M|ustart, "(TaxRelevant)")
+.continue ERROR14
+..
+!STEUERRELEVANT
+.select screen line "$,1:typ=10;proz>0"
+.continue HEADER  ? _G|mehr
+.continue ERROR14
+..
+!HEADER
+.select screen header
+..
+!TABELLE
+.select screen line
+.continue END ? _G|mehr
+..
+.. SteuerschlÅssel fehlt
+.continue ERROR29 ? F|empty(M|psteuer) & M|typ = 7
+.. bei steuerfrei muss Nullsteuerzeile das Feld "Steuer in Rechnung nicht ausweisen" deaktiviert sein
+.continue ERROR28 ? (F|equals(M|ustart, "(TaxfreeNoTaxLines)") ; F|equals(M|ustart, "(TaxRelevant)")) & M|psteuer^nullsts & M|psteuer^kstausw
+..
+.. Positionsnummer muss gefuellt sein fuer eine Artikelposition (typ=7).
+.continue ERROR4  ?  M|typ = 7 & F|empty(M|pnum)
+..
+.. Mindestens eine Positionsnummer muss gefuellt sein wenn keine Artikelposition vorhanden ist
+.. und es ist eine Zusatzposition (typ=12) mit einem positiven Wert die als Artikelposition 
+.. exportiert werden kann.
+.. Sonderfall: fuer eine Anzahlungsrechnung wird die Positionsnummer gesetzt falls keine vorhanden ist.
+.formula M|pnum = 1 ? _U|xbhatartikel & M|typ = 12 & _U|xbhatposnr & M|pwert >= 0 & F|empty(M|pnum) & F|equals(M|vorganga, "(Downpayment)") 
+.continue ERROR24   ? _U|xbhatartikel & M|typ = 12 & _U|xbhatposnr & M|pwert >= 0 & F|empty(M|pnum)
+.. 
+.. Falls die Rechnung keine Artikelposition hat, kann eine Zusatzposition (typ=12) als 
+.. Artikelposition exportiert werden nur falls der Wert positiv ist und eine Positionsnummer
+.. definiert ist. Ist der Wert negativ, wird die Zusatzposition als Zuschlag / Abschlag exportiert.
+.continue ERROR25 ? _U|xbhatartikel & M|typ = 12 & M|pwert < 0 & _F|empty(M|pnum)
+.. 
+.. vkbezbspr oder namebspr im Artikel typ = 7 muss gefÅllt sein
+.continue ERROR20 ? F|empty(M|artikel^vkbezbspr) &  F|empty(M|artikel^namebspr) & M|artikel^id <> "(0,0,0)"
+.. AZL20403: Rabatt
+.formula M|zfabtyp = "(AllowanceReasonCode95)"   ?  (M|typ = 7 ; M|typ = 11) & M|proz < 0 & F|empty(M|zfabtyp)
+.. bei Artikeln nur Abschlag (proz < 0) erlauben
+.continue ERROR5  ? M|typ = 7 & M|proz > 0 & U|xformat = "en16931" 
+.continue ERROR6  ? M|typ = 7 & M|proz < 0 & F|empty(M|zfabtyp)
+.. Grund fÅr Steuerbefreiung aus Steuerregel prÅfen 
+.continue ERROR7 ? _F|empty(M|strgl) & ( (F|empty(M|strgl^zfvatexemp) & ('M|strgl^zftaxcode(L=":")' <> "(ZFTaxCodeStandard)" ) ) )
+.. Steuerart aus Steuerregel prÅfen
+.continue ERROR8 ? _F|empty(M|strgl) & F|empty(M|strgl^zftaxtyp)
+.. Keine Sammelrechnung erlaubt
+.. Sammelrechnung erlauben, wenn U|xformat = "extended"
+.. Sammelrechnung nun erlauben?
+.continue ERROR9 ?  U|xformat = "en16931" & 'M|okopf^id' <> 'U|xmerkid' & _F|empty(U|xmerkid)  & _F|empty(M|okopf)
+.formula U|xmerkid = M|okopf^id  ? M|typ = 7
+.load 1 add M|artikel
+.continue ERROR23 ? _G|mehr
+.continue ERROR20 ? '1|vkbez.P|ksi' = "" & '1|name.P|ksi' = ""   & M|artikel^id <> "(0,0,0)"
+.continue STEUER ?  _F|defined(1|zfzutyp) & _F|defined(1|zfabtyp)
+.assign M|zfzutyp = M|artikel^zfzutyp ? F|empty(M|zfzutyp) & (M|typ = 13 ; M|typ = 14) & M|pwert > 0
+.assign M|zfabtyp = M|artikel^zfabtyp ? F|empty(M|zfabtyp) & (M|typ = 13 ; M|typ = 14) & M|pwert <= 0
+.assign M|zfzutyp = M|artikel^zfzutyp ? F|empty(M|zfzutyp) & (M|typ = 12 ; M|typ = 26) & M|pwert > 0
+.assign M|zfabtyp = M|artikel^zfabtyp ? F|empty(M|zfabtyp) & (M|typ = 12 ; M|typ = 26) & M|pwert <= 0
+.. zfzutyp muss fÅr ZugÑnge in Neutralen Postionen und Textpositionen gefÅllt sein
+.continue ERROR10 ? F|empty(M|zfzutyp) & (M|typ = 12 ; M|typ = 26) & M|pwert > 0
+.. zfzutyp muss fÅr AbgÑnge in Neutralen Postionen und Textpositionen gefÅllt sein
+.continue ERROR11 ? F|empty(M|zfabtyp) & (M|typ = 12 ; M|typ = 26) & M|pwert <= 0
+.. zfzutyp muss fÅr ZugÑnge und fÅr MaterialzuschlÑge gefÅllt sein
+.formula M|zfzutyp = M|artikel^zfzutyp ? (M|proz > 0 & F|empty(M|zfzutyp) & M|typ <> 10) ; (F|empty(M|zfzutyp) & M|typ = 14 & M|pwert > 0)
+.continue ERROR10 ? (M|proz > 0 & F|empty(M|zfzutyp) & M|typ <> 10) ; (F|empty(M|zfzutyp) & M|typ = 14 & M|pwert > 0)
+.. zfabtyp muss fÅr AbgÑnge gefÅllt sein
+.formula M|zfabtyp = M|artikel^zfabtyp ? (M|proz <= 0 & F|empty(M|zfabtyp)) ; (F|empty(M|zfabtyp) & M|typ = 14 & M|pwert <= 0)
+.continue ERROR11 ? (M|proz < 0 & F|empty(M|zfabtyp)) ; (F|empty(M|zfabtyp) & M|typ = 14 & M|pwert <= 0)
+.. zfzutyp muss fÅr Mindestbestellwertpositionen gefÅllt sein
+.continue ERROR26 ?  F|empty(M|zfzutyp) & M|typ = 13 & M|pwert > 0
+..
+.formula M|zfzutyp = "" ? _F|empty(M|zfabtyp) & (M|proz < 0  ; ((M|typ = 13 ; M|typ = 14) & M|pwert < 0))
+.formula M|zfabtyp = "" ? _F|empty(M|zfzutyp) & (M|proz >= 0 ; ((M|typ = 13 ; M|typ = 14) & M|pwert >= 0)) 
+..
+!STEUER: Steuerregel
+.continue ZUSCHLAG ? _F|defined(M|strgl^zftaxcode)
+..
+.. Steuercode AZL20400
+.assign M|zftaxcode = M|strgl^zftaxcode   ? F|empty(M|zftaxcode)
+.. Steuerart AZL20405
+.assign M|zftaxtyp = M|strgl^zftaxtyp     ? F|empty(M|zftaxtyp)
+.. Grund Steuerbefreiung AZL20407
+.assign M|zfvatexemp = M|strgl^zfvatexemp ? F|empty(M|zfvatexemp)
+..
+.continue END ? _F|defined(M|artikel^zfzutyp)
+.continue END ? _F|defined(M|artikel^zfabtyp)
+..
+!ZUSCHLAG: Zuschlagstyp AZL20404 nur, wenn Rabatt positiv
+.assign M|zfzutyp = M|artikel^zfzutyp ? F|empty(M|zfzutyp) & M|proz > 0
+..
+!ABSCHLAG: Abschalgstyp AZL20403 nur, wenn Rabatt negativ
+.assign M|zfabtyp = M|artikel^zfabtyp ? F|empty(M|zfabtyp) & M|proz < 0
+..
+.continue TABELLE
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR1
+.error ZUGFeRD: Der Betreuer fehlt. Bitte eintragen.
+.cursor betreuer 0
+.end 1
+..
+!ERROR2
+.error ZUGFeRD: Die Telefonnummer des Betreuers fehlt. Bitte eintragen.
+.cursor betreuer 0
+.end 1
+..
+!ERROR3
+.error ZUGFeRD: Der Zahlungsverteiler darf nicht gefÅllt sein. Bitte entfernen.
+.cursor zbedvert 0
+.end 1
+..
+!ERROR4
+.error ZUGFeRD: Positionsnummern fÅr Zeilen vom Typ "AU/BE-Position,BV" mÅssen vergeben sein. Bitte vervollstÑndigen.
+.cursor pnum 'M|aktzeile'
+.end 1
+..
+!ERROR5
+.error ZUGFeRD: Es sind nur AbschlÑge erlaubt. Bitte Wert kleiner 0 eintragen. ZuschlÑge sind nur im Extended-Format zulÑssig.
+.cursor proz 'M|aktzeile'
+.end 1
+..
+!ERROR6
+.error ZUGFeRD: Bitte den Abschlagstyp eintragen.
+.cursor zfabtyp 'M|aktzeile'
+.end 1
+..
+!ERROR7
+.error ZUGFeRD: Grund der Steuerbefreiung in der Steuerregel nicht gefÅllt. Bitte eintragen.
+.cursor strgl 'M|aktzeile'
+.end 1
+..
+!ERROR8
+.error ZUGFeRD: Steuerart in der Steuerregel nicht gefÅllt. Bitte eintragen.
+.cursor strgl 'M|aktzeile'
+.end 1
+..
+!ERROR9
+.error ZUGFeRD: Es ist keine Sammelrechnung erlaubt. Bitte entfernen Sie die unerlaubten Positionen
+.cursor zn 'M|aktzeile'
+.end 1
+..
+!ERROR10
+.error 'F|formatstr("ZUGFeRD: Bitte den Zuschlagstyp fÅr die Zusatzposition in Zeile {1} fÅllen.", M|aktzeile)'
+.cursor zfzutyp 'M|aktzeile'
+.end 1
+..
+!ERROR11
+.error 'F|formatstr("ZUGFeRD: Bitte den Abschlagstyp fÅr die Zusatzposition in Zeile {1} fÅllen.", M|aktzeile)'
+.cursor zfabtyp 'M|aktzeile'
+.end 1
+..
+!ERROR12
+.error ZUGFeRD: Kein Abbildungsmodell vorhanden. Bitte eintragen.
+.end 1
+..
+!ERROR13
+.error ZUGFeRD: Das Abbildungsmodell ist leer. Bitte gÅltigen Nachrichtentyp eintragen.
+.end 1
+..
+!ERROR14
+.error 'F|formatstr("ZUGFeRD: Im Rechnungskunde {1} ist das Feld USTID nicht gefÅllt. Bitte eintragen.", M|kl2)'
+.end 1
+..
+!ERROR15
+.error ZUGFeRD: Es werden keine Bruttopreise unterstÅtzt.
+.end 1
+..
+!ERROR16
+.error ZUGFeRD: Im RechnungsempfÑnger ist das Feld E-Mail RechnungsempfÑnger nicht gefÅllt. Bitte eintragen.
+.end 1
+..
+!ERROR18
+.error ZUGFeRD: Der Name des Rechnungskunden ist nicht gefÅllt. Bitte eintragen.
+.end 1
+..
+!ERROR19
+.error ZUGFeRD: Bitte Zahlungsart im Reiter ZUGFeRD fÅllen.
+.end 1
+..
+!ERROR20
+.error 'F|formatstr("ZUGFeRD: Bitte Artikelkurzbezeichnung oder Artikelname fÅr Artikel {1} in Zeile {2} fÅllen.", M|artikel^nummer, M|aktzeile)'
+.end 1
+..
+!ERROR21
+.error ZUGFeRD: Bitte IBAN in den Betriebsdaten fÅllen.
+.end 1
+..
+!ERROR22
+.error ZUGFeRD: Bitte die Versandadresse fÅllen.
+.cursor ans2
+.end 1
+..
+!ERROR23
+.error 'F|formatstr("ZUGFeRD: Bitte erst einen Artikel in Zeile {1} eintragen.", M|aktzeile)'
+.end 1
+..
+!ERROR24
+.error ZUGFeRD: Mindesten eine Zeile vom Typ "neutrale Position" mit einem positiven Wert muss eine Positionsnummer haben. Bitte vervollstÑndigen.
+.cursor pnum 'M|aktzeile'
+.end 1
+..
+!ERROR25
+.error ZUGFeRD: Zeilen vom Typ "neutrale Position" mit einem negativen Wert sollen keine Positionsnummer haben. Bitte leeren.
+.cursor pnum 'M|aktzeile'
+.end 1
+..
+!ERROR26
+.error 'F|formatstr("ZUGFeRD: Bitte den Zuschlagstyp fÅr die Mindestbestellwertposition in Zeile {1} fÅllen.", M|aktzeile)'
+.cursor zfzutyp 'M|aktzeile'
+.end 1
+..
+!ERR27
+.error ZUGFeRD: Bitte die Leitweg-ID fÅllen.
+.cursor leitwegid 0
+.end 1
+..
+!ERR27A
+.error ZUGFeRD: Bitte die individuelle Leitweg-ID fÅllen.
+.cursor yleitwegid 0
+.end 1
+..
+!ERR27B
+.error ZUGFeRD: Bitte "Ihr Zeichen" fÅllen.    
+.cursor frzeich 0
+.end 1
+..
+!ERROR28
+.error 'F|formatstr("ZUGFeRD: Bitte im Null-SteuerschlÅssel {1} das Kennzeichen {2}Steuer in Rechnung nicht ausweisen{2} deaktivieren.", M|psteuer, dblquote)'
+.cursor psteuer 'M|aktzeile'
+.end 1
+..
+!ERROR29
+.error 'F|formatstr("ZUGFeRD: Der SteuerschlÅssel fehlt in der Zeile {1}.", M|aktzeile)'
+.end 1
+..
+!ERROR30
+.error 'F|formatstr("ZUGFeRD: Die Steuerposition in der Zeile {1} hat keinen eingetragenen Grund der Steuerbefreiung.", M|aktzeile)'
+.cursor zfvatexemp 'M|aktzeile'
+.end 1

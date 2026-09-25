@@ -1,0 +1,153 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : KUMJOURNAL.EV
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : Allgemeines Event-FOP des Infosystems fb/KUMJOURNAL
+..  Functionality  : Common event FOP of the Infosystem fb/KUMJOURNAL
+..
+.. include fb/KUMJOURNAL.JKENN
+..*****************************************************************************
+..
+.set trans -
+..
+.continue PERIOD  ? G|evtvar = "anfj"   & G|evtartengl = "FIELD_EXIT"
+.continue PERIOD  ? G|evtvar = "endj"   & G|evtartengl = "FIELD_EXIT"
+.continue PERIOD  ? G|evtvar = "anfmon" & G|evtartengl = "FIELD_EXIT"
+.continue PERIOD  ? G|evtvar = "endmon" & G|evtartengl = "FIELD_EXIT"
+..
+.input "is/TABLEEREN"
+..
+.continue START ? G|evtvar = "bstart" & G|evtartengl = "BUTTON_BEFORE"
+.continue END
+..
+..*****************************************************************************
+!PERIOD: Set period
+..*****************************************************************************
+.type text xxtemon xxtsmon xxtsyear xxteyear xxtfromd xxttod
+.formula U|xxtsmon = "anfmon"
+.formula U|xxtemon = "endmon"
+.formula U|xxtsyear= "anfj"
+.formula U|xxteyear= "endj"
+.formula U|xxtfromd= "anfdat"
+.formula U|xxttod  = "enddat"
+.input "fb/IS.SETPERIOD"
+.continue END
+..
+..*****************************************************************************
+!START: Infosystem start
+..*****************************************************************************
+.input 'M|bkopf'
+..
+.formula M|select = "$,"
+.formula M|select = M|select + ";@zeilen=(1)"
+.formula M|select = M|select + ";iwbu=" + 'M|buwaehr^id'
+.formula M|select = M|select + ";sortgjgm=" + F|fysortdat(M|anfj, M|anfmon) + "!" + F|fysortdat(M|endj, M|endmon) ? _M|kaljahr
+.formula M|select = M|select + ";budat="    + 'M|anfdat:8' + "!" + 'M|enddat:8'                                   ?  M|kaljahr
+.formula M|select = M|select + ";typ==1"
+.formula M|select = M|select + ";1:bukreis=" + 'M|bukreis^id' ? _F|empty(M|bukreis)
+..
+.type text xttmp xtdat xterr
+.file -tempname U|xttmp
+.file -tempname U|xtdat
+.file -tempname U|xterr
+.input "DATEI.F"
+.output new 'U|xttmp'
+..
+.select entryjournal 'M|select'
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+.continue ELOOP ? _G|mehr
+? 'H|kenn' # 'H|monat' # 'F|year(F|fystartdate(H|gjahr, H|monat))' # 'H|gjahr' # 'H|sortgjgm' # 'H|sbetr' # 'H|hbetr' ? _M|kaljahr
+? 'H|kenn' # 'F|month(H|budat)' # 'F|year(H|budat)' # 'H|gjahr' # 'F|substr(H|budat:8,1,6)' # 'H|sbetr' # 'H|hbetr'   ?  M|kaljahr
+..*****************************************************************************
+!NEXT
+..*****************************************************************************
+.select continue
+.continue LOOP
+..*****************************************************************************
+!ELOOP
+..*****************************************************************************
+.output terminal
+.continue END  ? _F|fileexists(U|xttmp) ; _F|filesize(U|xttmp) > 0
+.system 'F|expr("group_by.sh -n 7 -k 5 -k 1 -o 2 -o 3 -o 4 -s 6 -s 7 " + U|xttmp + " 1>" + U|xtdat + " 2>" + U|xterr)' background
+.continue ERR01 ? _G|mehr
+.continue ERR01 ?  F|filesize(U|xterr) > 0
+.continue RFILE
+..
+..*****************************************************************************
+!RFILE
+..*****************************************************************************
+.type text U|xdummy1
+.type bool xbmehr
+.type real xrsoll xrhaben
+.type integer  xgmonat xizeile ximonat xijahr
+.type GJ   xgjahr
+..
+..*****************************************************************************
+!RLOOP
+..*****************************************************************************
+.make screen line +O
+.select from 'U|xtdat' M|tjkenn # M|tgmonat # M|tjahr # M|tgjahr # U|xdummy1 # M|tsoll # M|thaben
+.copy U|xbmehr = G|mehr
+.make screen line -O ? _U|xbmehr
+.continue INSSUM        ? _U|xbmehr
+.formula   U|xizeile  = M|aktzeile
+.formula   U|xgmonat  = M|tgmonat ? U|xizeile = 1
+.continue INSERT ? U|xgmonat = M|tgmonat
+.select screen line 'F|expr(U|xizeile-1)'
+..*****************************************************************************
+!INSSUM
+..*****************************************************************************
+.make screen line +O
+.formula   M|tmonsum = 1
+.formula   M|tgmonat = U|xgmonat
+.formula   M|tgjahr  = U|xgjahr
+.formula   M|tmonat  = U|ximonat
+.formula   M|tjahr   = U|xijahr
+.formula   M|tsoll   = U|xrsoll
+.formula   M|thaben  = U|xrhaben
+.input 'M|tab'
+.continue BFUSS ? _U|xbmehr
+..
+.formula   U|xrsoll  = 0
+.formula   U|xrhaben = 0
+.select screen line 'F|expr(U|xizeile+1)'
+.continue INSERT
+..
+..*****************************************************************************
+!INSERT
+..*****************************************************************************
+.input 'M|tab'
+.formula   U|xtkenn   = M|tjkenn
+.input  "fb/KUMJOURNAL.JKENN"
+.formula   M|tjkname  = U|xtjn
+.formula   M|soll     = M|soll + M|tsoll
+.formula   M|haben    = M|haben + M|thaben
+.formula   U|xrsoll   = U|xrsoll + M|tsoll
+.formula   U|xrhaben  = U|xrhaben + M|thaben
+.formula   U|xgmonat  = M|tgmonat
+.formula   U|xgjahr   = M|tgjahr
+.formula   U|xijahr   = M|tjahr
+.formula   U|ximonat  = M|tmonat
+.continue RLOOP
+..
+..*****************************************************************************
+!BFUSS
+..*****************************************************************************
+.input 'M|bfuss'
+.continue END
+..
+..*****************************************************************************
+!ERR01: GROUPBY error
+..*****************************************************************************
+.error Fehler beim Systemaufruf.
+.input -text 'U|xterr' ? F|filesize(U|xterr) > 0
+.end 1
+..
+..*****************************************************************************
+!END: End
+..*****************************************************************************
+.continue

@@ -1,0 +1,70 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ERFLIE.KBUPRUEFEN.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       :
+.. Functionality  :
+..  include     dfue/EDI2VKAUV.ABRUFTERMIN
+..  include     dfue/EDI2VKAUV.ABTERM.VDA
+..  include     dfue/EDI2VKAUV.ABTERM.DELFOR
+..  include     dfue/EDI2VKAUV.ABTERM.KONST
+..*****************************************************************************
+.set trans -
+..
+..<META M|='dfue/ERFLIE' > 
+..
+.type integer    xmge
+..
+.input "is/ABASFARBEN.DEF"
+..
+.. initialize colors
+.select screen header
+!INIT
+.select screen line
+.continue EINIT   ? _T|mehr
+.colour -foreground -1 -1 -1 -background -1 -1 -1 'M|aktzeile'
+.colour -foreground -1 -1 -1 -background -1 -1 -1  termint 'M|aktzeile' 
+.colour -foreground -1 -1 -1 -background -1 -1 -1  termcod 'M|aktzeile'
+.continue INIT
+!EINIT
+..
+.. check termcode with efop dfue/EDI2VKAUV.ABRUFTERMIN
+.. the efop expects an edi message in buffer h,
+.. start edi message without writing it..
+.select screen header
+.make edifact
+.formula H|datennorm = "VDA"
+.formula H|datenart = ""
+.formula H|labrufd = M|labrufd
+.formula H|status = 99
+!NROW
+.select screen line
+.continue EROW    ? _T|mehr
+.make line
+.formula H|text4 = M|termcod
+.formula H|text1 = "821" ? _F|empty(M|tzeit)
+.formula H|text6 = M|tzeit ? _F|empty(M|tzeit)
+.formula T|xmge  = M|menge
+.. colorize current row in case of errors
+.colour -foreground -1 -1 -1 -background 'U|xabasyellow' 'M|aktzeile'
+.input "dfue/EDI2VKAUV.ABRUFTERMIN"
+.formula M|txbuts = T|xtfehler + T|xptext 
+.formula M|txbuts = 'U|xdelivscheddate' + " - " + 'U|xforecastperiodend' ? F|empty(M|txbuts) & _F|empty(U|xforecastperiodend)
+.formula M|txbuts = 'U|xdelivscheddate' ? F|empty(M|txbuts)
+.formula M|menge  = T|xmge
+.colour -foreground -1 -1 -1 -background -1 -1 -1 'M|aktzeile'            ? _U|xistabrzeitraum
+.colour -foreground -1 -1 -1 -background 'U|xabasgroupdark' 'M|aktzeile'  ?  U|xistabrzeitraum
+.. Prfung Feinabrufhorizont
+.colour -foreground -1 -1 -1 -background -1 -1 -1  termint 'M|aktzeile'       ? _T|xistabrzeitraum
+.colour -foreground -1 -1 -1 -background 'U|xabasfieldhighlight' termint 'M|aktzeile' ?  M|kbfab  &  ('M|termint:8'> 'M|kfabhorizont:8') & _F|empty(M|kfabhorizont)
+.colour -foreground -1 -1 -1 -background 'U|xabasfieldhighlight' termint 'M|aktzeile' ? _F|empty(U|xtfehler)
+.colour -foreground -1 -1 -1 -background 'U|xabasfieldhighlight' termcod 'M|aktzeile' ? _F|empty(U|xtfehler) & U|xistabrzeitraum
+.continue NROW
+!EROW
+.. discard started edi message
+.select -
+..*****************************************************************************
+!END
+.continue

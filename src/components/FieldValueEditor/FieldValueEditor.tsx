@@ -10,6 +10,7 @@
  */
 import type { FieldValue } from '../../types/gherkin';
 import { useTranslation } from '../../i18n';
+import { IconClose, IconPlus } from '../icons';
 import styles from './FieldValueEditor.module.css';
 
 interface FieldValueEditorProps {
@@ -74,12 +75,12 @@ export function FieldValueEditor({
             type="button"
             aria-label={t('fieldEditor.removeField')}
           >
-            &times;
+            <IconClose />
           </button>
         </div>
       ))}
       <button className={styles.addBtn} onClick={addRow} type="button">
-        + {resolvedFieldLabel}
+        <IconPlus />{resolvedFieldLabel}
       </button>
     </div>
   );

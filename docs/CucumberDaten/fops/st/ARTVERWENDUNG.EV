@@ -1,0 +1,93 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ARTVERWENDUNG.EV
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      : lei
+.. Funktion       : Behandelt einfachere Feld- und Zeilenereignisse.
+.. Functionality  : Handles simple field and row events.
+..*****************************************************************************
+.set trans -
+..------------------------------- Header --------------------------------------
+.continue TYPE    ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "art"
+.continue ENUM    ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "az"
+.continue OPERAT  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "operator"
+.continue SELECT  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "auswahl"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL" & G|evtvar = "selgroup1"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL" & G|evtvar = "selgroup2"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL" & G|evtvar = "selgroup3"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL" & G|evtvar = "selgroup4"
+..--------------------------------- Table  -------------------------------------
+.continue BUALLOW ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "tfundortzeigen"
+.continue BUEXEC  ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "tfundortzeigen"
+..==============================================================================
+.continue END
+..
+!OPERAT: Exit field operator
+.continue CLRTAB  ? F|equals(M|operatoru, "(Normally)")
+.continue CLRREFS ? _F|equals(M|operatoru, "(Empty)") & _F|equals(M|operatoru, "(Filled)")
+.assign M|auswahl = ""
+..
+!CLRREFS: Clear input references and descriptions for enumeration and type
+.assign M|az = ""
+.assign M|art = ""
+.continue CLRTAB
+..
+!SELECT: Exit standard field selection
+.continue CLRREFS ? _F|equals(M|operatoru, "(Empty)") & _F|equals(M|operatoru, "(Filled)")
+.assign M|operator = "(Normally)"
+.continue CLRREFS
+..
+!TYPE: Named type has changed
+.assign M|suchpraefix = ""
+.assign M|operator = "(Normally)"
+.assign M|auswahl = ""
+.formula M|identnummer = M|art^nummer
+.continue CLRTAB ? F|empty(M|identnummer)
+.assign M|az = ""
+.copy M|suchpraefix = M|suchpraefix1
+.formula M|suchmuster = F|formatstr("^{1}[:LETTER:]*{2}$", M|suchpraefix, M|identnummer)
+.formula M|auswahl = M|suchmuster
+.assign M|operator = "(RegExp)"
+.continue CLRTAB
+..
+!ENUM: Enumeration has changed
+.assign M|suchpraefix = ""
+.assign M|operator = "(Normally)"
+.assign M|auswahl = ""
+.formula M|identnummer = M|az^nummer
+.continue CLRTAB ? F|empty(M|identnummer)
+.assign M|art = ""
+.copy M|suchpraefix = M|suchpraefix2
+.formula M|suchmuster = F|formatstr("^{1}[:LETTER:]*{2}$", M|suchpraefix, M|identnummer)
+.formula M|auswahl = M|suchmuster
+.assign M|operator = "(RegExp)"
+.continue CLRTAB
+..
+!BUALLOW: Button allowed?
+.continue ERROR01 ? F|empty(M|tfundortzeigen)
+.continue END
+..
+!BUEXEC: Execute button
+.formula M|guicmmd = F|formatstr("<{1}>{2}<(View)>?[pos]={3}", G|kdatname.tdnr, M|tfundort^id, M|tzn)
+.continue TESTOUT ? G|edp & F|isFlagSet(82)
+.command -parallel 'M|guicmmd'
+.continue END
+..
+!TESTOUT: Output test data
+.note 'M|guicmmd'
+.continue END
+..
+!CLRTAB: Clear table
+.input "is/TABLEEREN"
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR01: Command not allowed!
+.set trans +
+.type text xerrormsg
+.formula U|xerrormsg = F|formatstr("Es fehlt die Erlaubnis <{1}><{2}>!", G|kdatname.tdnr, G|kaktname12)
+.error -message 'U|xerrormsg'
+.end 1

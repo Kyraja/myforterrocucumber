@@ -1,0 +1,96 @@
+..!interpreter german translate noabbrev
+..*****************************************************************************
+.. Name           : UVFREIGEBEN.FREIGEBEN.BN
+.. Date           : 05.12.14
+.. Version        : 2014r3n02
+.. Author         : chbo
+.. Copyright      : (c) 2014 SABA International
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.art text xtcom                          ? F|defined( U|xtcom )       = G|False
+.art text xtsel                          ? F|defined( U|xtsel )       = G|False
+.art text xtdat                          ? F|defined( U|xtdat )       = G|False
+.art text xterrdat                       ? F|defined( U|xterrdat )    = G|False
+.art text xtedpcopy                      ? F|defined( U|xtedpcopy )   = G|False
+.art text xtcopyedp                      ? F|defined( U|xtcopyedp )   = G|False
+..
+..
+.weiter ERRWOCHE                         ? F|empty( M|woche )        = G|True
+.weiter KOMPONENTEN                      ? M|verfuegbar              = G|False
+.weiter FREIGEGEBEN                      ? M|freigegeben             = G|True
+..
+..-- Logdatei definineren
+.formel U|xterrdat   = "tmp/XUVFREIGEBEN." + 'G|versionneu' + ".EDP.LOG"
+.formel U|xtedpcopy  = "tmp/XUVFREIGEBEN." + 'G|versionneu' + ".EDP.COPY"
+..
+..-- EDP Datei erzeugen
+.datei -tempname U|xtdat
+.eingabe DATEI.F
+.ausgabe auf 'U|xtdat'
+#!ACTION=UPDATE
+#!DATABASE=4
+#!GROUP=2
+#!DONTCHANGE=-
+#!EDP_TESTFLAG2=1
+#!EDP_DATE='M|mittwoch:8'
+#!RECORDIDFLD=id
+#!FIRSTTABFLD=zeile
+#!SAVE=0
+id;beleg;beldat;zeile;mfreig;>0:umbuchen;<;
+$,,id='M|uvs^id';'M|wtsterm:8';.;'zeile';1;;
+..
+.ausgabe auf WERF.WEG
+.eingabe BILD.F
+.ausgabe BILDSCHIRM
+..
+..-- EDP Kommando zusammenbauen und absetzen
+.formel U|xtcom = "edpimport.sh -I "+'U|xtdat' + " -p abas123 2> " + 'U|xterrdat'
+.system 'U|xtcom' HINTER
+..
+..-- Fehlerbehandlung
+.weiter ERREDP ? G|mehr = G|False
+.formel M|freigegeben = G|True
+.hinweis -sofort Umlagerungsvorschlag 'M|uvs^id' wurde freigegeben.
+..
+.. clean up when we don't have errors
+.formel U|xtcom = "rm -f " + 'U|xtdat' + " " + 'U|xterrdat'            ?  (F|filesize(U|xterrdat) = 0)
+.system 'U|xtcom' hinter                                               ?  (F|filesize(U|xterrdat) = 0)
+.weiter ENDE
+..
+..
+!ERRWOCHE
+.hinweis -sofort Bitte aktuelle Woche engeben!
+.weiter ENDE
+..
+..
+!KOMPONENTEN
+.hinweis -sofort Komponenten fÅr Umlagerungsvorschlag 'M|uvs^id' nicht vorhanden!
+.weiter ENDE
+..
+..
+!FREIGEGEBEN
+.hinweis -sofort Umlagerungsvorschlag 'M|uvs^id' schon freigegeben!
+.weiter ENDE
+..
+..
+!ERREDP
+.hinweis -sofort Freigeben des Fertigungsvorschlags 'M|uvs^id' Åber EDP scheitert!
+.formel U|xtcopyedp = "cp " + 'U|xtdat' + " " + 'U|xtedpcopy'
+.system 'U|xtcopyedp' HINTER
+.weiter ENDE
+..
+..
+!ENDE
+.weiter

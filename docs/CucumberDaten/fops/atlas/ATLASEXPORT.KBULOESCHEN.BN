@@ -1,0 +1,106 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ATLASEXPORT.KBULOESCHEN.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Lîscht die Exportdaten zu einem Vorgang
+.. Functionality  : Deletes export data for a transaction
+..*****************************************************************************
+.set trans -
+..
+.type text   xtloedatei
+.type text   xtmpfile          ? _F|defined(U|xtmpfile)
+.type text   xtout             ? _F|defined(U|xtout)
+.type text   xterr             ? _F|defined(U|xterr)
+..
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+..
+..  deletes export data for a transaction
+..  ---------------------------------------------
+..  * sets transaction to not-exportet yet
+..  * sets edi-msg to not not active
+..  * deletes export files of this transaction
+..
+..
+.continue NODATA  ?  F|empty(M|kvorgang)
+..
+.formula M|kedi  = ""
+.formula M|kbedi = false
+.formula M|kbdateien = true
+.input "atlas/ATLASEXPORT.BSTART.BV"
+..
+.select screen header
+..
+!NZEILE
+.select screen line
+.continue EZEILE  ? _G|mehr
+.formula U|xtloedatei = "rm -f " + M|kverz + "/" + M|tdatei
+.system 'U|xtloedatei' background
+.continue NZEILE  ?  F|empty(M|tedi)
+.continue NZEILE  ?  M|tedi^status = -9
+.select edifact 'M|tedi^id'
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=53
+#!action=modify
+#!charset=eks
+id;status
+'H|id';-9
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR  ? _G|mehr
+.continue NZEILE
+..
+!EZEILE
+..
+.select lock sales 'M|kvorgang^id'       ?  M|kvorgang^dnr = 3
+.select lock purchasing 'M|kvorgang^id'  ?  M|kvorgang^dnr = 4
+.continue EVORG2  ? _T|mehr
+.select -
+.select sales 'M|kvorgang^id'         ? M|kvorgang^dnr = 3
+.select purchasing 'M|kvorgang^id'    ? M|kvorgang^dnr = 4
+..
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database='M|kvorgang^dnr':'M|kvorgang^objgruppe'
+#!action=modify
+#!charset=eks
+#!flddelimiter=#
+nummer\
+zn#patlasgem
+'M|kvorgang^id'\ 
+..
+!NVORG
+.select line
+.continue OUTPUT ? _G|mehr
+.continue NVORG  ?  H|typ <> arpos
+?'H|zn'#0\       ?  H|patlasrel
+.continue NVORG
+..
+!OUTPUT
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR  ? _G|mehr
+..
+!EVORG2
+.select -
+..
+.. refresh infosystem
+.input "atlas/ATLASEXPORT.BSTART.BV"
+..*****************************************************************************
+!END
+.continue
+..
+..
+!NODATA
+.error Geben Sie einen Vorgang an!
+.end 1
+..
+!ERROR
+.input 'U|xterr'
+.error ZurÅckschreiben gescheitert!
+.end 1

@@ -1,0 +1,102 @@
+..!interpreter english translate
+..*****************************************************************************
+.. FOP-Name       : W.LSPROT
+.. Autor          : ok
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Protokoll der ausgehenden Lieferscheine
+..*****************************************************************************
+.set trans -
+..
+.type text xtsel xlsnum xtemp
+.type date xlsdat
+..
+.formula xtemp = "WEDIPROT" + pid + ".TMP"
+..
+..**ok,31.12.2003 (erweitert wegen EDIFACT-Lieferschein)
+.formula xtsel = "$,,;@gruppe=0;nummer=" + 'M|edinr' + ";text1=500!505;text3="     ? 'M|edinr^such53'= "VKSPVA"
+.formula xtsel = "$,,;@gruppe=0;nummer=" + 'M|edinr' + ";text1=BUY1!TRA2;text3="   ? 'M|edinr^such53'= "VKDESADV"
+.formula xtsel = "$,,;@gruppe=0;nummer=" + 'M|edinr' + ";text1=BUY1!TRA2;text3="   ? 'M|edinr^such53'= "VKAVIEXP"
+.. mh, 09.09.2008
+.formula T|xtsel = T|xtsel + ";@zeilen=(1)"
+..
+.output new 'xtemp'
+.input "DATEI.F"
+..
+..**ok,31.12.2003 (erweitert wegen EDIFACT-Lieferschein)
+.continue VDA ? 'M|edinr^such53'= "VKSPVA"
+.continue EDI ? 'M|edinr^such53'= "VKDESADV" ; 'M|edinr^such53'= "VKAVIEXP"
+..
+!VDA
+.select edifact 'xtsel'
+.continue ENDE ? _mehr
+.select line 'selzeile'
+.continue SORT ? _mehr
+.formula xlsdat = 'H|text4'                           ?  'H|text1'/"500*"
+?LS#'H|text3'#'xlsdat'#'H|text5'#'H|text10'#     ?  'H|text1'/"500*"
+?GW#'H|text9'#'H|text10'###                      ?  'H|text1'/"505*"
+!A10
+.select edifact
+.continue SORT ? _mehr
+.select line 'selzeile'
+.continue SORT ? _mehr
+.formula xlsdat = 'H|text4'                           ?  'H|text1'/"500*"
+?LS#'H|text3'#'xlsdat'#'H|text5'#'H|text10'#     ?  'H|text1'/"500*"
+?GW#'H|text9'#'H|text10'###                      ?  'H|text1'/"505*"
+.continue A10
+..
+!EDI
+.select edifact 'xtsel'
+.continue ENDE ? _mehr
+.select line 'selzeile'
+.continue SORT ? _mehr
+?WA#'H|text6'#'H|text7'###                       ?  'H|text1'/"BUY1*"
+?GW#'H|text8'#'H|text9'###                       ?  'H|text1'/"TRA2*"
+.formula xlsdat = 'H|text8'                           ?  'H|text1'/"RFL1*"
+?LS#'H|text7'#'xlsdat'###                       ?  'H|text1'/"RFL1*"
+!A11
+.select edifact
+.continue SORT ? _mehr
+.select line 'selzeile'
+.continue SORT ? _mehr
+?WA#'H|text6'#'H|text7'###                       ?  'H|text1'/"BUY1*"
+?GW#'H|text8'#'H|text9'###                       ?  'H|text1'/"TRA2*"
+.formula xlsdat = 'H|text8'                           ?  'H|text1'/"RFL1*"
+?LS#'H|text7'#'xlsdat'###                       ?  'H|text1'/"RFL1*"
+.continue A11
+..
+!SORT
+.. mh, 09.09.2008: Datei schliessen
+.output new WERF.WEG
+.input DRUCKER
+.input BLANKOB.F
+.page 1
+.up
+.page 1
+.set trans +
+'txname'                                                         '      datum'
+                       LIEFERSCHEIN-PROTOKOLL
+                       ======================
+                           Seite: 'seite'
+
+EDI-Datensatz: 'M|edinr' Datum: 'M|edinr^erfass'  Debitor: 'M|edinr^idkunderab'
+
+LS-Nr     LS-Datum Werk    Ablade
+--------- -------- ------  ------
+.set trans -
+!AUSG
+.select from 'xtemp' x0 # x1 # x2 # x3 # x4 #
+.continue ENDE ? _mehr
+?'x1     ' 'x2    ' 'x4  '  'x3'              ? x0="LS"
+?                   'x1  '  'x2'              ? x0="WA"
+.set trans +
+?Gewicht-Brutto: 'x1' Netto: 'x2'             ? x0="GW"
+.set trans -
+.continue AUSG
+..
+!ENDE
+.formula xsys = "test -s " + xtemp
+.system 'xsys' background
+.formula xsys = "rm " + xtemp
+.system 'xsys' background ? mehr
+.end

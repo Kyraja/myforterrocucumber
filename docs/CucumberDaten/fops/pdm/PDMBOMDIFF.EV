@@ -1,0 +1,226 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PDMBOMDIFF.EV
+.. Author         : cl
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Functionality  : Validates inputs and sets production lists.
+.. Includes       :
+.. include pdm/PDMBOMDIFF.ARTSTATUS
+..*****************************************************************************
+.set trans -
+.type ID128:1 xtmpstdfl xtmpfl
+.type text xtsel
+.type P2:1 xvartikel 
+.type bool xbbasisaltfl
+..
+.continue VALPROD ? G|evtartengl = "FIELD_VALIDATION" & G|evtvar = "artikel"
+.continue EXTPROD ? G|evtartengl = "FIELD_EXIT"       & G|evtvar = "artikel"
+.continue VALBAS  ? G|evtartengl = "FIELD_VALIDATION" & G|evtvar = "basisartikel"
+.continue EXTBAS  ? G|evtartengl = "FIELD_EXIT"       & G|evtvar = "basisartikel" 
+.continue EXTVART ? G|evtartengl = "FIELD_EXIT"       & G|evtvar = "artikelvergl"  
+.continue VALWARE ? G|evtartengl = "FIELD_VALIDATION" & G|evtvar = "lgruppe"
+.continue EXTWARE ? G|evtartengl = "FIELD_EXIT"       & G|evtvar = "lgruppe"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"       & G|evtvar = "pdmstatus"
+.continue RADIOBU ? G|evtartengl = "FIELD_EXIT"       & G|evtvar = "sel1"
+.continue RADIOBU ? G|evtartengl = "FIELD_EXIT"       & G|evtvar = "sel2"
+.continue RADIOBU ? G|evtartengl = "FIELD_EXIT"       & G|evtvar = "loesch"
+.continue END
+..
+!RADIOBU: eines der Boolfelder setzen
+.copy M|sel1   = G|FALSE   ? M|sel1    & G|evtvar <> "sel1"
+.copy M|sel2   = G|FALSE   ? M|sel2    & G|evtvar <> "sel2"
+.copy M|loesch = G|FALSE   ? M|loesch  & G|evtvar <> "loesch"
+.continue END
+..
+!VALPROD: Validate product
+.continue END     ?  F|empty(M|artikel)
+.continue END     ?  F|empty(M|lgruppe)
+.continue ERROR01 ? _M|artikel^pdm
+..
+.. Standard production list must have product and warehouse.
+.assign U|xtmpstdfl = F|formatstr(M|selectstd, "$", M|artikel^id, M|lgruppe^id)
+.continue ERROR03 ? _G|mehr
+.copy M|artikel = M|artikel
+.assign M|nrflistestd = U|xtmpstdfl^nummer
+.assign M|flistestd   = U|xtmpstdfl
+..
+.. Others must have the same product.
+.assign U|xtmpfl = F|formatstr(M|selectnonstd, "$", M|artikel^id)
+.. base product -> standard production list of different product
+.assign U|xtmpfl = F|formatstr(M|selectstd, "$", M|artikelvergl^id, M|lgruppe^id)  ? G|evtvar = "basisartikel" & _U|xbbasisaltfl
+.assign U|xtmpfl = F|formatstr(M|selectnonstd, "$", M|artikel^id)                  ? G|evtvar = "basisartikel" &  U|xbbasisaltfl
+.continue ERROR04 ? _G|mehr
+..
+.. Braucht man, um vollbesemmelten Kern auszutricksen.
+.copy M|artikel = M|artikel
+.copy M|flistestd = U|xtmpstdfl
+.copy M|fliste = U|xtmpfl
+.assign M|artikelvergl = M|fliste^artikel
+.formula M|indexvergl  = M|artikelvergl^index 
+.input "pdm/PDMBOMDIFF.ARTSTATUS"
+.continue EXTPROD ? G|evtvar = "basisartikel"
+.continue END
+..
+!EXTPROD: Exit after input product
+.protection artikelvergl        ?  _F|empty(M|artikel) & G|evtvar = "artikel"
+.protection -reset artikelvergl ?   F|empty(M|artikel) & G|evtvar = "artikel"
+.protection -reset artikelvergl ?  _F|empty(M|artikel) & G|evtvar = "basisartikel"
+.continue CLRHEAD ? F|empty(M|artikel) ; F|empty(M|lgruppe)
+.copy M|apdm = M|artikel^pdm
+.assign M|pdmstatus = M|artikel^pdmstatus
+.formula M|le = M|artikel^le
+.formula M|index = M|artikel^index
+.formula M|artstatus = M|artikel^artstatus
+.continue PLSTOUT
+!VALBAS:  Validate field base product
+.protection artikel         ? _F|empty(M|basisartikel)
+.protection -reset artikel  ?  F|empty(M|basisartikel)
+.continue END
+!EXTBAS: Field exit base product
+.. xbbasisaltfl steht auf ja, wenn man mit einem Basisartikel arbeitet
+.. dann aber mit einer alternativen FL vergleichen will
+.copy U|xbbasisaltfl = G|false
+.protection stdversbasis          ?  F|empty(M|basisartikel)
+.protection artikelvergl          ?  F|empty(M|basisartikel)
+.copy M|stdversbasis = G|false    ?  F|empty(M|basisartikel)
+.protection -reset stdversbasis ? _F|empty(M|basisartikel)
+.protection -reset artikelvergl ? _F|empty(M|basisartikel)
+.formula P|maskkontextfop = "ARTIKEL"      ?  F|empty(M|basisartikel)
+.formula P|maskkontextfop = "BASISARTIKEL" ? _F|empty(M|basisartikel)
+.continue CLRHEAD           ?  F|empty(M|basisartikel)
+..Standard-Version vom Basisartikel ermitteln
+.formula U|xtsel = "$,,nummer=;such=;basisartikel="+'M|basisartikel^id'
+.formula U|xtsel = U|xtsel + ";stdvers=true;@ablageart=lebendig;@gruppe=1;"
+.assign U|xvartikel = U|xtsel
+.continue ERROR05               ? _G|mehr
+.assign M|artikel = U|xvartikel ?  G|mehr
+..letzte Version vom Basisartikel ermitteln
+.formula U|xtsel = "$,,nummer=;such=;basisartikel="+'M|basisartikel^id'+";stdvers=false"
+.formula U|xtsel = U|xtsel + ";@richtung=(Backwards);@gruppe=1;@ablageart=lebendig"
+.formula U|xtsel = U|xtsel + ";@richtung=(Backwards);@ordnung=nummer;@maxordtreffer=1"
+.assign U|xvartikel = U|xtsel
+.. noch nach alternativen Fertigungslisten suchen, wenn es keine weitere Version des Artikels gibt
+.continue PRODLST                    ? _G|mehr
+.assign M|artikelvergl = U|xvartikel ?  G|mehr
+.copy U|xbbasisaltfl   = G|false     ?  G|mehr
+..l”st dann wieder den Event Feldpruef vom Artikel aus
+.continue VALPROD
+!PRODLST: alternative Fertigungsliste suchen  mit der man vergleichen kann
+.assign U|xtmpfl = F|formatstr(M|selectnonstd, "$", M|artikel^id)
+.continue ERROR04 ? _G|mehr 
+..alternative FL gefunden, Artikel als Vergleichsartikel eintragen
+.copy U|xbbasisaltfl = G|true
+.assign M|artikelvergl = M|artikel
+.continue VALPROD
+!EXTVART: Field Exit for comparing product
+.input "is/TABLEEREN"
+.formula U|xtsel = "$,,nummer="+'M|artikelvergl^nummer'+";such=;basisartikel="+'M|basisartikel^id'+";@gruppe=1;"
+.select parts 'U|xtsel'
+.continue ERROR6 ? _G|mehr
+.formula M|indexvergl = M|artikelvergl^index
+.input "pdm/PDMBOMDIFF.ARTSTATUS"
+..Standard-Fertigungsliste des Vergleichartikels vorbelegen
+.assign M|fliste = H|flistestd^id
+.formula M|nrfliste = M|fliste^nummer
+.formula M|flbasis = M|fliste^flbasis
+.continue END
+..
+!VALWARE: Validate warehouse
+.continue END ? F|empty(M|artikel)
+.continue END ? F|empty(M|lgruppe)
+.. Standard production list must have product and warehouse.
+.assign U|xtmpstdfl = F|formatstr(M|selectstd, "$", M|artikel^id, M|lgruppe^id)
+.continue ERROR03 ? _G|mehr
+..
+.. Others must have the same product.
+.assign U|xtmpfl = F|formatstr(M|selectnonstd, "$", M|artikel^id)
+.continue ERROR04 ? _G|mehr
+..
+.. Braucht man, um vollbesemmelten Kern auszutricksen.
+.copy M|lgruppe = M|lgruppe
+.copy M|flistestd = U|xtmpstdfl
+.copy M|fliste = U|xtmpfl
+.continue END
+..
+!EXTWARE: Exit after input warehouse
+.continue CLRHEAD ? F|empty(M|artikel) ; F|empty(M|lgruppe)
+..
+!PLSTOUT: Update output field of production lists
+.formula M|nrflistestd = M|flistestd^nummer
+.formula M|flbasisstd = M|flistestd^flbasis
+.formula M|nrfliste = M|fliste^nummer
+.formula M|flbasis = M|fliste^flbasis
+.continue CLRTAB
+..
+!CLRHEAD: Clear header
+.copy M|apdm = M|artikel^pdm  ? G|evtvar = "artikel"
+.copy M|apdm = G|false        ? G|evtvar = "basisartikel"
+.formula M|artikel = ""       ? G|evtvar = "basisartikel"
+.formula M|artikelvergl = ""
+.formula M|pdmstatus = ""
+.formula M|flistestd = ""
+.formula M|nrflistestd = ""
+.formula M|fliste = ""
+.formula M|nrfliste = ""
+.formula M|flbasisstd = 0
+.formula M|flbasis = 0
+.formula M|index = ""
+.formula M|indexvergl = ""
+..
+!CLRTAB: Clear table
+.input "is/TABLEEREN"
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR01: Wrong product.
+.error -field M|artikel -message Der Artikel ist nicht PDM-gesteuert!
+.end 1
+..
+!ERROR02: Missing product.
+.error -field M|artikel -message Bitte den Artikel eintragen!
+.end 1
+..
+!ERROR03: No standard production list.
+.error -field M|artikel -message Es wurde keine Standardfertigungsliste gefunden!
+.end 1
+..
+!ERROR04: No further production list found!
+.error -message Es wurde keine zweite Fertigungsliste gefunden!
+.copy M|artikel = M|artikel
+.formula M|artikelvergl = ""
+.formula M|artstatusvergl = ""
+.formula M|indexvergl = ""
+.formula M|fliste = ""
+.formula M|nrfliste = ""
+.formula M|flbasis = 0
+.input "is/TABLEEREN"
+.end 1
+!ERROR05: no standard version of base product found
+.error -message Keine Standardversion des Basisartikels gefunden!
+.formula M|artikelvergl = ""
+.formula M|artstatusvergl = ""
+.formula M|indexvergl = ""
+.formula M|fliste = ""
+.formula M|nrfliste = ""
+.formula M|flbasis = 0
+.formula M|artikel = ""
+.formula M|artstatus = ""
+.formula M|index = ""
+.formula M|apdm = G|false
+.formula M|pdmstatus = ""
+.formula M|nrflistestd = ""
+.formula M|flistestd = ""
+.formula M|flbasisstd = 0
+.input "is/TABLEEREN"
+.end 1
+!ERROR6: Artikel nicht im Basisartikel als Version eintragen
+.error -message Der eingebene Artikel ist nicht im Basisartikel eintragen!
+.formula M|artikelvergl = ""
+.formula M|indexvergl = ""
+.formula M|nrfliste = ""
+.formula M|fliste = ""
+.formula M|flbasis = 0
+.end 1

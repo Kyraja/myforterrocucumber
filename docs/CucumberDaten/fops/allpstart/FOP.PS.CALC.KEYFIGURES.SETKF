@@ -1,0 +1,130 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : allpstart/FOP.PS.CALC.KEYFIGURES.SETKF
+.. Date           : 30.04.2013
+.. Version        :
+.. Author         : alltrotec/ts
+.. Copyright      : (c) 1990 - 2013 alltrotec GmbH
+.. Functionality  : Enter key figure values ˇ‚Äãn database
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+.set trans -
+..
+.continue               ? F|empty(U|xtkennzahl)
+..
+.load 8 group 'U|xydbgrkennzahlen' 'U|xtkennzahl'
+.continue END           ? _G|mehr
+.continue END           ? _8|yincronjob
+..
+..wenn mehere Monate ermittelt werden Åber Schleife
+.continue MONVAL        ?  U|xbmonwert
+..
+..
+!KFSEL:
+.formula U|xtsel = "$,,yprojekt==" + 7|id + ";ykennzahl==" + 8|id + ";ydatum=" + U|xt001 + ";@filingmode=(Active)"
+.load 9 group "P154:1" 'U|xtsel'
+.copy U|xbmehr = G|mehr
+.continue NEW           ? _U|xbmehr & _U|xbnull
+.continue UPDATE        ?  U|xbmehr & _U|xbnull
+.continue DELETE        ?  U|xbmehr &  U|xbnull
+.continue KFNEXTMON     ?  U|xbmonwert
+.continue END
+..
+!NEW:
+.make ProjectSuiteValueData GROUP1
+.assign  H|yprojekt  = 7|id
+.assign  H|ykennzahl = 8|id
+.formula H|such      = 7|such
+.formula H|name      = 7|name
+.formula H|ydatum    = 'U|xt001'
+.formula H|ywert     =  U|xrkfwert
+.rewrite
+.continue KFNEXTMON     ?  U|xbmonwert
+.continue END
+..
+!UPDATE:
+.select lock add 9|id
+.continue END           ? _G|mehr
+.formula H|ywert     =  U|xrkfwert
+.rewrite
+.continue KFNEXTMON     ?  U|xbmonwert
+.continue END
+..
+!DELETE:delete value
+.select lock add 9|id
+.delete                 ? _G|mehr
+.continue KFNEXTMON     ?  U|xbmonwert
+.continue END
+..
+..
+!KFDELNULL:delete all values with 0
+.formula U|xtsel = "$,,yprojekt==" + 7|id + ";ykennzahl==" + 8|id + ";ywert==0;yfcwert==0;yvokawert==0;ywertzus1==0;ywertzus2==0;@filingmode=(Active)"
+.load 9 group "P154:1" 'U|xtsel'
+!KFVDEL:
+.continue EDEL  ? _G|mehr
+.select lock add 9|id
+.delete         ?  G|mehr
+.load 9 continue
+.continue KFVDEL
+!EDEL:
+..
+.continue END
+..
+..
+!MONVAL: monthly values
+..delete values
+.formula U|xtsel = "$,,yprojekt==" + 7|id + ";ykennzahl==" + 8|id + "@filingmode=(Active)"
+.load 9 group "P154:1" 'U|xtsel'
+!MVLOAD:
+.continue MVCREATE                      ? _G|mehr
+..
+.formula U|xt001    = '9|ydatum:8'
+.formula U|xrkfwert = 0
+.formula U|xrkfwert = U|.xtvar.xt001    ?  F|defined(U|.xtvar.xt001)
+.continue MVLNEXT                       ? _U|xrkfwert = 0
+..
+delete '9|nummer'
+.select lock add 9|id
+.continue MVLNEXT                       ? _G|mehr
+.delete                                 ?  U|xrkfwert = 0 & 9|yfcwert = 0 & 9|yvokawert = 0 & 9|ywertzus1 = 0 & 9|ywertzus2 = 0
+.continue MVLNEXT                       ?  U|xrkfwert = 0 & 9|yfcwert = 0 & 9|yvokawert = 0 & 9|ywertzus1 = 0 & 9|ywertzus2 = 0
+.formula H|ywert = 0
+.rewrite
+..
+!MVLNEXT:
+.load 9 continue
+.continue MVLOAD
+..
+!MVCREATE:
+.formula U|xt001 = ""
+.formula U|xtcmd = "formula U|xt001 = F|nextelem(U|" + F|expr(U|xtvar) + ", xt001)"
+..      'F|expr(U|xtcmd)'
+.'F|expr(U|xtcmd)'
+!KFMON:
+.continue EMONVAL       ? F|empty(U|xt001)
+.formula U|xrkfwert   =  U|.xtvar.xt001
+.copy    U|xbnull     =  U|.xtvar.xt001 = 0
+..
+.continue KFSEL
+..
+!KFNEXTMON:
+.formula U|xtcmd = "formula U|xt001 = F|nextelem(U|" + F|expr(U|xtvar) + ", xt001)"
+.'F|expr(U|xtcmd)'
+.continue KFMON
+..
+!EMONVAL:
+..
+..
+!END:
+.copy U|xbmonwert = G|FALSE
+.continue

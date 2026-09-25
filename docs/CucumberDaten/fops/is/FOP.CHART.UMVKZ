@@ -1,0 +1,328 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : is/FOP.CHART.UMVKZ
+.. Autor          : foe
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Diagramm der Umsatz-/Verkehrszahlen oder Ab-/ZugÑnge
+.. Ablauf         : Unterprogramm
+.. Functionality  : Paints charts of turnover or transaction figures as well as
+..                  charts for receipts and issues
+.. Program flow   : Subroutine
+..*****************************************************************************
+.. Allgemein
+.... Bereich der GeschÑftsjahre aus Maske (Default: aktuelles und altes GeschÑftsjahr)
+.... aktuelles GeschÑftsjahr ?
+.... GeschÑftsjahre von chagj bis chegj
+.... Identnummer id
+.... Name name
+.. fb/FOP.CHART.UMSATZ: xtchtyp = "Umsatz"
+.... Umsatzzahlen als Chart
+.... Kunde / Lieferant
+.... Plan und/oder IST in Maske auswÑhlbar (chistz/chplanz)
+.... "Charts kumuliert ?" in Maske auswÑhlbar (chkum)
+.... Bezeichnung der 12 Monate aus Make (m1 - m12)
+.. fb/FOP.CHART.VKZ: xtchtyp = "VKZ"
+.... Verkehrszahlen als Chart
+.... Kunde / Lieferant / Sachkonto
+.... Plan und/oder IST in Maske auswÑhlbar (chistz/chplanz) ?
+.... BuchungswÑhrung aus Maske (mwaehr)
+.. la/FOP.CHART.ZUAB: xtchtyp = "ZuAb"
+.... Zu- und/oder AbgÑnge als Chart
+.... Artikelstamm
+.... Plan und/oder IST in Maske auswÑhlbar (chistz/chplanz)
+.... ZugÑnge und/oder AbgÑnge in Maske auswÑhlbar (chabgang/chzugang)
+.... "Charts kumuliert ?" in Maske auswÑhlbar(chkum)
+.... Bezeichnung der 12 Monate aus Make (m1 - m12)
+.... Lagereinheit aus Maske (le)
+..*****************************************************************************
+..
+.set trans -
+.type GJ    xgj
+.type text  xtip0:4 xtip:4 xtipist:4 xtipplan:4
+.type text  xtip1 xtip2
+.type text  xttitel xtxmark xtvarname xtvarname0
+.type integer   xityp ximon xianzm xinr
+.type integer   xianzsubtyp xisubtyp xifarbe xiznr
+.type text  xttfarbe xtfarbe1 xtfarbe2 xtfarbe3 xtfarbe4
+.type text  xtfarbe5 xtfarbe6 xtfarbe7 xtfarbe8 xtfarbe9
+.type text  xtfarbe10 xtfarbe11 xtfarbe12
+.type real  xrw xrw0
+.type bool  xbkum xbainl xbgjst
+.type bool  xbsubtyp0 xbsubtyp1 xbsubtyp2
+.type realx xxkurs
+.type text  xtmwaehr
+..
+.. Zeitbereich prÅfen
+.continue ERROR01 ? M|chegj < M|chagj
+..
+.. AusgewÑhlte Daten prÅfen
+.continue ERROR02 ? _M|chistz & _M|chplanz
+.continue IPBEZ   ?  U|xtchtyp <> "AbZu"
+.continue ERROR02 ? _M|chabgang & _M|chzugang
+..
+!IPBEZ
+.. Farben festlegen
+.input "is/ABASFARBEN.DEF"
+.. Rot "255 0 0"
+.formula U|xtfarbe1 = U|xabasmidred
+.. Gelb "255 255 0" /"250 250 0"
+.formula U|xtfarbe2 = U|xabasyellow
+.. GrÅn "0 255 0" / "0 255 100"
+.formula U|xtfarbe3 = U|xabasmidgreen
+.. Blau "0 0 255" / "0 50 250"
+.formula U|xtfarbe4 = U|xabasblue
+.. Schwarz "0 0 0"
+.formula U|xtfarbe5 = U|xabasblack
+.. Dunkelorange "255 140 0"
+.formula U|xtfarbe6 = U|xabasdarkorange
+.. DunkelgrÅn "0 100 0"
+.formula U|xtfarbe7 = U|xabasgreen
+.. Dunkelrot "139 0 0"
+.formula U|xtfarbe8 = U|xabasred
+.. Hellblau "191 239 255"
+.formula U|xtfarbe9 = U|xabaslightblue
+.. Gold "255 215 0"
+.formula U|xtfarbe10 = U|xabasgold
+.. Pink "255 181 197"
+.formula U|xtfarbe11 = U|xabaspink
+.. Grau "190 190 190"
+.formula U|xtfarbe12 = U|xabasgrey
+..
+.. Chart-Parameter Åbernehmen
+.formula U|xianzm = 12
+.formula U|xianzm = 13 ? (G|evtmaske = 0 ; G|evtmaske = 1) & U|xtchtyp = "VKZ"
+.formula U|xianzm = 15 ? G|evtmaske = 5 & U|xtchtyp = "VKZ"
+.formula U|xtmwaehr = M|mwaehr ? U|xtchtyp = "VKZ"
+.formula U|xtmwaehr = ""       ? U|xtchtyp = "AbZu"
+..
+.. Saldo bei VKZ kumulieren, Soll und Haben bei VKZ nicht kumulieren
+.copy U|xbkum = G|TRUE
+.. Werte kumulieren ? nur fÅr Umsatzzahlen und Ab-/ZugÑnge
+.copy U|xbkum = M|chkum ? U|xtchtyp <> "VKZ"
+..
+!DATEN: Chart initalisieren
+.chart -INIT
+.. Diagrammtyp setzen: kumuliert (auch VKZ) -> Linien, nicht kumuliert -> Balken
+.chart -PARAM -CHARTTYPE LINES ? U|xbkum
+.chart -PARAM -CHARTTYPE BAR   ? _U|xbkum
+.chart -PARAM -3D NO           ? _U|xbkum
+..
+.formula U|ximon = 0
+..
+.continue UMSATZ  ? U|xtchtyp = "Umsatz"
+.continue ABZU    ? U|xtchtyp = "AbZu"
+.continue VERKEHR ? U|xtchtyp = "VKZ"
+..
+!ABZU: Titel zusammensetzen
+.set trans +
+.formula U|xttitel = "Zu- und AbgÑnge" ? M|chzugang & M|chabgang
+.formula U|xttitel = "ZugÑnge"         ? M|chzugang & _M|chabgang
+.formula U|xttitel = "AbgÑnge"         ? _M|chzugang & M|chabgang
+.formula U|xttitel = F|formatstr("{1} fÅr {2} in {3}", 'U|xttitel', 'M|sucherw', 'M|le')
+.set trans -
+.. Anzahl Untertypen: 2 = ZugÑnge/AbgÑnge
+.formula U|xianzsubtyp = 2
+.copy U|xbsubtyp0 = M|chabgang
+.copy U|xbsubtyp1 = M|chzugang
+..
+.formula U|ximon = 0
+..
+!MARK0: Beschriftung X-Achse: Nummierung der 12 Monate
+.formula U|ximon = U|ximon + 1
+.formula U|xtxmark = "Mon-" + 'U|ximon'
+.chart -PARAM -MARKERX 'U|xtxmark'
+.continue MARK0 ? U|ximon < 12
+.continue TITEL
+..
+!UMSATZ
+.. Titel zusammensetzen
+.set trans +
+.formula U|xttitel = F|formatstr("Umsatzzahlen fÅr {1} in {2}", 'M|sucherw', 'G|inland')
+.set trans -
+.. Anzahl Untertypen: 1= Umsatz
+.formula U|xianzsubtyp = 1
+.copy U|xbsubtyp0 = G|TRUE
+..
+.. Beschriftung X-Achse: Bez. der 12 Monate
+.continue MARKN
+..
+!VERKEHR: Titel zusammensetzen
+.set trans +
+.formula U|xttitel = F|formatstr("Verkehrszahlen fÅr {1} in {2}", 'M|sucherw', 'U|xtmwaehr')
+.set trans -
+.. Anzahl Untertypen: 3 = Saldo/Soll/Haben
+.formula U|xianzsubtyp = 3
+.copy U|xbsubtyp0 = G|TRUE
+.copy U|xbsubtyp1 = G|TRUE
+.copy U|xbsubtyp2 = G|TRUE
+..
+.. Beschriftung X-Achse: A-Sal, Bez. der 12 Monate, M-13, E-Sal
+.chart -PARAM -MARKERX "A-Sal"
+..
+!MARKN: Beschriftung X-Achse: Bez. der 12 Monate
+.formula U|ximon = U|ximon + 1
+.chart -PARAM -MARKERX 'M|m.U|ximon'
+.continue MARKN ? U|ximon < 12
+.continue TITEL ? U|xtchtyp = "Umsatz"
+..
+!MARKZ: Fortsetzung der Beschriftung X-Achse: M-13, (M-14, M-15,) E-Sal fÅr VKZ
+.formula U|ximon = U|ximon + 1
+.formula U|xtxmark = "M-" + 'U|ximon'
+.chart -PARAM -MARKERX 'U|xtxmark'
+.continue MARKZ ? U|ximon < U|xianzm
+.chart -PARAM -MARKERX "E-Sal"
+..
+!TITEL: Titel setzen
+.set trans +
+.formula U|xttitel = F|formatstr("{1} kumuliert", 'U|xttitel')              ? U|xbkum & U|xtchtyp <> "VKZ"
+.formula U|xttitel = F|formatstr("{1} - Stand {2}", 'U|xttitel', 'G|datum')
+.set trans -
+.chart -PARAM -TITLECHART 'U|xttitel'
+.chart -PARAM -TITLEX "GeschÑftsmonate"
+.chart -PARAM -DECIMALSY 0
+..
+... Jahr initialisieren
+.formula U|xityp  = 0
+.formula U|xgj    = M|chegj
+.copy U|xbgjst = G|TRUE
+.formula U|xinr    = 0
+... Kunde oder Lieferant oder Artikel oder Konto holen
+.select customer 'M|id' ? G|evtmaske = 0
+.select supplier 'M|id' ? G|evtmaske = 1
+.select parts  'M|id' ? G|evtmaske = 2
+.select account 'M|id' ? G|evtmaske = 5
+.continue END ? _G|mehr
+..
+!DAT2: Anzahl Untertypen: Umsatz, ZugÑnge/AbgÑnge, Saldo/Soll/Haben
+.formula U|xisubtyp = U|xianzsubtyp
+.formula U|xityp = U|xityp + 1
+.formula U|xityp = 0 ? U|xityp > 1
+.continue NJ ? U|xityp = 0 ; U|xbgjst
+... NÑchstes GeschÑftsjahr ???
+.continue CHART ? U|xgj = M|chagj
+.load 1 company 'F|formatstr("$,,@gruppe=12;@zeilen=ja;gjahr=={1}", U|xgj)'
+.continue CHART ? _G|mehr
+.continue CHART ? 1|selzeile < 2
+.formula U|xiznr = 1|selzeile - 1
+.load 1 line 'U|xiznr'
+.continue CHART ? _G|mehr
+.assign U|xgj  = 1|gjahr
+.load 1
+.continue CHART ? U|xgj < M|chagj
+...
+!NJ: NJ GJ 'U|xgj' Typ 'U|xityp'
+.copy U|xbgjst = G|FALSE
+.continue IST  ? U|xityp = 1
+.continue PLAN ? U|xityp = 0
+.continue DAT2
+..
+!IST
+.continue DAT2 ? _M|chistz
+.set trans +
+.formula U|xtip = "Ist"
+.set trans -
+.continue JAHR
+..
+!PLAN
+.continue DAT2 ? _M|chplanz
+.set trans +
+.formula U|xtip = "Plan"
+.set trans -
+..
+!JAHR
+.continue HVKZ ? U|xtchtyp <> "Umsatz"
+... GeschÑftsjahr setzen
+.select year 'U|xgj'
+... Kurs bestimmen
+.copy U|xbainl   = (G|adatum < G|bueuro) ; F|empty(G|bueuro)
+.formula U|xxkurs   = 1
+.formula U|xxkurs   = 1/G|eurokurs ?  U|xbainl & G|ainland <> G|inland & G|eurokurs <> 0
+.formula U|xxkurs   = G|eurokurs   ? _U|xbainl & G|ninland <> G|inland
+.formula U|xxkurs   = 1            ?  U|xxkurs = 0
+.formula U|xtmwaehr = 'G|ninland'  ? _U|xbainl & _F|empty(G|bueuro)
+.formula U|xtmwaehr = 'G|ainland'  ?  U|xbainl & _F|empty(G|bueuro)
+.formula U|xtmwaehr = ""           ?  F|empty(G|bueuro)
+..
+!HVKZ: Verkehrszahlen holen
+.select vkz target 'U|xgj' 'U|xtmwaehr'  ? U|xityp = 0
+.select vkz actual 'U|xgj' 'U|xtmwaehr'  ? U|xityp = 1
+.continue DAT2 ? _G|mehr
+..
+!LINE
+.formula U|xisubtyp = U|xisubtyp - 1
+.continue NLINE ? U|xbsubtyp.U|xisubtyp = G|FALSE
+... Variablenname setzen
+.formula U|xtvarname0 = "H|u"  ? U|xtchtyp = "Umsatz"
+.formula U|xtvarname0 = "H|zm" ? U|xtchtyp = "AbZu" & U|xisubtyp = 1
+.formula U|xtvarname0 = "H|am" ? U|xtchtyp = "AbZu" & U|xisubtyp = 0
+.formula U|xtvarname0 = "H|s"  ? U|xtchtyp = "VKZ"  & U|xisubtyp > 0
+.formula U|xtvarname0 = "H|h"  ? U|xtchtyp = "VKZ"  & U|xisubtyp = 0
+.set trans +
+... Jahresttitel zusammensetzen
+.formula U|xtip1 = " - Saldo"  ? U|xtchtyp = "VKZ" & U|xisubtyp = 2
+.formula U|xtip1 = " - Soll"   ? U|xtchtyp = "VKZ" & U|xisubtyp = 1
+.formula U|xtip1 = " - Haben"  ? U|xtchtyp = "VKZ" & U|xisubtyp = 0
+.formula U|xtip0 = U|xtip + U|xtip1
+.formula U|xtip2 = "GJ"        ? U|xtchtyp = "Umsatz" ; U|xtchtyp = "VKZ"
+.formula U|xtip2 = "ZugÑnge"   ? U|xtchtyp = "AbZu" & U|xisubtyp = 1
+.formula U|xtip2 = "AbgÑnge"   ? U|xtchtyp = "AbZu" & U|xisubtyp = 0
+.formula U|xttitel = F|formatstr("{1} {2} - {3}", 'U|xtip2', 'U|xgj', 'U|xtip0')
+.set trans -
+..
+... Chart Titel, Farbe setzen
+.formula U|xinr  = U|xinr + 1
+.continue NRFARBE? U|xinr > 12
+.. Vordefinierte Farben
+.formula U|xttfarbe = 'U|xtfarbe.U|xinr'
+.chart -STARTVALUES 'U|xttitel' -RGBCOLOR 'U|xttfarbe' -LINEWIDTH 2
+.continue KUMUL
+..
+!NRFARBE: Weiter Farben ab 10 verwenden
+.formula U|xifarbe  = U|xinr - 3
+.chart -STARTVALUES 'U|xttitel' -COLOR 'U|xifarbe' -LINEWIDTH 2
+..
+!KUMUL: Bei VKZ Saldo kumulieren, Soll und Haben nicht kumulieren
+.copy U|xbkum = (U|xisubtyp = 2) ? U|xtchtyp = "VKZ"
+..
+.formula U|ximon = 0
+.formula U|xrw0  = 0.00
+.formula U|xrw0  = H|vortrag ? U|xtchtyp = "VKZ" & U|xisubtyp = 2
+.chart -VALUE 'U|xrw0'      ? U|xtchtyp = "VKZ"
+..
+!ADD: Werte berechnen, gegebenenfalls kumulieren
+.formula U|ximon = U|ximon + 1
+.formula U|xtvarname = U|xtvarname0 + 'U|ximon'
+.formula U|xrw  = F|eval(U|xtvarname)
+.formula U|xrw  = U|xrw * U|xxkurs  ? U|xtchtyp = "Umsatz"
+.formula U|xrw  = U|xrw - H|h.U|ximon ? U|xtchtyp = "VKZ"  & U|xisubtyp = 2
+.formula U|xrw  = U|xrw0 + U|xrw    ? U|xbkum
+.formula U|xrw0 = U|xrw
+... Chart-Werte setzen
+.chart -VALUE 'U|xrw'
+.continue ADD ? U|ximon < U|xianzm
+..
+.continue NLINE ? U|xtchtyp <> "VKZ"
+.. Letzer Wert Saldo
+.formula U|xrw0  = 0.00
+.formula U|xrw0  = H|saldo ? U|xisubtyp = 2
+.chart -VALUE 'U|xrw0'
+..
+!NLINE: NÑchster Subtyp oder nÑchster Typ oder nÑchstes GJ
+.continue LINE ? U|xisubtyp > 0
+.continue DAT2 ? (U|xgj > M|chagj) ; (U|xgj = M|chagj) & (U|xityp = 1)
+..
+!CHART: Chart aufrufen
+.chart -SHOW chart 0
+..*****************************************************************************
+!END
+.end 0
+..*****************************************************************************
+..
+!ERROR01: Dates are missing!
+.error Zeitbereich leer
+.end 1
+..
+!ERROR02: Nothing selected!
+.error Nichts ausgewÑhlt
+.end 1

@@ -1,0 +1,214 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : FO.SYSTEM
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Adapter zur Benutzung des system-Kommandos aus der FO.
+.. Functionality  : Wrapper for using the system command of the fo language.
+..*****************************************************************************
+.type text xxerrmsg  ? _F|defined(U|xxerrmsg)
+.type text xxcommand ? _F|defined(U|xxcommand)
+..
+.set trans +
+.assign U|xxerrmsg = "Systemaufruf kann nicht durchgefhrt werden"
+.set trans -
+..
+.continue FOAPI ? F|defined(U|xcommand)
+.continue USAGE ? F|defined(U|cmd)
+.continue USAGE ? G|argc > 0
+.continue USAGE
+..
+!FOAPI
+.formula U|xxcommand = U|xcommand
+.continue ERROR01 ? F|empty(U|xxcommand)
+..
+!DECLARE: Declarations
+.type text XXOPTPW       ? _F|defined(U|XXOPTPW)
+.type text XXOPTBG       ? _F|defined(U|XXOPTBG)
+.type text XXCOMWORD     ? _F|defined(U|XXCOMWORD)
+.type text xxmyerrmsg    ? _F|defined(U|xxmyerrmsg)
+.type IP9  xxerrorno     ? _F|defined(U|xxerrorno)
+.type DVM2 xxstderr      ? _F|defined(U|xxstderr)
+.type DVM2 xxstdout      ? _F|defined(U|xxstdout)
+..
+.. Initializations
+.atext -language 'G|lsprache' U|XXCOMWORD  695 System
+.atext -language 'G|lsprache' U|XXOPTBG   3479 HINTER
+.atext -language 'G|lsprache' U|XXOPTPW   3919 PASSWORT
+.formula U|xxerrorno = 0
+.formula U|xxstdout = ""
+.formula U|xxstderr = ""
+..
+!OPTPW: Handle password option
+.continue CLRPW ? _F|defined(U|xpassword)
+.continue CLRPW ? F|empty(U|xpassword)
+..
+!OPTBG: Handle background option
+.continue CLRBG ? _F|defined(U|xbackground)
+.continue CLRBG ? F|empty(U|xbackground)
+.continue ERRNO
+..
+!ERRNO: Handle option for own error number
+.continue STDOUT ? _F|defined(U|xerrorno)
+.continue STDOUT ? F|empty(U|xerrorno)
+.assign U|xxerrorno = U|xerrorno
+.continue ERROR04 ? _G|mehr
+..
+!GETMSG
+.translate -language 'G|bsprache' -number 'U|xxerrorno' -dictionary lg -variable U|xxmyerrmsg -close
+.continue STDOUT
+..
+!CLRPW: No password option
+.assign U|XXOPTPW = ""
+.continue OPTBG
+..
+!CLRBG: No background option
+.assign U|XXOPTBG = ""
+.continue ERRNO
+..
+!STDOUT: Handle option of filename for standard output
+.continue STDERR ? _F|defined(U|xstdout)
+.continue STDERR ? F|empty(U|xstdout)
+.assign U|xxstdout = U|xstdout
+.continue ERROR05 ? _G|mehr
+.continue STDERR
+..
+!STDERR: Handle option of filename for standard error
+.continue BUILD ? _F|defined(U|xstderr)
+.continue BUILD ? F|empty(U|xstderr)
+.assign U|xxstderr = U|xstderr
+.continue ERROR05 ? _G|mehr
+.continue BUILD
+..
+!BUILD: Build command instruction
+.type text xfosystem ? _F|defined(U|xfosystem)
+.formula U|xfosystem = U|XXCOMWORD
+.formula U|xfosystem = U|xfosystem + " " + G|DBLQUOTE + 'F|tostring(U|xxcommand)'
+.continue OUTPUT
+..
+!EXEC: Execute system command
+.'U|xfosystem'
+.continue RUNERR ? _G|mehr
+.continue END
+..
+!OUTPUT: While using background option special handle for standard output
+.continue TMPOUT ? _F|empty(U|XXOPTBG) & F|empty(U|xxstdout)
+.continue ADDOUT ? _F|empty(U|xxstdout)
+.continue ERROUT
+..
+!TMPOUT: Create a temporary filename to save standard output
+.file -tempname U|xxstdout -suffix "FO.SYSTEM.OUT"
+.continue ADDOUT
+..
+!ADDOUT: Add output file for standard out
+.formula U|xfosystem = U|xfosystem + " >" + U|xxstdout
+.continue ERROUT
+..
+!ERROUT: While using background option special handle for standard error
+.continue TMPERR ? _F|empty(U|XXOPTBG) & F|empty(U|xxstderr)
+.continue ADDERR  ? _F|empty(U|xxstderr)
+.continue PWBG
+..
+!TMPERR: Create a temporary filename to save standard error
+.file -tempname U|xxstderr -suffix "FO.SYSTEM.ERR"
+.continue ADDERR
+..
+!PWBG: Background and password
+.formula U|xfosystem = U|xfosystem + G|DBLQUOTE
+.formula U|xfosystem = U|xfosystem + " " + U|XXOPTPW ? _F|empty(U|XXOPTPW)
+.formula U|xfosystem = U|xfosystem + " " + U|XXOPTBG ? _F|empty(U|XXOPTBG)
+.continue EXEC
+..
+!ADDERR
+.formula U|xfosystem = U|xfosystem + " 2>" + U|xxstderr
+.continue PWBG
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!RUNERR: System command failed!
+.continue MYERROR ? _F|empty(U|xxmyerrmsg)
+.error -message Der Systemkommandoaufruf ist gescheitert: 'U|xxcommand'
+.continue BREAK ? F|empty(U|xxstderr)
+.continue BREAK ? _F|filenotempty(U|xxstderr)
+.continue ERRFILE
+..
+!MYERROR: Show own error message!
+.error -message 'U|xxmyerrmsg'
+.continue BREAK ? F|empty(U|xxstderr)
+.continue BREAK ? _F|filenotempty(U|xxstderr)
+.continue ERRFILE
+..
+!ERROR01: Command is missing!
+.set trans +
+.assign U|xxerrmsg = "Es fehlt die Angabe des Systemkommandos!"
+.continue USAGE
+..
+!ERROR02: Value for password option has wrong type!
+.set trans +
+.assign U|xxerrmsg = "Der Wert zur Passwortoption ist falsch!"
+.continue USAGE
+..
+!ERROR03: Value for background option has wrong type!
+.set trans +
+.assign U|xxerrmsg = "Der Wert zur Hintergrundoption ist falsch!"
+.continue USAGE
+..
+!ERROR04: Value for message number has wrong type!
+.set trans +
+.assign U|xxerrmsg = "Der Wert der Meldungsnummer ist falsch!"
+.continue USAGE
+..
+!ERROR05: Illegal path!
+.assign U|xxerrmsg = "Der Dateiname hat einen inkompatiblen Wert!"
+.continue USAGE
+..
+!USAGE: Print usage in English
+.set trans -
+.output terminal
+'U|xxerrmsg'
+?'U|xxcommand' ? _F|empty(U|xxcommand)
+
+FO-API:
+=======
+xcommand    = Shell command
+              Example: .fo U|xcommand = "ls *.xml"
+xpassword   = Value of G|TRUE will activate the PASSWORD option
+              otherwise not.
+              Example: .fo U|xpassword = G|TRUE
+xbackground = Value of G|TRUE will activate the BACKGROUND option
+              otherwise not.
+              Example: .fo U|xbackground = G|TRUE
+
+More configurations:
+--------------------
+xerrorno    = Message number from dictionary msg.lg.dic
+              Example: .fo U|xerrorno = 4711
+xstdout     = Standard output filename based to client directory
+xstderr     = Standard error filename based to client directory
+              If no name is specified a temporary filename will
+              be used for standard error.
+
+Named parameters:
+=================
+Will not be supported!
+
+Array parameters:
+=================
+Will not be supported!
+.continue BREAK
+..
+..
+!ERRFILE: Show standard error
+.output terminal
+?'U|xxcommand' ? _F|empty(U|xxcommand)
+
+'U|xxstderr':
+'F|string("-", 40)'
+.input -text 'U|xxstderr'
+.continue BREAK
+..
+!BREAK
+.end 1

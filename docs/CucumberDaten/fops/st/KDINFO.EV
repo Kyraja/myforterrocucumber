@@ -1,0 +1,300 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KDINFO.EV
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Verteilt je nach Ereignis die einfachere Funktionalitaet.
+.. Ablauf         : Zentrales Ereignis-EFOP
+..
+.. Functionality  : Handles events with more simple functions.
+.. Program flow   : Central event efop
+...Includes       :
+.. include st/KDINFO.KNUMKUSA.FA
+.. include st/KDINFO.WAEHRWAHL.BN
+..*****************************************************************************
+.set trans -
+..
+.. ACHTUNG: Via EDP kann man einen Boolschen Wert auf denselben Wert setzen und
+.. das EFOP wird dann ausgefuehrt. Deswegen muss ein Vergleich auf Aenderung sein.
+.type bool xbfneu
+.type bool xbfalt
+..
+..------------------------------- Header --------------------------------------
+.continue EVINFO  ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bstart"
+.continue OLDCURR ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "auswaehr"
+.continue CHCURR  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "auswaehr"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "ktschlagvon"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "ktschlagbis"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kdstart"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kdbisstart"
+.continue EVINFO  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "knumkusa"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbvert"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbabl"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbintern"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbextern"
+.continue BLANKET ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbblanket"
+.continue OPPORT  ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbopport"
+.continue OFFER   ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kboffer"
+.continue WEBORD  ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbweb"
+.continue ORDER   ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kborder"
+.continue DELIVER ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbdelivery"
+.continue INVOICE ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbinvoice"
+.continue SHIPPIN ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbshipping"
+.continue TT      ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbaktionen"
+.continue PJ      ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbprojekte"
+.continue SEROFF  ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbseroffer"
+.continue SERORD  ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbserorder"
+.continue REPORD  ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbreporder"
+.continue SERRES  ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbserreserv"
+.continue RSERRES ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kbserreserv"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "kbeleg"
+..
+..--------------------------------- Table  -------------------------------------
+..==============================================================================
+.continue END
+..
+!EVINFO: Show information of selected customer
+.type GL30 xpvon ? _F|defined(U|xpvon)
+.type GL30 xpbis ? _F|defined(U|xpbis)
+.formula U|xpvon = "ktschlagvon"
+.formula U|xpbis = "ktschlagbis"
+.input "is/RANGECHECK"
+.input "st/KDINFO.KNUMKUSA.FA"
+.continue INVTO
+..
+!OLDCURR: Keep old currency for exchange in mind
+.copy M|altauswaehr = M|auswaehr
+.continue END
+..
+!CHCURR: Change currency and refresh information
+.continue END ? M|altauswaehr^nummer = M|auswaehr^nummer
+.input "is/EVT.FIELD.OUTCURR"
+.input "st/KDINFO.WAEHRWAHL.BN"
+.continue END
+..
+!INVTO: Invoice to
+.formula M|krechkd = ""
+.continue CLRTAB  ?  F|empty(M|knumkusa)
+.continue STAFFER ?  M|istsachkd
+.assign M|krechkd =  M|knumkusa
+.formula M|krechkd =  "" ? _G|mehr
+.continue CLRTAB
+..
+!STAFFER: Customer or vendor of the assistant will be parameter
+.assign M|krechkd = M|knumsaku
+.formula M|krechkd =  "" ? _G|mehr
+.continue CLRTAB
+..
+!BLANKET: Blanket order was clicked
+.copy M|kbvorgaenge = M|kboffer ; M|kborder ; M|kbdelivery ; M|kbinvoice
+.continue VKVG ? _F|defined(M|kbkdinfo)
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|kbshipping ; M|kbweb ; M|kbopport
+.copy M|servorgaenge = M|kbseroffer ; M|kbserorder ; M|kbreporder ; M|kbserreserv
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|servorgaenge
+.continue VKVG
+..
+!OPPORT: Opportunity was clicked
+.copy M|kbvorgaenge = M|kbblanket ; M|kboffer; M|kborder ; M|kbdelivery ; M|kbinvoice
+.continue VKVG ? _F|defined(M|kbkdinfo)
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|kbshipping ; M|kbweb
+.copy M|servorgaenge = M|kbseroffer ; M|kbserorder ; M|kbreporder ; M|kbserreserv
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|servorgaenge
+.continue VKVG
+..
+!OFFER: Offer was clicked
+.copy M|kbvorgaenge = M|kbblanket ; M|kborder ; M|kbdelivery ; M|kbinvoice
+.continue VKVG ? _F|defined(M|kbkdinfo)
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|kbshipping ; M|kbweb ; M|kbopport
+.copy M|servorgaenge = M|kbseroffer ; M|kbserorder ; M|kbreporder ; M|kbserreserv
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|servorgaenge
+.continue VKVG
+..
+!WEBORD: Weborder was clicked
+.copy M|kbvorgaenge = M|kbblanket ; M|kboffer ; M|kborder ; M|kbdelivery ; M|kbinvoice
+.continue VKVG ? _F|defined(M|kbkdinfo)
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|kbshipping ; M|kbopport
+.copy M|servorgaenge = M|kbseroffer ; M|kbserorder ; M|kbreporder ; M|kbserreserv
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|servorgaenge
+.continue VKVG
+..
+!ORDER: Order was clicked
+.copy M|kbvorgaenge = M|kbblanket ; M|kboffer ; M|kbdelivery ; M|kbinvoice
+.continue VKVG ? _F|defined(M|kbkdinfo)
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|kbshipping ; M|kbweb ; M|kbopport
+.copy M|servorgaenge = M|kbseroffer ; M|kbserorder ; M|kbreporder ; M|kbserreserv
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|servorgaenge
+.continue VKVG
+..
+!DELIVER: Delivery note was clicked
+.copy M|kbvorgaenge = M|kbblanket ; M|kboffer ; M|kborder ; M|kbinvoice
+.continue VKVG ? _F|defined(M|kbkdinfo)
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|kbshipping ; M|kbweb ; M|kbopport
+.copy M|servorgaenge = M|kbseroffer ; M|kbserorder ; M|kbreporder ; M|kbserreserv
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|servorgaenge
+.continue VKVG
+..
+!INVOICE: Invoice was clicked
+.copy M|kbvorgaenge = M|kbblanket ; M|kboffer ; M|kborder ; M|kbdelivery
+.continue VKVG ? _F|defined(M|kbkdinfo)
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|kbshipping ; M|kbweb ; M|kbopport
+.copy M|servorgaenge = M|kbseroffer ; M|kbserorder ; M|kbreporder ; M|kbserreserv
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|servorgaenge
+.continue VKVG
+..
+!SHIPPIN: Shipping order was clicked
+.copy M|kbvorgaenge = M|kbblanket ; M|kboffer ; M|kborder ; M|kbdelivery ; M|kbinvoice
+.continue VKVG ? _F|defined(M|kbkdinfo)
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|kbweb ; M|kbopport
+.copy M|servorgaenge = M|kbseroffer ; M|kbserorder ; M|kbreporder ; M|kbserreserv
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|servorgaenge
+.continue VKVG
+..
+!SERRES: Service reservation was clicked
+.copy M|kbvorgaenge = M|kbblanket ; M|kbopport ; M|kboffer ; M|kborder ; M|kbdelivery ; M|kbinvoice ; M|kbshipping ; M|kbweb
+.copy M|servorgaenge = M|kbseroffer ; M|kbserorder ; M|kbreporder
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|servorgaenge
+.continue VKVG
+..
+!SEROFF: Service offer was clicked
+.copy M|kbvorgaenge = M|kbblanket ; M|kbopport ; M|kboffer ; M|kborder ; M|kbdelivery ; M|kbinvoice ; M|kbshipping ; M|kbweb
+.copy M|servorgaenge = M|kbserorder ; M|kbreporder ; M|kbserreserv
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|servorgaenge
+.continue VKVG
+..
+!SERORD: Service order was clicked
+.copy M|kbvorgaenge = M|kbblanket ; M|kbopport ; M|kboffer ; M|kborder ; M|kbdelivery ; M|kbinvoice ; M|kbshipping ; M|kbweb
+.copy M|servorgaenge = M|kbseroffer ; M|kbreporder ; M|kbserreserv
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|servorgaenge
+.continue VKVG
+..
+!REPORD: Repair order was clicked
+.copy M|kbvorgaenge = M|kbblanket ; M|kbopport ; M|kboffer ; M|kborder ; M|kbdelivery ; M|kbinvoice ; M|kbshipping ; M|kbweb
+.copy M|servorgaenge = M|kbseroffer ; M|kbserorder ; M|kbserreserv
+.copy M|kbvorgaenge = M|kbvorgaenge ; M|servorgaenge
+.continue VKVG
+..
+!RSERRES: Can evaluate keyword (Schlagwort), while service reservation was demarked
+.continue PSERRES ? M|kbserreserv
+.protection -reset ktschlagvon 0
+.protection -reset ktschlagbis 0
+.continue END
+..
+!PSERRES: Must not evaluate keyword (Schlagwort), while service reservation was marked
+.protection ktschlagvon 0
+.formula M|ktschlagvon = ""
+.protection ktschlagbis 0
+.formula M|ktschlagbis = ""
+.continue END
+..
+!UNPROTECT: Allow selection as partner of document
+.protection -reset kbeleg 0
+.continue TRANSACT
+..
+!PROTECT: Protect partner as partner of invoice
+.protection kbeleg 0
+.copy M|kbeleg = G|FALSE
+.continue TRANSACT
+..
+!VKVG: Sales or purchase document was clicked
+.continue CLRTAB ? M|kbvorgaenge
+.assign U|xbfneu = G|evtfeldneu
+.copy U|xbfalt = M|.G|evtvar
+.continue CLRTAB ? U|xbfneu = U|xbfalt
+.copy M|kbvorgaenge = U|xbfneu
+..weiter TRANSACT ? _F|defined(M|kbkdinfo)
+.continue GRPFLAG ? _F|defined(M|kbkdinfo)
+.copy M|servorgaenge = U|xbfneu & (G|evtvar = "kbseroffer" ; G|evtvar = "kbserorder" ; G|evtvar = "kbserreserv" ; G|evtvar = "kbreporder")
+.continue GRPFLAG
+..
+!TRANSACT: Process management
+.continue SET ? M|kbvorgaenge
+.continue RESET
+..
+!GRPFLAG: Flag for faked button group is set
+.continue PROTECT ? F|empty(M|knumkusa) ; _M|kbvorgaenge
+.continue UNPROTECT
+..
+!SET: Deactivate transaction options
+.protection kbvert 0
+.protection kbextern 0
+.protection kbintern 0
+.copy M|kbvert = G|FALSE
+.copy M|kbextern = G|FALSE
+.copy M|kbintern = G|FALSE
+.continue NOVG ? _G|evtvar = "kbprojekte" & _G|evtvar = "kbaktionen"
+.continue CLRTAB
+..
+!RESET: Activate transaction options
+.protection -reset kbvert 0 ? _F|empty(M|kbedien)
+.protection -reset kbintern 0
+.protection -reset kbextern 0
+.continue DOVG ? _G|evtvar = "kbprojekte" & _G|evtvar = "kbaktionen"
+.continue CLRTAB
+..
+!DOVG: Switch transactions on
+.copy M|kbprojekte = G|TRUE
+.copy M|kbaktionen = G|TRUE ? _F|empty(M|kbedien)
+.continue CLRTAB
+..
+!NOVG: Switch transactions off
+.copy M|kbprojekte = G|FALSE
+.copy M|kbaktionen = G|FALSE
+.continue CLRTAB
+..
+!PJ: Project switch was clicked
+.continue CLRTAB ? M|kbaktionen
+.continue VKONOUT
+..
+!TT: Activity switch was clicked
+.continue CLRTAB ? M|kbprojekte
+.continue VKONOUT
+..
+!VKOUT: Switch sales/purchase off
+.protection -reset ktschlagvon 0
+.protection -reset ktschlagbis 0
+.copy M|kbvorgaenge = G|FALSE
+.copy M|kboffer = G|FALSE
+.copy M|kbblanket = G|FALSE
+.copy M|kborder = G|FALSE
+.copy M|kbdelivery = G|FALSE
+.copy M|kbinvoice = G|FALSE
+.copy M|kbeleg = G|FALSE
+.protection kbeleg 0
+.continue RESET ? _F|defined(M|kbkdinfo)
+.copy M|kbopport = G|FALSE
+.copy M|kbweb = G|FALSE
+.copy M|kbshipping = G|FALSE
+.copy M|kbseroffer = G|FALSE
+.copy M|kbserorder = G|FALSE
+.copy M|kbserreserv = G|FALSE
+.copy M|kbreporder = G|FALSE
+.copy M|servorgaenge = G|FALSE
+.continue RESET
+..
+!VKONOUT: Switch on/off sales/purchase documents
+.copy U|xbfalt = M|.G|evtvar
+.assign U|xbfneu = G|evtfeldneu
+.continue CLRTAB ? U|xbfneu = U|xbfalt
+.continue VKOUT ? U|xbfneu
+.continue VKON
+..
+!VKON: Switch sales/purchase on
+.protection -reset kbeleg 0 ? _F|empty(M|knumkusa)
+.copy M|kbvorgaenge = G|TRUE
+.copy M|kboffer = G|TRUE
+.copy M|kbblanket = G|TRUE
+.copy M|kborder = G|TRUE
+.copy M|kbdelivery = G|TRUE
+.copy M|kbinvoice = G|TRUE
+.continue SET ? _F|defined(M|kbkdinfo)
+.copy M|kbopport = G|TRUE
+.copy M|kbweb = G|TRUE
+.copy M|kbshipping = G|TRUE
+.continue SET
+..
+!CLRTAB: Clear table
+.make screen line -- ? M|tzeilen > 0
+..*****************************************************************************
+!END
+.continue

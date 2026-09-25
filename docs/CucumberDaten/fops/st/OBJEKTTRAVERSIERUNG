@@ -1,0 +1,160 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : OBJEKTTRAVERSIERUNG
+.. Autor          : erwo
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Zwei Objekte werden gemeinsam traversiert. Die Objekte mÅssen
+.. im 1-Puffer und im 2-Puffer liegen und auf dem Kopf positioniert sein. Danach
+.. wird ein FOP aufgerufen, was die beiden Kîpfe bearbeitet.
+..
+.. Der Name des FOPs, um die Kîpfe zu verarbeiten, wird in
+..   U|objekttraversierungkopf
+.. erwartet.
+..
+.. Danach werden beide Objekte auf ihre erste Zeile positioniert und ein
+.. FOP aufgerufen, dass die beiden Zeilen verarbeitet.
+..
+.. Der Name des FOPs, um beide Zeilen zu verarbeiten, wird in
+..   U|objekttraversierungbeidezeilen
+.. erwartet.
+..
+.. Gehen einem Objekt die Zeilen aus, werden die Zeilen im jeweils anderen Objekt
+.. traversiert und ein FOP aufgerufen, dass die einzelne Zeile verarbeitet.
+..
+.. Der Name des FOPs, um die Restzeilen des 1-Puffer zu verarbeiten, wird in
+..   U|objekttraversierungzeilein1puffer
+.. erwartet.
+..
+.. Der Name des FOPs, um die Restzeilen des 2-Puffer zu verarbeiten, wird in
+..   U|objekttraversierungzeilein2puffer
+.. erwartet.
+..
+.. Die unten definierten Variablen werden ueberschrieben. Also sollte man
+.. im aufrufendem FOP diese nicht verwenden.
+..
+.. Im Kopffop dÅrfen
+..   U|tabellein1vorhanden - Hat das Objekt im 1-Puffer eine Tabelle?
+..   U|tabellein2vorhanden - analog im 2-Puffer
+.. gelesen werden.
+..
+.. In den Zeilenfops dÅrfen
+..   U|tabellein1vorhanden
+..   U|tabellein2vorhanden
+..   U|mehrin1puffer - War im 1-Puffer der letzte Versuch eine Zeile zu laden erfolgreich?
+..   U|mehrin2puffer - analog im 2-Puffer
+..   U|zeilein1puffer - Welche Zeile sollte im 1-Puffer geladen sein
+..   U|zeilein2puffer - analog im 2-Puffer
+.. gelesen werden.
+..
+.. In allen FOPs darf
+..   U|traversierungabbruch
+.. geschrieben werden, es wird bei G|true sofort abgebrochen.
+..
+.. Ansonsten darf im Kopffop auf den 1- und den 2-Puffer zugegriffen werden,
+.. es darf aber kein .lade 1 oder .lade 2 gemacht werden. (In keiner Variante.)
+..
+.. Im Zeilenfop fÅr beide Zeilen darf auf den 1- und den 2-Puffer zugegriffen
+.. werden, es darf aber kein .lade 1 oder .lade 2 gemacht werden.
+.. (In keiner Variante.)
+..
+.. Im Zeilenfop fÅr die restlichen Zeilen des 1-Puffer darf auf den 1-Puffer
+.. zugegriffen werden, es darf aber kein .lade 1 gemacht werden. (In keiner Variante.)
+..
+.. Im Zeilenfop fÅr die restlichen Zeilen des 2-Puffer darf auf den 2-Puffer
+.. zugegriffen werden, es darf aber kein .lade 2 gemacht werden. (In keiner Variante.)
+..
+.. Functionality  :
+..
+..*****************************************************************************
+.set trans -
+..
+.type bool tabellein1vorhanden  ? _F|defined(U|tabellein1vorhanden)
+.type bool tabellein2vorhanden  ? _F|defined(U|tabellein2vorhanden)
+.type bool mehrin1puffer        ? _F|defined(U|mehrin1puffer)
+.type bool mehrin2puffer        ? _F|defined(U|mehrin2puffer)
+.type I9   zeilein1puffer       ? _F|defined(U|zeilein1puffer)
+.type I9   zeilein2puffer       ? _F|defined(U|zeilein2puffer)
+.type bool traversierungabbruch ? _F|defined(U|traversierungabbruch)
+.type I9   aktuellezeile        ? _F|defined(U|aktuellezeile)
+..
+.. Wir erwarten zwei DatensÑtze. Einer im 1-Puffer, einer im 2-Puffer.
+.. Ferner werden wir den 9-Puffer benîtigen, um Metadaten zu laden.
+..
+.. Initialisierung
+.copy U|traversierungabbruch = G|false
+.copy U|aktuellezeile = 0
+..
+.. Vorhandensein der Tabellen feststellen
+.load 9 metadata "1|"
+.copy U|tabellein1vorhanden = G|FALSE
+.copy U|tabellein1vorhanden = 9|vvtab ? G|mehr
+.load 9 metadata "2|"
+.copy U|tabellein2vorhanden = G|FALSE
+.copy U|tabellein2vorhanden = 9|vvtab ? G|mehr
+.load 9
+..
+.. Kopf vergleichen
+.copy U|zeilein1puffer = 0
+.copy U|zeilein2puffer = 0
+..
+.input 'U|objekttraversierungkopf'
+.continue END ? U|traversierungabbruch
+..
+.. Entscheiden in welchen Puffern Zeilen geladen werden kînnen
+.continue END                   ? _U|tabellein1vorhanden & _U|tabellein2vorhanden
+.continue BEIDEZL               ?  U|tabellein1vorhanden &  U|tabellein2vorhanden
+..
+.copy U|mehrin2puffer = G|FALSE ?  U|tabellein1vorhanden & _U|tabellein2vorhanden
+.continue ZEILE1L               ?  U|tabellein1vorhanden & _U|tabellein2vorhanden
+..
+.copy U|mehrin1puffer = G|FALSE ? _U|tabellein1vorhanden &  U|tabellein2vorhanden
+.continue ZEILE2L               ? _U|tabellein1vorhanden &  U|tabellein2vorhanden
+..
+!BEIDEZV
+.copy U|aktuellezeile = U|zeilein1puffer
+.input 'U|objekttraversierungbeidezeilen'
+.continue END ? U|traversierungabbruch
+.continue BEIDEZL
+..
+!ZEILE1V
+.copy U|aktuellezeile = U|zeilein1puffer
+.input 'U|objekttraversierungzeilein1puffer'
+.continue END ? U|traversierungabbruch
+.continue ZEILE1L
+..
+!ZEILE2V
+.copy U|aktuellezeile = U|zeilein2puffer
+.input 'U|objekttraversierungzeilein2puffer'
+.continue END ? U|traversierungabbruch
+.continue ZEILE2L
+..
+!ZEILE1L: Laden den nÑchsten Zeile/n
+.load 1 line
+.copy U|mehrin1puffer = G|mehr
+.copy U|zeilein1puffer = U|zeilein1puffer + 1 ? U|mehrin1puffer
+.continue ZEILE1V ? U|mehrin1puffer
+.continue END
+!ZEILE2L
+.load 2 line
+.copy U|mehrin2puffer = G|mehr
+.copy U|zeilein2puffer = U|zeilein2puffer + 1 ? U|mehrin2puffer
+.continue ZEILE2V ?  U|mehrin2puffer
+.continue END
+..
+!BEIDEZL
+.load 1 line
+.copy U|mehrin1puffer = G|mehr
+.copy U|zeilein1puffer = U|zeilein1puffer + 1 ? U|mehrin1puffer
+.load 2 line
+.copy U|mehrin2puffer = G|mehr
+.copy U|zeilein2puffer = U|zeilein2puffer + 1 ? U|mehrin2puffer
+.continue BEIDEZV ? U|mehrin1puffer & U|mehrin2puffer
+.continue ZEILE1V ? U|mehrin1puffer
+.continue ZEILE2V ? U|mehrin2puffer
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+

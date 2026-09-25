@@ -1,0 +1,104 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EKLAB.TAB.LAB
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Ausgabe/Neue Zeile der Lieferabrufe inkl. der Keinbedarf-Meldungen
+.. Functionality  : Output/new row of purchasing forecasts + nodemand messages
+..*****************************************************************************
+..<META M|='ek/EKLAB'>
+..<META H|='P4:2'>
+..<META 2|='P4:2'>
+.set trans -
+..
+.type bool   xblabvorhanden      ? _F|defined(U|xblabvorhanden)
+.type text   xtselLAB            ? _F|defined(U|xtselLAB)
+.type text   xtselEDI            ? _F|defined(U|xtselEDI)
+..
+..
+.make screen line +O
+.colour -foreground 'T|xabasblack' -background 'M|colforecast' 'M|aktzeile'
+.formula M|ttyp = M|ktyplieferabruf
+.colour -foreground 'T|xabasblack' -background 'M|colnodemand' 'M|aktzeile'  ?  2|mge = 0.0
+.formula M|ttyp = M|ktypkeinbedarf  ?  2|mge = 0.0
+..
+.formula M|tbaktiv = false
+.formula M|tbv = ""
+.formula M|tlab = 2|kopf^id
+.formula M|tls = ""
+.formula M|tprahmen = 2|zrahmen^id
+.formula M|tprahmen = H|kopf^id
+.formula M|tprahmenpos = H|id
+.assign M|basisartikel = 2|artex^basisartikel
+.formula M|tartikel = 2|artex^id
+.formula M|tartname = 2|artex^sucherw
+.formula M|tlief = 2|kopf^lief^id
+.formula M|tfzahl = H|fzahl
+.formula M|tpackanw = H|packanw
+.formula M|tmge = 2|mge
+.copy M|the = 2|he
+.formula M|tpreis = 2|preis
+.formula M|tbeterm = ""
+.formula M|tliterm = 2|tterm
+.formula M|trterm = 2|rterm
+.formula M|tplatz = 2|platz^id
+.formula M|tfix = 2|fix
+.formula M|tverwendung = 2|verw      ?  F|defined(2|verw)
+..
+.type P4:2 xconddatitem ? _F|defined(U|xconddatitem)
+.type date xconddat ? _F|defined(U|xconddat)
+.formula U|xconddatitem = 2|id 
+.input "ek/EKLAB.GET.KONDDAT.FO"
+.formula M|tkonddat = U|xconddat 
+.formula M|tzgltstatus = ""
+.formula M|tzgltstatus = M|kstatusrot ? _F|empty(H|zgltvon) & U|xconddat<H|zgltvon
+.formula M|tzgltstatus = M|kstatusrot ? _F|empty(H|zgltbis) & U|xconddat>H|zgltbis
+.formula M|tbgltstatus = F|empty(M|tzgltstatus)
+.formula M|tzgltstatus = "" ? ( _F|empty(H|zgltvon) ; _F|empty(H|zgltbis) ) & M|tbgltstatus
+.copy M|kzgltstatus = M|kstatusrot ? _M|tbgltstatus 
+.copy M|tbstatusabrufbaremenge = G|true ? H|fzahlabrufoffen >= 0.0 ; H|maxabrufmge = 0.0
+..
+..  possible actions
+.formula M|tbustorno     = "icon:screen_delete"
+.formula M|tbuvorschlag  = ""
+.formula M|tbukonvert    = ""
+.formula M|tbukeinbedarf = ""
+.formula M|tbusenden     = "icon:arrow_blue_right"
+..
+.protection tbuvorschlag 'M|aktzeile'
+.protection tbuvorschlag2 'M|aktzeile'
+.protection tbukonvert 'M|aktzeile'
+.protection tbukeinbedarf 'M|aktzeile'
+..
+..
+..  EDI-Nachricht auswerten
+..
+.formula M|tedi = ""
+.formula U|xtselEDI = "$,,;@gruppe=0;nummer=" + '2|kopf^ident' +";@richtung=rckw„rts;@ordnung=nummer"    ? _F|empty(2|kopf^ident)
+.formula U|xtselEDI = "$,,;@gruppe=0;ideksvor=" + 'M|tlab^nummer' + ";erfass=" + 'M|tlab^erfass:8' + "!.;@richtung=rckw„rts"  ?  F|empty(2|kopf^ident)
+.load 5 edifact 'U|xtselEDI'
+.formula M|tedi = 5|id   ?  G|mehr
+.load 5
+.continue ENDEDI    ?  F|empty(M|tedi)
+..
+.formula M|tedihinweis = ""
+.formula M|tediuebdat = M|tedi^uebdat
+.formula M|tstatusz = G|icook      ?  M|tedi^status = 0
+.formula M|tstatusz = G|icoerror        ?  M|tedi^status > 0
+.formula M|tstatusz = "icon:ball_blue"       ?  M|tedi^status = 2
+..
+.continue ENDEDI    ?  F|empty(M|tedi^ftext)
+.type text xt1 ? _F|defined(U|xt1)
+.type text xt2 ? _F|defined(U|xt2)
+.formula U|xt1 = ""
+.formula U|xt2 = ""
+.select from 'M|tedi^ftext'  U|xt1 ^
+.select from 'M|tedi^ftext'  U|xt2 ^
+.select from
+.formula M|tedihinweis = U|xt1 + ";" + U|xt2
+..
+!ENDEDI
+..*****************************************************************************
+!END
+.continue

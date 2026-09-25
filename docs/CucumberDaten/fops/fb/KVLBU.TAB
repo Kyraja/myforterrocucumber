@@ -1,0 +1,131 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Table row FOP of the Infosystem fb/KVLBU
+..*****************************************************************************
+..
+.set trans -
+..
+.continue END ? _M|offen & _M|abgeschl
+..
+.continue PERIOD2 ? M|anfj <> M|endj
+..
+..*****************************************************************************
+!PERIOD1: end year is start year
+..*****************************************************************************
+.select year 'M|anfj' 'M|anfm' 'M|endm'
+.formula G|adatum = M|von
+.formula G|edatum = M|bis
+.formula U|xrasaldo = H|asaldo
+.formula U|xresaldo = H|esaldo
+.continue INIT
+..
+..*****************************************************************************
+!PERIOD2: end year is not start year
+..*****************************************************************************
+.select year 'M|anfj' 'M|anfm'
+.formula G|adatum = M|von
+.formula U|xrasaldo = H|asaldo
+..
+.select year 'M|endj' 'M|endm'
+.formula G|edatum = M|bis
+.formula U|xresaldo = H|esaldo
+..
+.select period 'M|von' 'M|bis'        ? M|anfj <> M|endj
+..
+..*****************************************************************************
+!INIT
+..*****************************************************************************
+.formula U|xtselect = "$,"
+.formula U|xtselect = U|xtselect + ";0:kvrel=1"
+.formula U|xtselect = U|xtselect + ";0:konto=" + H|id
+.formula U|xtselect = U|xtselect + ";0:typ=1"
+.formula U|xtselect = U|xtselect + ";0:kvnum=" + M|kvvon + "!" + M|kvbis
+.formula U|xtselect = U|xtselect + ";0:iwbu=" + M|buwaehr^id
+.formula U|xtselect = U|xtselect + ";0:sortgjgm=" + U|xtsortgjgmfrom + "!" + U|xtsortgjgmto
+.formula U|xtselect = U|xtselect + ";0:budat="
+.formula U|xtselect = U|xtselect + 'M|von:8' ? _F|empty(M|von)
+.formula U|xtselect = U|xtselect + "!"
+.formula U|xtselect = U|xtselect + 'M|bis:8' ? _F|empty(M|bis)
+.formula U|xtselect = U|xtselect + ";kv^kvoffen=1" ?  M|offen & _M|abgeschl
+.formula U|xtselect = U|xtselect + ";kv^kvoffen=0" ? _M|offen &  M|abgeschl
+.formula U|xtselect = U|xtselect + ";@ordnung=0:kvnum." + 'M|richtung(L=":")' + ",0:sortgjgm." + 'M|richtung(L=":")' + ",0:budat." + 'M|richtung(L=":")'
+..
+.load 0 entryjournal 'U|xtselect'
+.continue END    ? _G|mehr
+..
+.formula U|xicount  = 0
+.continue INSERT
+..
+..*****************************************************************************
+!NEXT
+..*****************************************************************************
+.load 0 continue
+.continue END    ? _G|mehr
+.continue INSERT
+..
+..*****************************************************************************
+!INSERT
+..*****************************************************************************
+.make screen line +O
+.copy      M|tbuchung  = 0|buchung
+.copy      M|tkonto    = 0|konto
+.copy      M|tkv       = 0|kv
+.formula   M|tkvnum    = M|tkv^kvnum
+.copy      M|toffen    = M|tkv^kvoffen
+.formula   M|tsoll     = 0|sbetr
+.formula   M|thaben    = 0|hbetr
+.formula   M|tgegen    = 0|gegen
+.formula   M|tptext    = 0|ptext
+.formula   M|tptext    = 0|text    ?  M|tptext = ""
+.formula   M|tbeleg    = 0|beleg
+.formula   M|tebeleg   = 0|ebeleg
+.copy      M|tbudat    = 0|budat
+.formula   M|tmonat    = 0|monat
+.copy M|tsteuer   = 0|steuer
+.copy M|tkart     = 0|kart    ? F|defined(0|kart)
+.formula   M|tbeldat   = 0|beldat
+.copy      M|tstrgl    = 0|strgl
+.formula   U|xicount   = U|xicount + 1
+..
+.formula   M|tasaldo   = U|xrasaldo
+.formula   M|tesaldo   = U|xresaldo
+.formula   M|tkvssum   = M|tkv^sumsoll
+.formula   M|tkvhsum   = M|tkv^sumhaben
+.formula   M|tkvsaldo  = M|tkv^saldo
+..
+..*****************************************************************************
+!BALANCE
+..*****************************************************************************
+.type integer xifactor ? _F|defined(U|xifactor)
+..
+.formula U|xifactor =  1
+.formula U|xifactor = -1 ? M|richtungn = 1
+.continue SUBLEDGER ? 0|konto^dnr <> 5
+.formula U|xifactor = U|xifactor * -1 ? 0|konto^ev = "V"
+..
+..*****************************************************************************
+!SUBLEDGER
+..*****************************************************************************
+..
+.continue COLOR
+..
+..*****************************************************************************
+!COLOR
+..*****************************************************************************
+.continue SETCOL ? U|xicount > 1
+..
+.formula U|ximod =  U|ximod + 1
+..
+..*****************************************************************************
+!SETCOL: Set color
+..*****************************************************************************
+.colour -background 'F|condexpr(F|expr(U|ximod//2)=0, U|xabasgroupdark, U|xabasgrouplight)' 'M|aktzeile'
+.continue NEXT
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

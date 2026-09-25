@@ -1,0 +1,368 @@
+..!interpreter english
+..@@BEGINHEAD
+..========================================================================
+..==
+..==  Name              : LABDIFF
+..==
+..==  Pfad              : dfue
+..==
+..==  Funktion          : Ausgabe Differenzreport VDA-/ODETT-
+..==                      Lieferabrufe
+..==
+..==  Erstellungsdatum  : 26.05.1998
+..==
+..==  Autor             : alltrotec GmbH, Matthias Schrîder
+..==
+..==  Verantwortlich    : mh
+..==
+..==  notwendige Pfade  : dfue
+..==
+..==  Menuepunkte       :
+..==
+..==  Bitte wÑhlen Sie die Methode zur Identifikation des aktuellen Lieferabrufs
+..==  - Kundenartikelnummer, Werk, Abladestelle, VerwendungsschlÅssel
+..==  - Rahmenauftrags- und / oder Kunden-EKS-Ident-Nr.
+..==  - Ende
+..==
+..==  WÑhlen Sie die weitere Verarbeitungsmethode fÅr den gewÑhlten Lieferabruf
+..==  - Letzten Abruf des identifizierbaren EKS-Rahmens fÅr Differenzliste verwenden
+..==  - GewÑhlten Abruf fÅr Differenzliste verwenden
+..==
+..==  Maskenprioritaet
+..==  bei EFOP          :
+..==
+..==  Besonderheiten    : Parameter an LABDIFF.DRUCK:
+..==                      - Identnummer des EKS-EDI-Datensatzes des aktuell
+..==                        gewÑhlten letzten Lieferabrufes zu einem
+..==                        EKS-Rahmenauftrag (num, Datensatz ist geholt !)
+..==
+..========================================================================
+..@@ENDHEAD
+..
+.input ARB
+..
+.. variable definitions
+..@@BEGINVARDEFS
+..====================================================
+.set trans +
+..... procedure stack pointer .....
+.type integer   xprocsp
+..>> Abschlu·- / Bestell-Nummer
+.type text       xabbenr
+..>> aktuelle EKS-EDI-Identnummer
+.type text       xactedinum
+..>> Name des DFUE-Programms
+.type text       xdfueprog
+..>> Name des DFUE-Unterprogramms
+.type text       xdfueuprog
+..>> Name des VKAUV-Unterprogramms DFUE / DU .IMP.INI
+.type text       xduimpini
+..>> GTIN-Artikelnummer
+.type text       xgtigtin
+..>> 1. SuchschlÅssel EDI
+.type text       xedisuchschluessel1
+..>> Kunden-Fortschrittszahl
+.type integer    xeinfzahl
+..>> Kunden-Fortschrittszahl
+.type integer    xeinfzahlprv
+..>> Identnummer der EKS-Rahmen-Artikels
+.type text       xideksart
+..>> Identnummer des EKS-Rahmenauftrags
+.type text       xideksrah
+..>> Identnummer des EKS-Auftrages
+.type text       xideksvor
+..>> globaler Schalter, ob Protokoll erweitert
+.type bool       xistfproterw
+..>> 1. Schalter, ob nach Holen Satz vorhanden
+.type bool       xistsatz1
+..>> Zeichen des Kunden
+.type text       xkdzeich
+..>> Datum Lieferabruf
+.type GD         xlabrufd
+..>> Kundenartikelnummer
+.type text       xkuartnr
+..>> Datum letzer Lieferscheineingang
+.type GD         xleinlida
+..>> Nummer letzer Lieferscheineingang
+.type text       xleinlief
+..>> Name der permanenten Protokoll-Datei
+.type text       xnfprotokoll
+..>> Name der Erweiterung der Protokoll-Datei
+.type text       xnfprotokollerw
+..>> Identnummer EKS-Rahmen
+.type text       xranum
+..>> Suchwort EKS-Rahmen
+.type text       xrasuch
+..>> Benennung EKS-Rahmen
+.type text       xraname
+..>> ID Selektionsleiste
+.type text       xselektionslei
+..>> Identnummer SEL-ED-LAB
+.type text       xSELEDLABId
+..>> Richtung "rÅckwÑrts" fÅr Selektionsleiste aus LG
+.atext xSELSORTRUECK 2644
+..>> Richtung "vorwÑrts" fÅr Selektionsleiste aus LG
+.atext xSELSORTVORW 2643
+..>> Identnummer SEL-VK-REI
+.type text       xSELVKREIId
+..>> Identnummer SEL-VK-REE
+.type text       xSELVKREIIdGTIN
+..>> SYS-Befehl
+.type text       xsybefehl
+..>> TMP-Verzeichnis
+.type text       xtmpdir
+..====================================================
+..@@ENDVARDEFS
+..
+.. initialize procedure stack pointer
+.formula xprocsp = 0
+.. alle variablen mÅssen definiert sein, sonst bricht das programm ab
+.set demand -
+.set cancel -
+..
+.. ----------------------------------------
+.continue EPROCDEF
+.. procedure definitions
+!EPROCDEF: ----- end procedure definitions -----
+.. ----------------------------------------
+..
+..>> Name des DFUE-Programms (tname aus ARB)
+.formula xdfueprog = tname
+..>> Name des DFUE-Unterprogramms
+.formula xdfueuprog = tname
+.formula xistfproterw = false
+..>> vorÅbergehendes Verzeichnis temporÑre Dateien in "."
+.formula xtmpdir = ""
+..>> Name der Protokoll-Datei Erweiterung
+.formula xnfprotokollerw = xtmpdir + "XDAV.IMP." + panummer + ".TMP"
+..
+.output new 'xnfprotokollerw'
+.length 1
+.right 80
+.tablerecord
+..
+.output new WERF.WEG
+..
+..>> Test VKAUV-Unterprogramms DFUE.IMP.INI
+..**ok,07.01.2003 (xarb wurde entfernt)
+..**ok,07.01.2003 (Test von DFUE.IMP.INI wurde entfernt)
+.formula xduimpini = "dfue/DFUE.IMP.INI"
+..
+.formula xdfueuprog = xduimpini
+..
+.input 'xduimpini'
+..
+..
+!REPT001: ==============================
+.formula xedinum = ""
+..
+.. >> MenÅauswahl fÅr Identifikation des aktuellen Lieferabrufs
+.output terminal
+.input BILD.F
+'tname' - Ausgabe Differenzliste fÅr VDA-/ODETT-Lieferabrufe
+
+..
+.menu WÑhlen Sie die Methode zur Auswahl des Lieferabrufs
+Åber Rahmenauftrag (mit Artikel-Nr, Werk, Abladestelle, VerwendungsschlÅssel)
+Åber EDI-Datensatz (mit Lieferabruf-Nr, Artikel-Nr, Kunde, Werk, Abladestelle)
+Ende
+....
+..
+..
+.. =====   CASE001   =====
+.continue BRK001 ? _(menu = 1)
+.. >> MenÅauswahl 1: Holen EKS-Rahmenauftrag und -EDI-Datensatz
+..      .fo xselektionslei = "%" + (xSELVKREIId << -1)
+..**ok,19.09.2001 (rohlingslose Selektion)
+.formula xselektionslei = "%,,art=;kopf=;kunde=;kopf^werk=;kopf^ablstelle=;kopf^verwschl=;kopf^abschlnr="
+.formula xselektionslei = xselektionslei + ";.kotyp=(BlanketOrder)"
+.select sales 'xselektionslei'
+..
+..
+.continue EL001 ? _(mehr)
+.. IF001
+.formula xranum  = 'kopf^num3'
+.formula xrasuch = 'kopf^such3'
+.formula xraname = 'kopf^betreff'
+.formula xident  = 'kopf^ident'
+..**ok,05.10.2001 (Jetzt Identnummer und Suchwort des Artikels gemerkt)
+.formula xnreksartikel = 'art^num2'
+.formula xsueksartikel = 'art^such2'
+..
+..
+.continue EL002 ? G|false
+.. IF002
+..
+.continue EL003 ? _(xident<> "")
+.. IF003
+.select edifact 'xident'
+..
+.formula xistsatz1 = mehr
+..**ok,05.10.2001 (Jetzt ideksart mit Identnummer oder Suchwort des Artikels verglichen)
+..
+..
+.continue EL004 ? _(xistsatz1)
+.. IF004
+..
+.continue EL005 ? _((ideksart=xnreksartikel) ; (ideksart=xsueksartikel))
+.. IF005
+.continue FI005
+!EL005
+..**ok,16.05.2002 (die Variable xeksartikel --> xnreksartikel korrigiert)
+..
+.box Fehler
+ FÅr den Rahmenauftrag-ID: 'xranum  ', Suchwort: 'xrasuch'
+ mit dem Artikel 'xnreksartikel'
+ ist kein eingegangener Lieferabruf vorhanden!
+.formula xistsatz1 = false
+..
+!FI005
+..
+.continue FI004
+!EL004
+.. >> Testergebnis negativ: Fehlermeldung
+.box Fehler
+
+ Rahmenauftrag:
+
+ 'xranum  ' 'xrasuch ' 'xraname'
+
+ hat Eintrag eines eingegangenen Lieferabrufs
+ fÅr nicht existierenden EDI-Datensatz !
+
+..
+..
+!FI004
+..
+.continue FI003
+!EL003
+.. >> Testergebnis negativ: Fehlermeldung
+..>>
+.box Fehler
+ FÅr den Rahmenauftrag-ID: 'xranum  ', Suchwort: 'xrasuch'
+ ist kein eingegangener Lieferabruf vorhanden!
+.formula xistsatz1 = false
+..
+!FI003
+..
+.continue FI002
+!EL002
+.. >> Testergebnis negativ: Fehlermeldung
+..>>
+.box Fehler
+
+ GewÑhltes Objekt:
+
+ 'xranum  ' 'xrasuch ' 'xraname'
+
+ ist kein Rahmenauftrag !
+ (Parameter "Rahmen" in Selektions-Leiste auf "ja" lassen)
+
+..
+..
+!FI002
+..
+.continue FI001
+!EL001
+.formula xistsatz1 = false
+..
+!FI001
+..
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(menu = 2)
+.. >> MenÅauswahl 2: Holen letzten EKS-EDI-Datensatz eines Rahmens
+..**ok,19.09.2001 (rohlingslose Selektion)
+.. Åber EDI-Datensatz (mit Feinabruf-Nr, Artikel-Nr, Kunde, Werk, Abladestelle)
+..**ok,03.01.2002 (EDI-ID-Nr in der Selektion ganz vorne umgelagert)
+.formula xselektionslei = "%,,num53=;ideksart=;labruf=;idkundeab=;werk=;ablstelle=;verwschl=;abbenr="
+..**ok,12.12.2002 (wegen der alten EDI-DatensÑtze wurde "datenart=511" entfernt)
+.formula xselektionslei = xselektionslei + ";ideksrah=;sinhouse=500;vorart=3;imex=IM"
+.formula xselektionslei = xselektionslei + ";fcode=0;status=0;@richtung="+ xSELSORTRUECK
+.select edifact 'xselektionslei'
+..
+..
+.continue EL006 ? _(mehr)
+.. IF006
+..>> Testergebnis positiv: Holen letzten Lieferabruf aus EKS-EDI-Datenbank
+..
+..  .hole edi 'num'
+..
+!EL006
+.. FI006
+..
+.formula xistsatz1 = mehr
+..
+.continue ESAC001
+!BRK002
+.end .
+..
+!ESAC001: =====   ENDCASE   =====
+..
+..>> Test, ob (mindestens ein) EKS-EDI-Datensatz (Lieferabruf) ausgewÑhlt
+..
+..
+.continue EL007 ? _(xistsatz1)
+.. IF007
+.input DRUCKER
+..
+!EL007
+.. FI007
+..
+..
+!LOOP001: ==============================
+.continue ELOP001 ? _(xistsatz1)
+.. >> Verarbeitung aller gewÑhlten EKS-EDI-DatensÑtze (Lieferabrufe)
+..>> Merken aktuelle EKS-EDI-Identnummer
+.formula xactedinum = num
+..
+.input LABDIFF.DRUCK
+..
+..
+.continue EL008 ? _(geraet = "")
+.. IF008
+..
+.continue EL009 ? _(grafik)
+.. IF009
+.box Liste beendet
+
+ Weiter ...
+
+..
+..
+.continue FI009
+!EL009
+.output terminal ...
+..
+!FI009
+..
+!EL008
+.. FI008
+..
+.select edifact
+..
+..>> Merken, ob neuen Datensatz geholt
+..**19.09.2001 (zuerst mit "mehr" geprÅft)
+..
+..
+.continue EL010 ? _(mehr)
+.. IF010
+.formula xistsatz1 = mehr & (num <> xactedinum)
+..
+.continue FI010
+!EL010
+.formula xistsatz1 = mehr
+..
+!FI010
+..
+.continue LOOP001
+!ELOP001: ==============================
+..
+.continue REPT001 ? _((menu <> 1) & (menu <> 2))
+..
+..>> Lîschen Erweiterung Protokoll-Datei
+.formula xsybefehl = "rm -f " + xnfprotokollerw + " 1> ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+..
+.end .
+..

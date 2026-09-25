@@ -1,0 +1,118 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : DATEVFBBW.EV
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Allgemeines Event-FOP zu DATEV-Export Infosystemen (FBBW)
+.. Functionality  :
+..*****************************************************************************
+..
+.. include fb/DATEVFB.EV
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.input "fb/DATEVFB.EV"
+..
+.continue ABRNUM  ? G|evtvar = "abrechnungsnummer" & G|evtartengl = "FIELD_VALIDATION"
+.continue START   ? G|evtvar = "bstart"
+.continue PERIOD  ? G|evtvar = "datvon"
+.continue PERIOD  ? G|evtvar = "datbis"
+.continue PERIOD  ? G|evtvar = "anfm"
+.continue PERIOD  ? G|evtvar = "endm"
+.continue PERIOD  ? G|evtvar = "gjahr"
+.continue SELEXPN ? G|evtvar = "selexpnum"  & G|evtartengl = "FIELD_EXIT"
+.continue ABRNUMA ? G|evtvar = "abrnumauto" & G|evtartengl = "FIELD_EXIT"
+.continue END
+..
+..*****************************************************************************
+!ABRNUMA
+..*****************************************************************************
+.protection abrechnungsnummer         ?  M|abrnumauto
+.formula M|abrechnungsnummer = 0   ?  M|abrnumauto
+.protection -reset abrechnungsnummer  ? _M|abrnumauto
+.continue END
+..
+..*****************************************************************************
+!SELEXPN
+..*****************************************************************************
+.formula M|wiederholung = M|selexpnum > 0
+.type IP9 xsuchnummer
+.formula U|xsuchnummer = M|selexpnum
+.input "fb/DATEVFBBW.LESE.LOG"
+.continue END ? F|empty(M|selexpnum)
+.formula M|selexpnum = 0 ? F|empty(U|xdatvon)
+.formula M|expnummer = M|selexpnum
+.formula M|wiederholung = M|selexpnum > 0
+.continue ERR03 ? F|empty(U|xdatvon)
+.formula M|expnummer = U|xexpnummer
+.formula M|datvon = U|xdatvon
+.formula M|datbis = U|xdatbis
+.formula M|abrechnungsnummer = U|xabrechnungsnummer
+.continue PERIOD
+..
+..*****************************************************************************
+!ABRNUM
+..*****************************************************************************
+.continue END ? M|.G|evtvar >= 1 & M|.G|evtvar <= 69
+.error Nur Werte zwischen 1 und 69 zulaessig.
+.end 1
+..
+..*****************************************************************************
+!PERIOD
+..*****************************************************************************
+.type text xxtsmon    ? _F|defined(U|xxtsmon)
+.type text xxtsyear   ? _F|defined(U|xxtsyear)
+.type text xxtemon    ? _F|defined(U|xxtemon)
+.type text xxteyear   ? _F|defined(U|xxteyear)
+.type text xxtfromd   ? _F|defined(U|xxtfromd)
+.type text xxttod     ? _F|defined(U|xxttod)
+..
+.formula U|xxtsyear = "gjahr"
+.formula U|xxteyear = "gjahr"
+.formula U|xxtfromd = "datvon"
+.formula U|xxttod   = "datbis"
+.formula U|xxtsmon  = "anfm"
+.formula U|xxtemon  = "endm"
+..
+.input "fb/IS.SETPERIOD"
+..
+.continue END ? F|empty(M|datvon)
+.. Als Wirtschaftsjahr immer das Kalenderjahr des Anfangsdatums des Anfangs-GJs
+.copy    M|wjbeginn = F|fystartdate(F|getfy(M|datvon))
+.formula M|wirtschaftsjahr = F|year(M|wjbeginn)
+.continue END
+..
+..*****************************************************************************
+!START: Select data
+..*****************************************************************************
+.continue ERR02 ? F|empty(M|datvon)
+.. Enddatum auf Ende des Kalenderjahres setzen, wenn es leer ist
+.formula M|datbis = F|tostring(F|year(M|datvon)) + "1231" ? F|empty(M|datbis)
+.continue ERR01 ? F|year(M|datvon) <> F|year(M|datbis)
+.continue END
+..
+..*****************************************************************************
+!ERR01
+..*****************************************************************************
+.error Kein kalenderjahrÅbergreifender Export mîglich.
+.end 1
+..
+..*****************************************************************************
+!ERR02
+..*****************************************************************************
+.error Kein Anfangsdatum angegeben.
+.end 1
+..
+..*****************************************************************************
+!ERR03
+..*****************************************************************************
+.error Exportvorgang nicht gefunden.
+.end 1
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

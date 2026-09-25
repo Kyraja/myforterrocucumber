@@ -1,0 +1,449 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BVSTATUS.EV
+.. Autor          : es
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+..
+.. Funktion       : Infosystem BSTATUS, alle Events
+...Includes       :
+.. include la/BSTATUS.FARBE
+.. include st/GETICONPART
+.. include la/BSTATUS.EDP
+..*****************************************************************************
+.set trans -
+..
+.type IP4 xstufe
+.type text xtherkunft
+.type integer xstartzl
+.type text  xtext ? _F|defined(U|xtext)
+.type VPKS1   xtartid    ? _F|defined(xtartid)
+.type ID39:2  xtlgid     ? _F|defined(xtlgid)
+.type text    xticon     ? _F|defined(xticon)
+..
+..-----------------------------------------------------------------------------
+.. Tabellenteil
+..-----------------------------------------------------------------------------
+.continue BRES     ? G|evtartengl="BUTTON_AFTER" & G|evtvar="breserv"
+.continue BVORG    ? G|evtartengl="BUTTON_AFTER" & G|evtvar="bvorgang"
+.continue KLAPP    ? G|evtartengl="BUTTON_AFTER" & G|evtvar="aufzu"
+.continue ERSATZ   ? G|evtartengl="BUTTON_AFTER" & G|evtvar="ersetzen"  & F|defined(M|bstatus)
+.continue FVALLOP  ? G|evtartengl="FIELD_VALIDATION" & G|evtvar="kaufklappen"
+.continue ALLOPEN  ? G|evtartengl="FIELD_EXIT"       & G|evtvar="kaufklappen"
+.continue BSART    ? G|evtartengl="FIELD_EXIT" & G|evtvar="elbsart" & F|defined(M|bstatus)
+.continue UMLLG    ? G|evtartengl="FIELD_EXIT" & G|evtvar="umllg" & F|defined(M|bstatus)
+.copy M|kaufklappen = G|FALSE ? F|defined(M|kaufklappen)
+.input "is/TABLEEREN"
+.assign P|maskkontextfop = ""   ? _F|defined(M|bstatus)
+..-----------------------------------------------------------------------------
+.. Kopfteil
+..-----------------------------------------------------------------------------
+.continue SEL        ? G|evtartengl="FIELD_EXIT"    & G|evtvar="select"
+.continue VBSTART    ? G|evtartengl="BUTTON_AFTER"  & G|evtvar="buvstatus"
+.continue BSTART     ? G|evtartengl="BUTTON_AFTER"  & G|evtvar="bstart"
+.continue KLGRUPPE   ? G|evtartengl="FIELD_EXIT"    & G|evtvar="klgruppe"
+.continue ALLE       ? G|evtartengl="FIELD_EXIT"    & G|evtvar="vorw"
+.continue NURKRIT    ? G|evtartengl="FIELD_EXIT"    & G|evtvar="nurkrit"
+.continue NURKRIT    ? G|evtartengl="FIELD_EXIT"    & G|evtvar="nurkritpf"
+.continue BKVORG     ? G|evtartengl="BUTTON_AFTER"  & G|evtvar="bkvorgang"
+.continue BSTATUS    ? G|evtartengl="FIELD_EXIT"    & G|evtvar="ansbstatus"
+.continue ASL        ? G|evtartengl="FIELD_EXIT"    & G|evtvar="ansasl"
+.continue VARIANTE   ? G|evtartengl="FIELD_EXIT"    & G|evtvar="bvariante"
+.continue LEEREN     ? G|evtartengl="FIELD_EXIT"    & G|evtvar="konddat"
+.continue LEEREN     ? G|evtartengl="FIELD_EXIT"    & G|evtvar="detail"
+.continue ANZSTUF    ? G|evtartengl="FIELD_EXIT"    & G|evtvar="anzstufen"
+.continue LEEREN     ? G|evtartengl="FIELD_EXIT"    & G|evtvar="alle"
+.continue END
+..
+!ANZSTUF: number of steps
+.continue LEEREN  ? _F|defined(M|kaufklappen)
+.continue LEEREN  ? _M|kaufklappen
+.continue END
+!FVALLOP: Validate function open everything
+.continue END ? _F|empty(M|tzeilen)
+.copy M|kaufklappen = G|FALSE
+.continue ERROR1
+..
+!ALLOPEN: Do function open everything
+.continue LEEREN  ? _M|kaufklappen
+.select screen header
+..
+!NEXTROW
+.select screen line
+.continue END                ? _G|mehr
+.continue NEXTROW            ?  M|aufzu = "icon:folder_opened"  ; M|aufzu = "icon:minus_black" 
+.continue NEXTROW            ?  F|empty(M|aufzu)
+.continue NEXTROW            ?  (M|aufzu = "icon:folder_closed" ; M|aufzu = "icon:plus_black") & M|tbaumstufe >= M|anzstufen
+.formula M|aufzu = "icon:folder_opened" ?  M|aufzu = "icon:folder_closed"
+.formula M|aufzu = "icon:minus_black"   ?  M|aufzu = "icon:plus_black"
+.continue KLAPP
+..
+!VBSTART
+.copy M|letzte = G|TRUE 
+.copy M|detail = G|TRUE 
+.input "is/HOL.VSTATUS"
+.continue END
+!BSART: Setzen der Beschaffungsart im Beschaffungsstatus
+.formula M|umllg = "" ? _F|equals(M|elbsart,"(Relocation)") 
+.protection -field umllg 'M|aktzeile'  ? _F|equals(M|elbsart,"(Relocation)") 
+.protection -reset -field umllg 'M|aktzeile'  ? F|equals(M|elbsart,"(Relocation)") 
+.continue ERROR2 ? F|equals(M|elbsart,"(Subcontracting)")
+.continue ERROR2 ? F|equals(M|elbsart,"(Restructure)")
+.continue END
+!UMLLG: Umlagerungsgruppe setzen im Beschaffungsstatus
+.continue ERROR3 ? _F|empty(M|umllg) & _F|equals(M|elbsart,"(Relocation)")
+.continue END
+..
+!BSTART
+.copy M|letzte = G|FALSE
+.input "is/HOL.VSTATUS"
+.continue END
+..
+!ASL: Sales order BOM clicked
+.continue NOASL ? _M|ansasl
+.copy M|ansbstatus = G|FALSE
+.copy M|bvariante  = G|FALSE
+.copy M|brelevant  = G|TRUE 
+.continue VWSOBOM
+..
+!NOASL
+.copy M|ansbstatus = G|TRUE
+.copy M|bvariante  = G|FALSE
+.continue VWPSTAT
+..
+!BSTATUS: Propcurement status clicked
+.continue NOBSTATUS ? _M|ansbstatus
+.copy M|ansasl    = G|FALSE
+.copy M|bvariante = G|FALSE
+.copy M|brelevant = G|TRUE
+.continue VWPSTAT
+..
+!NOBSTATUS
+.copy M|ansasl    = G|TRUE
+.copy M|bvariante = G|FALSE
+.continue VWSOBOM
+..
+!VARIANTE: Variant production list clicked
+.continue NOVARIANTE ? _M|bvariante
+.copy M|ansbstatus = G|FALSE
+.copy M|ansasl     = G|FALSE
+.copy M|brelevant  = G|TRUE
+.continue VWSOBOM
+..
+!NOVARIANTE
+.copy M|ansbstatus = G|TRUE
+.copy M|ansasl     = G|FALSE
+.continue VWPSTAT
+..
+!VWPSTAT: View is procurement status
+.assign P|maskkontextfop = "BSTATUS"
+.continue LEEREN
+..
+!VWSOBOM: View is sales order BOM
+.assign P|maskkontextfop = "ASL"
+.continue LEEREN
+..
+!KLGRUPPE
+.copy M|klgruppe = M|intlgruppe ? F|empty(M|klgruppe)
+.formula M|select = ""
+.continue SEL
+..
+!SEL: Informationsfelder im Kopfteil fuellen
+.type bool xverkauf
+.. Auftragsposition ??
+.copy U|xverkauf = M|select / "*,3,*"
+..
+.continue SELLEER                 ?  F|empty(M|select)
+.continue DOSEL                   ? _F|defined(H|id)
+.continue SELHOLOK                ?  H|id = M|select
+..
+!DOSEL
+.select sales 'M|select'          ?  U|xverkauf
+.select purchasing 'M|select'     ? _U|xverkauf
+.continue SELLEER                 ? _G|mehr
+.continue SELHOLOK                ? _U|xverkauf
+.continue REP                     ?  H|kotyp = 35
+.continue SELHOLOK
+..
+!REP: Fuer Reparaturauftraege werden Daten des Fertigungsvorschlags benoetigt
+.formula U|xtherkunft = "$,,id=;artikel==" + H|artikel^id + ";verw==" + H|verw + ";@ablageart=(Both);@gruppe=5"
+.select nolock purchasing 'U|xtherkunft'
+.continue SELLEER                 ? _G|mehr
+.formula M|select = H|id
+..
+!SELHOLOK: Felder, die fuer alle BS und RES gleichermassen gefuellt werden
+.formula M|kvorgang = H|id
+.copy M|klgruppe    = H|lgruppe
+.formula M|klimge   = H|limge           ? H|typ<>G|arpos
+.formula M|klimge   = H|limge * H|lehe  ? H|typ= G|arpos
+.formula M|kmge     = H|mge             ? H|typ<>G|arpos
+.formula M|kmge     = H|mge   * H|lehe  ? H|typ= G|arpos
+.formula M|kterm    = H|term
+.formula M|kwterm   = H|term            ?  U|xverkauf & H|fix
+.formula M|kwterm   = H|wterm           ? _U|xverkauf
+.formula M|kfterm   = H|fterm
+.formula M|kvorlauf = 0                 ? H|typ<>G|arpos
+.formula M|kvorlauf = H|vorlauf         ? H|typ= G|arpos
+.formula M|verw     = H|verw
+.assign M|kprojekt  = H|projekt
+.formula M|kdispo   = H|dispo           ? _U|xverkauf
+.formula M|kdispoa  = H|dispoa          ? _U|xverkauf
+.formula M|kfix     = H|fix
+.continue SELTYP                        ? _F|defined(M|bstatus)
+.formula M|kkrit    = H|krit
+.formula M|kfahnez  = G|icokrit         ? H|krit = "*"
+.formula M|kfahnez  = G|icovkrit        ? H|krit = "^"
+.formula M|kfahnez  = G|icoukrit        ? H|krit = ""
+.formula M|konddat  = H|tterm
+..
+!SELTYP: Typspezifische Felder initialisieren
+.continue SELRES                      ?  H|typ=G|RESERV
+.. Auftragsposition/Bestellposition/BV/UMV/FV
+.continue SELFV                       ?  H|typ=G|FEVOR
+.add H|kopf
+.formula M|kvkopf = ""                ? _G|mehr
+.formula M|kvkopf = D|id              ?  G|mehr
+.copy M|kfreig    = G|mehr
+.add
+.continue SELBE                       ? _U|xverkauf
+.. Auftragsposition
+.assign M|kvart = "(SalesOrder)"
+.continue SELBS1
+..
+!SELBE: Bestellposition/BV/UMV/LFV
+.assign M|kvart = "(ExternalProcurement)" ? F|equals(H|bsart, "(ExternalProcurement)")
+.assign M|kvart = "(Relocation)"          ? F|equals(H|bsart, "(Relocation)")
+.assign M|kvart = "(Subcontracting)"      ? F|equals(H|bsart, "(Subcontracting)")
+..
+!SELBS1
+.formula M|ksterm = ""                ? _F|empty(H|kopf)
+.formula M|ksterm = H|sterm           ?  F|empty(H|kopf)
+.continue SELBS2
+..
+!SELFV
+.add H|ba
+.formula M|kvkopf = ""                ? _G|mehr
+.formula M|kvkopf = D|id              ?  G|mehr
+.copy M|kfreig    = G|mehr
+.add
+.assign M|kvart   = "(InhouseProduction)"
+.formula M|ksterm = H|sterm
+..
+!SELBS2
+!SELBSART
+.formula M|kart   = H|art^id
+.formula M|kle    = H|art^le
+.assign U|xtartid = M|kart^id
+.assign U|xtlgid  = M|klgruppe
+.input "st/GETICONPART"
+.formula M|icon   = U|xticon
+.continue SELEND
+..
+!SELRES: Reservierungen R
+.formula M|kvart  = "(Reservation)"
+.formula M|ksterm = ""                ? H|elart<>3
+.formula M|ksterm = H|sterm           ? H|elart=3
+.add H|vor
+.continue SELRESFV                    ? D|typ=G|FEVOR
+.. RES zu Auftragsposition/Bestellposition/BV/UMV
+.add D|kopf
+.continue SELRES2
+..
+!SELRESFV: RES zu FV
+.add D|ba
+..
+!SELRES2
+.formula M|kvkopf = ""                ? _G|mehr
+.formula M|kvkopf = D|id              ?  G|mehr
+.copy M|kfreig    = G|mehr
+.add
+..
+.copy M|kfix    = G|TRUE              ? M|kfreig
+.continue SELBSART                    ? H|elart=1 ; H|elart=4
+.formula M|kart = ""
+.formula M|kle  = ""
+.continue SELEND
+..
+!SELLEER: Informationsfelder leeren, weil Vorgang leer ist
+.formula M|select   = ""
+.formula M|kvart    = ""
+.formula M|kvkopf   = ""
+.formula M|kvorgang = ""
+.copy M|klgruppe    = M|intlgruppe    ? F|empty(M|klgruppe)
+.formula M|kart     = ""
+.formula M|klimge   = 0.0
+.copy M|kfreig      = G|FALSE
+.formula M|kmge     = 0.0
+.formula M|kle      = ""
+.formula M|kvorlauf = 0
+.formula M|ksterm   = ""
+.formula M|kterm    = ""
+.formula M|kwterm   = ""
+.formula M|kfterm   = ""
+.formula M|verw     = ""
+.formula M|kprojekt = ""
+.formula M|kdispo   = ""
+.formula M|kdispoa  = ""
+.formula M|kfix     = ""
+.continue SELEND                      ? _F|defined(M|bstatus)
+.formula M|kkrit    = ""
+.formula M|kfahnez  = ""
+.continue SELEND
+..
+!SELEND: unlock, clear table
+.select -
+.continue LEEREN
+..
+!ALLE
+.continue LEEREN ? _F|defined(M|bstatus)
+.copy M|nurkrit   = G|FALSE
+.copy M|nurkritpf = G|FALSE
+.continue LEEREN
+..
+!NURKRIT
+.continue LEEREN               ? _M|nurkrit & _M|nurkritpf
+.continue NOTKRIT              ? 'M|kfterm' = "" & M|kterm > G|datum
+.copy M|vorw      = G|FALSE
+.copy M|nurkritpf = G|FALSE    ?  G|evtvar="nurkrit"
+.copy M|nurkrit   = G|FALSE    ?  G|evtvar="nurkritpf"
+..
+!LEEREN
+.input "is/TABLEEREN"
+.continue END
+..
+!NOTKRIT
+.error -message Der Vorgang ist nicht kritisch.
+.copy M|nurkrit   = G|FALSE
+.copy M|nurkritpf = G|FALSE
+.continue END
+..
+!BKVORG
+.select add M|kvorgang
+.continue EXEC
+..
+!EXEC
+.continue END ? _G|mehr
+.formula U|xtext = 'F|formatstr("{1}<{2}>", H|id, "(Edit)")' +" ? [autoclose] = 1"
+.command -parallel 'U|xtext'
+.select -
+.continue END
+..
+.. Tabellenteil
+!BRES
+.select add M|reserv
+.continue EXEC
+..
+!BVORG
+.select add M|vorgang
+.continue EXEC
+..
+!ERSATZ: Beschaffungsart ersetzen
+.continue ERROR6 ? F|equals(M|bdispoa,"(VariantRelated)")  
+.continue ERROR4 ? F|equals(M|elbsart,"(Relocation)") & F|empty(M|umllg)
+.continue ERROR5 ? F|equals(M|elbsart, M|reserv^elbsart) & _F|equals(M|elbsart,"(Relocation)") 
+.continue ERROR5 ? F|equals(M|elbsart, M|reserv^elbsart) & F|equals(M|umllg^id, M|reserv^umllg^id) & F|equals(M|elbsart,"(Relocation)")
+.input "la/BSTATUS.EDP"
+.continue END
+!KLAPP: Auf-/zuklappen
+.formula U|xstartzl = M|aktzeile
+.continue AUFZU                   ? _F|defined(M|bstatus)
+.continue SSTLAUF                 ?  M|aufzu = "icon:plus_black" & M|ansasl & G|evtvar = "aufzu"
+.continue SSTLZU                  ?  M|aufzu = "icon:minus_black" & M|ansasl & G|evtvar = "aufzu"
+.continue SSTLAUF                 ?  M|aufzu = "icon:minus_black" & G|evtvar = "kaufklappen" 
+..
+!AUFZU
+.continue AUFKLAPP                ?  M|bstl=-1
+.continue ZUKLAPP                 ?  M|bstl=+1
+.continue END
+..
+!SSTLAUF: Stckliste aufklappen
+.continue END                     ? M|tbaumstufe = M|anzstufen & G|evtvar = "aufzu"
+.formula M|aufzu = "icon:minus_black"
+.formula U|xstufe = M|tbaumstufe
+.input "la/BSTATUS.AUFZU"
+.continue ENDHOL
+..
+!SSTLZU: Stckliste zuklappen
+.formula M|aufzu = "icon:plus_black"
+.input "la/BSTATUS.AUFZU"
+.continue ENDHOL
+..
+!AUFKLAPP
+.formula M|bstl  = +1
+.formula M|aufzu = "icon:folder_opened"
+.continue AUFRES    ? _F|defined(M|bstatus)
+.. im BSTATUS aufklappen
+.select add M|vorgang
+.continue ENDHOL    ? _G|mehr
+.formula M|stufe = M|tbaumstufe + 1
+.select add eres    ?  M|vorw
+.select add lres    ? _M|vorw
+.continue ENDHOL    ? _G|mehr
+..
+!HOLB
+.input 'M|tab'     ? _F|empty(M|tab)
+.select line       ?  M|vorw
+.select add ppos   ? _M|vorw
+.continue HOLB     ?  G|mehr
+.continue ENDHOL
+..
+!AUFRES: im VSTATUS aufklappen
+.select add M|reserv
+.continue ENDHOL    ? _G|mehr
+.formula M|stufe = M|tbaumstufe + 1
+.select add H|vor
+.continue ENDHOL    ? _G|mehr
+.input 'M|tab'      ? _F|empty(M|tab)
+..
+!ENDHOL: alles geholt
+.. Tabelle ab xstartzl einfaerben
+.select screen line 'U|xstartzl'
+.continue COLOR           ? _F|defined(M|bstatus)
+.make screen line -O      ? M|tbaumstufe > M|stufe
+.make screen line -O      ? M|tbaumstufe > M|anzstufen & M|kaufklappen
+..
+!COLOR: Coloring rows
+.input "la/BSTATUS.FARBE"
+.continue ALLOPEN ? G|evtvar = "kaufklappen"
+.continue END
+..
+!ZUKLAPP
+.formula M|bstl  = -1
+.formula M|aufzu = "icon:folder_closed"
+.formula M|stufe = M|tbaumstufe
+.select screen line
+.continue END                        ? _G|mehr
+..
+!NXTZUKLAPP
+.continue ENDZUKLAPP                 ? M|tbaumstufe <= M|stufe
+.make screen line -O
+.continue NXTZUKLAPP                 ? M|aktzeile > U|xstartzl
+..
+!ENDZUKLAPP
+.continue ENDHOL
+.. ****************************************************************************
+!END
+.continue
+.. ****************************************************************************
+..
+!ERROR1
+.error Keine Tabellenzeilen geladen!
+.end 1
+!ERROR2
+.error Diese Beschaffungsart kann nicht gew„hlt werden!
+.copy M|elbsart = M|reserv^elbsart
+.end 1
+!ERROR3
+.error Keine Umlagerungsgruppe w„hlbar!
+.formula M|umllg = ""
+.end 1
+!ERROR4
+.error Umlagerungsgruppe w„hlen!
+.cursor umllg 'M|aktzeile'
+.end 1
+!ERROR5
+.error Diese Einstellung ist schon in der Auftragsfertigungsliste gesetzt.
+.end 1
+!ERROR6
+.error Nicht m”glich bei der Dispositionsart variantenbezogen.
+.end 1

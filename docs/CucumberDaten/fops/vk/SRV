@@ -1,0 +1,354 @@
+..!interpreter english translate
+.continue START1
+..*****************************************************************************
+..
+..  Name      : SRV
+..  Datum     : 07.03.96
+..  Vers.     : 7.1
+..  Autor     : System 3
+..
+..  Verantwortlich : as
+..  Verantwortlich : mibr
+..
+..
+..  Funktion  : Vorschlagsliste - Sammelrechnungen
+..              Programm dient zur Erstellung einer Vorschlagsliste
+..              als Grundlage zur Erzeugung von Sammelrechnungen.
+..
+..  Ablauf    :
+..          a : - alle Nummern offener LS eines Kunden, deren Lieferdatum
+..                vor dem anzugebenden Liefertermin lag, werden in die
+..                Vorschlagliste geschrieben (VR.(nr))
+..              - sortieren der Vorschlagsliste
+..              - Rechnungserzeugung
+..          b : - s. a: (fÅr alle Kunden)
+..          c : - editieren der Journaldatei VR.J (nur lesen)
+..          d : - Aufruf des Programms VRLE (Druck der Vorschlagsliste)
+..
+..*****************************************************************************
+..  Input - Output - Dateien
+..  ========================
+..
+..  vrlad     = Laderdatei (VR.LAD)
+..  sortd     = Vorschlagsliste (VR.(nr))
+..  merkdatei = Zeigerdatei fÅr Vorschlagslistennummerierung (VR.N)
+..  journal   = Journaldatei (VR.J)
+..  VRLIST.TMP= Zwischendatei fÅr Sortierung von VR.(nr)
+..  VR.ERR    = Fehlerdatei, enthaelt Lieferscheinnummern ohne
+..              Zahlungsbedingung
+..*****************************************************************************
+..  SUBROUTINES
+..  ===========
+..
+..  xvrle     = Programm zum Ausdruck der Rechnungsvorschlagsliste
+..  vrlad     = Lader zum Ansto·en der Rechnungserzeugung (VR.LAD)
+..
+..
+..*****************************************************************************
+.set trans -
+!START1
+.type bool xeinszuviel
+.type text sortd merkdatei journal vrlad xvrle xzbederr eingabe sysb aa
+.type text xsys vrnum xnum xkom
+.formula xeinszuviel = false
+..
+!START
+..
+.input "ARB"
+..
+.type bool xmenzbed xmemzbed
+..
+.formula xmenzbed = false
+.formula xmemzbed = false
+..
+.formula sortd=xarb+"VR."
+.formula merkdatei=xarb+"VR.N"
+.formula journal=xarb+"VR.J"
+.formula vrlad=xarb+"VR.LAD"
+.formula xvrle=xarb+"VRLE"
+.formula xzbederr = xarb+"VR.ERR"
+..
+.output new 'xzbederr'
+..
+.type integer xx xzahl xzeig xtyp vlnum xsfaehig
+.type text xmerk xname xart wust:299 xtmp:10 zzbed xzeile xt:20
+.type date xdatum xfrueh
+.type bool xweiter
+..
+.continue NICHTSTUN ? _xeinszuviel
+.. die Nummer der Vorschlagsliste in VR.N wieder um eins erniedrigen
+.select from 'merkdatei' xzahl
+.formula xzahl=xzahl-1
+.output new 'merkdatei'
+.input "DATEI.F"
+'xzahl'
+.select from
+.formula xeinszuviel = false
+..
+!NICHTSTUN
+.set trans +
+.output terminal
+.input BILD.F
+                        Vorschlagliste Sammelrechnungen
+
+.menu
+Liste fÅr VorgÑnge eines Kunden    >> .formula eingabe = "A"
+Liste fÅr VorgÑnge aller Kunden    >> .formula eingabe = "B"
+Journal zeigen                     >> .formula eingabe = "C"
+Rechnungsliste zeigen              >> .formula eingabe = "D"
+Ende                               >> .formula eingabe = "Q"
+..
+.continue ENDE ? F|empty(G|menue)
+..
+?                        Liste fÅr VorgÑnge eines Kunden   ? eingabe = "A"
+?                        Liste fÅr VorgÑnge aller Kunden   ? eingabe = "B"
+?                                Journal zeigen            ? eingabe = "C"
+?                            Rechnungsliste zeigen         ? eingabe = "D"
+
+..
+.read "Liefertermin ? (return=heute)" xdatum ? eingabe/"/AB/"
+.formula xdatum=datum ? xdatum=xfrueh
+?Liefertermin: 'xdatum' ? eingabe/"/AB/"
+.set trans -
+..
+.continue B    ? eingabe="A" ; eingabe="B"
+.continue C    ? eingabe="C"
+.continue D    ? eingabe="D"
+.continue ENDE ? eingabe="Q"
+.continue START
+..
+!B: ein Kunde / alle Kunden
+.. die nÑchste zu vergebende Nummer fÅr die Vorschlagliste steht in VR.N
+.formula sortd=xarb+"VR."
+.select from 'merkdatei' xzahl
+.formula xmerk=xzahl
+.formula xzahl=xzahl+1
+.output new 'merkdatei'
+.input "DATEI.F"
+'xzahl'
+..
+.select from
+.formula sortd=sortd+ xmerk
+.output new 'sortd'
+.output terminal
+.input bild.f
+.formula xzeig=1      ? eingabe="A"
+.formula xzeig=2      ? eingabe="B"
+..
+.continue NAECHST  ? eingabe="B"
+..
+.read "Lieferungen fÅr welchen Kunden" xkunde
+.select customer 'xkunde'
+.continue FEHL2 ? _mehr
+..
+.formula xname=name
+.formula xnum=num
+.output terminal
+.input BILD.F
+..
+!NAECHST
+.formula xx=0
+.select sales outstanding delnotes
+.continue SO1     ? _mehr
+.continue NAECHST ? H|vom>xdatum
+..
+.continue NAECHST ? H|kunde<>xnum & eingabe="A"
+.continue ZBED    ? H|zbedschl <> zzbed ; H|zbed <> zzbed
+..
+.formula xmenzbed = true
+.output addedto 'xzbederr'
+.input "DATEI.F"
+'H|num   ' 'H|vom    ' 'H|kunde'
+.continue NAECHST
+..
+!ZBED
+.formula xmemzbed = true
+..
+.continue SUCH
+.. Rechnungen kînnen nur zusammengefasst werden, wenn jeweils folgende
+.. DB-Inhalte Åbereinstimmen:
+..                 - Rechnungskunde
+..                 - Vertreter
+..                 - Preisstellung
+..                 - Zahlungsbedingung
+..                 - Inland/Ausland
+..                 - WÑhrung
+..
+.. Rechnungen werden aber auch dann zusammengefasst, wenn
+..                 - Preisstellung
+..                 - Vertreter
+.. nicht vorhanden sind. Es wird also ein leerer Eintrag in diesen
+.. Feldern abkzeptiert.
+.. Wenn diese Felder vorhanden sein muessen,
+.. dann muessen diese bei der Zusammensetztung des Suchstrings
+.. noch zusaetzlich abgefragt werden.
+..
+!SUCH: Zusammensetzen des Suchstrings zum spÑteren Vergleich
+.formula xtaun=num
+.formula xtyp=typ
+.formula xynum=num
+.add H|kunde2
+.. nichtsf=TRUE --> Kunde nicht sammelfÑhig
+.formula xsfaehig = 1
+.formula xsfaehig = 0 ? nichtsf
+.formula wust=D|num
+.add H|vertr
+.formula wust=wust+D|num
+.add H|pbed
+.formula wust=wust+D|num
+.add H|zbed
+.formula wust=wust+D|num
+.add
+.formula xtmp=F|value(H|ustart, "AN138")
+.formula wust=wust+xtmp
+.formula xtmp=land
+.formula wust=wust+xtmp
+.output addedto 'sortd'
+.input "DATEI.F"
+'xynum' # 'xsfaehig' # 'wust'
+.continue NAECHST
+..
+!SO1: Sortieren der Vorschlagsliste
+.occupy WERF.WEG
+.output new WERF.WEG
+.occupy
+.set background +
+..fo sysb="sort +2d -3 +0n -1 "+ sortd +" > "+xarb+"VRLIST.TMP"
+.formula sysb="slv.awk "+sortd
+.system 'sysb'
+.formula sysb="cp "+sortd+" "+xarb+"VRLIST.TMP"
+.system 'sysb'
+.set background -
+.continue JOU
+..
+!D
+.read "Vorschlagliste" vrnum
+.continue START ? vrnum=""
+.formula xnum=xarb+"VR."+vrnum
+.formula xkom = "test -s "+xnum
+.set background +
+.system 'xkom'
+.set background -
+.continue FEHL3 ? _mehr
+.input 'xvrle'
+.continue START
+..
+!JOU
+.continue ALLESKLAR ? _xmenzbed
+.output terminal
+.set trans +
+.input BILD.F
+*** Folgende Lieferscheine enthalten keine Zahlungsbedingung
+    und kînnen deshalb nicht bearbeitet werden:
+
+Lsch.-Nr.  Datum       Ku.-Nr.
+------------------------------
+.set trans -
+!LOOP1
+.select from 'xzbederr' xzeile^
+.continue FERTIG1 ? _mehr
+'xzeile'
+.continue LOOP1
+..
+!FERTIG1
+.select from
+..
+.output terminal ...
+.formula xeinszuviel = true ? _xmemzbed
+.continue START ? _xmemzbed
+.read "Sollen die restlichen Lieferscheine weiter bearbeitet werden? (J/N)" xweiter
+.continue ALLESKLAR ? xweiter
+.formula xeinszuviel = true
+.continue START
+..
+!ALLESKLAR
+.output addedto 'journal'
+.input "DATEI.F"
+.set trans +
+?  'datum ' : alle Kunden     : 'sortd'  VorgÑnge bis: 'xdatum '  ? xzeig=2
+?  'datum ' : 'xname         ': 'sortd'  VorgÑnge bis: 'xdatum '  ? xzeig=1
+..
+..  FÅr Kunden, die den Lader nicht gekauft haben, mÅssen die Passagen mit
+..  LaderKDOs Åbersprungen werden. Test ob Lader instaliert ist wird mit
+..  dem .hol firma "konf" KDO realisiert. Die Belegung der boolschen Var.
+..  dbl auf true -> Ladervorhanden, KDOs ausfÅhren
+..         false -> Lader nicht vorh., Åberspringen + entsp. Info ausgeben
+..  ak, 05/19/92
+..
+.output new WERF.WEG
+.continue NODBL  ?  grafik
+.select company "$,gruppe=18;@gruppe=18"
+.continue NODBL  ?  _dbl
+..
+..  Lader vorhanden, KDOs ausfÅhren
+..
+.formula xt = "Rechnungen werden erzeugt ...   !!!  Bitte warten  !!!"
+.output new 'vrlad'
+.set trans -
+<b->
+<Hinweis> 'xt'
+<verkauf>
+<rechnung>
+<menue> Vorschl
+'xmerk'
+<return>
+<abbruch>
+..<Text> SRVM
+..<zeigen>
+..<eingabe>
+<b+>
+.output new werf.weg
+.select from 'sortd' aa^
+.continue NICHTS ? aa=""
+.select from
+.end "lesen VR.LAD"
+..
+!NICHTS
+.set trans +
+.output terminal
+
+    Keine rechnungsrelevanten VorgÑnge gefunden !
+
+.output terminal ...
+.continue START
+..
+!C: Journal editieren (nur lesen)
+.editing -readonly 'journal'
+.continue START
+..
+!FEHL2
+.output terminal
+
+      Kunde 'xkunde' nicht vorhanden !!
+
+.output terminal ...
+.continue START
+..
+!FEHL3
+.output terminal
+
+      Vorschlagsliste 'xnum' nicht vorhanden, bzw. leer !!
+
+.output terminal ...
+.continue START
+..
+!ENDE
+.end .
+..
+..
+!NODBL: Lader nicht installiert
+.output terminal
+.input BILD.F
+  Bitte geben Sie nach dem nÑchsten <return> das Kommando
+
+                <Verkauf> <Rechnung> ein.
+
+
+  Dannach geben Sie die Nummer der Vorschlagsliste ein.
+
+  Nummer der Vorschlagsliste: 'xmerk'
+
+
+.output terminal ...
+.end .
+

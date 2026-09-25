@@ -1,0 +1,169 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : INTRASTATZENTRALE.ME
+..  Datum          : 03.01.2010
+..  Version        : 2010
+..  Autor          : cl
+..  Verantwortlich : cl
+..  Kontrolle      : tiwe
+..  Funktion       :
+..  Ablauf         :
+..
+..  includes       :
+..include  sk/INTRASTATZENTRALE.NRMELD
+..*****************************************************************************
+.set trans -
+.type text xti             ? _F|defined(U|xti)
+.type text xsys            ? _F|defined(U|xsys)
+.type text xvntmp          ? _F|defined(U|xvntmp)
+.type text xtemp           ? _F|defined(U|xtemp)
+.type bool xfehl           ? _F|defined(U|xfehl)
+.type text xth1            ? _F|defined(U|xth1)
+.type text xth2            ? _F|defined(U|xth2)
+.type text xtbueuro        ? _F|defined(U|xtbueuro)
+.type bool xbeu            ? _F|defined(U|xbeu)
+.type text xdnpar          ? _F|defined(U|xdnpar)
+.type integer  xiisn       ? _F|defined(U|xiisn)
+.type text xdnt            ? _F|defined(U|xdnt)
+.type text xfstr           ? _F|defined(U|xfstr)
+.type integer xiposzahl    ? _F|defined(U|xiposzahl)
+.type integer xilaenge     ? _F|defined(U|xilaenge)
+.type integer xistartindex ? _F|defined(U|xistartindex)
+..
+.formula P|maskkontextfop = ""
+..
+.input "is/ABASFARBEN.DEF"
+.formula M|farbe = U|xabasyellow
+.. Arbeitsverzeichnis auslesen
+.input "ARB"
+.formula M|arbver = U|xarb
+..
+.formula M|rotz   = "icon:ball_red"
+.formula M|gelbz  = "icon:ball_yellow"
+.formula M|blauz  = "icon:ball_blue"
+.formula M|gruenz = "icon:ball_green"
+..
+.copy M|testindikator = G|FALSE
+.formula M|intra  = 0
+.copy M|hinweis = ""
+.copy M|ssek = ""
+.copy M|ssvk = ""
+.copy M|inland = G|inland
+.formula M|inland = G|inland ? +M|inland = 0
+..
+.formula M|bzeichen = G|bzeichen
+.copy M|beuro = G|FALSE
+.assign M|beuro = F|sysinfo(18)^euro
+.error Konfigurationsdatensatz nicht gefunden!   ? _G|mehr
+.end 1                                           ? _G|mehr
+..
+.assign M|betriebid = F|sysinfo(10)^id
+.error Betriebsdatensatz nicht gefunden!         ? _G|mehr
+.end 1                                           ? _G|mehr
+..
+.copy M|finlakenn = F|sysinfo(10)^finlakenn
+.continue FEHLER1       ? F|empty(M|finlakenn)
+.copy M|ustid = F|sysinfo(10)^ustid
+.copy M|fname = F|sysinfo(10)^ans
+.copy M|fstrunummer = F|sysinfo(10)^str
+.copy U|xfstr = M|fstrunummer
+.. das Feld Strasse des ZahlungsempfÑngers muss zerlegt werden -> str + nummer
+.. Entfernt Leerzeichen am Anfang und Ende
+.formula U|xiposzahl = 0
+.formula U|xfstr = F|trim(U|xfstr)
+.formula U|xiposzahl = F|regindex(U|xfstr, "\d{1,}")
+.formula U|xiposzahl = F|strindex(U|xfstr, "\d{1,}", 1) ? U|xiposzahl = 1
+.formula U|xilaenge  = +U|xfstr
+.formula U|xistartindex = U|xilaenge - U|xiposzahl + 1 ? U|xistartindex <> U|xilaenge
+.formula M|fnummer = U|xfstr >> U|xistartindex
+.formula M|fstr = U|xfstr >> - U|xistartindex
+.copy M|fplz = F|sysinfo(10)^plz
+.copy M|fort = F|sysinfo(10)^nort
+.copy M|fstaat = F|sysinfo(10)^staat
+.copy M|furlt = F|sysinfo(10)^urlt
+.copy M|ftele = F|sysinfo(10)^tele
+.copy M|ffax = F|sysinfo(10)^fax
+.copy M|femail = F|sysinfo(10)^email
+.formula M|steunr = (F|regreplaceall(F|sysinfo(10)^steunr, "\/", "") + "000000") << 11
+.continue FEHLER4       ? F|empty(M|steunr)
+.formula M|ustzus      = ("000" + F|sysinfo(10)^ustzus) >> 3
+.formula M|ischl       = M|finlakenn^ischl
+.continue FEHLER2       ? F|empty(M|ischl)
+.formula M|partyid = M|ischl + M|steunr + M|ustzus
+..
+.copy M|bgemeldet = G|FALSE
+.protection intra
+..
+.. Parameterdatei einziehen und prÅfen
+.formula U|xdnpar = G|bsprache+"/"+M|arbver+"INTRASTAT.PAR" ? G|bsprache <> G|isprache
+.formula U|xdnpar = M|arbver+"INTRASTAT.PAR"                ? G|bsprache = G|isprache
+.input 'U|xdnpar'
+..
+.. TemporÑrverzeichnis
+.formula M|tempver = U|xvntmp
+..
+.continue FEHLER3  ? +M|ssek < 0 ; +M|ssvk < 0
+.. diese folgenden 4 Zeilen bitte nicht verÑndern, da sonst nicht korrekt gemeldet wird!
+.copy M|bvre = G|TRUE
+.copy M|bere = G|TRUE
+.protection bvre
+.protection bere
+..
+.. set first day of year
+.formula U|xti = F|fystartdate(F|getfy(G|datum)) 
+.formula M|datumvon = U|xti
+.formula M|datumbis = G|datum
+.formula M|period = 'F|year(M|datumvon)'+"-"+'F|month(M|datumvon)' ? F|length(F|month(M|datumvon)) = 2
+.formula M|period = 'F|year(M|datumvon)'+"-"+"0"+'F|month(M|datumvon)' ? F|length(F|month(M|datumvon)) = 1
+..
+!TEMP: Test ob tmp-Verzeichnis vorhanden, schreibbar und gÅltiges Arbeits-
+..     verzeichnis. Wenn nicht, dann ist M|arbver das TemporÑrverzeichnis
+.formula U|xtemp = M|tempver << "/"
+.formula U|xsys = "test -d " + U|xtemp
+.system 'U|xsys' background
+.continue ARB ? _G|mehr
+..
+.formula U|xsys = "test -w " + U|xtemp
+.system 'U|xsys' background
+.continue ARB ? _G|mehr
+.continue ARB ? _G|arber / (U|xtemp + " *") & _G|arber / ("* " + U|xtemp + " *") & _G|arber / ("* " + U|xtemp)
+.continue DATNAME
+..
+!ARB: tmp-Verzeichnis = Arbeitsbereich
+.formula M|tempver = M|arbver
+..
+!DATNAME: Dateinamen festlegen
+.formula M|envelopeid = F|formatstr("XGTEST-{1}-{2}-{3}", M|period, 'G|datum:8', F|regreplace('G|zeit', ":", ""))
+.formula M|envelopeid = F|formatstr("{1}-{2}-{3}-{4}", M|matnum, M|period, 'G|datum:8', F|regreplace('G|zeit', ":", "")) ? _F|empty(M|matnum) & _M|testindikator
+.formula M|dntver  = M|osintra + M|envelopeid + ".xml"
+..
+.input "sk/INTRASTATZENTRALE.NRMELD"
+..
+!EURO
+.formula U|xth1 = ""
+.formula U|xth2 = ""
+.formula U|xth1 = 'G|auebereuro:8'
+.formula U|xth2 = 'G|euebereuro:8'
+.formula U|xtbueuro = 'G|bueuro:8'
+.formula U|xbeu = _M|beuro ; (+U|xtbueuro > 0 & G|eurokurs > 0.00 & +U|xth1 > 0 & +U|xth2 > 0)
+..
+.continue ? U|xbeu
+..
+.error Erstellung Intrahandelsstatistik nicht mîglich! Euro ist nicht konfiguriert!
+.end 1
+..
+!FEHLER1
+.error Bitte Bundesland des Finanzamtes eintragen!
+.end 1
+..
+!FEHLER2
+.error Bitte Intrastat-SchlÅssel fÅr meldendes Bundesland eintragen!
+.end 1
+..
+!FEHLER3
+.error Bitte SchlÅsselnamen fÅr Intrastat in Parameterdatei 'U|xdnpar' definieren!
+.end 1
+..
+!FEHLER4
+.error Bitte Steuernummer eintragen!
+.end 1

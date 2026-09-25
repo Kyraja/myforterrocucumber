@@ -1,0 +1,140 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDICENTER.ZNACH
+.. Autor          : ok/mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Ausgabe der Fehlercodes, die Fehlercodes variieren
+..                  abh„ngig vom Vorgangstyp der Nachricht
+.. Functionality  : post processing, display error codes
+..*****************************************************************************
+.set trans -
+..
+.. ignore ATLAS
+.continue END     ?  M|edinr^vorart = 80
+..
+.type integer    xedifcode       ? _F|defined(U|xedifcode)
+.type text   xdummvvlmes     ? _F|defined(U|xdummvvlmes)
+.type text   xsys            ? _F|defined(U|xsys)
+.type integer  xedinumfcod     ? _F|defined(U|xedinumfcod)
+.type text     xuebnra         ? _F|defined(U|xuebnra)
+.type text     xuebnr          ? _F|defined(U|xuebnr )
+..
+.formula U|xuebnra = "0"
+.formula U|xuebnr  = "0"
+..
+..*****************************************************************************
+.. Postprocessing fuer ORDERS
+..*****************************************************************************
+..  Nur Nachrichten Typ ORDERS weiter verarbeiten
+.continue ENDORD  ?  H|vorart <> 3
+.continue ENDORD  ? _F|empty(H|sinhouse)  &  H|sinhouse <> "200"
+.continue ENDORD  ?  H|nachrtyp/"EKLAB*"
+..
+..  ORDERS nur dann verarbeiten, wenn die Nachricht auf dem letztem
+..  Verarbeitungsschritt (status=10) stecken geblieben ist,
+..  und die Auftragsnummer noch fehlt
+.continue ENDORD  ? _F|empty(M|edinr^ideksvor)
+.continue ENDORD  ?  M|edinr^status <> 10 & M|edinr^status <> 0
+..
+.. Achtung: Merk-Hole-Klammer und Transkation
+.reserve
+.action +
+..
+.. 1. Auftrag ermitteln
+.. Kundenauftrag-edi ist ein EDI-spezifischer "individueller" Schlssel
+.formula U|xtsel = "$,,;@gruppe=1;kunde=" + 'M|idkundeab^id' + ";ktyp=3;ident=" + 'M|edinr^nummer'
+.load 1 sales 'U|xtsel'
+.continue ORDHOL  ? _G|mehr
+..
+.. 2. Uebertragungsnummer aus Kunde^edinfo
+.. Hier schon sperren fr Transaktionssicherheit!
+.select writelock nowait customer '1|kunde^edinfosnr^id'
+.continue ORDHOL  ? _G|mehr
+.continue ORDHOL  ? _G|gesperrt
+!NEXT1
+.select line
+.continue ORDHOL  ? _G|mehr
+.continue NEXT1   ? _(H|vorgang / ("VKAUEE-/AM/"))
+.formula U|xuebnra = H|uebnr
+..
+.. 3. EDI-Datensatz
+..    neue Uebertragunsnummer merken
+..    Auftrag und alte Uebertragunsnummer schreiben
+..    Status und Fehlercode auf 0 setzen
+.select writelock nowait edifact 'M|edinr^id'
+.continue ORDHOL  ? _G|mehr
+.continue ORDHOL  ? _G|gesperrt
+.formula H|ideksvor = 1|nummer
+.formula H|uebnra = U|xuebnra
+.formula U|xuebnr = H|uebnr
+.formula H|status = 0
+.formula H|fcode = 0
+.rewrite
+..
+.. 4. Neue Uebertragunsnnummer in Kunde^edinfo eintragen
+.select writelock nowait customer '1|kunde^edinfosnr^id'
+.continue ORDHOL  ? _G|mehr
+.continue ORDHOL  ? _G|gesperrt
+!NEXT2
+.select line
+.continue ORDHOL  ? _G|mehr
+.continue NEXT2   ? _(H|vorgang / ("VKAUEE-/AM/"))
+.formula H|uebnr = U|xuebnr
+.rewrite
+..
+.. Zeile aktualisieren
+.assign M|vorgang = 1|id
+.formula M|fotoz  = G|icook
+.formula M|status = 0
+.formula M|fcode  = 0
+.load 1
+..
+!ORDHOL
+.action -
+.select
+!ENDORD
+..
+..
+..*****************************************************************************
+.. Attempt postprocessing Pickup-Sheets, if locking issue during actual pus processing
+..*****************************************************************************
+.. Enter last transaction into blanket order (i.e. created delivery note for pus)
+.. Only update blanket order, if blanket order was not yet updated with even
+.. more recent transaction.
+..
+.continue ENDPUS  ?  F|empty(M|rahmen)
+.continue ENDPUS  ? _F|empty(M|rahmen^ident) & M|rahmen^ident > M|edinr^nummer
+.continue ENDPUS  ? _(M|edinr^such="VKAUV" & M|edinr^vorart=3 & M|edinr^datenart="PUS")
+.reserve
+.select writelock nowait sales 'H|ideksrah'
+.continue PUSHOL  ? _(G|mehr & G|gesperrt)
+.formula H|ident = M|edinr^nummer
+.formula H|lztabruf = M|edinr^ideksvor
+.rewrite
+!PUSHOL
+.select
+!ENDPUS
+..
+.. NOTE:  H-buffer might have lost edi message, can be refetched from M|edinr
+..
+..*****************************************************************************
+.. Ausgabe des Fehlercode nach Vorgangstyp der Nachricht
+..*****************************************************************************
+.continue ENDMES ? M|fcode < 0
+..
+.. Merken Fehlercode
+.formula U|xedifcode = M|fcode
+..
+.. Unterprogramm aus DFUE.IMP.INI
+.formula U|xdummvvlmes = "DFUE." + M|edinr^such + "MES"
+.continue ENDMES  ? _F|fileexists("dfue/" + 'U|xdummvvlmes')
+..
+.. Einlesen DFUE.XXXXXMES
+.input 'U|xdummvvlmes'
+.formula M|fctext = U|xedireffcod.xedifcode        ?  U|xedifcode < U|xedinumfcod
+!ENDMES
+..
+..*****************************************************************************
+!END
+.continue

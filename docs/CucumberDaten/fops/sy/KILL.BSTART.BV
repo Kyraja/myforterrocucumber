@@ -1,0 +1,125 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KILL.BSTART.BV
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      : lei
+.. Funktion       : Validiert die Steuerungsangaben in der Maskenpuffer.
+.. Functionality  : Validates input parameters in mask buffer.
+..*****************************************************************************
+.set trans -
+..
+.continue ERROR01 ? F|empty(M|host)
+.continue ERROR02 ? F|empty(M|display)
+.continue ERROR03 ? F|empty(M|interface)
+..
+.. Declarations
+.type text xcommand
+.type bool xbackground
+.type DVM2 xtableofprocesses xhelpdat xtableofcallers xstdout
+..
+.. Initializations
+.file -tempname U|xtableofprocesses
+.file -tempname U|xtableofcallers
+.file -tempname U|xhelpdat
+.file -tempname U|xstdout
+.file -screen -tempname M|tableofkills
+.file -screen -tempname M|tableofttys
+.copy M|confirmed = G|FALSE
+.formula M|displaycode = M|interface + ":" + M|display
+..
+.continue LISTING ? F|empty(M|processid)
+.continue SINGLE
+..
+!LISTING: Create table of processes
+.continue ERROR06 ? M|owndisplay = M|display
+.set trans +
+.formula M|boxtext = "Bildschirm " + M|display + " abbrechen?"
+.set trans -
+.formula M|all = "WAHL"
+.formula U|xcommand = "prozesse.sh " + M|host
+.copy U|xbackground = G|TRUE
+.copy U|xstdout = U|xtableofprocesses
+.input "is/FO.SYSTEM"
+.continue ERROR04 ? _F|filenotempty(U|xtableofprocesses)
+..
+.. Create table with caller
+.formula U|xcommand = "(datanm SHOW " + U|xhelpdat + " && cat "+ U|xhelpdat +" | sed -e 's/:[^:\t]*\t/\t/' >" + U|xtableofcallers + ")"
+.copy U|xbackground = G|TRUE
+.formula U|xstdout = ""
+.input "is/FO.SYSTEM"
+.continue ERROR05 ? _F|filenotempty(U|xtableofcallers)
+..
+.. Create table of processes and
+.formula U|xcommand = "umbringen.sh -b"
+.formula U|xcommand = U|xcommand + " " + M|displaycode
+.formula U|xcommand = U|xcommand + " " + M|host
+.formula U|xcommand = U|xcommand + " " + U|xtableofcallers
+.formula U|xcommand = U|xcommand + " " + U|xtableofprocesses
+.formula U|xcommand = U|xcommand + " " + M|tableofkills
+.formula U|xcommand = U|xcommand + " " + M|tableofttys
+.copy U|xbackground = G|TRUE
+.formula U|xstdout = ""
+.input "is/FO.SYSTEM"
+.continue ERROR04 ? _F|filenotempty(M|tableofkills)
+.continue WARNING
+..
+!SINGLE: Create table of processes with given ID
+.set trans +
+.formula M|boxtext = "Prozess " + M|processid + " abbrechen?"
+.set trans -
+.continue ERROR06 ? M|ownhost = M|host & M|ownprocessid = M|processid
+.formula M|all = "PROZ"
+.formula U|xcommand = "echo " + M|processid + " " + M|host
+.copy U|xbackground = G|TRUE
+.copy U|xstdout = M|tableofkills
+.input "is/FO.SYSTEM"
+.continue ERROR04 ? _F|filenotempty(M|tableofkills)
+.continue WARNING
+..
+!CONFIRM: Confirmation?
+.box -button "yes:no" -title 'F|formatstr("{1} {2}", G|kdatname65, M|isref^sucherw)'
+'M|boxtext'
+.continue END ? G|box <> G|boxyes
+.copy M|confirmed = G|TRUE
+.continue END
+..
+!AUTO: Confirm automatically while testing
+.copy M|confirmed = G|TRUE
+.continue END
+..
+!WARNING: Show warning
+.continue AUTO ? M|testmode
+.input "is/SYSSTOP.WARNING"
+.input "is/SYSSTOP.END"
+.continue CONFIRM
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR01: Host is missing!
+.error -line 0 -field M|host -message Es fehlt die Angabe des Rechners!
+.continue BREAK
+..
+!ERROR02: Display is missing!
+.error -line 0 -field M|display -message Es fehlt die Angabe des Bildschirms!
+.continue BREAK
+..
+!ERROR03: Interface is missing!
+.error -line 0 -field M|interface -message Es fehlt die Angabe der Schnittstelle!
+.continue BREAK
+..
+!ERROR04: Table of processes is empty!
+.error -message Die Prozessliste ist leer!
+.continue BREAK
+..
+!ERROR05: Table of caller is empty!
+.error -message Die Aufruferliste ist leer!
+.continue BREAK
+..
+!ERROR06: Cannot kill own process!
+.error -message Das Abbrechen des eigenen Prozesses ist nicht erlaubt!
+..
+!BREAK
+.end 1

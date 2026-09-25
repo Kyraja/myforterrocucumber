@@ -1,0 +1,704 @@
+..!interpreter english translate noabbrev
+..**********************************************************************
+.. FOP-Name        : TRANS.BSTART.BV
+.. Autor           : fwester
+.. Verantwortlich  : fwester
+.. Kontrolle       : cl
+.. Funktion        :
+.. Analysiert die Maske, beschreibt aus ihren Parametern eine Aktion und
+.. fuehrt diese aus. Der Fortlauf der Aktion wird in einem Ausgabefenster
+.. protokolliert. Im Fehlerfall wird mit einer Meldung abgebrochen.
+.. Ablauf          : Button-vor-EFOP
+..
+.. Functionality   :
+.. Analyses mask, creates an action from its parameters and exexutes it.
+.. The process will be logged in a output window. If an error occurs, the
+.. program will stop with an error message.
+.. Program flow    : Button before efop
+..**********************************************************************
+.set trans -
+.type text xerror xsuccess
+.type integer  xmode
+.type bool xnewersubdic
+.continue ANALYZE ? M|hasdic & M|hasdo
+.continue ERROR1
+..
+!ANALYZE: Analyze mask preferences and set operation options
+.. Set letter of dictionary
+.assign M|letter4dic = M|letter4ku ? M|dicown
+.assign M|letter4dic = M|letter4cc ? M|dicprogram
+.assign M|letter4dic = M|letter4lg ? M|dicfop
+.assign M|letter4dic = M|letter4tx ? M|dictxt
+.assign M|letter4dic = M|letter4ma ? M|dicmask
+.assign M|letter4dic = M|letter4me ? M|dicascii
+.assign M|letter4dic = M|letter4sh ? M|dichelp
+.assign M|letter4dic = M|letter4vt ? M|dicvartab
+.assign M|letter4dic = M|letter4pr ? M|dicawa
+.assign M|letter4dic = M|letter4is ? M|dicinfosys
+.assign M|letter4dic = M|letter4ng ? M|dicgui
+.assign M|letter4dic = M|letter4all ? M|dicall
+..
+.. Set path to dictionary
+.assign M|path2dic = M|homedir ? _M|dicown
+.assign M|path2dic = M|clientdir ? M|dicown
+..
+.. Set name for dictionary
+.assign M|name4dic = M|msgkudic ? M|dicown
+.assign M|name4dic = M|msgccdic ? M|dicprogram
+.assign M|name4dic = M|msglgdic ? M|dicfop
+.assign M|name4dic = M|msgtxdic ? M|dictxt
+.assign M|name4dic = M|msgmadic ? M|dicmask
+.assign M|name4dic = M|msgmedic ? M|dicascii
+.assign M|name4dic = M|msgshdic ? M|dichelp
+.assign M|name4dic = M|msgvtdic ? M|dicvartab
+.assign M|name4dic = M|msgprdic ? M|dicawa
+.assign M|name4dic = M|msgngdic ? M|dicgui
+.assign M|name4dic = "*" ? M|dicall
+..
+.. Set sub and WIN-dictionary
+.assign M|name4subdic = M|name4dic <$ "."
+..
+!LOGGER: Set logger redirect when testing
+.continue INITLOG ? M|quiet
+.continue CONTROL
+..
+!INITLOG
+.system 'F|expr(">" + M|tmpfile)' background
+.continue FATAL ? _G|mehr
+.formula M|log = ">>" + M|clientdir + "/" + M|tmpfile + " 2>>" + M|clientdir + "/" + M|tmpfile
+..
+!CONTROL
+.continue ADD     ? M|doadd
+.continue SUBGEN  ? M|dogen
+.continue EDIT    ? M|doedit ; M|dosubedit
+.continue TEST    ? M|dotest ; M|doteststrict
+.continue INSERT  ? M|doinsert
+.continue FOCMD   ? M|dotransfocmd
+.continue TRANS   ? M|dotrans
+.continue REPAIR  ? M|dorepair
+.continue MSGDAT  ? M|domsgdat
+.continue CLEAN   ? M|domsgclean
+.continue FATAL
+!ADD:********************** ADD TEXT ***********************************
+.continue OPTMASK ? _(M|dicfop ; M|dictxt)
+.. Add text from FOP
+.continue ERROR7 ? _M|hasfop
+.continue ADDSTD  ? M|fopstd
+.continue ADDONE  ? M|fopone
+.continue ADDARB  ? M|foparb
+.continue ADDOW   ? M|fopow
+.continue ADDLIST ? M|foptrans
+.continue FATAL
+..
+!OPTMASK: Add text from mask, menus or web applications
+.continue OPTMENU ? _M|dicmask
+.. add text from mask
+.continue ERROR7 ? _M|hasfop ; (M|hasfop & _(M|fopstd ; M|fopow))
+.continue STDMASK ? M|fopstd
+.continue OWNMASK ? M|fopow
+.continue FATAL
+..
+!OPTMENU: Add text from menus
+.continue OPTAWA  ? _(M|dicascii ; M|dichelp)
+.continue ADDMENU ? M|dicascii
+.continue ADDHTXT ? M|dichelp
+.continue FATAL
+..
+!OPTAWA: Add text from web applications, infosystems or vartabs
+.continue ADDAWA  ? M|dicawa
+.continue ADDINFO ? M|dicinfosys
+.continue ADDVTAB ? M|dicvartab
+.continue FATAL
+..
+!ADDSTD: Add text from standard FOP
+.assign U|xmode = 11
+.continue EXEC
+..
+!ADDONE: Add text from one particular FOP
+.continue ERROR7  ? _M|hasfop ; (M|hasfop & _M|fopone)
+.continue ERROR8  ?  F|empty(M|filename)
+.continue ERROR81 ? _F|fileexists(F|expr(M|clientdir + "/" + M|filename))
+.continue ERROR81 ?  F|isdir(F|expr(M|clientdir + "/" + M|filename))
+.assign U|xmode = 12
+.continue EXEC
+..
+!ADDARB: Add text from all FOP in one particular directory
+.continue ERROR7  ? _M|hasfop ; (M|hasfop & _M|foparb)
+.continue ERROR8  ? F|empty(M|filename)
+.continue ERROR81 ? _F|isdir(F|expr(M|clientdir + "/" + M|filename))
+.assign U|xmode = 13
+.continue EXEC
+..
+!ADDOW: Add text from FOP in directorys which names start with "ow"
+.continue ERROR7 ? _M|hasfop ; (M|hasfop & _M|fopow)
+.assign U|xmode = 14
+.continue EXEC
+..
+!ADDLIST: Add text from FOP in FOPALL.TRANS
+.continue ERROR7 ? _M|hasfop ; (M|hasfop & _M|foptrans)
+.assign U|xmode = 10
+.continue EXEC
+..
+!STDMASK: Add text from all standard masks
+.assign U|xmode = 1
+.continue EXEC
+..
+!OWNMASK: Add text from all individual masks
+.assign U|xmode = 2
+.continue EXEC
+..
+!ADDMENU: Add text from menus
+.continue ERROR7 ? _M|hasfop ; (M|hasfop & _(M|fopstd ; M|fopow))
+.continue STDMENU ? M|fopstd
+.continue OWNMENU ? M|fopow
+.continue FATAL
+..
+!STDMENU: Add text from standard menus
+.assign U|xmode = 1
+.continue EXEC
+..
+!OWNMENU: add text from individual menus
+.assign U|xmode = 2
+.continue EXEC
+..
+!ADDHTXT: Add text from help menus
+.assign U|xmode = 1
+.continue EXEC
+..
+!ADDAWA: Add text from property files
+.continue ERROR7 ? _M|hasfop ; (M|hasfop & _(M|fopstd ; M|fopow ; M|foparb))
+.continue AWASTD ? M|fopstd
+.continue AWAOWN ? M|fopow
+.continue AWAARB ? M|foparb
+.continue FATAL
+..
+!AWASTD: Add text from delivered property files
+.assign U|xmode = 1
+.continue EXEC
+..
+!AWAOWN: Add text from own property files
+.assign U|xmode = 3
+.continue EXEC
+..
+!AWAARB: Add text from property files of a directory
+.continue ERROR8  ? F|empty(M|filename)
+.continue ERROR81 ? _F|isdir(F|expr(M|clientdir + "/" + M|filename))
+.assign U|xmode = 4
+.continue EXEC
+..
+!ADDINFO: Add text from infosystem
+.continue ERROR7 ? _M|hasfop ; (M|hasfop & _(M|fopone ; M|fopow ; M|fopstd))
+.continue OWINFO  ? M|fopow
+.continue ONEINFO ? M|fopone
+.continue STDINFO ? M|fopstd
+.continue FATAL
+..
+!OWINFO: Add text from own infosystem
+.assign M|letter4dic = M|letter4is ? M|polyglot
+.assign U|xmode = 3
+.continue EXEC
+..
+!ONEINFO: Add text from one infosystem
+.continue ERROR8 ? F|empty(M|infosys)
+.assign M|letter4dic = M|letter4is ? M|polyglot
+.assign U|xmode = 1
+.continue EXEC
+..
+!STDINFO: Add text from standard infosystems
+.assign M|letter4dic = M|letter4is ? M|polyglot
+.assign U|xmode = 2
+.continue EXEC
+..
+!ADDVTAB: Add text from vartabs
+.assign U|xmode = 1
+.continue EXEC
+!TRANS:************************** TRANSLATION ***************************
+.continue UTRANS  ? M|dicown
+.continue PTRANS  ? M|dicprogram
+.continue TXTRANS ? M|dictxt
+.continue MTRANS  ? M|dicmask
+.continue GTRANS  ? M|dicascii
+.continue HTRANS  ? M|dichelp
+.continue VTRANS  ? M|dicvartab
+.continue AATRANS ? M|dicawa
+.continue ISTRANS ? M|dicinfosys
+.continue NGRANS  ? M|dicgui
+.continue FATAL
+..
+!UTRANS: Translate own text
+.assign U|xmode = 1
+.continue EXEC
+..
+!PTRANS: Translate program messages
+.assign U|xmode = 1
+.continue EXEC
+..
+!TXTRANS
+.assign U|xmode = 30
+.continue EXEC
+..
+!MTRANS: Translate all masks
+.assign U|xmode = 3
+.continue EXEC
+..
+!HTRANS: Translate all help menus
+.assign U|xmode = 2
+.continue EXEC
+..
+!GTRANS: Translate all menus
+.assign U|xmode = 3
+.continue EXEC
+..
+!VTRANS: Translate vartabs
+.assign U|xmode = 3
+.continue EXEC
+..
+!AATRANS: Translate property files
+.assign U|xmode = 2
+.continue EXEC
+..
+!NGTRANS: Translate Native GUI
+.assign U|xmode = 1
+.continue EXEC
+..
+!ISTRANS: Translate infosystems
+.continue ERROR7 ? _M|hasfop ; (M|hasfop & _(M|fopstd ; M|fopone ; M|fopow))
+.continue TSTDIS ? M|fopstd
+.continue TOWNIS ? M|fopow
+.continue TONEIS ? M|fopone
+.continue FATAL
+..
+!TSTDIS: Translate standard infosystems
+.assign M|letter4dic = M|letter4is
+.assign U|xmode = 11
+.continue EXEC
+!TOWNIS: Translate own infosystems
+.assign M|letter4dic = M|letter4is
+.assign U|xmode = 12
+.continue EXEC
+!TONEIS: Translate a single infosystem
+.continue ERROR8 ? F|empty(M|infosys)
+.assign M|letter4dic = M|letter4is
+.assign U|xmode = 16
+.continue EXEC
+!FOCMD:************************* TRANS FOCMD ****************************
+.continue ERROR7 ? _(M|fopone ; M|foparb)
+.assign M|letter4dic = M|letter4lg
+.continue CMDARB ? M|foparb
+.continue CMDFOP ? M|fopone
+.continue FATAL
+..
+!CMDARB: In all FOP of a particular directory
+.continue ERROR8  ? F|empty(M|filename)
+.continue ERROR81 ? _F|isdir(F|expr(M|clientdir + "/" + M|filename))
+.assign U|xmode = 31
+.continue EXEC
+..
+!CMDFOP: In one particular FOP
+.continue ERROR8  ? F|empty(M|filename)
+.continue ERROR81 ? _F|fileexists(F|expr(M|clientdir + "/" + M|filename))
+.continue ERROR81 ?  F|isdir(F|expr(M|clientdir + "/" + M|filename))
+.assign U|xmode = 32
+.continue EXEC
+!RENUMB:************************* RENUMBER DICS *************************
+.assign M|cmd = "trans_tool.sh -w7"
+.continue NOABORT
+!CLEAN:************************* CLEAN DICS *****************************
+.continue CLEANIS ? M|polyglot & M|dicinfosys
+.assign M|cmd = "trans_tool.sh -w9"
+.formula M|cmd = M|cmd + " -" + M|letter4dic
+.continue NOABORT
+..
+!CLEANIS: Clean all dics for infosystems
+.formula M|cmd = "trans_tool.sh -w9 -" + M|letter4dic
+.formula M|cmd = M|cmd + ";trans_tool.sh -w9 -" + M|letter4lg
+.formula M|cmd = M|cmd + ";trans_tool.sh -w9 -" + M|letter4ma
+.continue NOABORT
+!REPAIR:************************ REPAIR DICS ****************************
+.continue RENUMB ? M|dicall
+.continue REPINFO ? M|polyglot & M|dicinfosys
+.assign M|cmd = "trans_tool.sh -w8"
+.formula M|cmd = M|cmd + " -" + M|letter4dic
+.continue NOABORT
+..
+!REPINFO: Repair all dics for infosystems
+.formula M|cmd = "trans_tool.sh -w8 -" + M|letter4dic
+.formula M|cmd = M|cmd + ";trans_tool.sh -w8 -" + M|letter4lg
+.formula M|cmd = M|cmd + ";trans_tool.sh -w8 -" + M|letter4ma
+.continue NOABORT
+!MSGDAT:*********************** COMPILE DICS ****************************
+.copy M|timestamp = G|TRUE
+.continue DATALL ? M|dicall
+.continue DATINFO ? M|polyglot & M|dicinfosys
+.formula U|xmode = 1  ? M|dicprogram ; M|dicown ; M|dicgui
+.formula U|xmode = 3  ? M|dicvartab ; M|dichelp
+.formula U|xmode = 4  ? M|dicmask ; M|dicascii
+.formula U|xmode = 5  ? M|dicawa
+.formula U|xmode = 30 ? M|dictxt ; M|dicfop ; M|dicinfosys
+.continue EXEC
+..
+!DATALL: Generate all dics
+.formula M|cmd = "trans_tool.sh -w 6"
+.continue NOABORT
+..
+!DATINFO: Generate all dics for infosystems
+.formula M|cmd = "trans.sh -" + M|letter4lg + " 30"
+.formula M|cmd = M|cmd + ";trans.sh -" + M|letter4ma + " 4"
+.continue NOABORT
+!EXEC: ************************ EXECUTE COMMAND *************************
+.formula M|cmd = "trans.sh -" + M|letter4dic + " " + 'U|xmode'
+.formula M|cmd = M|cmd + " " + M|infosys^nummer ? _F|empty(M|infosys)
+.formula M|cmd = M|cmd + " " + M|filename ? _F|empty(M|filename)
+..
+!NOABORT
+.formula M|cmd = M|cmd + " " + M|log ? M|quiet
+.set cancel -
+.system 'M|cmd' ? _M|quiet
+.system 'M|cmd' background ? M|quiet
+.set cancel +
+.continue ERROR9 ? _G|mehr
+.continue END
+!EDIT:**************************** EDIT *********************************
+.copy U|xnewersubdic = F|filenewer(F|expr(M|path2dic + "/" + M|name4subdic), F|expr(M|path2dic + "/" + M|name4dic))
+.formula M|name4dic = M|name4subdic
+.continue SUBEDIT ? M|toolmode
+..
+!GENDIC
+.continue OPEN ? M|toolmode
+.. Hack, weil GUI-Editor mit den Dictionarys nicht klar kommt
+.. Generate certain subdictionary while editing whole dictionary
+.formula M|languages = F|trim(M|instlang)
+.formula M|languages = F|trim(M|outlang) ? M|letter4dic = M|letter4pr ; M|letter4dic = M|letter4tx
+.formula M|languages = F|trim(M|outlang) ? _M|polyglot & M|letter4dic = M|letter4ma
+.continue ERROR13 ? F|empty(M|languages)
+.continue BOX01 ? U|xnewersubdic
+..
+!NEWSUB
+.formula M|cmd = "trans_tool.sh -w1 -" + M|letter4dic + " -z -M NEW " + M|languages
+.formula M|cmd = M|cmd + " " + M|log ? M|quiet
+.set cancel -
+.system 'M|cmd' ? _M|quiet
+.system 'M|cmd' background ? M|quiet
+.continue ERROR11 ? _G|mehr
+.set cancel +
+.continue OPEN
+..
+!SUBEDIT: Has subdictionary a language which needs no unicode?
+.system 'F|expr("msgmerge -y" + M|letter4dic)' background
+.continue OPEN ? G|mehr
+.continue GENDIC
+..
+!OPEN: Open dictionary
+.type text xdictionary
+.formula U|xdictionary = M|path2dic + "/" + M|name4dic
+.continue ERROR3 ? _F|filewriteable('U|xdictionary')
+.assign M|lockname = "TRANS-"
+.formula M|lockname = M|lockname + "KU" ? M|letter4dic = M|letter4ku
+.formula M|lockname = M|lockname + "CC" ? M|letter4dic = M|letter4cc
+.formula M|lockname = M|lockname + "LG" ? M|letter4dic = M|letter4lg
+.formula M|lockname = M|lockname + "TX" ? M|letter4dic = M|letter4tx
+.formula M|lockname = M|lockname + "MA" ? M|letter4dic = M|letter4ma
+.formula M|lockname = M|lockname + "ME" ? M|letter4dic = M|letter4me
+.formula M|lockname = M|lockname + "SH" ? M|letter4dic = M|letter4sh
+.formula M|lockname = M|lockname + "VT" ? M|letter4dic = M|letter4vt
+.formula M|lockname = M|lockname + "PR" ? M|letter4dic = M|letter4pr
+.formula M|lockname = M|lockname + "NG" ? M|letter4dic = M|letter4ng
+.occupy 'M|lockname' installation
+.continue ERROR10 ? _G|gesperrt
+.editing -write -right 'M|maxtext' 'U|xdictionary'
+.occupy
+.continue END ? M|toolmode
+.. Hack, weil GUI-Editor mit den Dictionarys nicht klar kommt
+.. Insert certain subdictionary while editing whole dictionary
+.formula M|cmd = "trans_tool.sh -w4 -Lka -" + M|letter4dic + " " + M|languages
+.formula M|cmd = M|cmd + " " + M|log ? M|quiet
+.set cancel -
+.system 'M|cmd' ? _M|quiet
+.system 'M|cmd' background ? M|quiet
+.continue ERROR12 ? _G|mehr
+.set cancel +
+.continue END
+!TEST:*************************** TEST **********************************
+.type text xtestmode xdic
+..
+.. Get the languages which have to be tested
+.assign M|mark = "BTEST"
+.continue GETLANG
+..
+!BTEST
+.assign U|xtestmode = "-Y"
+.assign U|xtestmode = "" ? M|doteststrict
+.formula M|languages = "-W " + M|languages
+.formula U|xdic = "-w " + M|letter4dic
+.assign U|xdic = "" ? M|dicall
+..
+.formula M|cmd = "trans.sh " + 'U|xdic' + " " + 'U|xtestmode' + " " + 'M|languages'
+.formula M|cmd = M|cmd + " " + M|log ? M|quiet
+.system 'M|cmd' ? _M|quiet
+.system 'M|cmd' background ? M|quiet
+.continue ERROR9 ? _G|mehr
+.continue SUCCESS ? M|doteststrict
+.set trans +
+.formula U|xsuccess = "Wîrterbuch " + M|name4dic + " ist in Ordnung!"
+.set trans -
+.continue SUCC1
+!INSERT:**************** INSERT *****************************************
+.continue ERROR5 ? _(M|optcomplete ; M|optnottrans ; M|optnumber ; M|opttrans ; M|optcorrupt)
+..
+.assign M|mark = "BINSERT"
+.continue GETLANG
+..
+!BINSERT: Convert before insert
+.assign M|cmd = "trans_tool.sh -w"
+..
+!NEWS3: Convert into new S3 charset while system with new S3 charset
+.continue WIN     ? M|charsetutf16
+.continue CSVFORM ? M|csvformat
+..
+!S3: Convert to S3
+.assign U|xmode = 4
+.continue DOINS
+..
+!WIN: Source has new or old S3 charset, convert to old S3
+.assign U|xmode = 5
+.continue DOINS
+..
+!CSVFORM: Source has csv format
+.assign U|xmode = 11
+..
+!DOINS
+.formula M|cmd = M|cmd + 'U|xmode'
+.formula M|cmd = M|cmd + " -f" ? M|dicall
+.formula M|cmd = M|cmd + " -k" ? M|optcomment
+.formula M|cmd = M|cmd + " -a" ? M|optcomplete
+.formula M|cmd = M|cmd + " -" + M|letter4dic
+.formula M|cmd = M|cmd + " " + 'M|languages'
+.formula M|cmd = M|cmd + " " + M|log ? M|quiet
+.set cancel -
+.system 'M|cmd' ? _M|quiet
+.system 'M|cmd' background ? M|quiet
+.set cancel +
+.continue ERROR9 ? _G|mehr
+.continue END
+!SUBGEN:********************** GENERATE SUB *****************************
+.continue ERROR5 ? _(M|optcomplete ; M|optnottrans ; M|optnumber ; M|opttrans ; M|optcorrupt)
+.continue ERROR6 ? M|optnumber & M|lowlim > M|uplim
+..
+.type text xfromto
+..
+.. Initializations
+.assign U|xfromto = "-M NEW" ? M|optnottrans
+.assign U|xfromto = "-M OLD" ? M|opttrans
+.assign U|xfromto = "-M ERR" ? M|optcorrupt
+.formula U|xfromto = "-V" + 'M|lowlim' + " " + " -B" + 'M|uplim' ? M|optnumber
+..
+.assign M|mark = "BSUBGEN"
+.continue GETLANG
+..
+!BSUBGEN
+.assign M|cmd = "trans_tool.sh -w"
+..
+.. Convert into the correct format
+.continue NEUS3 ? _M|charsetutf16 & _M|csvformat
+.continue UTF16 ? M|charsetutf16
+.continue CSV   ? M|csvformat
+.continue FATAL
+..
+!NEUS3: Convert to s3 (default)
+.assign U|xmode = 1
+.continue DOGEN
+..
+!UTF16: Convert to utf16
+.assign U|xmode = 2
+.continue DOGEN
+..
+!CSV: Create as csv
+.assign U|xmode = 10
+..
+!DOGEN
+.formula M|cmd = M|cmd + 'U|xmode' + " -" + M|letter4dic
+.formula M|cmd = M|cmd + " -z" ? M|alwaysen
+.formula M|cmd = M|cmd + " " + U|xfromto + " " + M|languages
+.formula M|cmd = M|cmd + " " + M|log ? M|quiet
+.set cancel -
+.system 'M|cmd' ? _M|quiet
+.system 'M|cmd' background ? M|quiet
+.set cancel +
+.continue ERROR9 ? _G|mehr
+.continue END
+!GETLANG:*******************GET LANGUAGES *******************************
+.assign M|languages = ""
+.formula M|languages = M|languages + "D" ? M|langde
+.formula M|languages = M|languages + "E" ? M|langen
+.formula M|languages = M|languages + "F" ? M|langfr
+.formula M|languages = M|languages + "S" ? M|langes
+.formula M|languages = M|languages + "I" ? M|langit
+.formula M|languages = M|languages + "P" ? M|langpl
+.formula M|languages = M|languages + "R" ? M|langru
+.formula M|languages = M|languages + "U" ? M|langhu
+.formula M|languages = M|languages + "C" ? M|langcs
+.formula M|languages = M|languages + "T" ? M|langtr
+.formula M|languages = M|languages + "1" ? M|langfirst
+.formula M|languages = M|languages + "2" ? M|langsecond
+.formula M|languages = M|languages + "3" ? M|langthird
+.formula M|languages = M|languages + "A" ? M|langenus
+.formula M|languages = M|languages + "O" ? M|langro
+.formula M|languages = M|languages + "B" ? M|langid
+.formula M|languages = M|languages + "N" ? M|langnl
+.formula M|languages = M|languages + "M" ? M|langmk
+.formula M|languages = M|languages + "X" ? M|langbg
+.formula M|languages = M|languages + "Y" ? M|langsr
+.formula M|languages = M|languages + "L" ? M|langsl
+.formula M|languages = M|languages + "W" ? M|langsk
+.formula M|languages = M|languages + "G" ? M|langpt
+.formula M|languages = M|languages + "Q" ? M|langzhs
+.formula M|languages = M|languages + "H" ? M|langzh
+.formula M|languages = M|languages + "Z" ? M|langel
+.formula M|languages = M|languages + "V" ? M|langar
+.formula M|languages = M|languages + "K" ? M|langth
+.formula M|languages = M|languages + "J" ? M|langfa
+.formula M|languages = M|languages + "9" ? M|langvi
+.formula M|languages = M|languages + "8" ? M|langur
+.formula M|languages = M|languages + "7" ? M|langja
+.continue ERROR4 ? +M|languages < 1
+.continue 'M|mark'
+..
+!SUCCESS
+.continue SUCC1 ? M|quiet
+.continue SUCC1 ? _F|filenotempty('M|tmpfile')
+.output
+.input "DATEI.F"
+.set command @
+@input 'M|tmpfile'
+@set command .
+..
+!SUCC1
+.note 'U|xsuccess' ? _M|quiet
+!END:**************************** END ***********************************
+.continue
+..
+..
+!BOX01: Generate a new sub dictionary?
+.box -button "no:yes" -title 'F|formatstr("{1} {2}", G|kdatname65, M|isref^sucherw)'
+'M|boxtext1'
+'M|boxtext2'
+.continue OPEN ? G|box <> G|boxyes
+.continue NEWSUB
+..
+!ERROR1
+.continue ACTION ? M|hasdic
+.cursor dicown
+.set trans +
+.assign U|xerror = "Es fehlt die Angabe eines Wîrterbuchs."
+.set trans -
+.continue NOFATAL
+..
+!ACTION
+.cursor doadd
+.set trans +
+.assign U|xerror = "Es fehlt die Angabe einer Aktion."
+.set trans -
+.continue NOFATAL
+..
+!ERROR3
+.set trans +
+.assign U|xerror = "Es ist kein Wîrterbuch vorhanden oder es ist nicht schreibbar." ? _M|toolmode
+.assign U|xerror = "Es ist kein Teilwîrterbuch vorhanden oder es ist nicht schreibbar." ? M|toolmode
+.set trans -
+.continue NOFATAL
+..
+!ERROR4
+.cursor sellang
+.set trans +
+.assign U|xerror = "Es fehlt die Angabe einer Fremdsprache."
+.set trans -
+.continue NOFATAL
+..
+!ERROR5
+.cursor optcomplete
+.set trans +
+.assign U|xerror = "Es fehlt die Angabe eines Wîrterbuchbereiches."
+.set trans -
+.continue NOFATAL
+..
+!ERROR6
+.cursor lowlim
+.set trans +
+.assign U|xerror = "Der angebene Nummernbereich ist nicht gÅltig."
+.set trans -
+.continue NOFATAL
+..
+!ERROR7
+.cursor fopstd
+.set trans +
+.assign U|xerror = "Es fehlt die Angabe eines Datei-/Infosystembereiches."
+.set trans -
+.continue NOFATAL
+..
+!ERROR8
+.continue ERRINFO ? M|dicinfosys
+.cursor filename
+.set trans +
+.assign U|xerror = "Es fehlt die Angabe eines FOPs." ? (M|dicfop ; M|dictxt) & M|fopone
+.assign U|xerror = "Es fehlt die Angabe eines Arbeitsbereiches/Verzeichnisses." ? M|foparb
+.set trans -
+.continue NOFATAL
+!ERRINFO
+.cursor infosys
+.set trans +
+.assign U|xerror = "Es fehlt die Angabe eines Infosystems."
+.set trans -
+.continue NOFATAL
+..
+!ERROR81
+.cursor filename
+.set trans +
+.assign U|xerror = F|formatstr("Der angegebene Dateiname {1} wurde nicht gefunden!", M|filename) ? M|fopone
+.assign U|xerror = F|formatstr("Der angegebene Verzeichnisname {1} wurde nicht gefunden!", M|filename) ? M|foparb
+.set trans -
+.continue NOFATAL
+..
+!ERROR9
+.set trans +
+.assign U|xerror = "Fehler beim Erweitern. Protokoll beachten!" ? M|doadd
+.assign U|xerror = "Fehler beim Erzeugen. Protokoll beachten!" ? M|dogen
+.assign U|xerror = "Fehler beim Testen. Protokoll beachten!" ? M|dotest ; M|doteststrict
+.assign U|xerror = "Fehler beim EinfÅgen. Protokoll beachten!" ? M|doinsert
+.assign U|xerror = "Fehler beim öbersetzen. Protokoll beachten!" ? M|dotrans
+.assign U|xerror = "Fehler beim Kommandos Åbersetzen. Protokoll beachten!" ? M|dotransfocmd
+.assign U|xerror = "Fehler beim Reparieren. Protokoll beachten!" ? M|dorepair
+.assign U|xerror = "Fehler beim Bereinigen. Protokoll beachten!" ? M|domsgclean
+.set trans -
+.continue NOFATAL
+..
+!ERROR10
+.set trans +
+.assign U|xerror = "Das Wîrterbuch wird bereits bearbeitet! Aktion jetzt nicht mîglich."
+.set trans -
+.continue NOFATAL
+..
+!ERROR11
+.set trans +
+.assign U|xerror = "Das Wîrterbuch kann nicht bearbeitet werden. Das Erzeugen des Teilwîrterbuch schlug fehl!"
+.set trans -
+.continue NOFATAL
+..
+!ERROR12
+.set trans +
+.assign U|xerror = "Das Wîrterbuch wurde nicht bearbeitet. Das EinfÅgen des Teilwîrterbuch schlug fehl!"
+.set trans -
+.continue NOFATAL
+..
+!ERROR13: Generating a sub dictionary needs installed languages
+.set trans +
+.assign U|xerror = "Ein Teilwîrterbuch kann nicht erzeugt werden. Es fehlt eine zweite Sprache!"
+.set trans -
+.continue NOFATAL
+..
+!NOFATAL
+.error -message 'U|xerror'
+.end 1
+..
+!FATAL
+.error -number 1111
+.end 1

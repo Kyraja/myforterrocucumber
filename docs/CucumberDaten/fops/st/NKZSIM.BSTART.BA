@@ -1,0 +1,283 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : NKZSIM.BSTART.BB
+.. Author         : fhil
+.. Verantwortlich : lei
+.. Kontrolle      :
+.. Functionality  : Simulate how a number range is selected
+..*****************************************************************************
+..
+.set trans -
+..
+.make screen line --
+..
+.type A303 U|xnkverfahren
+.type text U|xdnr
+.type text U|xkommando
+.type text U|xnkz
+.type text U|xerrpraefix
+.type text U|xerrzyklus
+.type text U|xerrmandant
+.type text U|xerrvmandant
+.type text U|xerrmsmandanten
+.type text U|xerrkontgroesse
+.type integer U|xi
+.type integer U|xj
+.type integer U|xebene
+.type bool U|xtrefferpfadprev
+.type bool U|xtreffernk
+..
+.set trans +
+.copy U|xerrpraefix = "Falsches Vergabeverfahren im Nummernkreis. Vergabeverfahren Pr„fix erforderlich."
+.copy U|xerrzyklus = "Zyklische Struktur in der Zuordnung."
+.copy U|xerrmandant = "Im Nummernkreis fehlt der Mandant."
+.copy U|xerrvmandant = "Im Nummernkreis fehlt der Vergabemandant."
+.copy U|xerrmsmandanten = "Im Nummernkreis fehlt die Liste der Multisite-Mandanten."
+.copy U|xerrkontgroesse = "Ungltige Kontingentgr”áe im Nummernkreis."
+.set trans -
+..
+.copy U|xtreffernk = G|false
+..
+..
+.. nothing to load
+.continue ERROR1 ? F|empty(M|startnkz)
+..
+.. load number range
+.continue LOADNK ? M|startnkz^objgruppe = 1
+..
+.. load number range assignment or prefix assignment
+..
+.copy U|xi = -1
+.copy U|xnkz = 'M|startnkz^id'
+..
+..
+!LOADHEAD: load number or prefix assignment
+..
+.copy U|xi = U|xi + 1
+..
+.continue ERROR2 ? U|xi = 10
+..
+.load 'U|xi' numberassignment 'U|xnkz'
+..
+..
+!LOADLINE: load line in number or prefix assignment
+..
+.load 'U|xi' line
+..
+.continue NOLINE ? _G|mehr
+..
+.make screen line +O
+..
+.assign M|tbaumstufe = U|xi + 1
+..
+.copy U|xkommando = "assign M|tznebene = " + 'xi' + "|zn"
+.'U|xkommando'
+.copy U|xkommando = "assign M|tbaumtext = " + 'xi' + "|such"
+.'U|xkommando'
+.copy U|xkommando = "assign M|tnkz = " + 'xi' + "|id"
+.'U|xkommando'
+.copy U|xkommando = "copy M|tzuordnung = " + 'xi' + "|nummernkreis"
+.'U|xkommando'
+.copy U|xkommando = "assign M|tbedingung = " + 'xi' + "|zuordbed ? " + 'U|xi' + "|objgruppe = 4"
+.'U|xkommando'
+.copy U|xkommando = "copy M|tmandant = M|tzuordnung^mandant ? " + 'U|xi' + "|objgruppe = 8"
+.'U|xkommando'
+.copy U|xkommando = "copy M|tmandant = " + 'xi' + "|nummernkreis^mandant ? " + 'U|xi' + "|nummernkreis^objgruppe = 1"
+.'U|xkommando'
+.copy U|xkommando = "copy M|tnkverwendbar = " + 'xi' + "|nummernkreis^verwendbar ? " + 'U|xi' + "|nummernkreis^objgruppe = 1"
+.'U|xkommando'
+..
+.continue NOLINE ? F|empty(M|tzuordnung)
+.continue ERRPZ ? M|tnkz^objgruppe = 8
+.continue ERRNK ? M|tzuordnung^objgruppe = 1
+.continue ERRZYKL ? M|tzuordnung^objgruppe = 4
+..
+..
+!ERRFIN: error check is finished
+..
+.copy U|xnkz = 'M|tzuordnung^id'
+..
+.continue LOADHEAD ? M|tzuordnung^objgruppe = 4 ; M|tzuordnung^objgruppe = 8
+.continue LOADLINE
+..
+..
+!NOLINE: no line to load
+..
+.copy U|xi = U|xi - 1
+.continue LOADLINE ? U|xi >= 0
+.continue CHECK
+..
+..
+!LOADNK: load number range
+..
+.make screen line +O
+..
+.assign M|tznebene = 1
+.assign M|tbaumstufe = 1
+.assign M|tbaumtext = M|startnkz^such
+.copy M|tnkz = M|startnkz
+.copy M|tzuordnung = M|startnkz
+.copy M|tmandant = M|startnkz^mandant
+.copy M|tnkverwendbar = M|startnkz^verwendbar
+..
+..
+!ERRNK: check number range
+..
+.assign U|xnkverfahren = "(Prefix)"
+.continue ERRMAND ? M|tzuordnung^verfahren = 'U|xnkverfahren' & F|empty(M|tzuordnung^mandant)
+..
+.assign U|xnkverfahren = "(CentralAssignment)"
+.continue ERRMAND ? M|tzuordnung^verfahren = 'U|xnkverfahren' & F|empty(M|tzuordnung^mandant)
+..
+.assign U|xnkverfahren = "(Contingent)"
+.continue ERRVMA ? M|tzuordnung^verfahren = 'U|xnkverfahren' & F|empty(M|tzuordnung^mandant)
+.continue ERRMSMA ? M|tzuordnung^verfahren = 'U|xnkverfahren' & F|empty(M|tzuordnung^msmandanten)
+.continue ERRKTGR ? M|tzuordnung^verfahren = 'U|xnkverfahren' & M|tzuordnung^kontingentgroesse = 0
+..
+.continue CHECK ? M|tnkz^objgruppe = 1
+.continue ERRFIN
+..
+..
+!ERRMAND: missing mandant in number range
+..
+.assign M|tbaumiconz = M|fehler
+.assign M|tfehler = U|xerrmandant
+.continue CHECK ? M|tnkz^objgruppe = 1
+.continue ERRFIN
+..
+..
+!ERRVMA: missing mandant in number range (method contingent)
+..
+.assign M|tbaumiconz = M|fehler
+.assign M|tfehler = U|xerrvmandant
+.continue CHECK ? M|tnkz^objgruppe = 1
+.continue ERRFIN
+..
+..
+!ERRMSMA: missing list of multisite clients in number range (method contingent)
+..
+.assign M|tbaumiconz = M|fehler
+.assign M|tfehler = U|xerrmsmandanten
+.continue CHECK ? M|tnkz^objgruppe = 1
+.continue ERRFIN
+..
+..
+!ERRKTGR: missing contingent size in number range (method contingent)
+..
+.assign M|tbaumiconz = M|fehler
+.assign M|tfehler = U|xerrkontgroesse
+.continue CHECK ? M|tnkz^objgruppe = 1
+.continue ERRFIN
+..
+..
+!ERRPZ: check prefix assignment is valid
+..
+.assign U|xnkverfahren = "(Prefix)"
+.continue ERRNK ? M|tzuordnung^verfahren = 'U|xnkverfahren'
+..
+.assign M|tbaumiconz = M|fehler
+.assign M|tfehler = U|xerrpraefix
+..
+.continue ERRNK
+..
+..
+!ERRZYKL: check number assignment on cycles
+..
+.copy U|xj = U|xi
+..
+..
+!NEXTNODE
+..
+.copy U|xj = U|xj - 1
+..
+.continue ERRFIN ? U|xj < 0
+..
+.copy U|xkommando = "continue NEXTNODE ? " + 'U|xj' + "|id <> M|tzuordnung^id"
+.'U|xkommando'
+..
+.assign M|tbaumiconz = M|fehler
+.assign M|tfehler = U|xerrzyklus
+..
+.continue LOADLINE
+..
+..
+!CHECK: check status loaded lines
+..
+.select screen header
+..
+.copy U|xebene = 0
+.type bool U|xtrefferpfad.U|xebene ? _F|defined(U|xtrefferpfad.U|xebene)
+.copy U|xtrefferpfad.U|xebene = G|true
+..
+..
+!CHECKLINE
+..
+.select screen line
+..
+.continue END ? _G|mehr
+..
+.assign U|xebene = M|tbaumstufe
+.type bool U|xtrefferpfad.U|xebene ? _F|defined(U|xtrefferpfad.U|xebene)
+..
+.continue COND ? M|tnkz^objgruppe = 4 & _F|empty(M|tbedingung)
+..
+.copy M|tbedingungstatus = M|tnkverwendbar ; M|tzuordnung^objgruppe = 8 ; M|tzuordnung^objgruppe = 4
+..
+.continue STATUS
+..
+..
+!COND: check condition in number assignment
+..
+.continue STATUS ? F|empty(M|referenzobjekt)
+..
+.assign U|xdnr = M|referenzobjekt^dnr
+.assign M|select = "$,,@ablageart=(Both);id=" + 'M|referenzobjekt^id' +";" + 'M|tbedingung'
+.select group 'U|xdnr' 'M|select'
+.assign M|tbedingungstatus = G|mehr
+.select
+..
+..
+!STATUS: set number or prefix assignment status
+..
+.continue STATUSNK ? M|tzuordnung^objgruppe = 1
+..
+.copy U|xebene = M|tbaumstufe - 1
+.copy U|xtrefferpfadprev = U|xtrefferpfad.U|xebene
+.copy U|xebene = M|tbaumstufe
+..
+.assign M|tbaumiconz = M|rot ? _M|tbedingungstatus & F|empty(M|tfehler) ; _U|xtrefferpfadprev & F|empty(M|tfehler)
+.assign M|tbaumiconz = M|gruen ? M|tbedingungstatus & _U|xtrefferpfad.U|xebene & U|xtrefferpfadprev & F|empty(M|tfehler)
+.assign M|tbaumiconz = M|orange ? M|tbedingungstatus & U|xtrefferpfad.U|xebene & U|xtrefferpfadprev & F|empty(M|tfehler)
+..
+.copy U|xtrefferpfad.U|xebene = G|true ? M|tbedingungstatus & _U|xtrefferpfad.U|xebene & U|xtrefferpfadprev
+..
+.continue CHECKLINE
+..
+..
+!STATUSNK: set number range status
+..
+.copy U|xebene = M|tbaumstufe - 1
+..
+.assign M|tbaumiconz = M|gruenok ? M|tbedingungstatus & _U|xtreffernk & U|xtrefferpfad.U|xebene & F|empty(M|tfehler)
+.assign M|tbaumiconz = M|orange ? M|tbedingungstatus & U|xtreffernk & U|xtrefferpfad.U|xebene & F|empty(M|tfehler)
+.assign M|tbaumiconz = M|rot ? _M|tbedingungstatus & F|empty(M|tfehler)
+.assign M|tbaumiconz = M|rot ? M|tbedingungstatus & _U|xtreffernk & _U|xtrefferpfad.U|xebene & F|empty(M|tfehler)
+..
+.copy U|xtreffernk = G|true ? M|tbedingungstatus & _U|xtreffernk & U|xtrefferpfad.U|xebene
+..
+.copy U|xebene = M|tbaumstufe
+.copy U|xtrefferpfad.U|xebene = G|true ? U|xtreffernk
+..
+.continue CHECKLINE
+..
+..
+!END
+.continue
+..
+..
+!ERROR1
+.error -message Nummernkreiszuordnung fehlt.
+.continue END
+!ERROR2
+.error -message Maximal 10 Ebenen erlaubt.
+.continue CHECK

@@ -1,0 +1,86 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SQRELOCATION.EDP
+.. Author         : tiwe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Function       : EDP-Handling fr SQRELOCATION 
+..                 
+.. Functionality  : 
+..
+..*****************************************************************************
+.. Variablen
+.set trans -
+.type text U|xtwork ? _F|defined(xtwork)
+.type text U|xtmld  ? _F|defined(xtmld)
+.type text U|xterr  ? _F|defined(xterr)
+.type text U|xtcmd     ? _F|defined(xtcmd)
+.type text U|xtprojekt ? _F|defined(xtprojekt)
+.type text U|xtbehzug ? _F|defined(xtbehzug)
+.type text U|xtbehabg ? _F|defined(xtbehabg)
+.type text U|xtorig   ? _F|defined(xtorig)
+..
+.formula U|xtwork = "rmtmp/SQRELOCATION."+'G|sekundenz'+".EDP"
+.formula U|xtmld  = "rmtmp/SQRELOCATION."+'G|sekundenz'+".MLD"
+.formula U|xterr  = "rmtmp/SQRELOCATION."+'G|sekundenz'+".ERR"
+.input "DATEI.F"
+.output new 'U|xtwork'
+.continue BEHBUCH ? F|equals(M|workflow,"(ContainerReLocation)")
+.continue MANUMB
+!MANUMB: Maske Manuelle Lagerbuchung per EDP steuern
+.formula U|xtprojekt = "----"             ? _F|sysinfo(18)^projekt
+.formula U|xtprojekt = ""                 ? F|sysinfo(18)^projekt & F|empty(M|tprojekt)
+.formula U|xtprojekt = 'M|tprojekt^id'     ? F|sysinfo(18)^projekt & _F|empty(M|tprojekt)
+.formula U|xtbehabg  = "----"             ? _F|sysinfo(18)^behaelter     
+.formula U|xtbehzug  = "----"              ? _F|sysinfo(18)^behaelter
+.formula U|xtbehabg  = ""                  ? F|sysinfo(18)^behaelter  & F|empty(M|tbehabgang)    
+.formula U|xtbehzug  = ""                  ? F|sysinfo(18)^behaelter & F|empty(M|tbehzugang)
+.formula U|xtbehabg  = 'M|tbehabgang^id'    ? F|sysinfo(18)^behaelter  & _F|empty(M|tbehabgang)    
+.formula U|xtbehzug  = 'M|tbehzugang^id'    ? F|sysinfo(18)^behaelter & _F|empty(M|tbehzugang)
+.formula U|xtorig    = "----"
+..der Orig ist nur gefllt beim Fertigungs- und Einkaufszugang
+.formula U|xtorig    = 'M|zugang^id'        ? _F|empty(M|zugang) & (_F|empty(M|kzugang) ; _F|empty(M|fertigung))
+
+#!database=190:1          
+#!action=new
+#!password='G|einmalpw'
+#!dontchange=----
+artikel;beleg;beldat;buart;ljtext1;orig\
+mge;ze;platz;platz2;verw;verw2;lffert;lffert2;charge1;charge2;projekt;projekt2;behaelter;behaelterzu;
+'M|tartikel^id';'M|belnr';'G|datum';(Transfer);'M|belnr';'U|xtorig'\
+'M|tmge(L="0")';'M|tle';'M|tlplatz^id';'M|tlplatzzu^id';'M|tverw';'M|tverw';'M|tfertig^id';'M|tfertig^id';'M|tcharge^id';'M|tcharge^id';'U|xtprojekt';'U|xtprojekt';'U|xtbehabg';'U|xtbehzug';
+.continue EDPEXEC
+!BEHBUCH: Maske Beh„lterlagerbuchung per EDP steuern fr den Workflow Beh„lter umlagern
+#!action=do
+#!typedcmd=(ContainerAdjustment)
+#!password='G|einmalpw'
+param;behaelter;zuplatz;beleg;beldat;
+;'M|tbehabgang^id';'M|tlplatzzu^id';'M|belnr';'G|datum';
+.continue EDPEXEC
+!EDPEXEC
+.output
+.formula U|xtcmd = "edpimport.sh -c EKS -P -I " +'U|xtwork'
+.formula U|xtcmd = 'U|xtcmd' + " 1> "+'U|xtmld'
+.formula U|xtcmd = 'U|xtcmd' + " 2> "+'U|xterr'
+.system 'U|xtcmd' background
+.formula M|edpworkdat = 'U|xtwork'
+.formula M|edperrdat = 'U|xterr'
+.continue EDPOK  ? G|mehr
+..Die manuelle Lagerbuchung wurde nicht durchgefuehrt
+.continue ERR01 
+!EDPOK
+.formula M|thinweis = M|okay
+.continue ENDE
+..************************************************************
+.. Programmende
+..************************************************************
+!ENDE
+.continue
+..************************************************************
+.. Fehlerhandling
+..************************************************************
+!ERR01
+.formula M|thinweis = M|fehler
+.copy M|edpfehler = G|true
+.error Fehler bei Umbuchung in Zeile 'M|aktzeile'. Programm ab dort abgebrochen.
+.end 1

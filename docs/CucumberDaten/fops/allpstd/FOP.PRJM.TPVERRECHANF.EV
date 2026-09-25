@@ -1,0 +1,690 @@
+..!interpreter english declaration noabbrev
+.. at 2017-06-16, 17:15
+.set TRANS -
+..========================================================================
+..==  Name              : FOP.PRJM.TPVERRECHANF.EV
+..==  Pfad              : allpstd
+..==  Funktion          :
+..==  Erstellungsdatum  : 26.05.2011
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2016 alltrotec GmbH
+..==  Besonderheiten    :
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"  ? _F|defined(U|xydbprojekt)
+.input "allpstart/TRANS.KONFIG.INI" ? _F|defined(U|xydbtrans)
+.input "allpstart/FOP.PRJM.UP.DEF"  ? _F|defined(U|xtupstornorecht)
+..====================================================
+.type text    xtsys xtsel xykoobjekt xyprojekt xtvar xbuchtyp
+.type text    xttransini xttransdat xttransprot xttransleer xttitel xttext1 xttext2
+.type real    xrbetrag xrsumme
+.type GD      xybudat xbudat
+.type bool    xyberlaubt xbok xbtpok xbstorno
+.type P86:1   xpproject
+.type integer xprocsp      ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Hauptprojekt_pruefen -----
+.copy U|xpproject = M|yhauptprojekt
+.input "allpstart/FOP.PRJM.UP.PROJECTCLOSINGVARS"
+.continue EL001 ? _(((M|yhauptprojekt^ystatusk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefvanf))) ; (((M|yhauptprojekt^ystatusk = "ABS") ; (M|yhauptprojekt^ystatusk = "08") ; (M|yhauptprojekt^yablage)) & (F|rec(U|xystclosingvars, ypmkabpruefvanf))))
+.set trans +
+.formula U|xttitel = "Fehler"
+.formula U|xttext1 = F|formatstr("Das Projekt {1} hat den Status {2}{3}{2}.", H|yhauptprojekt^such, G|dblquote, H|yhauptprojekt^ystatus)
+.formula U|xttext2 = "Teilprojektverrechnungen dÅrfen nicht mehr erfasst werden!"
+.set trans -
+.box 'U|xttitel'
+'U|xttext1'
+'U|xttext2'
+.error
+.end 1
+!EL001
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Rechtepruefung_TPVerrechnungsanforderung -----
+.continue EL002 ? _(U|xypmrepruefkst)
+.assign U|xbok = G|FALSE
+.formula U|xykoobjekt = H|yhauptprojekt^yverantwkst^id
+.input 'U|xypmrepruefkstprog'
+.assign U|xbok   = G|TRUE       ? U|xyberlaubt
+.formula U|xykoobjekt = H|yteilprojekt^yverantwkst^id
+.input 'U|xypmrepruefkstprog'
+.assign U|xbtpok = G|TRUE       ? U|xyberlaubt
+!EL002
+.continue EL003 ? _(U|xypmrepruefktr)
+.assign U|xbok = G|FALSE
+.formula U|xykoobjekt = H|yhauptprojekt^yktr^id
+.input 'U|xypmrepruefktrprog'
+.assign U|xbok   = G|TRUE       ? U|xyberlaubt
+.formula U|xykoobjekt = H|yteilprojekt^yktr^id
+.input 'U|xypmrepruefktrprog'
+.assign U|xbtpok = G|TRUE       ? U|xyberlaubt
+!EL003
+.continue EL004 ? _(U|xypmrepruefind)
+.input 'U|xypmrepruefindprog'
+.assign U|xbok = U|xyberlaubt
+!EL004
+.continue 'xprocst.xprocsp'
+!PROC003: ----- VA_Storno_Leistungsmeldungen -----
+.load 1 group 'U|xydbgrlnachweis' 'F|expr("$,," + U|xtvar + "==" + 0|id + ";@ablageart=(1)")'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.select lock nowait object '1|id'
+.continue EL005 ? _(G|mehr)
+.continue EL006 ? _(G|gesperrt)
+.continue EL007 ? _(H|ysperre)
+.set TRANS +
+Die Leistungsmeldung 'H|nummer' wird gerade von 'H|ysperrzeich', Aufrufer Nr. 'H|yaufrufernr' bearbeitet.
+.set TRANS -
+.assign U|xbok = G|FALSE
+.continue FI007
+!EL007
+.continue EL008 ? _(U|xbstorno)
+.formula H|.xtvar = ""
+.rewrite
+!EL008
+!FI007
+.continue FI006
+!EL006
+.set TRANS +
+Die Leistungsmeldung '1|nummer' kann nicht bearbeitet werden.
+.set TRANS -
+.assign U|xbok = G|FALSE
+!FI006
+.continue FI005
+!EL005
+.set TRANS +
+Die Leistungsmeldung '1|nummer' kann nicht bearbeitet werden.
+.set TRANS -
+.assign U|xbok = G|FALSE
+!FI005
+.load 1 continue
+.continue LOOP001
+!ELOP001: ==============================
+.continue 'xprocst.xprocsp'
+!PROC004: ----- Storno_TPVerrechnungsanforderung -----
+.formula U|xttransprot = "rmtmp/X.PRJMTPVERRECHNUNG." + G|sekundenz + "." + G|pid + ".PROT.TMP"
+.output NEW 'U|xttransprot'
+.input DATEI.F
+'G|kommandochar'box Fehler beim Stornieren der Teilprojektverrechnung
+.assign U|xbok = G|TRUE
+.load 9 group 'U|xydbgrtpverrechanf' 'M|id'
+.continue EL009 ? _(G|mehr)
+.load 8 add 9|yteilprojekt
+.load 0 group 'U|xydbgrtpposition' 'F|expr("$,,ytpverrechanf==" + 9|id + ";@ablageart=(1)")'
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.formula U|xtvar = "ytpposid"
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC003
+!RET001
+.formula xprocsp = xprocsp - 1
+.formula U|xtvar = "ymztpposid"
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC003
+!RET002
+.formula xprocsp = xprocsp - 1
+.load 1 group 'U|xydbgrtpposition' '0|yorig'
+.continue EL010 ? _(G|mehr)
+!EL010
+.select lock nowait object '0|id'
+.continue EL011 ? _(G|mehr)
+.continue EL012 ? _(G|gesperrt)
+.continue EL013 ? _(U|xbstorno)
+.delete
+!EL013
+.continue FI012
+!EL012
+.set TRANS +
+Die Teilprojektposition '0|nummer' kann nicht bearbeitet werden.
+.set TRANS -
+.assign U|xbok = G|FALSE
+!FI012
+.continue FI011
+!EL011
+.set TRANS +
+Die Teilprojektposition '0|nummer' kann nicht bearbeitet werden.
+.set TRANS -
+.assign U|xbok = G|FALSE
+!FI011
+.load 0 continue
+.continue LOOP002
+!ELOP002: ==============================
+.select lock nowait object '9|id'
+.continue EL014 ? _(G|mehr)
+.continue EL015 ? _(G|gesperrt)
+.continue EL016 ? _(U|xbstorno)
+.delete
+!EL016
+.continue FI015
+!EL015
+.set TRANS +
+Die Teilprojektverrechnung '0|nummer' kann nicht bearbeitet werden.
+.set TRANS -
+.assign U|xbok = G|FALSE
+!FI015
+.continue FI014
+!EL014
+.set TRANS +
+Die Teilprojektverrechnung '9|nummer' kann nicht bearbeitet werden.
+.set TRANS -
+.assign U|xbok = G|FALSE
+!FI014
+.select lock nowait object '8|id'
+.continue EL017 ? _(G|mehr)
+.continue EL018 ? _(G|gesperrt)
+.continue EL019 ? _(U|xbstorno)
+.formula H|ytpoffwert = H|ytpwert
+.load 0 group 'U|xydbgrtpverrechanf' 'F|expr("$,,yteilprojekt==" + H|id + ";@ablageart=(1)")'
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.formula H|ytpoffwert = H|ytpoffwert - 0|ybetrag
+.load 0 continue
+.continue LOOP003
+!ELOP003: ==============================
+.rewrite
+!EL019
+.continue FI018
+!EL018
+.set TRANS +
+Das Teilprojekt '8|such' kann nicht bearbeitet werden.
+.set TRANS -
+.assign U|xbok = G|FALSE
+!FI018
+.continue FI017
+!EL017
+.set TRANS +
+Das Teilprojekt '8|such' kann nicht bearbeitet werden.
+.set TRANS -
+.assign U|xbok = G|FALSE
+!FI017
+.continue EL020 ? _(_(U|xbok))
+'G|kommandochar''G|kommandochar'
+.output NEW WERF.WEG
+.input 'U|xttransprot'
+.error
+.action abort   ? U|xbstorno
+!EL020
+.continue FI009
+!EL009
+.set TRANS +
+.box Hinweis
+Die Teilprojektverrechnung konnte nicht geladen werden!
+.set TRANS -
+.error
+.end 1
+!FI009
+.continue 'xprocst.xprocsp'
+!PROC005: ----- offener_Wert -----
+.select lock group 'U|xydbgrprojekt' 'H|yteilprojekt^id'
+.continue EL021 ? _(G|mehr)
+.formula U|xrbetrag = 0
+.formula U|xtsel = "$,,yteilprojekt==" + H|id + ";@ablageart=(1)"
+.load 0 group 'U|xydbgrtpverrechanf' 'U|xtsel'
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.formula U|xrbetrag = U|xrbetrag + 0|ybetrag
+.load 0 continue
+.continue LOOP004
+!ELOP004: ==============================
+.formula H|ytpoffwert = H|ytpwert - U|xrbetrag
+.rewrite
+.continue FI021
+!EL021
+.set TRANS +
+.box Fehler
+Das Teilprojekt 'M|yteilprojekt' kann nicht bearbeitet werden.
+
+Der offene Wert kann nicht aktualisiert werden.
+.set TRANS -
+!FI021
+.continue 'xprocst.xprocsp'
+!PROC006: ----- Kostenbuchung_stornieren -----
+.continue EL022 ? _(G|evtkommd = G|kaktname12)
+.select group 'U|xydbgrtpverrechanf' 'M|id'
+.continue EL023 ? _(G|mehr)
+.continue EL024 ? _(_(F|empty(H|ytransaktion)))
+.continue EL025 ? _(F|sysinfo(18)^allppro)
+.assign U|xybudat   = H|ydatum
+.assign U|xyprojekt = H|yteilprojekt^id
+.input 'U|xtupstornorecht'
+.continue EL026 ? _(U|xybstorno)
+.assign U|xybudat   = H|ydatum
+.assign U|xyprojekt = H|yhauptprojekt^id
+.input 'U|xtupstornorecht'
+!EL026
+!EL025
+.continue EL027 ? _(U|xybstorno)
+.set TRANS +
+.box -BUTTON yes:no -TITLE Achtung
+Soll die Freigabe der Teilprojektverrechnung zurÅckgenommen werden?
+.set TRANS -
+.continue EL028 ? _(G|box = G|boxyes)
+.select lock group 'U|xydbgrtpverrechanf' 'M|id'
+.continue EL029 ? _(G|mehr)
+.continue EL030 ? _(G|gesperrt)
+.load 8 add H|ytransaktion
+.continue EL031 ? _(G|mehr)
+.formula U|xttransdat  = "rmtmp/X.PRJMMATUMBU.STORNO." + G|sekundenz + "." + G|pid + ".DAT.TMP"
+.formula U|xttransprot = "rmtmp/X.PRJMMATUMBU.STORNO." + G|sekundenz + "." + G|pid + ".PROT.TMP"
+.formula U|xttransleer = "rmtmp/X.PRJMMATUMBU.STORNO." + G|sekundenz + "." + G|pid + ".LEER.TMP
+.load 8 line
+.output NEW 'U|xttransdat'
+.input DATEI.F
+#!ACTION=VIEW
+#!EDP_LANGCODE='G|bsprache'
+id;ybustorno;
+'8|id';;
+.output NEW WERF.WG
+.formula U|xtsys = "edpimport.sh -c EKS -p " + G|einmalpw + " " + U|xttransdat + " 2>" + U|xttransprot
+.system 'U|xtsys' BACKGROUND
+.select lock group 'U|xydbgrtpverrechanf' 'M|id'
+.load 8 add H|ytransaktion
+.continue EL032 ? _(G|mehr)
+.continue EL033 ? _(8|ystorno)
+.assign H|ytransaktion = ""
+.rewrite
+.continue FI033
+!EL033
+.set TRANS +
+.box Fehler
+Die Buchung konnte nicht storniert werden.
+.set TRANS -
+!FI033
+!EL032
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC005
+!RET003
+.formula xprocsp = xprocsp - 1
+.continue FI031
+!EL031
+.set TRANS +
+.box Fehler
+Die Transaktion 'H|ytransaktion' konnte nicht geîffnet werden.
+.set TRANS -
+!FI031
+.continue FI030
+!EL030
+.set TRANS +
+.box Hinweis
+Die Teilprojektverrechnung wird gerade bearbeitet!
+Storno ist derzeit nicht mîglich.
+.set TRANS -
+!FI030
+.continue FI029
+!EL029
+.set TRANS +
+.box Hinweis
+Die Teilprojektverrechnung konnte nicht geladen werden!
+.set TRANS -
+!FI029
+!EL028
+!EL027
+.continue FI024
+!EL024
+.set TRANS +
+.box Hinweis
+Die Teilprojektverrechnung ist nicht freigegeben.
+.set TRANS -
+!FI024
+.continue FI023
+!EL023
+.set TRANS +
+.box Hinweis
+Die Teilprojektverrechnung konnte nicht geladen werden!
+.set TRANS -
+!FI023
+.continue FI022
+!EL022
+.set TRANS +
+.box Fehler
+Der Vorgang ist nur im <zeigen> mîglich.
+.set TRANS -
+!FI022
+.continue 'xprocst.xprocsp'
+!PROC007: ----- Transaktion_erstellen -----
+.continue EL034 ? _(G|evtkommd = G|kaktname12)
+.copy U|xbok = G|TRUE
+.load 0 add M|id
+.continue EL035 ? _(G|mehr)
+.copy U|xpproject = 0|yhauptprojekt
+.input "allpstart/FOP.PRJM.UP.PROJECTCLOSINGVARS"
+.continue EL036 ? _(_(F|empty(0|yhauptprojekt)))
+.continue EL037 ? _(((0|yhauptprojekt^ystatusk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefvanf))) ; (((0|yhauptprojekt^ystatusk = "ABS") ; (0|yhauptprojekt^ystatusk = "08") ; (0|yhauptprojekt^yablage)) & (F|rec(U|xystclosingvars, ypmkabpruefvanf))))
+.set trans +
+.formula U|xttitel = "Fehler"
+.formula U|xttext1 = F|formatstr("Das Projekt {1} hat den Status {2}{3}{2}.", 0|yhauptprojekt^such, G|dblquote, 0|yhauptprojekt^ystatus)
+.formula U|xttext2 = "Teilprojektverrechnungen dÅrfen nicht mehr freigegeben werden!"
+.set trans -
+.box 'U|xttitel'
+'U|xttext1'
+'U|xttext2'
+.copy U|xbok = G|FALSE
+!EL037
+!EL036
+.continue EL038 ? _(_(F|empty(0|ydatum)))
+.copy    U|xbudat   = M|ydatum
+.formula U|xbuchtyp = "S"
+.input "allpstart/PRUEF.BUDAT"
+.continue EL039 ? _(_(U|xbbuchbar))
+.set TRANS +
+.box Hinweis
+Das Datum 'U|xbudat' liegt in einer abgeschlossenen Periode.
+.set TRANS -
+.copy U|xbok = G|FALSE
+!EL039
+.continue FI038
+!EL038
+.set TRANS +
+.box Hinweis
+Vor der Freigabe bitte das Buchungsdatum eintragen.
+.set TRANS -
+.copy U|xbok = G|FALSE
+!FI038
+.continue FI035
+!EL035
+.set TRANS +
+.box Hinweis
+Die Teilprojektverrechnung konnte nicht geladen werden!
+.set TRANS -
+.copy U|xbok = G|FALSE
+!FI035
+.continue EL040 ? _(U|xbok)
+.continue EL041 ? _(((F|cmdpermitted(U|xydbtrans, 12)) & (F|cmdpermitted(U|xydbtrans, 13)) & (F|cmdpermitted(U|xydbtrans, 14)) & (F|cmdpermitted(U|xydbtransdat, 12)) & (F|cmdpermitted(U|xydbtransdat, 13)) & (F|cmdpermitted(U|xydbtransdat, 14))) ; ((_(F|empty(F|sysinfo(10)^ykonfigprjm^ybatchuser))) & (F|sysinfo(10)^ykonfigprjm^ybatchuser^fremdok)))
+.set TRANS +
+.box -BUTTON yes:no -TITLE Hinweis
+Soll die Teilprojektverrechnung freigegeben werden?
+.set TRANS -
+.continue EL042 ? _(G|box = G|boxyes)
+.select lock add M|id
+.continue EL043 ? _(G|mehr)
+.load 9 add M|id
+.input allpstd/FOP.PRJM.UP.TPVERRECHANF.BUCHEN
+.continue FI043
+!EL043
+.set TRANS +
+.box Hinweis
+Die Teilprojektverrechnung konnte nicht geladen werden!
+.set TRANS -
+!FI043
+!EL042
+.continue FI041
+!EL041
+.set TRANS +
+.box Fehler
+Sie haben keine Berechtigung fÅr Buchungstransaktionen.
+Die Freigabe ist nicht mîglich.
+.set TRANS -
+!FI041
+!EL040
+.continue FI034
+!EL034
+.set TRANS +
+.box Fehler
+Der Vorgang ist nur im <zeigen> mîglich.
+.set TRANS -
+!FI034
+.continue 'xprocst.xprocsp'
+!PROC008: ----- Storno -----
+.continue EL044 ? _(G|evtkommd = G|kaktname12)
+.select group 'U|xydbgrtpverrechanf' 'M|id'
+.continue EL045 ? _(G|mehr)
+.continue EL046 ? _(_(F|empty(H|ytransaktion)))
+.set TRANS +
+.box Hinweis
+Die Teilprojektverrechnung ist bereits freigegeben.
+Bitte erst die Freigabe aufheben!
+.set TRANS -
+.continue FI046
+!EL046
+.assign U|xbok   = G|TRUE
+.assign U|xbtpok = G|TRUE
+.continue EL047 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC002
+!RET004
+.formula xprocsp = xprocsp - 1
+.continue EL048 ? _(U|xbtpok)
+.set TRANS +
+.box -BUTTON yes:no -TITLE Achtung
+Die Teilprojektverrechnung 'H|nummer' wird storniert, alle zugehîrigen Teilprojektposition werden
+gelîscht und bereits abgerechnete Leistungsmeldungen werden wieder freigegeben!
+.set TRANS -
+.continue EL049 ? _(G|box = G|boxyes)
+.assign U|xbstorno = G|FALSE
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC004
+!RET005
+.formula xprocsp = xprocsp - 1
+.continue EL050 ? _(U|xbok)
+.assign U|xbstorno = G|TRUE
+.action +
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC004
+!RET006
+.formula xprocsp = xprocsp - 1
+.action -
+!EL050
+!EL049
+.continue FI048
+!EL048
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderlichen Rechte, die Teilprojektverrechnung zu stornieren.
+.set TRANS -
+.error
+.end 1
+!FI048
+.continue FI047
+!EL047
+.set TRANS +
+.box Hinweis
+Die Teilprojektverrechnung konnte nicht geladen werden!
+Bitte Tabelle neu laden.
+.set TRANS -
+.error
+.end 1
+!FI047
+!FI046
+.continue FI045
+!EL045
+.set TRANS +
+.box Hinweis
+Die Teilprojektverrechnung konnte nicht geladen werden!
+.set TRANS -
+!FI045
+.continue FI044
+!EL044
+.set TRANS +
+.box Fehler
+Der Vorgang ist nur im <zeigen> mîglich.
+.set TRANS -
+!FI044
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskein")
+.continue EL051 ? _(G|evtkommd = G|kaktname14)
+.assign  M|yfreidat     = ""
+.formula M|yfreidurch   = ""
+.assign  M|ytransaktion = ""
+.continue FI051
+!EL051
+.continue EL052 ? _(_(G|evtkommd = G|kaktname12))
+.continue EL053 ? _(_(F|empty(M|ytransaktion)))
+.set TRANS +
+.box Hinweis
+Diese Teilprojektverrechnung ist bereits freigegeben.
+
+<'G|evtkommd'> nicht mîglich.
+.set TRANS -
+.error
+.end 1
+!EL053
+!EL052
+!FI051
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "maskpruef")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC001
+!RET007
+.formula xprocsp = xprocsp - 1
+.continue EL054 ? _(M|yhauptprojekt^id <> M|yteilprojekt^yteilprojektzu^id)
+.set TRANS +
+.box Fehler
+Das Teilprojekt 'M|yteilprojekt^such' gehîrt nicht zum Hauptprojekt 'M|yhauptprojekt^such'.
+.set TRANS -
+.error
+.end 1
+!EL054
+.formula U|xrbetrag = M|ybetrag
+.formula U|xrsumme  = M|yvaeigenleist + M|yvafremdleist + M|yvasonstkost + M|yvafertleist
+.continue EL055 ? _(_(U|xrsumme = U|xrbetrag))
+.set TRANS +
+.box Fehler
+Falsche Werte fÅr Eigen-, Fremd-, Fertigungsleistung und sonstige Kosten.
+Bitte prÅfen.
+.set TRANS -
+.error
+.end 1
+!EL055
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtart = "buttonvor")
+.continue BRK004 ? _(G|evtvar = "ybubuchen")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC007
+!RET008
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK004
+.continue BRK005 ? _(G|evtvar = "ybubuchenedp")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC007
+!RET009
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK005
+.continue BRK006 ? _(G|evtvar = "ybukobustorno")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC006
+!RET010
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK006
+.continue BRK007 ? _(G|evtvar = "ybukobustornoedp")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC006
+!RET011
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK007
+.continue BRK008 ? _(G|evtvar = "ybustorno")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC008
+!RET012
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK008
+.continue BRK009 ? _(G|evtvar = "ybustornoedp")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET013" 
+.continue PROC008
+!RET013
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK009
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK003
+.continue BRK010 ? _(G|evtart = "feldaus")
+.continue BRK011 ? _(G|evtvar = "yhauptprojekt")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET014" 
+.continue PROC001
+!RET014
+.formula xprocsp = xprocsp - 1
+.continue ESAC003
+!BRK011
+.continue BRK012 ? _(G|evtvar = "yteilprojekt")
+.assign  M|yhauptprojekt = M|yteilprojekt^yteilprojektzu^id
+.formula M|such          = M|yteilprojekt^such
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET015" 
+.continue PROC001
+!RET015
+.formula xprocsp = xprocsp - 1
+.continue ESAC003
+!BRK012
+.continue BRK013 ? _(G|evtvar = "yvaeigenleist")
+.formula M|yvafremdleist = M|ybetrag - M|yvaeigenleist - M|yvasonstkost - M|yvafertleist
+.continue ESAC003
+!BRK013
+.continue BRK014 ? _(G|evtvar = "ylohnanteil")
+.formula M|yvafremdleist = M|ybetrag - M|yvaeigenleist - M|yvasonstkost - M|yvafertleist
+.continue ESAC003
+!BRK014
+.continue BRK015 ? _(G|evtvar = "yvafremdleist")
+.formula M|yvaeigenleist = M|ybetrag - M|yvafremdleist - M|yvasonstkost - M|yvafertleist
+.continue ESAC003
+!BRK015
+.continue BRK016 ? _(G|evtvar = "ymatanteil")
+.formula M|yvaeigenleist = M|ybetrag - M|yvafremdleist - M|yvasonstkost - M|yvafertleist
+.continue ESAC003
+!BRK016
+.continue BRK017 ? _(G|evtvar = "yvasonstkost")
+.formula M|yvafremdleist = M|ybetrag - M|yvaeigenleist - M|yvasonstkost - M|yvafertleist
+.continue ESAC003
+!BRK017
+.continue BRK018 ? _(G|evtvar = "yvafertleist")
+.formula M|yvafremdleist = M|ybetrag - M|yvaeigenleist - M|yvasonstkost - M|yvafertleist
+.continue ESAC003
+!BRK018
+.continue BRK019 ? _(G|evtvar = "ydatum")
+.continue EL056 ? _(_(F|empty(M|ydatum)))
+.copy    U|xbudat   = M|ydatum
+.formula U|xbuchtyp = "S"
+.input "allpstart/PRUEF.BUDAT"
+.continue EL057 ? _(_(U|xbbuchbar))
+.set TRANS +
+.box Hinweis
+Das Datum 'U|xbudat' liegt in einer abgeschlossenen Periode.
+.set TRANS -
+.formula M|ydatum = ""
+.error
+.end 1
+!EL057
+!EL056
+.continue ESAC003
+!BRK019
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC001
+!BRK010
+!ESAC001: =====   ENDCASE   =====
+.continue

@@ -1,0 +1,294 @@
+..!interpreter english declaration noabbrev
+.. at 2016-08-22, 15:02
+.set trans -
+..========================================================================
+..==  Name              : TRANSACTION.EXE
+..==                      V3
+..==  Pfad              : allpstart
+..==  Funktion          : Ausfhren / Buchen der Transaktionen
+..==  Erstellungsdatum  : 03.08.07
+..==  Autor             : alltrotec GmbH/CP
+..==  Copyright         : (c) 1990 - 2014 alltrotec GmbH
+..==  Besonderheiten    : ben”tigte Programme
+..==                      owko/TRANSACTION.EXE.INI
+..==                      owko/TRANSACTION.EXE.UP
+..==
+..========================================================================
+.input DATEI.F
+..====================================================
+.type integer   xprocsp         ? _F|defined(U|xprocsp)
+.type integer   xi00            ? _F|defined(U|xi00)
+.type text      xhlp            ? _F|defined(U|xhlp)
+.type text      xedp            ? _F|defined(U|xedp)
+.type text      xerr            ? _F|defined(U|xerr)
+.type text      xout            ? _F|defined(U|xout)
+.type text      xsys            ? _F|defined(U|xsys)
+.type text      xid             ? _F|defined(U|xid)
+.type text      xttmpftext      ? _F|defined(U|xttmpftext)
+..====================================================
+.set demand -
+.formula U|xerr = "rmtmp/X.TRANSACTIONERR." + G|PID + ".TMP"
+.formula U|xout = "rmtmp/X.TRANSACTIONOUT." + G|PID + ".TMP"
+.formula U|xedp = "rmtmp/X.TRANSACTIONEDP." + G|PID + ".TMP"
+.output new 'U|xedp'
+.continue EPROCDEF
+!PROC001: ----- kopf -----
+.formula U|xkobef.xi00 = "~~~"      ? F|empty(U|xkobef.xi00)
+.continue EL001 ? _(F|empty(U|xhlp))
+.formula U|xhlp = U|xkobef.xi00
+.continue FI001
+!EL001
+.formula U|xhlp = U|xhlp + ";" + U|xkobef.xi00
+!FI001
+.formula U|xi00 = U|xi00 + 1
+.continue 'xprocst.xprocsp'
+!PROC002: ----- tabelle -----
+.formula U|xtabef.xi00 = "~~~"      ? F|empty(U|xtabef.xi00)
+.continue EL002 ? _(F|empty(U|xhlp))
+.formula U|xhlp = U|xtabef.xi00
+.continue FI002
+!EL002
+.formula U|xhlp = U|xhlp + ";" + U|xtabef.xi00
+!FI002
+.formula U|xi00 = U|xi00 + 1
+.continue 'xprocst.xprocsp'
+!PROC003: ----- MitLeistungsarten -----
+'U|x2kozeile'\
+'U|x2tazeile'
+.formula U|xhlp = ""
+.formula U|xi00 = 1
+!LOOP001: ==============================
+.continue ELOP001 ? _(F|defined(U|x2kobef.xi00))
+.'U|x2kobef.xi00'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.continue LOOP001
+!ELOP001: ==============================
+.output ADDEDTO 'U|xedp'
+'U|xhlp'\
+.load 1 line
+!LOOP002: ==============================
+.continue ELOP002 ? _(mehr)
+.formula U|xhlp = ""
+.formula U|xi00 = 1
+!LOOP003: ==============================
+.continue ELOP003 ? _(F|defined(U|x2tabef.xi00))
+.'U|x2tabef.xi00'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC002
+!RET002
+.formula xprocsp = xprocsp - 1
+.continue LOOP003
+!ELOP003: ==============================
+.output ADDEDTO 'U|xedp'
+'U|xhlp'\
+.load 1 line
+.continue LOOP002
+!ELOP002: ==============================
+.formula U|xi00 = 1
+!LOOP004: ==============================
+.continue ELOP004 ? _(F|defined(U|x2lzbef.xi00))
+.'U|x2lzbef.xi00'
+.formula U|xi00 = U|xi00 + 1
+.continue LOOP004
+!ELOP004: ==============================
+.continue 'xprocst.xprocsp'
+!PROC004: ----- buchen -----
+.add F|sysinfo(10)^ykonfigprjm
+.continue EL003 ? _(G|mehr)
+.assign G|neuespassw = D|ybatchuser     ? _F|empty(D|ybatchuser) & D|ybatchuser^fremdok
+!EL003
+.formula U|xsys = "edpimport.sh -p " + G|einmalpw + " -r REF " + U|xedp + " >" + U|xout + " 2>" + U|xerr
+.system 'U|xsys' BACKGROUND
+.select from 'U|xout' xid^
+.select from
+.continue EL004 ? _(U|xid = "(0,0,0)")
+.file -tempname U|xttmpftext
+.output new 'U|xttmpftext'
+.select lock add 0|ytrdaten
+.set TRANS +
+Inhalt EDP-Buchungsdatei:
+.set TRANS -
+.input 'U|xedp'
+
+
+.set TRANS +
+Inhalt EDP-Fehlerdatei:
+.set TRANS -
+.input 'U|xerr'
+.output NEW WERF.WEG
+.formula H|yftext = U|xttmpftext
+.set TRANS +
+.formula h|yfehler  = "Buchung nicht erzeugt"
+.set TRANS -
+.formula h|ystatusk = "BIE"
+.continue FI004
+!EL004
+.load 2 object 'U|xid'
+.select lock add 0|ytrdaten
+.formula h|ystatusk  = "BUE"
+.formula h|ybezeich  = G|bzeichen
+.formula h|yfehler   = ""
+.formula h|ybabl     = G|true
+.formula h|yfbuchung = 'U|xid'  ?  2|gruppe = 0
+.formula h|ysbuchung = 'U|xid'  ? _2|gruppe = 0
+!FI004
+.rewrite
+.select --
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.set separator ^
+.load 0 line
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.load 1 add 0|ytrdaten
+.continue EL005 ? _((F|empty(1|ysbuchung)) & (F|empty(1|yfbuchung)) & (1|ystatusk  = "BIG") & (1|yprio     = 0|ypriotr) & (_(1|ybabl)))
+.input 'F|foppath("TRANSACTION.EXE.INI")'
+.continue BRK001 ? _(1|ybuartk = "F")
+.output new 'U|xedp'
+#!database=6
+#!group=0
+#!action=NEW
+#!charset=EKS
+#!EDP_LANGCODE='G|bsprache'
+#!DONTCHANGE=~~~
+.continue EL006 ? _(F|empty(1|ykkstelle))
+'U|x0kozeile'\
+'U|x0tazeile'
+.formula U|xhlp = ""
+.formula U|xi00 = 1
+!LOOP006: ==============================
+.continue ELOP006 ? _(F|defined(U|x0kobef.xi00))
+.'U|x0kobef.xi00'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+.continue LOOP006
+!ELOP006: ==============================
+.output ADDEDTO 'U|xedp'
+'U|xhlp'\
+.load 1 line
+!LOOP007: ==============================
+.continue ELOP007 ? _(G|mehr)
+.continue EL007 ? _(_(1|yktonpruef))
+.formula U|xhlp = ""
+.formula U|xi00 = 1
+!LOOP008: ==============================
+.continue ELOP008 ? _(F|defined(U|x0tabef.xi00))
+.'U|x0tabef.xi00'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC002
+!RET004
+.formula xprocsp = xprocsp - 1
+.continue LOOP008
+!ELOP008: ==============================
+.output ADDEDTO 'U|xedp'
+'U|xhlp'\
+!EL007
+.load 1 line
+.continue LOOP007
+!ELOP007: ==============================
+.continue FI006
+!EL006
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC003
+!RET005
+.formula xprocsp = xprocsp - 1
+!FI006
+.output NEW WERF.WEG
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC004
+!RET006
+.formula xprocsp = xprocsp - 1
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(1|ybuartk = "S")
+.output NEW 'U|xedp'
+#!database=6
+#!group=1
+#!action=NEW
+#!charset=EKS
+#!EDP_LANGCODE='G|bsprache'
+#!DONTCHANGE=~~~
+.continue EL008 ? _(F|empty(1|ykkstelle))
+'U|x1kozeile'\
+'U|x1tazeile'
+.formula U|xhlp = ""
+.formula U|xi00 = 1
+!LOOP009: ==============================
+.continue ELOP009 ? _(F|defined(U|x1kobef.xi00))
+.'U|x1kobef.xi00'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC001
+!RET007
+.formula xprocsp = xprocsp - 1
+.continue LOOP009
+!ELOP009: ==============================
+.output ADDEDTO 'U|xedp'
+'U|xhlp'\
+.load 1 line
+!LOOP010: ==============================
+.continue ELOP010 ? _(mehr)
+.formula U|xhlp = ""
+.formula U|xi00 = 1
+!LOOP011: ==============================
+.continue ELOP011 ? _(F|defined(U|x1tabef.xi00))
+.'U|x1tabef.xi00'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC002
+!RET008
+.formula xprocsp = xprocsp - 1
+.continue LOOP011
+!ELOP011: ==============================
+.output ADDEDTO 'U|xedp'
+'U|xhlp'\
+.load 1 line
+.continue LOOP010
+!ELOP010: ==============================
+.continue FI008
+!EL008
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC003
+!RET009
+.formula xprocsp = xprocsp - 1
+!FI008
+.output NEW WERF.WEG
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC004
+!RET010
+.formula xprocsp = xprocsp - 1
+.continue ESAC001
+!BRK002
+!ESAC001: =====   ENDCASE   =====
+!EL005
+.load 0 line
+.continue LOOP005
+!ELOP005: ==============================
+.load 0 header
+.system 'F|formatstr("rm -f {1}", U|xedp)' background
+.system 'F|formatstr("rm -f {1}", U|xerr)' background
+.system 'F|formatstr("rm -f {1}", U|xout)' background
+.continue

@@ -1,0 +1,267 @@
+..!interpreter english declaration noabbrev
+.. at 2016-06-15, 16:50
+.set TRANS -
+..========================================================================
+..==  Name              : FOP.PRJM.DECKBLATT.EV
+..==  Pfad              : allppro
+..==  Funktion          : Events an LV Kalkulationblatt
+..==  Erstellungsdatum  : 25.10.2012
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2016 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allppro/LV.KONFIG.INI"
+..====================================================
+.type text    xtsys xtsel xtcmd xtid xtvar xtwert xtdatei xtprojleistkatid
+.type real    xpapreis
+.type integer ximonat xivar xizaehler
+.type integer xyvdn xyvgr
+.type bool    xbvar xbok
+.type GD      xdkonddat
+.type TAZ7    xeinh
+.type text    xykoobjekt
+.type bool    xyberlaubt
+.'F|expr("type P" + U|xydbgrprojekt + " xpprojekt")
+.type int   xprocsp     ? _F|defined(U|xprocsp)
+.formula U|xprocsp = 0
+.set DEMAND -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Rechtepruefung -----
+.continue EL001 ? _(U|xypmrepruefkst)
+.formula U|xykoobjekt = M|yverantwkst^id            ? _G|evtvar = "yskblatt"
+.formula U|xykoobjekt = M|yskblatt^yverantwkst^id   ?  G|evtvar = "yskblatt"
+.input 'U|xypmrepruefkstprog'
+.continue EL002 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderliche Rechte fÅr diese Kostenstelle.
+.set TRANS -
+.continue EL003 ? _(G|evtart = "maskein")
+.error
+.end 1
+.continue FI003
+!EL003
+.copy M|yverantwkst = F|oldvalue(M|yverantwkst) ? _G|evtvar = "yskblatt"
+.copy M|yskblatt    = F|oldvalue(M|yskblatt)    ?  G|evtvar = "yskblatt"
+!FI003
+!EL002
+!EL001
+.continue EL004 ? _(U|xypmrepruefind)
+.input 'U|xypmrepruefindprog'
+.continue EL005 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderliche Rechte fÅr diese Kostenstelle.
+.set TRANS -
+.continue EL006 ? _(G|evtart = "maskein")
+.error
+.end 1
+.continue FI006
+!EL006
+.copy M|yverantwkst = F|oldvalue(M|yverantwkst) ? _G|evtvar = "yskblatt"
+.copy M|yskblatt    = F|oldvalue(M|yskblatt)    ?  G|evtvar = "yskblatt"
+!FI006
+!EL005
+!EL004
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|EVTART = "maskein")
+.continue EL007 ? _(_(F|empty(M|yverantwkst)))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+!EL007
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"
+.continue EL008 ? _(G|evtkommd = G|kaktname14)
+.copy   M|ybauftragseingang = G|FALSE
+.copy   M|ybforecast        = G|FALSE
+.copy   M|ysperre           = G|FALSE
+.assign M|ysperrzeich       = ""
+.assign M|ysperrzp          = ""
+!EL008
+.continue EL009 ? _((G|evtkommd = G|kaktname13) & (M|ysperre))
+.input "allpstart/CHECK.RECORD.LOCK"
+!EL009
+.continue EL010 ? _(_(G|evtkommd = G|kaktname10))
+.assign  M|yskblatt = M|ykblattid       ? _F|empty(M|ykblattid)
+!EL010
+.continue
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|EVTART = "maskpruef")
+.continue EL011 ? _(_(G|evtkommd = G|kaktname10))
+.continue EL012 ? _(M|ybauftragseingang)
+.continue EL013 ? _(F|empty(M|yprojekt))
+.set TRANS +
+.box Hinweis
+Das Deckblatt muss einen Verweis auf ein Projekt enthalten,
+wenn es als Auftragseingangskalkulation gekennzeichnet werden soll.
+.set TRANS -
+.copy M|ybauftragseingang = G|FALSE
+.error
+.end 1
+.continue FI013
+!EL013
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";id<>"        + M|id              ? _G|evtkommd = G|kaktname14
+.formula U|xtsel = U|xtsel + ";yprojekt=="  + M|yprojekt^id
+.formula U|xtsel = U|xtsel + ";ybauftragseingang==1;@ablageart=(1)"
+.load 0 group 'U|xydbgrdeckblatt' 'U|xtsel'
+.continue EL014 ? _(G|mehr)
+.set TRANS +
+.formula U|xtsel = "Hinweis"
+.box -button yes:no -title 'U|xtsel'
+Es existiert bereits ein Deckblatt zu diesem Projekt, das als Auftragseingangskalkulation gekennzeichnet ist.
+Soll das aktuelle Deckblatt als Auftragseingangskalkulation gespeichert werden?
+.set TRANS -
+.continue EL015 ? _(G|box = G|boxyes)
+.select lock add 0|id
+.continue EL016 ? _(G|mehr)
+.copy H|ybauftragseingang = G|FALSE
+.rewrite
+.continue FI016
+!EL016
+.set TRANS +
+.box Hinweis
+Das Deckblatt '0|nummer' kann nicht bearbeitet werden.
+Die Kennzeichnung Auftragseingangskalkulation kann nicht entfernt werden.
+.set TRANS -
+.copy M|ybauftragseingang = G|FALSE
+.error
+.end 1
+!FI016
+.continue FI015
+!EL015
+.copy M|ybauftragseingang = G|FALSE
+.error
+.end 1
+!FI015
+!EL014
+!FI013
+!EL012
+.continue EL017 ? _(M|ybforecast)
+.continue EL018 ? _(F|empty(M|yprojekt))
+.set TRANS +
+.box Hinweis
+Das Deckblatt muss einen Verweis auf ein Projekt enthalten,
+wenn es als Forecastkalkulation gekennzeichnet werden soll.
+.set TRANS -
+.copy M|ybforecast = G|FALSE
+.error
+.end 1
+.continue FI018
+!EL018
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";id<>"       + M|id           ? _G|evtkommd = G|kaktname14
+.formula U|xtsel = U|xtsel + ";yprojekt==" + M|yprojekt^id
+.formula U|xtsel = U|xtsel + ";yrevdatum==" +'M|yrevdatum:8'
+.formula U|xtsel = U|xtsel + ";ybforecast==1;@ablageart=(1)"
+.load 0 group 'U|xydbgrdeckblatt' 'U|xtsel'
+.continue EL019 ? _(G|mehr)
+.set TRANS +
+.formula U|xtsel = "Hinweis"
+.box -button yes:no -title 'U|xtsel'
+Es existiert bereits ein Deckblatt zu diesem Projekt zu diesem Revisionsdatum, das als Forecastkalkulation gekennzeichnet ist.
+Soll das aktuelle Deckblatt als Forecastkalkulation zu diesem Revisionsdatum gespeichert werden?
+.set TRANS -
+.continue EL020 ? _(G|box = G|boxyes)
+.select lock add 0|id
+.continue EL021 ? _(G|mehr)
+.copy H|ybforecast = G|FALSE
+.rewrite
+.continue FI021
+!EL021
+.set TRANS +
+.box Hinweis
+Das Deckblatt '0|nummer' kann nicht bearbeitet werden.
+Die Kennzeichnung Forecastkalkulation kann nicht entfernt werden.
+.set TRANS -
+.copy M|ybforecast = G|FALSE
+.error
+.end 1
+!FI021
+.continue FI020
+!EL020
+.copy M|ybforecast = G|FALSE
+.error
+.end 1
+!FI020
+!EL019
+!FI018
+!EL017
+!EL011
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|EVTART = "maskende")
+.continue EL022 ? _(_(F|empty(M|ykblattid)))
+.load 0 group "145:3" 'M|ykblattid'
+.continue EL023 ? _(G|mehr)
+.continue EL024 ? _(_(0|yprojekt = M|yprojekt))
+.select lock add 0|id
+.continue EL025 ? _(G|mehr)
+.copy H|yprojekt = M|yprojekt
+.rewrite
+.continue FI025
+!EL025
+.set trans +
+.box Fehler
+Das Kalkulationsblatt '0|nummer' kann nicht bearbeitet werden.
+Der Abgleich des Projektes ist nicht mîglich.
+.set trans -
+!FI025
+!EL024
+!EL023
+!EL022
+.end 1  ? M|ybmaskezu
+.continue
+.continue ESAC001
+!BRK003
+.continue BRK004 ? _(G|EVTART = "feldaus")
+.continue BRK005 ? _(G|evtvar = "yskblatt")
+.continue EL026 ? _(F|empty(M|yskblatt))
+.formula M|ykblattid = ""
+.continue FI026
+!EL026
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+.formula M|ykblattid     = M|yskblatt^id
+.formula M|such          = M|yskblatt^such
+.formula M|name          = M|yskblatt^namebspr
+.copy    M|ybezugsdatum  = M|yskblatt^ybezugsdatum  ? F|empty(M|ybezugsdatum)
+.copy    M|yverantwkst   = M|yskblatt^yverantwkst
+.copy    M|yprojekt      = M|yskblatt^yprojekt
+.copy    M|ykunde        = M|yskblatt^ykunde
+.copy    M|ybearbeiteran = M|yskblatt^ybearbeiteran
+!FI026
+.continue ESAC002
+!BRK005
+.continue BRK006 ? _(G|evtvar = "yverantwkst")
+.continue EL027 ? _(_(F|empty(M|yverantwkst)))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+!EL027
+.continue ESAC002
+!BRK006
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK004
+!ESAC001: =====   ENDCASE   =====
+.continue

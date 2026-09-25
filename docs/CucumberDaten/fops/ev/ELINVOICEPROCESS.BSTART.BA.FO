@@ -1,0 +1,213 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICEPROCESS.BSTART.BA.FO
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Functionality  : Read edi message with zugferd invoice and show its 
+..                  data in the infosystem
+..*****************************************************************************
+.set trans -
+.type bool xindikator ? _F|defined(U|xindikator)
+..
+..<META M|='ev/ELINVOICEPROCESS'>
+..<META H|='P53:0'>
+..EDI-Konfig Supplier/Suppliercontact
+..<META 3|='P1:4'>
+..EDI-Konfig Customer/Customercontact
+..<META 5|='P0:4'>
+..
+.. exit FOP if no EDI message is given
+.continue ? F|empty(M|edifact)
+.continue DUBLETTE   ?  M|bdublette
+.continue KEINZF     ? _F|equals(M|edifact^edinachraz, "(ZUGFeRDInvoice)")
+..
+.type text  xrow      ? _F|defined(U|xrow)
+.type text  xtext     ? _F|defined(U|xtext)
+.type P53:0 xedi      ? _F|defined(U|xedi)
+.type DVS1  xfotoz    ? _F|defined(U|xfotoz)
+.type bool  xbnotizen ? _F|defined(U|xbnotizen)
+..
+.. The row types are shown as text for easy recognition by a user 
+.type text xArtikelzeile ? _F|defined(U|xArtikelzeile)
+.type text xZuAbschlagzeile ? _F|defined(U|xZuAbschlagzeile)
+.type text xSteuerzeile ? _F|defined(U|xSteuerzeile)
+.type text xTextzeile ? _F|defined(U|xTextzeile)
+.set trans +
+.formula U|xArtikelzeile = "Artikel"
+.formula U|xZuAbschlagzeile = "Zuschlag/Abschlag"
+.formula U|xSteuerzeile = "Steuer"
+.formula U|xTextzeile = "Notiz"
+.set trans -
+..
+.input "is/ABASFARBEN.DEF"
+..
+.. Refresh data from edi message on start button event 
+.assign U|xedi = M|edifact
+.formula U|xfotoz = M|fotoz
+.copy U|xbnotizen = M|btabellemitnotizen
+.input "is/KOPFLEEREN"    
+.input "is/KOPFFARBENZURUECKSETZEN.FO"
+.formula M|gruenz = "icon:ball_green"
+.formula M|rotz = "icon:ball_red"
+.formula M|orangez = "icon:ball_orange"
+.formula M|button0 = M|gruenz
+.formula M|button8 = M|gruenz
+.formula M|button9 = M|gruenz
+.formula M|button1 = M|gruenz
+.formula M|button7 = M|gruenz
+.formula M|button2 = M|gruenz
+.formula M|buttonartikel = M|gruenz
+.copy M|btabellemitnotizen = U|xbnotizen
+.formula M|notizen = ""
+.input "is/TABLEEREN"
+.assign M|edifact = U|xedi
+.copy M|bewlei = F|sysinfo(18)^bewlei
+.assign M|edipartner = U|xedi^partner
+.assign M|ediaktiv = G|false
+.assign M|status = M|edifact^edistatusaz
+.assign M|ediobjsuch = M|edifact^ediobjsuch
+.assign M|reek = M|edifact^ideksvor
+.formula M|ebeleg = M|reek^ebeleg
+.formula M|neurenetto = M|reek^sumnetto
+.formula M|neurenetto = M|reek^rebetr
+.formula M|sumnettobestellung = M|bestellung^sumnetto
+.formula M|sumnettoliefer = M|liefek^sumnetto
+.formula M|fotoz = U|xfotoz
+.formula M|gefundenefelder = ""
+.formula M|fehlendefelder = ""
+.continue     ? _F|empty(M|reek)
+..
+.continue EKEDI ? M|edipartner^dnr=1
+.continue VKEDI ? M|edipartner^dnr=0
+.continue START
+!EKEDI
+.load 3 supplier 'F|formatstr("$,,;@gruppe=4;@zeilen=(1);edinachraz={1};klnum={2}", "(ZUGFeRDInvoice)", M|edipartner^id)'
+.continue START ? _G|mehr
+.load 3 line '3|selzeile'
+.assign M|ediaktiv = 3|erlaubt 
+.load 3
+.continue START
+!VKEDI
+.load 5 customer 'F|formatstr("$,,;@gruppe=4;@zeilen=(1);edinachraz={1};klnum={2}", "(ZUGFeRDInvoice)", M|edipartner^id)'
+.continue START ? _G|mehr
+.load 5 line '5|selzeile'
+.assign M|ediaktiv = 5|erlaubt 
+.load 5
+.continue START
+..
+!START
+.. information / erros / notes are shown in free text fields;
+.. dather for these ar gathered in temporay files
+.. 
+.type text xftextAllNotes  ? _F|defined(U|xftextAllNotes)
+.file -tempname U|xftextAllNotes
+.output new 'U|xftextAllNotes'
+.input "DATEI.F"
+.output
+..
+.type text xftextShownFields  ? _F|defined(U|xftextShownFields)
+.file -tempname U|xftextShownFields
+.output new 'U|xftextShownFields'
+.input "DATEI.F"
+.output
+..
+.type text xftextMissingFields ? _F|defined(U|xftextMissingFields)
+.file -tempname U|xftextMissingFields
+.output new 'U|xftextMissingFields'
+.input "DATEI.F"
+.output
+..
+..*****************************************************************************
+.. Show E-Invoice in HTLM viewr
+..*****************************************************************************
+.type P53:0 xedi ? _F|defined(U|xedi)
+.type text urlfield ? _F|defined(U|urlfield)
+..
+.formula U|xedi = M|edifact^id
+.formula U|urlfield = "M|htmldateiname"
+.input "ELINVOICE.VIEWER.FO"
+..
+..*****************************************************************************
+.. Add data from zugferd edi message's table to infosystem
+..*****************************************************************************
+..
+.select edifact 'M|edifact^id'
+.continue END ? _G|mehr
+..
+.. xrow handles which infosys-row (or head for "0"), the current 
+.. line of edifact should be written to
+.formula U|xrow = "0"
+..
+!NEXTROW
+.select line
+.continue ENDEDI ? _G|mehr
+.input 'M|tab'
+.formula M|nettopreis = M|NetPriceProductTradePrice     ? F|defined(M|NetPriceProductTradePrice)
+.formula M|bruttopreis = M|GrossPriceProductTradePrice  ? F|defined(M|GrossPriceProductTradePrice)
+..
+.continue NEXT        ? _F|defined(M|AppliedTradeAllowanceChargeIndicator)
+.copy U|xindikator = G|TRUE  ? 'M|AppliedTradeAllowanceChargeIndicator' = "true"
+.copy U|xindikator = G|FALSE ? 'M|AppliedTradeAllowanceChargeIndicator' = "false"
+..
+!NEXT
+.continue ARTIKEL  ? _F|defined(M|AppliedTradeAllowanceChargeActualAmount)
+.formula M|zuabschlag = M|AppliedTradeAllowanceChargeActualAmount        ?  U|xindikator
+.formula M|zuabschlag = M|AppliedTradeAllowanceChargeActualAmount * (-1) ? _U|xindikator
+..
+!ARTIKEL
+.continue NEXTROW ? _F|defined(M|artikel) ; M|buttonartikel = M|rotz
+.continue NEXTROW ? F|empty(M|artikel)
+.formula M|buttonartikel = M|rotz 
+.continue NEXTROW
+..*****************************************************************************
+..
+!ENDEDI
+.select screen head
+.colour -background 'U|xabasyellow' ExchangedDocumentID 0 ? F|defined(M|ExchangedDocumentID) & F|empty(M|ExchangedDocumentID) & M|ozeilen>0
+.set trans +
+.formula U|xtext = ""
+.formula U|xtext = "Dienstleistungsrechnung"    ? F|defined(M|ExchangedDocumentTypeCode) & M|ExchangedDocumentTypeCode = "82"
+.formula U|xtext = "Handelsrechnung"            ? F|defined(M|ExchangedDocumentTypeCode) & M|ExchangedDocumentTypeCode = "380"
+.formula U|xtext = "Gutschrift"                 ? F|defined(M|ExchangedDocumentTypeCode) & (M|ExchangedDocumentTypeCode = "381" ; M|ExchangedDocumentTypeCode = "81")
+.formula U|xtext = "Korrekturrechnung"          ? F|defined(M|ExchangedDocumentTypeCode) & M|ExchangedDocumentTypeCode = "384"
+.formula U|xtext = "Eigenrechnung"              ? F|defined(M|ExchangedDocumentTypeCode) & M|ExchangedDocumentTypeCode = "389"
+.formula U|xtext = "Selbstverfasste Gutschrift" ? F|defined(M|ExchangedDocumentTypeCode) & M|ExchangedDocumentTypeCode = "261"
+.formula U|xtext = "Vorauszahlungsrechnung"     ? F|defined(M|ExchangedDocumentTypeCode) & M|ExchangedDocumentTypeCode = "386"
+.formula U|xtext = "Rechnungsinformation fÅr die Buchhaltung" ? F|defined(M|ExchangedDocumentTypeCode) & M|ExchangedDocumentTypeCode = "751"
+.set trans -
+.formula M|vorgangstyp = U|xtext
+.assign M|vorganga = "(Invoice)"              ? M|ExchangedDocumentTypeCode = "80" ; M|ExchangedDocumentTypeCode = "82" ; M|ExchangedDocumentTypeCode = "84" ; M|ExchangedDocumentTypeCode = "130" ; M|ExchangedDocumentTypeCode = "202"
+.assign M|vorganga = "(Invoice)"              ? M|ExchangedDocumentTypeCode = "203" ; M|ExchangedDocumentTypeCode = "204" ; M|ExchangedDocumentTypeCode = "211" ; M|ExchangedDocumentTypeCode = "295" 
+.assign M|vorganga = "(Invoice)"              ? M|ExchangedDocumentTypeCode = "325" ; M|ExchangedDocumentTypeCode = "326" ; M|ExchangedDocumentTypeCode = "380" ;  M|ExchangedDocumentTypeCode = "383"
+.assign M|vorganga = "(Invoice)"              ? M|ExchangedDocumentTypeCode = "384" ; M|ExchangedDocumentTypeCode = "385" ; M|ExchangedDocumentTypeCode = "386" ; M|ExchangedDocumentTypeCode = "387"
+.assign M|vorganga = "(Invoice)"              ? M|ExchangedDocumentTypeCode = "388" ; M|ExchangedDocumentTypeCode = "389" ; M|ExchangedDocumentTypeCode = "390" ; M|ExchangedDocumentTypeCode = "393"
+.assign M|vorganga = "(Invoice)"              ? M|ExchangedDocumentTypeCode = "394" ; M|ExchangedDocumentTypeCode = "395" ; M|ExchangedDocumentTypeCode = "456" ; M|ExchangedDocumentTypeCode = "457"
+.assign M|vorganga = "(Invoice)"              ? M|ExchangedDocumentTypeCode = "527" ; M|ExchangedDocumentTypeCode = "575" ; M|ExchangedDocumentTypeCode = "623" ; M|ExchangedDocumentTypeCode = "633"
+.assign M|vorganga = "(Invoice)"              ? M|ExchangedDocumentTypeCode = "751" ; M|ExchangedDocumentTypeCode = "780" ; M|ExchangedDocumentTypeCode = "935"
+.assign M|vorganga = "(CreditNoteCommercial)" ? M|ExchangedDocumentTypeCode = "81" ; M|ExchangedDocumentTypeCode = "83" ; M|ExchangedDocumentTypeCode = "261" ; M|ExchangedDocumentTypeCode = "262"  
+.assign M|vorganga = "(CreditNoteCommercial)" ? M|ExchangedDocumentTypeCode = "296" ; M|ExchangedDocumentTypeCode = "308" ;  M|ExchangedDocumentTypeCode = "381" ;  M|ExchangedDocumentTypeCode = "396"
+.assign M|vorganga = "(CreditNoteCommercial)" ? M|ExchangedDocumentTypeCode = "420" ; M|ExchangedDocumentTypeCode = "458"
+.copy M|korrektur = G|TRUE ? M|ExchangedDocumentTypeCode = "384"
+..
+.assign M|tterm = M|SpecifiedTradePaymentTermsDueDateDateTime
+.formula M|button7 = M|rotz ? F|empty(M|SpecifiedTradePaymentTermsDueDateDateTime)
+..
+..*****************************************************************************
+!END
+..
+.. add gathered information to free text fields in infosystem
+.formula M|notizen = U|xftextAllNotes
+.formula M|fehlendefelder = U|xftextMissingFields
+.formula M|gefundenefelder = U|xftextShownFields
+..
+.continue
+..
+!KEINZF
+.error -message Diese Nachricht ist keine E-Rechnung.
+.end 1
+..
+!DUBLETTE
+.error -message Diese Nachricht ist eine Dublette einer bereits erstellten Rechnung.    ? F|empty(M|dedi)
+.error -message 'F|formatstr("Diese Nachricht ist eine Dublette einer bereits erstellten Rechnung mit EDI-Nachricht {1}.", M|dedi^nummer)' ? _F|empty(M|dedi)
+.end 1

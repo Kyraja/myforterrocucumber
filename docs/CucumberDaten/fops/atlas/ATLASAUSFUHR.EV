@@ -1,0 +1,96 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ATLASAUSFUHR.EV
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Allgemeines Eventhandling
+.. Functionality  : General event handling
+..  include     is/KOPFLEEREN
+..*****************************************************************************
+.set trans -
+..
+.. local fields
+.type VPK10  xvvorgang
+.type bool   xkbzollausbda
+.type bool   xkbzollausvor
+..
+.. event evaluation
+.. ----------- ----- Kopfteil Button -------------------------------------------
+.continue INIT    ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kvorgang"
+.. ----------- ----- Dienststelle beim Zoll ------------------------------------
+.continue ZOLLBD  ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kbzollausbda"
+.continue ZOLLKU  ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kbzollausvor"
+.. ----------- ----- Kopfteil Korrekturen --------------------------------------
+.continue KLBED   ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "klbed"
+.continue KORR    ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kincoort"
+.continue ISO     ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kincoland"
+.continue KORR    ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kbruttogew"
+.continue ZOLLVER ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kzollverant"
+.. ----------- ----- Tabellenteil ----------------------------------------------
+.continue FORBID  ? T|evtartengl = "ROW_MOVE_BEFORE"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+!ZOLLBD
+.formula M|kbzollausvor = false      ?  M|kbzollausbda
+!ZOLLKU
+.formula M|kbzollausbda = false      ?  M|kbzollausvor
+.continue END     ?  F|empty(M|kvorgang)
+.. Standardwert fr Ausfuhrzollstelle, wenn m”glich aus Vorgang
+.formula M|kuebzollst = M|kzollstelle
+.formula M|kuebzollst = M|kauszollst     ? _F|empty(M|kauszollst)
+.. Falls Bediener eine Wahl getroffen hat, diese verwenden
+.formula M|kuebzollst = M|kzollstelle    ?  M|kbzollausbda
+.formula M|kuebzollst = M|kauszollst     ?  M|kbzollausvor
+.continue KORR
+..
+!KLBED: update displayed incocode text, when reference to incocode object is changed
+.formula M|kincoterm = M|klbed^incocode
+.continue KORR
+..
+!ZOLLVER: name and email from person responsible for cutoms registration
+.formula M|kzollverantn =  M|kzollverant^sucherw
+.formula M|kzollverante =  M|kzollverant^email
+.continue KORR
+..
+!KORR
+.input "atlas/ATLASAUSFUHR.KBUPRUEFEN.BN"
+.continue END
+..
+!ISO
+.formula  M|kiso2 = ""  ? F|empty(M|kincoland)
+.continue KORR          ? F|empty(M|kincoland)
+.formula M|kiso2 = M|kincoland^iso2
+.formula M|kiso2 = M|kincoland^staat^iso2 ? F|equals(M|kincoland^typ, "(Region)")
+.continue KORR
+..
+!INIT: remove rows, clear header fields
+.make screen line -- ? M|tzeilen > 0
+.assign T|xvvorgang = M|kvorgang^id
+.formula   T|xkbzollausbda = M|kbzollausbda
+.formula   T|xkbzollausvor = M|kbzollausvor
+.input "is/KOPFLEEREN"
+.continue END     ?  F|empty(T|xvvorgang)
+.assign M|kvorgang = T|xvvorgang^id
+.formula M|kbzollausbda = T|xkbzollausbda
+.formula M|kbzollausvor = T|xkbzollausvor
+.assign M|kkl = T|xvvorgang^kunde^id    ?  T|xvvorgang^dnr = 3
+.assign M|kkl = T|xvvorgang^lief^id     ?  T|xvvorgang^dnr = 4
+.assign M|kvstaat = T|xvvorgang^vstaat^id
+.. examine transaction status
+.input "ATLASPARAMS"
+.assign T|xvatvorgang = T|xvvorgang^id
+.input "ATLASSTATUS"
+.assign M|katlasgem = T|xbatgemeldet
+.assign M|kedi = T|xvatedi^id
+!EINIT
+.select -
+.continue END
+..
+!FORBID: an event was triggered, which is not allowed
+.error
+.end 1
+..*****************************************************************************
+!END
+.continue

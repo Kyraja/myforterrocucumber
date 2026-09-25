@@ -1,0 +1,205 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICEPROCESS.OBJSUCHE.ORDER.PROCESS.FO
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+..
+..Supplier/Suppliercontact
+..<META 2|='P3:22'>
+..
+..Customer/Customercontact
+..<META 4|='P4:22'>
+..
+.. Parameter-Variablen vervollstÑndigen
+.type text xsuchnummer ? _F|defined(U|xsuchnummer)
+.type text xsuchfrzeich ? _F|defined(U|xsuchfrzeich)
+.. (optinale) Parameter-Variablen vervollstÑndigen
+.type VP5 xsuchlieferant ? _F|defined(U|xsuchlieferant)
+.type VP5 xsuchresteller ? _F|defined(U|xsuchresteller)
+..
+.. Ergebnis initialisieren
+.type VP23 xgefundenVP22 ? _F|defined(U|xgefundenVP22)
+.formula U|xgefundenVP22 = ""
+..
+.. Fehlerhinweis
+.type text xtsuchfehler ? _F|defined(U|xtsuchfehler)
+.formula U|xtsuchfehler = ""
+..
+..*****************************************************************************
+..
+.. KEINE SUCHPARAMETER = NICHT SUCHEN
+.. xgefundenVP5 und xtsuchfehler bleiben auf ""
+..
+.continue END ? F|empty(U|xsuchnummer) & F|empty(U|xsuchfrzeich)
+.continue END ? F|empty(U|xsuchlieferant) & F|empty(U|xsuchresteller)
+..
+..*****************************************************************************
+..
+.. SKIPP SEARCH, IF CACHE HAS IDENTICAL SEARCH PARAMETERS
+..
+.type bool xvp22empty ?_F|defined(U|xvp22empty)
+.copy U|xvp22empty = G|false
+..
+.input "ev/ELINVOICEPROCESS.CACHE.ORDER.OUT.FO"
+.continue ENDDNC ? _F|empty(U|xgefundenVP22)
+.continue ENDDNC ?  U|xvp22empty 
+..
+..*****************************************************************************
+..
+.. Hilfsfelder zur Duplikatserkennung
+.type bool  xbgefundenEK ? _F|defined(U|xbgefundenEK)
+.copy U|xbgefundenEK = G|false
+.type bool xbgefundenVK ? _F|defined(U|xbgefundenVK)
+.copy U|xbgefundenVK = G|false
+..
+.. Nur in Einkaufs-Vorgaengen suchen, wenn der xLieferant und/oder xRechnungssteller Lieferanten sind
+.type bool xbsuchEK ? _F|defined(U|xbsuchEK)
+.copy U|xbsuchEK = G|true
+.copy U|xbsuchEK = G|false ? _F|empty(U|xsuchlieferant) & U|xsuchlieferant^dnr<>1
+.copy U|xbsuchEK = G|false ? _F|empty(U|xsuchresteller) & U|xsuchresteller^dnr<>1
+..
+.. Nur in Verkaufs-Vorgaengen suchen, wenn xLieferant und/oder xRechnungssteller Kunden sind
+.type bool xbsuchVK ? _F|defined(U|xbsuchVK)
+.copy U|xbsuchVK = G|true
+.copy U|xbsuchVK = G|false ? _F|empty(U|xsuchlieferant) & U|xsuchlieferant^dnr<>0
+.copy U|xbsuchVK = G|false ? _F|empty(U|xsuchresteller) & U|xsuchresteller^dnr<>0
+..
+..*****************************************************************************
+..
+.. Sprungmarken-Namen, PREFIX
+..  END = Ende 
+..  EVK = Ende Verkauf = Kunden/Kundenkontakte lesen
+..  EEK = Ende Einkauf = Lieferanten/Lieferrantenkontakte lesen
+..  DUP = Dupliatksfehlermeldung
+..
+.. Sprungmarken-Namen, SUFFIX
+..  FN = mit FRZEICH und Identnummer suchen
+..  F = mit FRZEICH suchen
+..  N = mit Identnummer suchen
+..
+.. Ein Duplikat tritt auch dann auf, wenn ein EK- und ein VK-Vorgang das
+.. selbe FRZEICH/NUMMER haben.
+.. Je mehr Parameter angegeben werden, desto genauer wird gesucht.
+..
+.. Wird mit einer Suche ein eindeutiger treffer gefunden, wird nicht 
+.. mehr mit einer anderen Suche gesucht.
+..
+.. TOOD / ZU KLéREN: passt die aktuelle Such-Priorisierung / Reihenfolge?
+.. 
+..*****************************************************************************
+..
+.. Fehlertexte Åbersetzen; Namen wie SUFFIX, s.o.
+..
+.type text xtdupliFN ? _F|defined(U|xtdupliFN) 
+.type text xtdupliF ? _F|defined(U|xtdupliF) 
+.type text xtdupliN ? _F|defined(U|xtdupliN) 
+..
+.set trans +
+.formula U|xtdupliFN = "Mehrere VorgÑnge mit Ihr Zeichen {1} und Identnummer {2}"
+.formula U|xtdupliF = "Mehrere VorgÑnge mit Ihr Zeichen {1}"
+.formula U|xtdupliN = "Mehrere VorgÑnge mit Identnummer {1}"
+.set trans -
+..
+..*****************************************************************************
+..
+..<BLOCK> Mit FRZEICH und NUMMER in Bestellungen suchen
+.continue ENDFN ? F|empty(U|xsuchfrzeich) ; F|empty(U|xsuchnummer)
+.continue EEKFN ? _U|xbsuchEK
+.continue EEKFN ? _F|isvalue('U|xsuchnummer', "N4")
+.load 2 purchasing 'F|formatstr("$,,;@gruppe=22;frzeich=={1};nummer=={2};lief=={3};lief2=={4};@ablageart=(Both)", U|xsuchfrzeich, U|xsuchnummer, U|xsuchlieferant^id, U|xsuchresteller^id)'
+.continue EEKFN ? _G|mehr
+.formula U|xgefundenVP22 = 2|id
+.copy U|xbgefundenEK = G|true
+.load 2 purchasing
+.continue DUPFN ? G|mehr
+!EEKFN
+.continue EVKFN ? _U|xbsuchVK
+.continue EVKFN ? _F|isvalue('U|xsuchnummer', "N3")
+.load 4 sales 'F|formatstr("$,,;@gruppe=22;frzeich=={1};nummer=={2};kunde=={3};kunde2=={4};@ablageart=(Both)", U|xsuchfrzeich, U|xsuchnummer, U|xsuchlieferant^id, U|xsuchresteller^id)'
+.continue EVKFN ? _G|mehr
+.formula U|xgefundenVP22 = 4|id
+.copy U|xbgefundenVK = G|true
+.load 4 sales
+.continue DUPFN ? G|mehr
+!EVKFN
+.continue DUPFN ? U|xbgefundenEK & U|xbgefundenVK
+.continue END   ? U|xbgefundenEK ; U|xbgefundenVK
+.continue ENDFN 
+!DUPFN
+.formula U|xgefundenVP22 = ""
+.formula U|xtsuchfehler = F|formatstr(U|xtdupliFN, U|xsuchfrzeich, U|xsuchnummer) 
+.continue END
+!ENDFN
+..</BLOCK>
+..
+..
+..<BLOCK> mit FRZEICH in Bestellungen suchen
+.continue ENDF ? F|empty(U|xsuchfrzeich)
+.continue EEKF ? _U|xbsuchEK
+.load 2 purchasing 'F|formatstr("$,,;@gruppe=22;frzeich=={1};lief=={2};lief2=={3};@ablageart=(Both)", U|xsuchfrzeich, U|xsuchlieferant^id, U|xsuchresteller^id)'
+.continue EEKF ? _G|mehr
+.formula U|xgefundenVP22 = 2|id
+.copy U|xbgefundenEK = G|true
+.load 2 purchasing
+.continue DUPF ? G|mehr
+!EEKF
+.continue EVKF ? _U|xbsuchVK
+.load 4 sales 'F|formatstr("$,,;@gruppe=22;frzeich=={1};kunde=={2};kunde2=={3};@ablageart=(Both)", U|xsuchfrzeich, U|xsuchlieferant^id, U|xsuchresteller^id)'
+.continue EVKF ? _G|mehr
+.formula U|xgefundenVP22 = 4|id
+.copy U|xbgefundenVK = G|true
+.load 4 sales
+.continue DUPF ? G|mehr
+!EVKF
+.continue DUPF ? U|xbgefundenEK & U|xbgefundenVK
+.continue END  ? U|xbgefundenEK ; U|xbgefundenVK
+.continue ENDF 
+!DUPF
+.formula U|xgefundenVP22 = ""
+.formula U|xtsuchfehler = F|formatstr(U|xtdupliF, U|xsuchfrzeich) 
+.continue END
+!ENDF
+..</BLOCK>
+..
+..
+..<BLOCK> Mit NUMMER in Bestellungen suchen
+.continue ENDN ? F|empty(U|xsuchnummer)
+.continue EEKN ? _U|xbsuchEK
+.continue EEKN ? _F|isvalue('U|xsuchnummer', "N4")
+.load 2 purchasing 'F|formatstr("$,,;@gruppe=22;nummer=={1};lief=={2};lief2=={3};@ablageart=(Both)", U|xsuchnummer, U|xsuchlieferant^id, U|xsuchresteller^id)'
+.continue EEKN ? _G|mehr
+.formula U|xgefundenVP22 = 2|id
+.copy U|xbgefundenEK = G|true
+.load 2 purchasing
+.continue DUPN ? G|mehr
+!EEKN
+.continue EVKN ? _U|xbsuchVK
+.continue EVKN ? _F|isvalue('U|xsuchnummer', "N3")
+.load 4 sales 'F|formatstr("$,,;@gruppe=22;nummer=={1};kunde=={2};kunde2=={3};@ablageart=(Both)", U|xsuchnummer, U|xsuchlieferant^id, U|xsuchresteller^id)'
+.continue EVKN ? _G|mehr
+.formula U|xgefundenVP22 = 4|id
+.copy U|xbgefundenVK = G|true
+.load 4 sales
+.continue DUPN ? G|mehr
+!EVKN
+.continue DUPN ? U|xbgefundenEK & U|xbgefundenVK
+.continue END  ? U|xbgefundenEK ; U|xbgefundenVK
+.continue ENDN 
+!DUPN
+.formula U|xgefundenVP22 = ""
+.formula U|xtsuchfehler = F|formatstr(U|xtdupliN, U|xsuchnummer) 
+.continue END
+!ENDN
+..</BLOCK>
+..
+..*****************************************************************************
+!END
+.load 2 ? F|defined(2|id)
+.load 4 ? F|defined(4|id)
+.input "ev/ELINVOICEPROCESS.CACHE.ORDER.IN.FO"
+!ENDDNC: nicht cachen
+.continue

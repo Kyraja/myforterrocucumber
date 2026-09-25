@@ -1,0 +1,255 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KALKBAUM.BSTART.BN
+.. Datum          : 10.09.2007
+.. Version        : 2007r4n02
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Validiert Steuerungsparameter. Formuliert die Datenbankfrage
+.. zu den Kalkulationblaettern der ersten Stufe und fuehrt sie aus. Klappt alle
+.. Kalkulationsblaetter der ersten und folgenden Stufen auf.
+..
+.. Functionality  : Validates control parameters. Builds the database query for
+.. the costing sheets of the first level and executes it. Opens all costing sheets
+.. of the first and the following levels.
+..
+.. Ablauf         : Button-nach-EFOP des Feldes "bstart"
+.. Program flow   : Button after efop of the item "bstart"
+..*****************************************************************************
+.set trans -
+.type integer xopenedrow      ? _F|defined(U|xopenedrow)
+.type text    xsel            ? _F|defined(U|xsel)
+.type bool    xnotmehr        ? _F|defined(U|xnotmehr)
+.type text    xselect         ? _F|defined(U|xselect)
+.type text    x2select        ? _F|defined(U|x2select)
+..
+.. Initializations
+.assign M|ittyp    = M|kblatt^typ
+.assign M|herkunft = M|kblatt^herkunft  ? F|equals(M|ittyp, "(FinalCosting)")
+.assign M|stufe    = 1
+.copy U|xnotmehr   = G|FALSE
+..
+.. Clear table
+.input "is/TABLEEREN"
+..
+.copy M|istpos = G|FALSE
+..
+.continue KBLATT    ? _F|empty(M|kblatt) & F|empty(M|betrieb) & F|empty(M|kart) & F|empty(M|kauftrag) & F|empty(M|kbestellung)
+.copy M|istart      = _F|empty(M|kart)
+.copy M|istba       = _F|empty(M|betrieb)
+.copy M|istpos      = _(F|empty(M|kauftrag) & F|empty(M|kbestellung))
+.formula M|kblatt   = ""
+.assign M|ittyp     = ""
+.formula M|herkunft = ""
+.formula M|vnr      = ""
+..
+.. Control building database query
+.continue PRODUCT ? M|istart
+.continue WORKORD ? M|istba
+.continue SALES   ? _F|empty(M|kauftrag)
+.continue PURCHAS ? _F|empty(M|kbestellung)
+.continue ERROR0  ?  F|empty(M|kblatt)
+..
+!PRODUCT: we have a product
+.formula M|select = "$,,herkunft=" + M|kart^id + ";typ=(StandardPreliminaryCostingOfProduct);@gruppe=1"
+.select costsheet 'M|select'
+.continue ERROR6 ? _G|mehr
+.continue WEITER ? U|xnotmehr
+..
+.select costsheet 
+.. only one hit, no dynamic selection
+.copy U|xnotmehr = G|TRUE ? _G|mehr
+.continue PRODUCT         ? _G|mehr
+..
+.formula M|select = "%,,herkunft=" + M|kart^id + ";vnr=;flistestd=;lgruppe=;typ=(StandardPreliminaryCostingOfProduct);@gruppe=1;@autostart=ja"
+.continue QUERY
+..
+!WORKORD: we have a work-order
+.continue ERROR7     ? M|betrieb / "*!*"
+.continue ERROR8     ? M|betrieb / "+*"
+.load 6 workorder 'M|betrieb'
+.continue ABLAGE     ? _G|mehr
+.continue ERROR3     ? _F|empty(6|ag)
+..
+.formula M|kbaart  = 6|art
+.load 7 add 6|lres
+.continue ERROR5     ? _G|mehr
+.formula M|select  = "$,herkunft=" + 7|id + ";typ=(FinalCosting);@gruppe=1"
+.continue QUERY
+..
+!ABLAGE
+.formula U|xsel = "$,,;num4=" + 'M|betrieb' + ";@gruppe=5;@ablageart=(Filed)"
+.load 8 purchasing 'U|xsel'
+..
+.continue ERROR4     ? _G|mehr
+.continue ITTYP      ?  U|xnotmehr
+..
+.load 8 purchasing
+.. only one hit, no dynamic selection
+.copy U|xnotmehr = G|TRUE ? _G|mehr
+.continue ABLAGE          ? _G|mehr
+..
+.formula U|xsel = "%,,;num4=" + 'M|betrieb' + ";artikel=" + M|kart + ";vom=;@gruppe=5;@ablageart=(Filed);@autostart=ja"
+.load 8 purchasing 'U|xsel'
+.continue ERROR4     ? _G|mehr
+..
+!ITTYP
+.copy U|xnotmehr = G|FALSE
+.formula M|kbaart  = 8|art
+.formula M|select  = "$,herkunft=" + 8|id + ";typ=(FinalCosting);@gruppe=1"
+.continue QUERY
+..
+!SALES: we have a sales order
+.formula U|xselect = M|kauftrag^id
+.continue BOTH
+..
+!PURCHAS: we have a purchasing order
+.formula U|xselect = M|kbestellung^id
+..
+!BOTH: sales or purchasing order
+.load 0 object 'U|xselect'
+.continue ERROR1    ? _G|mehr
+..
+.. Are there any rows
+.load 0 line
+.continue ERROR2    ? _G|mehr
+.continue POSPROD
+..
+!TABROW: are there more rows
+.load 0 line
+.continue LEVELS    ? _G|mehr
+..
+!POSPROD
+.load 3 add 0|art
+.continue TABROW  ? 3|gruppe <> 1
+.assign U|x2select = 0|id
+.continue SELOK
+..
+!SELOK: Control building query for different types of orders in sales and purchasing
+.continue PRECOST   ? M|baufvk  & _F|empty(M|kauftrag)
+.continue PRECOST   ? M|bbestvk & _F|empty(M|kbestellung)
+.continue FINCOST   ? M|baufnk  & _F|empty(M|kauftrag)
+.continue FINCOST   ? M|bbestnk & _F|empty(M|kbestellung)
+.continue FATAL
+..
+!PRECOST: perliminary costing for different types
+.formula M|select = "$,,herkunft=" + U|x2select + ";typ<>(FinalCosting);@gruppe=1" ? F|empty(M|ittyp)
+.formula M|select = "$,,herkunft=" + U|x2select + ";vnr=" + 'M|vnr' + ";typ=" + M|ittyp + ";@gruppe=1" ? _F|empty(M|ittyp)
+.select costsheet 'M|select'
+.continue ERROR6 ? _G|mehr
+.continue WEITER ? U|xnotmehr
+..
+.select costsheet
+.. only one hit, no dynamic selection
+.copy U|xnotmehr = G|TRUE ? _G|mehr
+.continue PRECOST         ? _G|mehr
+..
+.formula M|select = "%,,herkunft=" + U|x2select + ";art=;stand=;vnr=;flistestd=;lgruppe=;typ<>(FinalCosting);@gruppe=1;@autostart=ja"  ? F|empty(M|ittyp)
+.formula M|select = "%,,herkunft=" + U|x2select + ";art=;stand=;vnr=" + 'M|vnr' + ";flistestd=;lgruppe=;typ=" + M|ittyp + ";@gruppe=1;@autostart=ja" ? _F|empty(M|ittyp)
+.continue QUERY
+..
+!FINCOST: final costing
+.formula M|select = "$,,herkunft=" + U|x2select + ";typ=(FinalCosting);@gruppe=1"
+..
+!QUERY: query database
+.copy U|xnotmehr = G|FALSE
+.select costsheet 'M|select'
+.continue WEITER
+..
+!KBLATT
+.select costsheet 'M|kblatt^id'
+..
+!WEITER
+.continue MAKEROW   ?  G|mehr
+.continue TABROW    ? _G|mehr 
+.continue ERROR6    ?  M|istart ; M|istba
+..
+!MAKEROW: create a row
+.assign M|ittyp    = H|typ
+.assign M|kblatt   = H|id               ?  F|empty(M|kblatt) & F|defined(H|id)
+.assign M|vnr      = H|vnr              ?  F|defined(H|id)
+.assign M|herkunft = M|kblatt^herkunft  ?  F|equals(M|ittyp, "(FinalCosting)")
+.input 'M|tab'                          ? _F|empty(M|tab)
+..
+!SHEET: next costing sheet for position or level
+.continue LEVELS    ? _M|istpos
+.continue TABROW
+..
+!LEVELS: Reinit row counter while opening nodes
+.select screen header
+..
+!NEXT
+.select screen line
+.continue AKTU          ? _G|mehr
+.continue NEXT          ?  M|tbaumstat <> "+"
+.assign M|stufe = M|tbaumstufe + 1
+.continue NEXT          ?  M|anzstufen < M|stufe
+.assign U|xopenedrow = M|aktzeile
+.assign M|tbaumstat  = "-"
+.input 'M|openknot'     ? _F|empty(M|openknot)
+.select screen line 'U|xopenedrow'
+.continue FATAL         ? _G|mehr
+.continue NEXT
+..
+!AKTU
+.select screen line
+.continue END ? _G|mehr
+.continue ODD ? (M|tbaumstufe // 2) <> 0
+.colour -background 'M|farbe2' 'M|aktzeile'
+.continue AKTU
+..
+!ODD
+.colour -background 'M|farbe1' 'M|aktzeile'
+.continue AKTU
+..
+!END
+.continue
+..*****************************************************************************
+!FATAL
+.error -number 1111
+.end 1
+..
+..
+!ERROR0
+.error -field M|kart -message Bitte einen Artikel, Betriebsauftrag oder Vorgang eintragen.
+.continue BREAK
+..
+!ERROR1
+.error Der ausgew„hlte Vorgang wurde inzwischen gel”scht. Bitte Auswahl wiederholen.
+.continue BREAK
+..
+!ERROR2
+.error Keine Tabellenzeile vorhanden.
+.continue BREAK
+..
+!ERROR3
+.error Keine Kalkulationsergebnisse vorhanden.
+.continue BREAK
+..
+!ERROR4
+.error Kein Betriebsauftrag vorhanden.
+.continue BREAK
+..
+!ERROR5
+.error Kein Fertigungsvorschlag vorhanden.
+.continue BREAK
+..
+!ERROR6
+.error Es wurde kein Kalkulationsblatt gefunden.
+.continue BREAK
+..
+!ERROR7
+.error -field M|betrieb -message Keine Bereichsangabe erlaubt.
+.formula M|betrieb = ""
+.formula M|kbaart  = ""
+.continue BREAK
+..
+!ERROR8
+.error -field M|betrieb -message Unzul„ssige Angabe.
+.formula M|betrieb = ""
+.formula M|kbaart  = ""
+.continue BREAK
+..
+!BREAK
+.end 1

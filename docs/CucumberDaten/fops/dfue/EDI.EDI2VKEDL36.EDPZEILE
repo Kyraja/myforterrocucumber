@@ -1,0 +1,130 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDI.EDI2VKEDL36.EDPZEILE
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Unterprogramm zu dfue/EDI.EDI2VKEDL36 zum Erstellen der
+..                  EDP-Zeilen.
+.. Functionality  : Sub-FOP to dfue/EDI.EDI2VKEDL36 for creating edp-rows.
+..*****************************************************************************
+.set trans -
+..
+.type text   xedpmarke       ? _F|defined(U|xedpmarke)
+.type text   xedpreturn      ? _F|defined(U|xedpreturn)
+.type text   xDC             ? _F|defined(U|xDC)
+.type text   xEDLBUTTON      ? _F|defined(U|xEDLBUTTON)
+..
+.formula U|xedpreturn  = ""
+.formula U|xDC = "~"
+.formula U|xEDLBUTTON = "1"
+..
+..
+.. event evaluation
+.. ----------- ---------- ---------- -------------------------------------------
+.continue RFL1    ?  U|xedpmarke = "RFL1"
+.continue QTY1    ?  U|xedpmarke = "QTY1"
+.continue PAC1    ?  U|xedpmarke = "PAC1"
+.continue RFL1M   ?  U|xedpmarke = "RFL1MEHR"
+.continue ENDE    ?  U|xedpmarke = "ENDE"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue NOARGS
+..
+..
+!RFL1: create new withdraw delivery notes as copy from original delivery note
+.. Erstelle Entnahme-Lieferschein als Kopie des Usprungslieferscheins
+..      Puffer H: EDI-Zeile
+..      Puffer 1: Ursprungslieferschein (Kopf)
+..
+.set trans +
+.formula U|xbem = F|formatstr("Dieser Lieferschein wurde durch die EDL-Entnahmeinfo {1}{2}{1} angelegt.", dblquote, 'U|xedinumneu')
+.set trans -
+.output addedto 'U|xnlader'
+.. --- --- --- --- --- --- --- --- --- ---
+
+# Create withdrawal delivery note
+# - Copy origin delivery note
+# - Remove all rows
+# - Add rows with edl data (e.g. relocation location)
+# - Finish: Press EDL-Button only when done adding all rows
+
+#!action=copy
+#!database=3:23
+#!dontchange='xDC'
+#!EDP_FOPMODE=1
+
+nummer;nummer;edlls;edllsnr;edllsdat;ident;bem\
+ zn;artex;mge;tterm;platz;preis;zkuartnr;konddat;ptext;charge;abnrpo;proz;pros;konto;kstelle;0:edlls
+
+'1|id';'xDC';'xDC';'U|xedllsnr';'U|xedllsdat:8';'U|xedinumneu';'U|xbem'\
+    -*; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC'\
+.. --- --- --- --- --- --- --- --- --- ---
+.output new WERF.WEG
+.continue END
+..
+..
+!QTY1: add item row to withdraw delivery note
+.. Erg„nzen der Entnahme-Lieferschein-Erstellung:
+..      Puffer H: EDI-Zeile
+..      Puffer 1: Ursprungslieferschein (Kopf)                  (RFL1)
+..      Puffer 2: Ursprungslieferschein-Artikel-Position        (ART1)
+..      Puffer 5: Artikel aus ARTIKELPRUEFUNG                   (ART1)
+..
+.output addedto 'U|xnlader'
+.. --- --- --- --- --- --- --- --- --- ---
+    + ; '5|id' ; 'U|xmge' ; '2|tterm:8' ; 'U|xumplatz' ; '2|preis'; '2|zkuartnr'; '2|konddat:8'; '2|ptext'; '2|charge^id'; '2|abnrpo'; '2|proz'; '2|pros'; '2|konto^id'; '2|kstelle^id'; 'xDC'\
+.. --- --- --- --- --- --- --- --- --- ---
+.output new WERF.WEG
+.continue END
+..
+..
+!PAC1: add packing item row to withdraw delivery note
+.. Erg„nzen der Entnahme-Lieferschein-Erstellung:
+.. Muss zum EDP-Skript (s.o. RFL1) passen:
+..      Puffer H: EDI-Zeile
+..      Puffer 1: Ursprungslieferschein (Kopf)                  (RFL1)
+..      Puffer 2: Ursprungslieferschein-Packmittel-Position     (PAC1)
+..      Puffer 5: Packmittel aus ARTIKELPRUEFUNG                (PAC1)
+..
+.output addedto 'U|xnlader'
+.. --- --- --- --- --- --- --- --- --- ---
+    + ; '5|id' ; 'U|xanzpackst' ; '2|tterm:8' ; 'U|xumplatz' ; '2|preis'; '2|zkuartnr'; '2|konddat:8'; '2|ptext'; '2|charge^id'; '2|abnrpo'; '2|proz'; '2|pros'; '2|konto^id'; '2|kstelle^id'; 'xDC'\
+.. --- --- --- --- --- --- --- --- --- ---
+.output new WERF.WEG
+.continue END
+..
+..
+!RFL1M: multiple withdrawals in same esp message
+.. empty item row without trailing backslash
+.output addedto 'U|xnlader'
+.. --- --- --- --- --- --- --- --- --- ---
+    .; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xEDLBUTTON'
+
+.. --- --- --- --- --- --- --- --- --- ---
+.output new WERF.WEG
+.continue END
+..
+..
+!ENDE: end of withdrawing delivery notes
+.. empty item row without trailing backslash
+.output addedto 'U|xnlader'
+.. --- --- --- --- --- --- --- --- --- ---
+    .; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xDC' ; 'xEDLBUTTON'
+
+# Creation of widhdrawal delivery notes complete
+
+.. --- --- --- --- --- --- --- --- --- ---
+.output new WERF.WEG
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!NOARGS
+.set trans +
+.formula U|xedpreturn = "Fehlerhafter Aufruf des FOPs EDI.EDI2VKEDL36.EDPZEILE"
+.set trans -
+.error 'U|xedpreturn'
+.end 1

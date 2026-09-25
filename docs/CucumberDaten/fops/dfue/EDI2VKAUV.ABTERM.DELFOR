@@ -1,0 +1,147 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDI2VKAUV.ABTERM.DELFOR
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : EntschlÅsselung der EDIFACT/DELFOR Termincoces
+.. Functionality  : Decryption of EDIFACT/DELFOR schedule codes
+..
+.. Verschluesselung:
+..
+..  Fertigungsfreigabe (15)
+..      text5   leer        = Keine Abrufmenge
+..      text15  "2"         = Fertigungsfreigabe "Ja"
+..      -> nur Kummulierter Bedarf (13), keine neue Abrufposition
+..
+..  Matrialfreigabe (16)
+..      text5   leer        = Keine Abrufmenge
+..      text16  "3"         = Materialfreigabe "Ja"
+..      -> nur Kummulierter Bedarf (13), keine neue Abrufposition
+..
+..  Kummulierter Bedarf (13)
+..      text13  nicht leer  = Kumulierter Bedarf
+..      text5   leer
+..
+..  Abrufdatum (04) Vorschauenddatum (09) in Form:
+..      CCJJMMTT fuer Wochentermine
+..      CCJJMM01 fuer Monatstermine
+..
+..  AbnahmeverpflichtungsschlÅssel (07)
+..      0 = Fester Termin ???
+..      1 = Fester Termin
+..      4 = Vorschautermin
+..
+..  AbrufmengeschlÅssel (06)
+..      0 = Tagestermin ???
+..      1 = Tagestermin
+..      2 = Wochentermin
+..      3 = Monatstermin
+..      4 = flexibler Zeitraum, Von-Datum in text4 und Bis-Datum in text9
+..*****************************************************************************
+.set trans -
+..
+.. locally used helpers
+.type text   xt1         ? _F|defined(T|xt1)
+.type text   xt5         ? _F|defined(T|xt5)
+..
+.. remove whitespace, set "0" for empty quantity in text5
+.formula T|xt5  = 'H|text5'
+.formula T|xt5  = "0"            ? F|empty(T|xt5)
+..
+.. order of branching..?
+.continue VDA222  ?  H|text4 / "*222222*"
+.continue VDA333  ?  H|text4 / "*333333*"
+.continue VDA444  ?  H|text4 / "*444444*"
+.continue EDIFREI ?  T|xt5 = "0"  &   'H|text15' = "2"
+.continue EDIFREI ?  T|xt5 = "0"  &   'H|text16' = "3"
+.continue EDITERM ?  T|xmge > 0
+.continue EDITERM ?  T|xt5 = "0"
+.continue END
+..
+!VDA222: no demand
+.copy T|xiausgabe = U|kotermKEINBEDARF
+.continue END
+..
+!VDA333: backlog
+.copy T|xiausgabe = U|kotermRUECKSTAND
+.continue END
+..
+!VDA444: immediate demand
+.copy T|xiausgabe = U|kotermSOFORTBEDARF
+.continue END
+.. 
+!EDIFREI: Materialfreigabe und Fertigungsfreigabe, keine Abrufmengen
+.formula T|xiausgabe = T|kotermFREIGABE
+.continue END
+..
+!EDIKBED: Kumulierter Bedarf, Rueckstand
+.. Abrufmenge:      Kummulierter Bedarf
+.formula T|xmge   = 'H|text13'
+.formula T|xiausgabe = T|kotermRUECKSTAND
+.continue END
+..
+!EDITERM
+.. Datum in Textvariable
+.. Jahr vorstellen, wenn nur MMTT
+.. Jahrtausend vorstellen, wenn nur JJMMTT
+.. Weitere seltsame Datumstests
+.formula T|xttermincode = 'H|text4'
+.formula T|xttermincode = ('T|datum:8' << 4) + T|xttermincode  ? +T|xttermincode = 4
+.formula T|xttermincode = ('T|datum:8' << 2) + T|xttermincode  ? +T|xttermincode = 6
+.continue EDIKORR ?  +T|xttermincode <> 8
+.assign T|xdabruftermin = T|xttermincode
+.continue EDIKORR ? _T|mehr
+.continue EDIDATE
+!EDIKORR: Datumskorektur
+.formula T|xttermincode = ""                        ?  T|xautofehldatumkorr =  "nein"
+.formula T|xttermincode = T|xautofehldatumkorr      ?  T|xautofehldatumkorr <> "nein"
+..
+!EDIDATE
+.. mh, 04.03.2010: Auswertung text7 nach text6 (war vorher umgekehrt)
+.continue EDIT2T  ?  'H|text6' = "4"
+.continue EDIMON  ?  'H|text6' = "3"
+.continue EDIWO   ?  'H|text6' = "2"
+.continue EDIVOR  ?  'H|text7' = "4"
+.continue EDITAG
+..
+!EDIVOR
+.. Ist ein Termin in xttermincode voranden, ist dies ein Anfangstermin
+.. ist dies kein Termin vorhanden, wird H|text9 als Endtermin interpretiert
+.formula T|xdabruftermin = T|xttermincode   ? _F|empty(T|xttermincode)
+.formula T|xdabruftermin = 'H|text9'     ?  F|empty(T|xttermincode)
+.formula T|xiausgabe = T|kotermREST
+.formula T|xiausgabe = T|kotermTERMIN    ? _F|empty(U|xttermincode)
+.continue END
+..
+!EDIT2T:  Bedarf fÅr Tag bis Tag
+..  Anfang Tag:    text4 -> xttermincode
+..  Ende Tag:      text9
+.formula T|xdabruftermin    = 'T|xttermincode'
+.formula T|xdabrufterminbis = 'H|text9'
+.formula T|xiausgabe =  T|kotermTAG2TAG
+.continue END
+..
+!EDIMON: Bedarf fÅr Monat
+.formula T|xlabrufexpd = 1
+.formula T|xdabruftermin  = T|xttermincode
+.formula T|xttermincode = T|xdabruftermin:8
+.formula T|xtjahr  = F|substr(T|xttermincode, 1, 4)
+.formula T|xtmonat = F|substr(T|xttermincode, 5, 2)
+.formula T|xiausgabe =  T|kotermMONAT
+.continue END
+..
+!EDIWO
+.formula T|xdabruftermin  = T|xttermincode
+.formula T|xkw1  = T|xdabruftermin
+.formula T|xiausgabe = T|kotermWOCHE
+.continue END
+..
+!EDITAG
+.formula T|xdabruftermin  = T|xttermincode
+.formula T|xlabrufexpd = 1
+.formula T|xiausgabe = T|kotermTERMIN
+.continue END
+..*****************************************************************************
+!END
+.continue

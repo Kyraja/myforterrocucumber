@@ -1,0 +1,543 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : OPENDOWNPAYMENTS.TAB
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  : Selektiert Auftr„ge und Bestellungen aus der Ablage
+..
+..*****************************************************************************
+.set trans -
+.type bool      xbeiner      ? _F|defined(U|xbeiner)
+.type text      xorigid      ? _F|defined(U|xorigid)
+.type ID100:21  xmerk2id     ? _F|defined(U|xmerk2id)  
+.type bool      xdel         ? _F|defined(U|xdel)
+.type integer   xzn          ? _F|defined(U|xzn)
+.type bool      xaubedel     ? _F|defined(U|xaubedel)
+.type ID3:1     xaumerk      ? _F|defined(U|xaumerk)
+.type ID4:1     xbemerk      ? _F|defined(U|xbemerk)
+.type ID6:0     xbuch        ? _F|defined(U|xbuch)
+.type bool      xmehr        ? _F|defined(U|xmehr)
+.type bool      xtreffer     ? _F|defined(U|xtreffer)
+.type GD2       xdate        ? _F|defined(U|xdate)
+.type RN7.2     xanzrebetr   ? _F|defined(U|xanzrebetr)
+.type RN7.2     xzahlbetr    ? _F|defined(U|xzahlbetr)
+.type RN7.2     xanzbetr     ? _F|defined(U|xanzbetr)
+.type bool      xnotdel      ? _F|defined(U|xnotdel)
+.type bool      xsumme       ? _F|defined(U|xsumme)
+.type R12.2     xwert        ? _F|defined(U|xwert)
+.type bool      xbstorno     ? _F|defined(U|xbstorno)
+.type ARTR52002 xbetrsumme   ? _F|defined(U|xbetrsumme)
+.type text      xtsel        ? _F|defined(U|xtsel)
+..
+.formula U|xmerk2id = ""
+.formula M|select = "$,,"
+.formula M|select = M|select + ";nummer=!"                     ? (F|empty(M|auftrag) & M|bverkauf) ; (F|empty(M|bestellung) & M|beinkauf)
+.formula M|select = M|select + ";kopf=" + M|auftrag^id         ?  M|bverkauf & _F|empty(M|auftrag)
+.formula M|select = M|select + ";kopf=" + M|bestellung^id      ?  M|beinkauf & _F|empty(M|bestellung)
+.formula M|select = M|select + ";kotyp=(SalesOrder)"           ?  M|bverkauf
+.formula M|select = M|select + ";kotyp=(PurchaseOrder)"        ?  M|beinkauf
+.formula M|select = M|select + ";konto=" + M|anzkonto^id       ? _F|empty(M|anzkonto)
+.formula M|select = M|select + ";kopf^kunde2=" + M|kunde       ?  M|bverkauf
+.formula M|select = M|select + ";kopf^lief2=" + M|lief         ?  M|beinkauf
+.formula M|select = M|select + ";kopf^erfass>=" + 'M|startdat' ? _F|empty(M|startdat)
+.formula M|select = M|select + ";status=`"
+.formula M|select = M|select + ";@gruppe=2;kategorie=(Downpayment);@ablageart=(Both)"
+..
+.load 0 sales 'M|select'         ?  M|bverkauf
+.load 0 purchasing 'M|select'    ?  M|beinkauf
+.continue ERROR1                 ? _G|mehr
+.continue LINE
+..
+!EKVK
+.formula U|xanzrebetr = 0
+.formula U|xzahlbetr = 0
+.load 0 sales            ?  M|bverkauf
+.load 0 purchasing       ?  M|beinkauf
+.continue LINE           ?  G|mehr & M|tzeilen = 0
+.continue RECHOHNEAUBE   ? _G|mehr & M|tzeilen = 0
+.continue RECHOHNEAUBE   ? _G|mehr & M|anzrenr^kotyp = 5 & F|empty(M|ophist) & M|bverkauf
+.continue RECHOHNEAUBE   ? _G|mehr & M|anzerenr^kotyp = 5 & F|empty(M|ophist) & M|beinkauf
+.copy U|xdel = G|FALSE
+.continue XDEL           ? _G|mehr
+.continue AUSGABE        ? G|mehr & '0|id' <> 'M|anzrenr^id' & M|bverkauf
+.continue AUSGABE        ? G|mehr & '0|id' <> 'M|anzerenr^id' & M|beinkauf
+.. 
+!XDEL
+.copy U|xdel = G|TRUE ? (F|empty(M|ophist) ; F|empty(M|anzrebetr) ; F|empty(M|anzrenr) ; F|empty(M|budat)) & M|bverkauf
+.copy U|xdel = G|TRUE ? (F|empty(M|ophist) ; F|empty(M|anzrebetr) ; F|empty(M|anzerenr) ; F|empty(M|budat)) & M|beinkauf
+.make screen line -O   ? U|xdel
+.continue RECHOHNEAUBE ? _G|mehr
+..
+!LINE
+.continue NOT     ? _G|mehr & _U|xbeiner 
+.continue NEXT    ? _G|mehr
+.copy U|xbeiner = G|TRUE
+.continue AUSGABE ? M|tzeilen = 0
+.copy U|xdel = G|FALSE
+.copy U|xdel = G|TRUE ? (F|empty(M|ophist) ; F|empty(M|anzrebetr) ; F|empty(M|anzrenr) ; F|empty(M|budat)) & M|bverkauf
+.copy U|xdel = G|TRUE ? (F|empty(M|ophist) ; F|empty(M|anzrebetr) ; F|empty(M|anzerenr) ; F|empty(M|budat)) & M|beinkauf
+.make screen line -O ? U|xdel
+..
+!AUSGABE
+.make screen line +O
+.assign M|aunummer  = 0|kopf^id     ?  M|bverkauf
+.assign M|benummer  = 0|kopf^id     ?  M|beinkauf
+.formula M|vom      = 0|kopf^vom    ? _F|empty(0|kopf^vom)
+.assign M|tkunde    = 0|kopf^kunde2 ?  M|bverkauf
+.assign M|tlief     = 0|kopf^lief2  ?  M|beinkauf
+.formula M|betreff  = 0|kopf^betreff
+.formula M|auzn     = 0|id          ?  M|bverkauf
+.formula M|bezn     = 0|id          ?  M|beinkauf
+.assign M|tanzkonto = 0|konto
+..
+.copy U|xsumme = G|FALSE
+..
+!LREPOS: hier mehrere Treffer m”glich
+.formula M|select = "$,,;orig=" + 0|id + "
+.formula M|select = M|select + ";kopf^ablagef=TRUE"
+.formula M|select = M|select + ";kopf=;kotyp=;kopf^vom=;treart="
+...formula M|select = M|select + ";ozeilen=;orig^konto=;kopf^vom="
+.formula M|select = M|select + ";kopf^vom<="+'M|stichtag'
+.formula M|select = M|select + ";@gruppe=2;@ablageart=(Both);@ordnung=kopf^vom"
+.continue SAUSGABE ? U|xsumme
+..
+!SUMME
+.formula U|xwert = 0
+.load 1 sales 'M|select'       ?  M|bverkauf
+.load 1 purchasing 'M|select'  ?  M|beinkauf
+.copy U|xsumme = G|TRUE
+.continue EKVK ? _G|mehr
+.formula U|xwert = U|xwert + 1|pwert
+..
+!SELSUM
+.load 1 sales        ?  M|bverkauf
+.load 1 purchasing   ?  M|beinkauf
+.load 1 ? _G|mehr
+.continue EKVK       ? _G|mehr & U|xwert = 0  & _M|storno
+.continue LREPOS     ? _G|mehr & U|xwert = 0  &  M|storno
+.continue LREPOS     ? _G|mehr & U|xwert <> 0
+.formula U|xwert = U|xwert + 1|pwert
+.continue SELSUM
+..
+!SAUSGABE
+.load 1 sales 'M|select'       ?  M|bverkauf
+.load 1 purchasing 'M|select'  ?  M|beinkauf
+..
+.continue EKVK     ? _G|mehr
+.continue LLREPOS  ?  F|empty(1|kopf)
+.continue ADDKOPF  ? F|empty(M|anzrenr) & U|xwert <> 0 & (F|equals(1|id^treart, "(CanceledDownpayment)") ; F|equals(1|id^treart, "(CancelationDownpayment)") ; F|equals(1|id^treart, "(Downpayment)")) & M|bverkauf
+.continue ADDKOPF  ? F|empty(M|anzerenr) & U|xwert <> 0 & (F|equals(1|id^treart, "(CanceledDownpayment)") ; F|equals(1|id^treart, "(CancelationDownpayment)") ; F|equals(1|id^treart, "(Downpayment)")) & M|beinkauf
+.continue LLREPOS  ?  1|pwert>0 & 1|konto^id <> M|auzn^konto^id & M|bverkauf
+.continue LLREPOS  ?  1|pwert>0 & 1|konto^id <> M|bezn^konto^id & M|beinkauf
+.continue ADDKOPF
+..
+!LLREPOS
+.load 1 sales        ?  M|bverkauf
+.load 1 purchasing   ?  M|beinkauf
+..
+.continue LNOTMEHR ? _G|mehr
+.continue LLREPOS  ? F|empty(1|kopf)
+.continue LNOTMEHR ? M|tzeilen = 0 
+.continue LLREPOS  ? 1|pwert>0 & 1|konto^id <> M|auzn^konto^id & M|bverkauf
+.continue LLREPOS  ? 1|pwert>0 & 1|konto^id <> M|bezn^konto^id & M|beinkauf
+.continue LLMAKE   ? G|mehr
+..
+!LNOTMEHR
+.copy U|xmehr = G|FALSE
+.copy U|xmehr = G|mehr
+.continue EKVK       ? _U|xmehr & (M|tzeilen = 0 ; U|xnotdel)
+.continue LLMAKE     ?  M|tzeilen = 0 & U|xmehr
+..
+.copy U|xdel = G|FALSE
+.continue NOTMEHR ? _U|xmehr
+.copy U|xdel = G|TRUE ? (F|empty(M|ophist) ; F|empty(M|anzrebetr) ; F|empty(M|zahlbetr) ;F|empty(M|anzrenr) ; F|empty(M|budat))  & M|bverkauf
+.copy U|xdel = G|TRUE ? (F|empty(M|ophist) ; F|empty(M|anzrebetr) ; F|empty(M|zahlbetr) ; F|empty(M|anzerenr) ; F|empty(M|budat)) & M|beinkauf
+.continue MAKELINE ? 1|kotyp <> 4
+.copy U|xdel = G|FALSE
+.. Abschlussrechnung aus LS
+.formula M|select = "$,,;orig=" + 1|id + ";kopf^budat=;status=;kopf^fakt=;kopf=;kopf^ablagef=TRUE;kopf^vom=;kotyp=;pwert=;@gruppe=2;@ablageart=(Both);@ordnung=kopf^vom"  
+.load 3 sales 'M|select'       ? M|bverkauf
+.load 3 purchasing 'M|select'  ? M|beinkauf 
+.copy U|xdel = G|TRUE ? _G|mehr
+.formula U|xdate = ""
+.continue TREFFER     ? _G|mehr 
+.copy U|xdel = G|TRUE ? 3|kotyp = 5 & 3|kopf^budat <= M|stichtag
+.formula U|xdate = 3|kopf^budat
+..
+!TREFFER
+.copy U|xtreffer = G|FALSE
+.copy U|xtreffer = G|TRUE ? _U|xdel
+.make screen line -O ?  U|xdel
+.continue LLMAKE ? _U|xdel
+.continue EKVK
+..
+!NOTMEHR
+.copy U|xdel = G|TRUE ? (F|empty(M|ophist) ; F|empty(M|anzrebetr) ; F|empty(M|anzrenr) ; F|empty(M|budat)) & M|bverkauf
+.copy U|xdel = G|TRUE ? (F|empty(M|ophist) ; F|empty(M|anzrebetr) ; F|empty(M|anzerenr) ; F|empty(M|budat)) & M|beinkauf
+..
+!MAKELINE
+.make screen line -O ?  U|xdel
+.continue EKVK ? _U|xmehr
+..
+!LLMAKE
+.make screen line +O 
+.assign M|tkunde    = 0|kopf^kunde2 ?  M|bverkauf
+.assign M|tlief     = 0|kopf^lief2  ?  M|beinkauf
+.assign M|aunummer  = 0|kopf^id     ?  M|bverkauf
+.assign M|benummer  = 0|kopf^id     ?  M|beinkauf
+.formula U|xaumerk  = 0|kopf^id     ?  M|bverkauf
+.formula U|xbemerk  = 0|kopf^id     ?  M|beinkauf
+.formula M|vom      = 0|kopf^vom    ? _F|empty(0|kopf^vom)
+.formula M|auzn     = 0|id          ?  M|bverkauf
+.formula M|bezn     = 0|id          ?  M|beinkauf
+.assign M|tanzkonto = 0|konto
+.continue ADDKOPF
+..
+!ADDKOPF
+.select add 1|kopf
+.assign M|anzrenr    = 1|id    ? M|bverkauf
+.assign M|anzerenr   = 1|id    ? M|beinkauf
+.assign M|tanzvre    = M|anzrenr^kopf  ? M|bverkauf
+.assign M|tanzere    = M|anzerenr^kopf ? M|beinkauf
+..
+.. Schlussrechnung ermitteln
+.copy U|xtsel = "$,,orig==" + 'M|anzrenr^orig^id'  ? M|bverkauf
+.copy U|xtsel = "$,,orig==" + 'M|anzerenr^orig^id' ? M|beinkauf
+.copy U|xtsel = U|xtsel + ";kopf^vorganga=(Invoice);kotyp==(Invoice);@gruppe=2;@ablageart=(Both)"
+.load 7 sales nolock 'U|xtsel'      ? M|bverkauf
+.load 7 purchasing nolock 'U|xtsel' ? M|beinkauf
+.copy M|bschluss = G|mehr
+.assign M|tschlvre = 7|kopf^id ? G|mehr & M|bverkauf
+.assign M|tschlere = 7|kopf^id ? G|mehr & M|beinkauf
+..
+.formula M|anzredat  = 1|kopf^budat
+.formula M|anzrebetr = 1|pwert
+.copy M|vorganga     = 1|treart
+.assign M|anzwaehr   = 1|pland
+.assign M|ophist     = 1|kopf^ophist
+.assign M|waehr      = 1|kopf^land
+.formula M|budat     = 1|kopf^budat
+.copy U|xdel = G|FALSE
+.copy U|xaubedel = G|FALSE
+.copy U|xbstorno = G|FALSE
+.formula U|xbetrsumme = U|xzahlbetr + 1|pwert ? 1|treart = "Rechnung"
+.copy U|xbstorno = G|TRUE ? 'M|budat:8' <= 'M|stichtag:8' & M|auzn^remge = 0 & U|xbetrsumme<>0 & 1|treart = "Rechnung" & M|bverkauf
+.copy U|xdel = G|TRUE     ? U|xbstorno
+.copy U|xaubedel = G|TRUE ? U|xbstorno
+.copy U|xdel = G|TRUE     ? U|xbstorno & ((F|empty(M|ophist) & 1|kopf^sumnetto <> 0) ; F|empty(1|pwert) ; F|empty(M|anzrenr)) & M|bverkauf
+.copy U|xdel = G|TRUE     ? U|xbstorno & ((F|empty(M|ophist) & 1|kopf^sumnetto <> 0) ; F|empty(1|pwert) ; F|empty(M|anzerenr)) & M|beinkauf
+.make screen line -O      ? U|xdel
+.continue SDEL            ? M|tzeilen = 0
+.assign U|xaumerk = M|aunummer^id ? U|xbstorno & M|bverkauf
+.assign U|xbemerk = M|benummer^id ? U|xbstorno & M|beinkauf
+.continue SDEL                    ? U|xbstorno
+..
+.copy U|xdel = G|FALSE
+.copy U|xaubedel = G|FALSE
+.formula U|xbetrsumme = U|xzahlbetr + 1|pwert ? 1|treart = "Rechnung"
+.copy U|xdel = G|TRUE     ? M|auzn^remge = 0 & U|xbetrsumme <> 0 & 1|treart = "Rechnung" & M|bverkauf
+.copy U|xaubedel = G|TRUE ? U|xdel
+.copy U|xdel = G|TRUE   ? ((F|empty(M|ophist) & 1|kopf^sumnetto <> 0) ; F|empty(1|pwert) ; F|empty(M|anzrenr)) & M|bverkauf
+.copy U|xdel = G|TRUE   ? ((F|empty(M|ophist) & 1|kopf^sumnetto <> 0) ; F|empty(1|pwert) ; F|empty(M|anzerenr)) & M|beinkauf
+.make screen line -O    ? U|xdel
+.continue PRUEF         ? F|empty(1|kopf^ophist) & M|tzeilen <> 0
+.continue EKVK          ? U|xdel
+.assign U|xmerk2id = M|ophist^id
+.load 2 object 'M|ophist^id'
+.continue LLREPOS              ? _G|mehr
+..
+!LOP
+.load 2 line
+.copy U|xnotdel = G|FALSE
+.copy U|xnotdel = G|TRUE ? _G|mehr
+.continue LLREPOS ? _G|mehr 
+.continue LLREPOS ? M|tzeilen = 0
+.. 
+.continue PRUEF  ? F|equals(2|opztyp, "(Invoice)") & M|anzrebetr < 0 & F|empty(1|status)
+.continue LOP    ? _(F|equals(2|opztyp, "(Payment)") ; F|equals(2|opztyp, "(DebitOI)") ; F|equals(2|opztyp, "(Clearing)"))
+.continue LOP    ? F|empty(2|zbudat) 
+.continue LOP    ? '2|zbudat:8' > 'M|stichtag:8'
+.continue DOUBL  ? 'U|xmerk2id' = 'M|ophist^id' & _F|empty(M|zahlbetr)
+.continue WEITER
+..
+!PRUEF: Abschlussrechnung immer l”schen
+.copy U|xaubedel = G|FALSE
+.copy U|xaubedel = G|TRUE ?  M|bverkauf & 'M|aunummer' = 'U|xaumerk^nummer' & '1|kopf^budat:8' <= 'M|stichtag:8' & (1|kotyp=4 & _U|xtreffer)
+.copy U|xaubedel = G|TRUE ?  M|bverkauf & 'M|aunummer' = 'U|xaumerk^nummer' & _F|empty(U|xdate) & U|xdate <= M|stichtag & U|xtreffer
+.copy U|xaubedel = G|TRUE ?  M|beinkauf & 'M|benummer' = 'U|xbemerk^nummer' & '1|kopf^budat:8' <= 'M|stichtag:8' & (1|kotyp=4 & _U|xtreffer)
+.copy U|xaubedel = G|TRUE ?  M|beinkauf & 'M|benummer' = 'U|xbemerk^nummer' & _F|empty(U|xdate) & U|xdate <= M|stichtag & U|xtreffer
+..
+.assign U|xaumerk = M|aunummer^id ?  M|bverkauf
+.assign U|xbemerk = M|benummer^id ?  M|beinkauf
+.formula U|xanzbetr = M|anzrebetr * (-1) ? U|xaubedel & M|anzrebetr < 0
+.formula U|xanzbetr = M|anzrebetr        ? U|xaubedel & M|anzrebetr > 0
+.formula U|xanzrebetr = U|xanzrebetr + U|xanzbetr   ? U|xaubedel
+..
+!SDEL
+.continue KEINETAB  ? M|tzeilen = 0
+.make screen line -O  ? U|xaubedel
+.continue KEINETAB  ? M|tzeilen = 0
+.continue SDEL      ? M|bverkauf & M|aunummer^id = U|xaumerk & U|xbstorno
+.continue SDEL      ? M|beinkauf & M|benummer^id = U|xbemerk & U|xbstorno
+..
+!KEINETAB
+.copy U|xbstorno = G|FALSE
+.copy U|xaubedel = G|FALSE
+.continue LLREPOS
+..
+!LOOP
+.formula U|xzahlbetr = 0  ? M|tzeilen = 0
+.formula U|xanzrebetr = 0 ? M|tzeilen = 0
+.continue LLREPOS         ? M|tzeilen = 0
+.copy U|xdel = G|FALSE
+.copy U|xdel = G|TRUE  ? M|aunummer^id = U|xaumerk & U|xanzrebetr = U|xzahlbetr & M|bverkauf
+.copy U|xdel = G|TRUE  ? M|benummer^id = U|xbemerk & U|xanzrebetr = U|xzahlbetr & M|beinkauf
+.formula U|xzahlbetr = 0  ?  U|xdel & U|xaubedel
+.formula U|xanzrebetr = 0 ?  U|xdel & U|xaubedel
+.make screen line -O   ? U|xdel & U|xaubedel
+.continue LOOP         ? U|xdel & U|xaubedel
+.continue LLREPOS
+..
+!DOUBL: Zeile duplizieren
+.make screen line +O 
+.assign M|tanzkonto  = 0|konto
+.assign M|ophist     = U|xmerk2id
+.formula M|anzrebetr = 1|pwert
+.copy M|vorganga     = 1|treart
+.assign M|anzwaehr   = 1|pland
+.formula M|anzredat  = 1|kopf^budat
+.assign M|waehr      = 1|kopf^land
+.formula M|vom       = 0|kopf^vom ? _F|empty(0|kopf^vom)
+..
+.continue EINKAUF                 ? M|beinkauf
+.assign M|anzrenr    = 1|id
+.assign M|tanzvre    = M|anzrenr^kopf
+.assign M|tkunde     = 0|kopf^kunde2
+.assign M|aunummer   = 0|kopf^id
+.formula M|auzn      = 0|id
+.continue WEITER
+..
+!EINKAUF
+.assign M|anzerenr   = 1|id
+.assign M|tanzere    = M|anzerenr^kopf
+.assign M|tlief      = 0|kopf^lief
+.assign M|benummer   = 0|kopf^id
+.formula M|bezn      = 0|id
+..
+!WEITER
+.. Schlussrechnung dazu ermitteln
+.copy U|xtsel = "$,,orig==" + 'M|anzrenr^orig^id'  ? M|bverkauf
+.copy U|xtsel = "$,,orig==" + 'M|anzerenr^orig^id' ? M|beinkauf
+.copy U|xtsel = U|xtsel + ";kopf^vorganga=(Invoice);kotyp==(Invoice);@gruppe=2;@ablageart=(Both)"
+.load 7 sales nolock 'U|xtsel'      ? M|bverkauf
+.load 7 purchasing nolock 'U|xtsel' ? M|beinkauf
+.copy M|bschluss = G|mehr
+.assign M|tschlvre = 7|kopf^id ? G|mehr & M|bverkauf
+.assign M|tschlere = 7|kopf^id ? G|mehr & M|beinkauf
+..
+.assign M|buch    = 2|buch
+.formula U|xbuch  = ""
+.assign U|xbuch   = 2|buch
+.formula U|xanzrebetr = 0 ? F|empty(U|xbuch)
+.make screen line -O    ? F|empty(U|xbuch) & _F|equals(2|opztyp, "(DebitOI)")
+.continue LLREPOS       ? F|empty(U|xbuch)
+.formula M|budat  = 2|zbudat
+.assign M|buwaehr = 2|iwbu
+.assign M|opz     = 2|opz
+.load 3 add 2|buch^id
+.continue LOP ? _G|mehr 
+..
+!L3LINE
+.load 3 line
+.continue DELLOP   ? _G|mehr
+.formula M|betrag = 3|betrag ? '3|konto^id' = 'M|tkunde^id'
+.formula M|ewbetr = 3|ewbetr ? '3|konto^id' = 'M|tkunde^id'
+.continue L3LINE   ? '3|konto^id' <> 'M|tanzkonto^id'
+.continue L3LINE   ? _F|empty(M|projekt) & '3|projekt^id' <> 'M|projekt^id'
+.continue L3LINE   ? _F|empty(M|projekt) & F|empty(3|projekt)
+.assign M|tprojekt     =  3|projekt
+.continue BEINKAUF ? M|beinkauf
+.formula M|zahlbetr    =  3|ewbetr
+.formula M|inlzahlbetr =  3|betrag
+.formula M|zahlbetr    = -3|ewbetr ? 3|soll
+.formula M|inlzahlbetr = -3|betrag ? 3|soll
+.formula U|xzahlbetr = U|xzahlbetr + M|zahlbetr 
+.continue DELLOP
+..
+!BEINKAUF
+.formula M|zahlbetr    =  3|ewbetr
+.formula M|inlzahlbetr =  3|betrag
+.formula M|zahlbetr    = -3|ewbetr ? _3|soll
+.formula M|inlzahlbetr = -3|betrag ? _3|soll
+.formula U|xzahlbetr = U|xzahlbetr + M|zahlbetr 
+..
+!DELLOP: hier Zeilen kl”schen wenn <> Projekt
+.copy U|xdel = G|FALSE
+.copy U|xdel = G|TRUE ? (_F|empty(M|projekt) & F|empty(M|tprojekt)) ; (_F|empty(M|projekt) & 'M|projekt^id' <> 'M|tprojekt^id')
+.make screen line -O  ? U|xdel
+.copy U|xdel = G|FALSE
+.continue LOP
+..
+!NEXT
+.load 0 sales          ?  M|bverkauf
+.load 0 purchasing     ?  M|beinkauf
+.continue RECHOHNEAUBE ? _G|mehr
+.continue LINE
+..
+!RECHOHNEAUBE: Jetzt noch alle Rechnungen ohne orig, aber mit Anzahlungspositionen suchen
+.continue END   ? _F|empty(M|bestellung) & M|beinkauf
+.continue END   ? _F|empty(M|auftrag) & M|bverkauf
+.formula M|select = "$,,;orig=`;kategorie=(Downpayment);@gruppe=2;@ablageart=(Both)"
+.formula M|select = M|select + ";kotyp=(Invoice)"    
+.formula M|select = M|select + ";kopf^kunde2=" + M|kunde       ?  M|bverkauf
+.formula M|select = M|select + ";kopf^lief2=" + M|lief         ?  M|beinkauf
+.formula M|select = M|select + ";konto=" + M|anzkonto^id ? _F|empty(M|anzkonto)
+..
+.load 4 sales 'M|select'         ? M|bverkauf
+.load 4 purchasing 'M|select'    ? M|beinkauf
+.continue END ? _G|mehr
+..
+!RECHNUNG
+.make screen line +O 
+.assign M|tkunde     = 4|kopf^kunde2 ?  M|bverkauf
+.assign M|tlief      = 4|kopf^lief2  ?  M|beinkauf
+.formula M|vom       = 4|kopf^vom   
+.assign M|anzrenr    = 4|id     ? M|bverkauf
+.assign M|anzerenr   = 4|id     ? M|beinkauf
+.assign M|tanzvre    = M|anzrenr^kopf  ? M|bverkauf
+.assign M|tanzere    = M|anzerenr^kopf ? M|beinkauf
+..
+.. Schlussrechnung dazu ermitteln
+.copy U|xtsel = "$,,orig==" + 'M|anzrenr^orig^id'  ? M|bverkauf
+.copy U|xtsel = "$,,orig==" + 'M|anzerenr^orig^id' ? M|beinkauf
+.copy U|xtsel = U|xtsel + ";kopf^vorganga=(Invoice);kotyp==(Invoice);@gruppe=2;@ablageart=(Both)"
+.load 7 sales nolock 'U|xtsel'      ? M|bverkauf
+.load 7 purchasing nolock 'U|xtsel' ? M|beinkauf
+.copy M|bschluss = G|mehr
+.assign M|tschlvre = 7|kopf^id ? G|mehr & M|bverkauf
+.assign M|tschlere = 7|kopf^id ? G|mehr & M|beinkauf
+..
+.assign M|tanzkonto  = 4|konto
+.formula M|anzrebetr = 4|pwert
+.copy M|vorganga     = 4|treart
+.assign M|anzwaehr   = 4|pland
+.formula M|anzredat  = 4|kopf^budat
+.assign M|ophist     = 4|kopf^ophist
+.assign M|waehr      = 4|kopf^land
+.copy U|xdel         = G|FALSE
+.copy U|xdel         = G|TRUE   ? (F|empty(M|ophist) ; F|empty(4|pwert) ; F|empty(M|anzrenr)) & M|bverkauf
+.copy U|xdel         = G|TRUE   ? (F|empty(M|ophist) ; F|empty(4|pwert) ; F|empty(M|anzerenr)) & M|beinkauf
+.make screen line -O            ? U|xdel
+.continue LOOPRE                ? U|xdel
+.formula U|xmerk2id = ""
+.assign U|xmerk2id  = M|ophist^id
+.load 5 object 'M|ophist^id'
+.continue LOOPRE                ? _G|mehr
+..
+!L2OP
+.load 5 line
+.continue LOOPRE  ? _G|mehr 
+.continue LOOPRE  ?  M|tzeilen = 0
+.. 
+.continue P2RUEF  ? F|equals(5|opztyp, "(Invoice)") & M|anzrebetr < 0
+.continue L2OP    ? _(F|equals(5|opztyp, "(Payment)") ; F|equals(5|opztyp, "(DebitOI)") ; F|equals(5|opztyp, "(Clearing)"))
+.continue L2OP    ? F|empty(5|zbudat) 
+.copy U|xdel = G|FALSE
+.copy U|xdel = G|TRUE  ? '5|zbudat:8' > 'M|stichtag:8'
+.make screen line -O   ?  U|xdel
+.continue L2OP         ?  U|xdel 
+.continue D2OUBL       ? 'U|xmerk2id' = 'M|ophist^id' & _F|empty(M|zahlbetr)
+.continue W2EITER
+..
+!P2RUEF: Abschlussrechnung immer l”schen
+.copy U|xaubedel = G|FALSE
+.copy U|xaubedel = G|TRUE         ? 'M|anzredat:8' <= 'M|stichtag:8'
+.assign U|xaumerk = M|aunummer^id ?  M|bverkauf
+.assign U|xbemerk = M|benummer^id ?  M|beinkauf
+.make screen line -O  
+..
+!L2OOP
+.continue LOOPRE        ? M|tzeilen = 0
+.copy U|xdel = G|FALSE
+.copy U|xdel = G|TRUE   ? M|aunummer^id = U|xaumerk & M|bverkauf
+.copy U|xdel = G|TRUE   ? M|benummer^id = U|xbemerk & M|beinkauf
+.make screen line -O    ? U|xdel & U|xaubedel
+.continue L2OOP         ? U|xdel & U|xaubedel
+.continue LOOPRE
+..
+!D2OUBL: Zeile duplizieren
+.make screen line +O 
+.assign M|tkunde     = 4|kopf^kunde2 ?  M|bverkauf
+.assign M|tlief      = 4|kopf^lief2  ?  M|beinkauf
+.formula M|vom       = 4|kopf^vom   
+.assign M|anzrenr    = 4|id          ?  M|bverkauf
+.assign M|anzerenr   = 4|id          ?  M|beinkauf
+.assign M|tanzkonto  = 4|konto
+.formula M|anzrebetr = 4|pwert
+.copy M|vorganga     = 4|treart
+.assign M|anzwaehr   = 4|pland
+.formula M|anzredat  = 4|kopf^budat
+.assign M|ophist     = 4|kopf^ophist
+.assign M|waehr      = 4|kopf^land
+..
+!W2EITER
+.formula U|xbuch  = "" 
+.assign U|xbuch   = 5|buch
+.assign M|buch    = 5|buch
+.make screen line -O    ? F|empty(U|xbuch)
+.continue LOOPRE        ? F|empty(U|xbuch)
+.formula M|budat  = 5|zbudat
+.assign M|buwaehr = 5|iwbu
+.assign M|opz     = 5|opz
+.load 6 add 5|buch^id
+.continue L2OP           ? _G|mehr 
+..
+!L6LINE
+.load 6 line
+.continue D2ELLOP  ? _G|mehr
+.formula M|betrag = 6|betrag ? '6|konto^id' = 'M|tkunde^id'
+.formula M|ewbetr = 6|ewbetr ? '6|konto^id' = 'M|tkunde^id'
+.continue L6LINE   ? '6|konto^id' <> 'M|tanzkonto^id'
+.continue L6LINE   ? _F|empty(M|projekt) & '6|projekt^id' <> 'M|projekt^id'
+.continue L6LINE   ? _F|empty(M|projekt) & F|empty(6|projekt)
+.assign M|tprojekt     =  6|projekt
+.continue E2INKAUF ? M|beinkauf
+.formula M|zahlbetr    =  6|ewbetr
+.formula M|inlzahlbetr =  6|betrag
+.formula M|zahlbetr    = -6|ewbetr ? 6|soll
+.formula M|inlzahlbetr = -6|betrag ? 6|soll
+.continue D2ELLOP
+..
+!E2INKAUF
+.formula M|zahlbetr    =  6|ewbetr
+.formula M|inlzahlbetr =  6|betrag
+.formula M|zahlbetr    = -6|ewbetr ? _6|soll
+.formula M|inlzahlbetr = -6|betrag ? _6|soll
+..
+!D2ELLOP: hier Zeilen kl”schen wenn <> Projekt
+.copy U|xdel = G|FALSE
+.copy U|xdel = G|TRUE ? (_F|empty(M|projekt) & F|empty(M|tprojekt)) ; (_F|empty(M|projekt) & 'M|projekt^id' <> 'M|tprojekt^id')
+.make screen line -O  ? U|xdel
+.copy U|xdel = G|FALSE
+.continue L2OP
+..
+!LOOPRE
+.load 4 sales       ?  M|bverkauf
+.load 4 purchasing  ?  M|beinkauf
+.continue END       ? _G|mehr
+.continue RECHNUNG
+..
+.continue END
+..*****************************************************************************
+!END
+.continue
+..
+!NOT
+.error Keine Daten vorhanden!
+.end 1
+..
+!ERROR1
+.note Kein(e) Treffer vorhanden!
+.assign M|treffer = G|FALSE
+.continue

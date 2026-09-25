@@ -1,0 +1,157 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDIGA.TBURECHNUNG.BA
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : Create an invoice in abas ERP with data from credit note.
+..*****************************************************************************
+..!meta M|=dfue/EDIGA
+.set trans -
+..
+.continue END ? F|empty(M|ganr) ; F|empty(M|tedinr) ; _M|tbelegmoeglich ; _F|empty(M|trechnung)
+.. 
+.type integer actrow
+.type text creditNoteNo
+.type P53 edi 
+.type P3 invoice
+.type text maskid
+.type text command
+.type text screenaction
+.type M9.3 availableQty
+.type M9.3 itemQty
+.type integer xi
+.. 
+.type text edpfile
+.file -tempname U|edpfile
+.type text edperror
+.file -tempname U|edperror
+.type text edpnotice
+.file -tempname U|edpnotice
+.. 
+.formula U|creditNoteNo = M|ganr
+.copy U|edi = M|tedinr
+..
+.formula U|actrow = M|aktzeile
+.. 
+.output new 'U|edpfile'
+.input "DATEI.F"
+.. 
+.select screen header
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+
+# WRITE NEW SALES INVOICE
+#  
+# Create invoice for credit note by using add document with delivery note items.
+# 
+# Credit note items with single delivery note items are added as single invoice item.
+# Credit note items with several delivery note items have all their invoice items added.
+#
+# COMPLICATIONS
+# -> Using add document CLEARS INVOICE HEADER FIELDS-> invoice header data is set as last line
+# -> Credit note item has less quantity than in delivery notes -> reduce itemQty to availableQty
+# -> Credit note item has more quantity than in delivery notes -> add remaining availableQty to itemQty of last item
+
+#!database=3
+#!group=24
+#!action=new
+#!dontchange=~
+#!flddelimiter=;
+#!userowid=1
+#!tagfld=tag
+
+nummer;tag\
+  zn;0:beleg;mge;preis;ganr;0:bem;0:tterm;0:ident;0:ueb
+
+~;INVOICE\
+
+!NEXT
+.select screen line
+.continue INVOICE ? _G|mehr
+.continue NEXT ?  M|ganr <> U|creditNoteNo
+.continue NEXT ?  M|tedinr <> U|edi
+.continue NEXT ? _M|tbelegmoeglich
+.continue NEXT ? _F|empty(M|trechnung)
+.continue ITEMS ? _F|empty(M|ttlipos2)
+
+  +;'M|tbeleg^id';~;~;~;~;~;~;~\
+  #;~;'M|mge';'M|preis';'U|creditNoteNo';~;~;~;~\
+
+.continue NEXT
+!ITEMS
+.formula U|availableQty = M|mge
+.formula U|xi = 0
+!NEXTITM
+.formula U|xi = U|xi +1
+.continue ENDITM ? U|xi > 10
+.continue ENDITM ? F|empty(M|ttlipos.xi)
+.continue NEXTITM ? F|empty(M|ttlimge.xi)
+.formula U|itemQty = M|ttlimge.xi ? M|ttlimge.xi <= U|availableQty
+.formula U|itemQty = U|availableQty ? M|ttlimge.xi > U|availableQty
+.formula U|availableQty = U|availableQty - U|itemQty
+
+  +;'M|ttlipos.xi^id';~;~;~;~;~;~;~\
+  #;~;'U|itemQty';'M|preis';'U|creditNoteNo';~;~;~;~\
+
+.continue NEXTITM
+!ENDITM
+.continue NEXT ? U|availableQty = 0
+.formula U|itemQty = U|itemQty + U|availableQty 
+
+  #;~;'U|itemQty';~;~;~;~;~;~\
+
+.continue NEXT
+!INVOICE
+
+  0;~;~;~;~;'U|creditNoteNo';'G|datum:8';'U|edi^nummer';'M|kbbuchen'
+
+
+
+# UPDATE EDI MESSAGE WITH CREDIT NOTE
+# 
+# Set status 0 
+# Set error code 0 
+# Add invoice number
+
+#!database=53
+#!group=0
+#!action=update
+#!dontchange=~
+#!flddelimiter=;
+
+id;status;fcode;ideksvor
+
+'U|edi^id';0;0;@status:NUM(INVOICE)@
+
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+.output terminal
+..
+.system 'F|formatstr("edpimport.sh -P -I {1} -H {2} 2> {3}", U|edpfile, U|edpnotice, U|edperror)' password background
+.continue ERROR ? _G|mehr 
+.. 
+.continue ACTROW ? F|empty(U|edi^ideksvor)
+.assign U|invoice = 'F|formatstr("$,,;ktyp=(Invoice);nummer=={1};@ablageart=(Both);erfass={2}", U|edi^ideksvor, G|datum)'
+.continue ACTROW ? _G|mehr
+.. 
+.select screen header
+!NXTSHOW
+.select screen line
+.continue ACTROW ? _G|mehr 
+.copy M|rechnr = U|invoice ? M|tedinr=U|edi
+.copy M|tbelegmoeglich = G|false ? M|tedinr=U|edi
+.continue NXTSHOW
+.. 
+!ACTROW
+.select screen line 'U|actrow'
+..*****************************************************************************
+!END
+.continue
+.. 
+.. 
+!ERROR
+.error Fehler beim Erstellen der Rechnung!
+.select screen line 'U|actrow'
+.. .editing -readonly 'U|edperror'
+.. .editing -readonly 'U|edpnotice'
+.. .editing -readonly 'U|edpfile'
+.end 1

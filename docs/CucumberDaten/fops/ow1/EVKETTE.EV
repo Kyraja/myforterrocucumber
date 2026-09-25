@@ -1,0 +1,98 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EVKETTE.EV
+.. Autor          : bs
+.. Verantwortlich : fwester
+.. Kontrolle      :
+.. Funktion       : Je Ereigniseintritten an bestimmten Eingabefeldern wird
+.. Funktionalitaet verteilt:
+.. Maskeneintritt          -> Maskengrundeinstellung
+.. Feldaustritt Vorgang    -> Maske leeren und Info
+.. Feldaustritt Richtgung  -> Verfolgungsrichtung fixieren
+.. Buttonnach Startbutton  -> Berichtserstellung
+.. Buttonnach Selektieren  -> Vorgang/Position selektieren und neu starten.
+..
+.. Ablauf         : Zentrales EFOP
+...Includes       :
+.. include ev/EVKETTE.BSTART.BN
+..*****************************************************************************
+.set trans -
+..---------------------------- Mask: ------------------------------------------
+.continue ENTER   ? G|evtartengl = "SCREEN_ENTER"
+..---------------------------- Header: ----------------------------------------
+.continue START   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+.continue DETAILS ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "vorgang"
+.continue DIRECT  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "richtung"
+..---------------------------- Table: -----------------------------------------
+.continue NEWDOCU ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "buneustart"
+.continue NEWITEM ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "buposstart"
+..=============================================================================
+.continue END
+..
+!ENTER: Initialize mask buffer while entering screen
+.assign M|richtung = "(Backwards)"
+.copy M|rueckw = G|TRUE
+.continue CLRTAB
+..
+!DETAILS: Details of document or item
+.continue CLRHEAD ? F|empty(M|vorgang)
+.continue ERROR04 ? M|vorgang^gruppe <> 1 & M|vorgang^gruppe <> 2
+.formula M|vorgart = M|vorgang^typa
+.formula M|kerfass = M|vorgang^vom
+.formula M|kerfass = M|vorgang^erfass ? F|empty(M|kerfass)
+.assign M|ksuch = M|vorgang^kl ? F|defined(M|vorgang^kl)
+.continue CLRTAB
+..
+!CLRHEAD: Clear header
+.input "is/KOPFLEEREN"
+.copy M|rueckw = G|TRUE
+.continue CLRTAB
+..
+!CLRTAB: Clear table
+.input "is/TABLEEREN"
+.continue END
+..
+!DIRECT: Change direction
+.copy M|rueckw = F|value(M|richtung,"AS50") = "(Backwards)"
+.copy M|vorw = F|value(M|richtung,"AS50") = "(Forwards)"
+.continue CLRTAB
+..
+!START: Start report
+.continue ERROR01 ? F|empty(M|vorgang)
+.assign M|select = M|vorgang^id
+.input "ev/EVKETTE.BSTART.BN"
+.type text xturl2
+.formula U|xturl2    = "http://"+'E|BAPPS_HOST'+":9280/erprest-2/aba/abas/erp/ProcessChain?process="+'M|vorgang^id'+"&abaLayout=abaMinimal&view=sales"     ?  M|vorgang^dnr = 3
+.formula U|xturl2    = "http://"+'E|BAPPS_HOST'+":9280/erprest-2/aba/abas/erp/ProcessChain?process="+'M|vorgang^id'+"&abaLayout=abaMinimal&view=purchase"  ?  M|vorgang^dnr = 4
+.formula M|bappkette = 'U|xturl2' ? M|vorgang^dnr=3 ;  M|vorgang^dnr = 4
+.continue END
+..
+!NEWDOCU: Select document from table row
+.continue ERROR02 ? F|empty(M|tvorgang)
+.copy M|vorgang = M|tvorgang
+.continue DETAILS
+..
+!NEWITEM: Select item from table row
+.continue ERROR02 ? F|empty(M|tvorp)
+.copy M|vorgang = M|tvorp
+.continue DETAILS
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+.set trans +
+..
+!ERROR01: Missing input!
+.error Die Auswahl ist unvollstÑndig. Bitte ergÑnzen!
+.cursor vorgang 0
+.end 1
+..
+!ERROR02: Selection failed!
+.error Auswahl konnte nicht durchgefÅhrt werden!
+.end 1
+..
+!ERROR04: Illegal input!
+.error Auswahl ist nicht zulÑssig!
+.formula M|vorgang = ""
+.cursor vorgang 0
+.end 1

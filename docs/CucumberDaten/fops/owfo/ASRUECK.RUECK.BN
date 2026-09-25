@@ -1,0 +1,102 @@
+..!interpreter german translate noabbrev
+..*****************************************************************************
+.. Name           : ASRUECK.RUECK.BN
+.. Date           : 03.12.14
+.. Version        : 2014r3n02
+.. Author         : chbo
+.. Copyright      : (c) 2014 SABA International
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+..
+.art text xtedpdatei                        ? F|defined( U|xtedpdatei )  = G|False
+.art text xtedpkomm                         ? F|defined( U|xtedpkomm )   = G|False
+.art text xtedplog                          ? F|defined( U|xtedplog )    = G|False
+.art text xtedpcopy                         ? F|defined( U|xtedpcopy )   = G|False
+.art text xtcopyedp                         ? F|defined( U|xtcopyedp )   = G|False
+.art text xtbeleg                           ? F|defined( U|xtbeleg )     = G|False
+..
+..
+.weiter RELOAD                              ? M|reload        = G|True
+.weiter NICHTVERFUEG                        ? M|verfuegbar    = G|False
+.weiter RUECKGEMELDET                       ? M|rueckgemeldet = G|True
+..
+..-- AS-Nummer zwischenspeichern
+.formel U|xtbeleg = M|as^nummer
+..
+..-- Logdatei definineren
+.formel U|xtedplog   = "tmp/ASRUECK." + 'G|versionneu' + ".EDP.LOG"
+.formel U|xtedpcopy  = "tmp/ASRUECK." + 'G|versionneu' + ".EDP.COPY"
+..
+..-- EDP Importdatei erstellen
+..-- Ester AS des BAs am Dienstag rÅckmelden, zweiter am Mittwoch, weitere am Donnerstag
+.datei -TEMPNAME U|xtedpdatei
+.eingabe DATEI.F
+.ausgabe auf 'U|xtedpdatei'
+#!DATABASE=9
+#!GROUP=1
+#!ACTION=DONE
+#!CHARSET=EKS
+#!FLDDELIMITER=;
+#!EDP_STOREROWMODE=DELNONE
+#!EDP_LOCKBEHAVIOR=NOWAIT
+#!EDP_TESTFLAG2=1
+?#!EDP_DATE='M|dienstag:8'         ? F|substr( 'M|as^nummer', -3, 3 ) = "001"
+?#!EDP_DATE='M|mittwoch:8'         ? F|substr( 'M|as^nummer', -3, 3 ) = "002"
+?#!EDP_DATE='M|donnerstag:8'       ? F|substr( 'M|as^nummer', -3, 3 ) <> "001" & F|substr( 'M|as^nummer', -3, 3 ) <> "002"
+
+barmex;gut;sofort;bzeit;mzeit;
+'M|as^id';ja;ja;'M|vzeitschwank';'M|vzeitschwank';
+.ausgabe auf WERF.WEG
+.eingabe BILD.F
+.ausgabe BILDSCHIRM
+..
+..-- EDP Kommando zusammenbauen und laufen lassen
+.formel U|xtedpkomm = "edpimport.sh -I " + 'U|xtedpdatei' + " -p abas123 2> " + 'U|xtedplog'
+.. 'M|as^nummer' 'M|as^id' 'M|as^vzeit'
+.. 'U|xtedpkomm'
+.. .edit 'U|xtedpdatei'
+.system 'U|xtedpkomm' HINTER
+..-- Fehlerbehandlung
+.weiter ERREDP ? G|mehr = G|False
+..-- Erfolgreich
+.hinweis -sofort RÅckmeldung des Arbeitsscheins 'U|xtbeleg' erfolgreich.
+.formel M|rueckgemeldet = G|True
+.weiter ENDE
+..
+..
+!ERREDP
+.hinweis -sofort RÅckmeldung des Arbeitsscheins 'U|xtbeleg' Åber EDP scheitert!
+.formel U|xtcopyedp = "cp " + 'U|xtedpdatei' + " " + 'U|xtedpcopy'
+.system 'U|xtcopyedp' HINTER
+.weiter ENDE
+..
+..
+!NICHTVERFUEG
+.hinweis -sofort Komponenten fÅr Arbeitsschein 'M|as^nummer' nicht verfÅgbar!
+.weiter ENDE
+..
+..
+!RUECKGEMELDET
+.hinweis -sofort Arbeitsschein 'M|rueckmeldung' wurde schon rÅckgemeldet!
+.weiter ENDE
+..
+..
+!RELOAD
+.hinweis -sofort Tabelle zuerst aktualisieren mit Klick auf Starttaste!
+.weiter ENDE
+..
+..
+!ENDE
+.weiter

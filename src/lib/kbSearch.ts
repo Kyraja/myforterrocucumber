@@ -40,35 +40,86 @@ export interface KBSearchInput {
   processChains?: ProcessChain[];
   /** Raw requirements text for fallback matching */
   requirementsText?: string;
+  /** Agent-provided thematic keywords for additional KB lookup */
+  keywords?: string[];
 }
 
 /**
  * Search the knowledge base for relevant chunks.
  * Uses table names (DE + EN), table refs, mask numbers as search terms.
+ *
+ * When `input.keywords` contains agent-provided Stichpunkte, `maxResults`
+ * is applied **per keyword** (each keyword gets its own top-N slice of
+ * chunks that actually matched it). Results are then unioned and deduped
+ * by chunk id, keeping the highest score. When no keywords are given,
+ * the original overall top-N behavior applies.
  */
 export function searchKnowledgeBase(
   chunks: KBChunk[],
   input: KBSearchInput,
-  maxResults: number = 3,
+  maxResults: number = 1,
 ): KBSearchResult[] {
-  if (chunks.length === 0 || input.tables.length === 0) return [];
+  if (chunks.length === 0) return [];
+  if (input.tables.length === 0 && !input.keywords?.length) return [];
 
-  // Build search terms from identified tables
-  const searchTerms = buildSearchTerms(input);
+  const keywords = (input.keywords ?? [])
+    .map(k => k.trim())
+    .filter(k => k.length >= 3);
 
-  // Score each chunk
+  // No keywords → classic overall top-N over combined terms.
+  if (keywords.length === 0) {
+    return scoreAndRank(chunks, buildSearchTerms(input), input.actionContexts, maxResults);
+  }
+
+  // Per-keyword mode: score chunks against each keyword in isolation
+  // (tables, refs and chains still contribute as baseline), keep only
+  // chunks where the keyword actually produced a hit, take top N per
+  // keyword, then union and dedupe by chunk id.
+  const byChunk = new Map<string, KBSearchResult>();
+  for (const keyword of keywords) {
+    const terms = buildSearchTerms({ ...input, keywords: [keyword] });
+    const scored: KBSearchResult[] = [];
+    for (const chunk of chunks) {
+      const { score, matchedTerms } = scoreChunk(chunk, terms, input.actionContexts);
+      const keywordHit = matchedTerms.some(
+        t => t.startsWith('Kw:') || t.startsWith('Kw(text):') || t.startsWith('Kw~:'),
+      );
+      if (!keywordHit) continue;
+      const ratingBoost = chunk.rating === 1 ? 1.5 : chunk.rating === -1 ? 0.3 : 1.0;
+      const finalScore = score * ratingBoost;
+      if (finalScore > 0) {
+        scored.push({ chunk, score: finalScore, matchedTerms });
+      }
+    }
+    scored.sort((a, b) => b.score - a.score);
+    for (const res of scored.slice(0, maxResults)) {
+      const existing = byChunk.get(res.chunk.id);
+      if (!existing || res.score > existing.score) {
+        byChunk.set(res.chunk.id, res);
+      }
+    }
+  }
+
+  const merged = Array.from(byChunk.values());
+  merged.sort((a, b) => b.score - a.score);
+  return merged;
+}
+
+function scoreAndRank(
+  chunks: KBChunk[],
+  terms: SearchTerms,
+  actionContexts: ActionContext[] | undefined,
+  maxResults: number,
+): KBSearchResult[] {
   const scored: KBSearchResult[] = [];
   for (const chunk of chunks) {
-    const { score, matchedTerms } = scoreChunk(chunk, searchTerms, input.actionContexts);
-    // Boost chunks that were rated positively, penalize negatively rated
+    const { score, matchedTerms } = scoreChunk(chunk, terms, actionContexts);
     const ratingBoost = chunk.rating === 1 ? 1.5 : chunk.rating === -1 ? 0.3 : 1.0;
     const finalScore = score * ratingBoost;
     if (finalScore > 0) {
       scored.push({ chunk, score: finalScore, matchedTerms });
     }
   }
-
-  // Sort by score descending, take top N
   scored.sort((a, b) => b.score - a.score);
   return scored.slice(0, maxResults);
 }
@@ -84,6 +135,8 @@ interface SearchTerms {
   tableNames: Set<string>;
   /** Process chain terms (before/after) */
   chainTerms: Set<string>;
+  /** Agent-provided thematic keywords (lowercased) */
+  agentKeywords: Set<string>;
 }
 
 /** Minimum word length for reverse-contains matching */
@@ -94,6 +147,7 @@ function buildSearchTerms(input: KBSearchInput): SearchTerms {
   const maskNumbers = new Set<number>();
   const tableNames = new Set<string>();
   const chainTerms = new Set<string>();
+  const agentKeywords = new Set<string>();
 
   for (const t of input.tables) {
     tableRefs.add(t.tableRef);
@@ -116,7 +170,36 @@ function buildSearchTerms(input: KBSearchInput): SearchTerms {
     }
   }
 
-  return { tableRefs, maskNumbers, tableNames, chainTerms };
+  // Agent-provided thematic keywords
+  if (input.keywords) {
+    for (const kw of input.keywords) {
+      const trimmed = kw.trim().toLowerCase();
+      if (trimmed.length >= 3) agentKeywords.add(trimmed);
+    }
+  }
+
+  return { tableRefs, maskNumbers, tableNames, chainTerms, agentKeywords };
+}
+
+/**
+ * Split a keyword into sub-tokens for partial matching against headings.
+ * Handles whitespace/punctuation boundaries and camelCase transitions.
+ * Returns tokens with length >= MIN_CONTAINS_LEN.
+ */
+function splitKeywordTokens(keyword: string): string[] {
+  const out = new Set<string>();
+  // Primary split: whitespace, punctuation, hyphens
+  const rawParts = keyword.split(/[\s,;:/()\-_.]+/);
+  for (const part of rawParts) {
+    if (!part) continue;
+    // Secondary split at camelCase boundaries
+    const camelParts = part.split(/(?<=[a-zäöüß])(?=[A-ZÄÖÜ])/);
+    for (const cp of camelParts) {
+      const lower = cp.toLowerCase();
+      if (lower.length >= MIN_CONTAINS_LEN) out.add(lower);
+    }
+  }
+  return Array.from(out);
 }
 
 /**
@@ -245,6 +328,37 @@ function scoreChunk(
         score *= 1.2;
         matchedTerms.push(`Hierarchy:${name}`);
         break;
+      }
+    }
+  }
+
+  // 8. Agent-provided thematic keywords
+  // Full bidirectional match preferred; fall back to token-based partial score.
+  for (const kw of terms.agentKeywords) {
+    if (kw.length < 3) continue;
+    const headingHit = containsMatch(headingLower, kw);
+    if (headingHit) {
+      score += 3.5;
+      matchedTerms.push(`Kw:${headingHit}`);
+      continue;
+    }
+    const textHit = containsMatch(textLower, kw);
+    if (textHit) {
+      score += 1.2;
+      matchedTerms.push(`Kw(text):${textHit}`);
+      continue;
+    }
+    // Token-based partial score for compound robustness
+    const tokens = splitKeywordTokens(kw);
+    if (tokens.length > 1) {
+      let hits = 0;
+      for (const tok of tokens) {
+        if (containsMatch(headingLower, tok)) hits++;
+      }
+      if (hits > 0) {
+        const frac = hits / tokens.length;
+        score += 0.8 * frac;
+        matchedTerms.push(`Kw~:${kw}(${hits}/${tokens.length})`);
       }
     }
   }

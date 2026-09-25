@@ -1,0 +1,80 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BELEG.KRITISCH
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Ermittelt den Kritisch-Status eines Beleges.
+.. Functionality  : Gets the critical flag of a document.
+..
+.. INPUT:
+.. U|xdocument -> Required: Setting flag for this purchasing document (ID4:1).
+.. U|xduedate  -> Setting flag regarding to this maximum date (GD).
+..
+.. OUTPUT:
+.. U|xcritical -> Resulting critical flag
+.. If we have a critical purchase order item, there will be an bonus output:
+.. U|xshipdate -> Shipping date of the most critical purchase order item (GD).
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type ID4:1 xxdocument ? _F|defined(U|xxdocument)
+.type GD    xxduedate  ? _F|defined(U|xxduedate)
+..
+.. Initializations
+.assign U|xxdocument = ""
+.assign U|xxduedate = G|datum
+..
+.. Handle argument document
+.continue USAGE ? _F|defined(U|xdocument)
+.continue USAGE ?  F|empty(U|xdocument)
+.continue USAGE ? _F|compatible(F|typeof(U|xdocument), F|typeof(U|xxdocument))
+.copy U|xxdocument = U|xdocument
+.continue DUEDATE ? _F|empty(U|xduedate)
+.continue LOADDOC
+..
+!DUEDATE: Handle argument due date
+.continue USAGE ? _F|compatible(F|typeof(U|xduedate), F|typeof(U|xxduedate))
+.copy U|xxduedate = U|xduedate
+..
+!LOADDOC: Load document
+.load 1 object 'U|xxdocument'
+.continue FATAL ? _G|mehr
+..
+.. Initialize output while arguments are fine
+.type bool xcritical ? _F|defined(U|xcritical)
+.continue USAGE ? _F|compatible(F|typeof(U|xcritical), "B")
+.copy U|xcritical = G|FALSE
+..
+!SWITCH: Switch type of document
+.continue PORDER  ? F|equals(1|typa, "(PurchaseOrder)")
+.continue RELEASE
+..
+!PORDER: Critical if at least one item of the document will not be delivered in time
+.type GD   xshipdate ? _F|defined(U|xshipdate)
+.type text xselect   ? _F|defined(U|xselect)
+.assign U|xshipdate = ""
+.. This means every item with a delivery date older or equal the due date
+.formula U|xselect = "$,,;aktiv=1;einplan=;mateinplan=;kopf={1};tterm<={2};@ablageart=(Active);@ordnung=tterm"
+.load 1 group "4:2" 'F|formatstr(U|xselect, U|xxdocument, U|xxduedate)'
+.copy U|xcritical = G|mehr
+.continue RELEASE ? _U|xcritical
+.copy U|xshipdate = 1|tterm
+.continue RELEASE
+..
+!RELEASE
+.load 1
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+!FATAL: Unexpected fatal error!
+.error -number 1111
+.continue BREAK
+..
+!USAGE: Wrong usage of program!
+.error -message Falsche Verwendung des Programms!
+..
+!BREAK
+.end 1

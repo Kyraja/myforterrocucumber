@@ -1,0 +1,116 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : PDFHILFE.TAB
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      : mg
+.. Funktion       : Zeigt die Kapitel jeweils als Zeilen in der Tabelle an.
+.. Ablauf         : Tabellen-FOP
+..
+.. Functionality  : Shows for each chapter a separate row in the table.
+.. Program flow   : Table efop
+..*****************************************************************************
+.set trans -
+..
+.continue CLRTAB ? G|evtartengl = "SCREEN_ENTER"
+.continue CLRTAB ? G|evtartengl = "FIELD_FILL"   & G|evtvar = "ganzehilfe"
+.continue CLRTAB ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "hsprache"
+.continue CLRTAB ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+.continue END
+..
+!CLRTAB: clear table
+.make screen line -- ? M|tzeilen > 0
+.assign M|markkapitel = 0
+..
+.. Declarations
+.type DVM2 xfiles
+.type text xquelle xname
+.type DVM2 xerror
+.type bool xstd
+..
+.. Initializations
+.file -tempname U|xfiles
+.file -tempname U|xerror
+..
+.. Check if source path is a existing directory
+.continue ERROR3 ? _F|isdir(M|pfadquellen)
+..
+.. Extract names of chapter
+.system 'F|formatstr("xmlpdfhelp.sh -p -l {1} >{2} 2>{3}", M|hspr, U|xfiles, U|xerror)' background
+.continue ERROR1 ? _G|mehr
+.continue ERROR2 ? _F|filenotempty(U|xfiles)
+..
+!READ: read names of chapter
+.select from 'U|xfiles' U|xquelle ^
+.continue END ? _G|mehr
+..
+.copy U|xstd = G|TRUE
+.. Check if source file exists (standard)
+.system 'F|formatstr("xmlpdfhelp.sh -t 1 -l {1} {2}", M|hspr, U|xquelle)' background
+.continue FILEOK ? G|mehr
+..
+.copy U|xstd = G|FALSE
+.. Check if source file exists (custom)
+.system 'F|formatstr("xmlpdfhelp.sh -t 2 -l {1} {2}", M|hspr, U|xquelle)' background
+.continue READ ? _G|mehr
+..
+!FILEOK
+.formula U|xname = U|xquelle <$ ".xml"
+.make screen line +O
+.copy M|tstd = U|xstd
+.continue WHOLE   ? G|evtartengl = "FIELD_FILL" & G|evtvar = "ganzehilfe"
+.continue MASKEIN ? _(G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart")
+..
+.. Update table after generating through button "bstart"
+.copy M|tmark = G|FALSE
+.continue TARGET
+..
+!WHOLE: update table after changing size through item "ganzehilfe"
+.assign M|tmark = 'G|evtfeldneu'
+.formula M|tziel = M|kziel ? M|tmark
+.formula M|tziel = U|xname + ".pdf" ? _M|tmark
+.continue CHECK
+..
+!MASKEIN: update table while not using button "bstart"
+.copy M|tmark = M|ganzehilfe
+..
+!TARGET: set name of target file
+.formula M|tziel = M|kziel ? M|ganzehilfe
+.formula M|tziel = U|xname + ".pdf" ? _M|ganzehilfe
+..
+!CHECK: check if target file exists
+.copy M|tzielda = F|filenotempty(F|formatstr("{1}/{2}", M|pfadziele, M|tziel))
+..
+!ITERATE
+.assign M|tkapitelnr = U|xname
+.assign M|tquelle = U|xquelle
+.formula M|markkapitel = M|markkapitel + 1 ?  M|tmark
+.formula M|markkapitel = M|markkapitel - 1 ? _M|tmark & M|markkapitel > 0
+.continue READ
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1
+.error
+.output terminal
+.. Convert error message charset
+.system 'F|formatstr("s3_conv 11 {1}", U|xerror)' background
+..
+'U|xerror'
+=================
+.set replacement =@
+.set command =%
+%input -text @U|xerror@
+%set command=.
+.set replacement ='
+.end 1
+..
+!ERROR2
+.error -message Es wurden keine Kapitel aus 'M|pfadquellen'/'M|kapiteldatei' gelesen
+.end 1
+..
+!ERROR3
+.error -message 'M|pfadquellen' fehlt. "'M|hspr'" gibt es nicht als Hilfesprache
+.end 1

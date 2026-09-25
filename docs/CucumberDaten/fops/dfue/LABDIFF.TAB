@@ -1,0 +1,129 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LABDIFF.TAB
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : FÅllt Tabellenzeilen mit der Abruf-Differenzliste
+.. Functionality  : Fills table with forecast delivery schedule difference list
+..*****************************************************************************
+.set trans -
+..
+.type bool xblief  ? _F|defined(U|xblief)
+.type bool xblab1  ? _F|defined(U|xblab1)
+.type bool xblab2  ? _F|defined(U|xblab2)
+.type bool xbkenn  ? _F|defined(U|xbkenn)
+.type text xtfield ? _F|defined(U|xtfield)
+.type integer  xizeile ? _F|defined(U|xizeile)
+..
+.. special treatment for delivery notes
+.continue SKIPP   ?  U|xblief
+..
+.. nothing to diff
+.continue END     ?  F|empty(H|nabdat) 
+.continue END     ?  F|empty(H|nabmge)
+..
+!SKIPP: first row?
+.continue VORHER  ?  M|tzeilen = 0
+..
+..
+!SORT
+.formula U|xgd1 = M|ttermin
+.formula U|xgd2 = H|nabdat   ? _U|xblief
+.formula U|xgd2 = H|tterm    ?  U|xblief
+.formula U|xgd2 = H|kopf^vom ?  U|xblief & F|empty(U|xgd2) & F|defined(H|kopf^vom)
+.formula U|xgd2 = "."        ?  U|xblief & F|empty(U|xgd2)
+.continue VORHER  ?  M|tzeilen = 0
+.continue HOPPLA  ?  U|xgd2 < U|xgdlast   &  M|tzeilen > 0
+.continue VORHER  ?  U|xgd2 < U|xgd1
+.continue GLEICH  ?  U|xgd2 = U|xgd1
+.continue SPAET1  ?  U|xgd2 > U|xgd1      &  M|tzeilen > M|aktzeile
+.continue SPAET2  ?  U|xgd2 > U|xgd1
+.continue END
+..
+..
+!HOPPLA: dates within one forecast are not properly sorted, start from top of table and insert at right spot
+.select screen header
+.select screen line
+.formula U|xgdlast = ""
+.continue SORT
+..
+!VORHER: insert new row before current row
+.formula U|xizeile = 0
+.formula U|xizeile = M|aktzeile -1  ?  M|aktzeile > 1
+.select screen line 'U|xizeile'
+.make screen line +
+.continue ABRUF1  ?  U|xblab1
+.continue ABRUF2  ?  U|xblab2
+.continue LIEFER  ?  U|xblief
+.continue KENNZ   ?  U|xbkenn
+.continue END
+..
+!GLEICH: write data into current row
+.continue ABRUF1  ?  U|xblab1
+.continue ABRUF2  ?  U|xblab2
+.continue VORHER  ?  U|xblief & _F|empty(M|tlitermin)
+.continue LIEFER  ?  U|xblief
+.continue KENNZ   ?  U|xbkenn
+.continue END
+..
+!SPAET1: skip one date further into the future
+.select screen line
+.continue SORT
+..
+!SPAET2: and of table, append new row
+.make screen line +
+.continue ABRUF1  ?  U|xblab1
+.continue ABRUF2  ?  U|xblab2
+.continue LIEFER  ?  U|xblief
+.continue KENNZ   ?  U|xbkenn
+.continue END
+..
+..
+!ABRUF1: old schedule
+.make screen line ? _F|empty(M|tlab1termin)
+.formula M|tlab1terminc = H|abdattyp
+.formula M|tlab1termin  = H|nabdat
+.formula M|tlab1menge   = H|nabmge
+.formula M|tlab1fzahl   = 0
+.formula U|xgdlast      = H|nabdat
+.formula M|ttermin      = H|nabdat      ? _F|empty(H|nabdat)
+.formula M|tterminc     = H|abdattyp    ? _F|empty(H|abdattyp)
+.continue END
+..
+!ABRUF2: new schedule
+.make screen line ? _F|empty(M|tlab2termin)
+.formula M|tlab2terminc = H|abdattyp
+.formula M|tlab2termin  = H|nabdat
+.formula M|tlab2menge   = H|nabmge
+.formula M|tlab2fzahl   = 0
+.formula U|xgdlast      = H|nabdat
+.formula M|ttermin      = H|nabdat      ? _F|empty(H|nabdat)
+.formula M|tterminc     = H|abdattyp    ? _F|empty(H|abdattyp)
+.formula U|endfab = H|nabdat
+.continue END
+..
+!LIEFER: delivery note
+.make screen line ? _F|empty(M|tlitermin)
+.formula M|tlitermin = U|xgd2
+.formula M|tlimenge  = H|mge
+.formula M|tlioffen  = 0
+.formula M|tlifzziel = 0
+.formula M|tlipos    = H|id
+.formula M|tlikopf   = H|kopf^id
+.formula M|ttermin   = U|xgd2
+.formula U|xgdlast   = U|xgd2
+.continue END
+..
+!KENNZ
+.formula U|xtfield = "ta" + 'xilab' + "menge"
+.make screen line ?  +'M|.xtfield'<>0
+.formula U|xgdlast  = H|nabdat
+.formula M|ttermin  = H|nabdat    ? _F|empty(H|nabdat)
+.formula M|tterminc = H|abdattyp  ? _F|empty(H|abdattyp)
+.formula M|.xtfield = H|nabmge
+.continue END
+..
+..*****************************************************************************
+!END
+.continue

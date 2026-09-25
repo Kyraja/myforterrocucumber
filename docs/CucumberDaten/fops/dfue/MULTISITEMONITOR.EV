@@ -1,0 +1,101 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : MULTISITEMONITOR.EV
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : dsch
+.. Functionality  : Field exit events, and row insertion/deletion blocker
+..
+..   Fields dn, datname, grliste, datnr, grausw use SYSTEM functionality to     
+..   pick the database group list. The mostly empty efop functions here NOT
+..   what controls the choice of database groups!
+..*****************************************************************************
+.set trans -
+..
+.. Events           
+..  ---------------------------------------------------------------------------
+.continue MANDLIST ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kmandlist"
+.continue SENDER   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kquellmandant"
+.continue RECEIVE  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kzielmandant"
+.continue DATNAME  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "dn" ; G|evtvar = "datname"
+.continue DATNAME  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "grliste"
+.continue DATNAME  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "datnr"
+.continue DGROUPS  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kbgruppieren"
+.continue OGROUPS  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kbobjquellid"
+.continue GROUPS   ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "grausw"
+..  ---------------------------------------------------------------------------
+.continue CLRTAB
+..
+!MANDLIST
+.formula M|kmandbez = M|kmandlist^name
+.. check if source/destination client are in client list
+.continue CLRTAB ? F|empty(M|kmandlist)
+.continue CLRTAB ? F|empty(M|kquellmandant) & F|empty(M|kzielmandant)
+!CHECKSOURCE
+.. check source client
+.select webconfiguration 'F|formatstr("$,,;@gruppe=2;id={1};mandant={2}",M|kmandlist^id,M|kquellmandant^id)' ? _F|empty(M|kquellmandant)
+.continue ERROR3 ? _F|empty(M|kquellmandant) & _G|mehr
+!CHECKDEST
+.. check destination client
+.select webconfiguration 'F|formatstr("$,,;@gruppe=2;id={1};zielmandant={2}",M|kmandlist^id,M|kzielmandant^id)' ? _F|empty(M|kzielmandant)
+.continue CLRTAB ? _F|empty(M|kzielmandant) & G|mehr
+.select webconfiguration 'F|formatstr("$,,;@gruppe=2;id={1};mandant={2};zielmandant=`",M|kmandlist^id,M|kzielmandant^id)' ? _F|empty(M|kzielmandant)
+.continue ERROR4 ? _F|empty(M|kzielmandant) & _G|mehr
+.continue CLRTAB
+..
+!SENDER
+.formula M|ksender = M|kquellmandant^mname
+.continue CHECKSOURCE ? _F|empty(M|kquellmandant) & _F|empty(M|kmandlist)
+.continue CLRTAB
+..
+!RECEIVE
+.formula M|kempfaenger = M|kzielmandant^mname
+.continue CHECKDEST ? _F|empty(M|kzielmandant) & _F|empty(M|kmandlist)
+.continue CLRTAB
+..
+!DGROUPS: build groups with database group
+.formula M|kbobjquellid = G|FALSE ? M|kbgruppieren
+.continue CLRTAB
+..
+!OGROUPS: build groups with source object ID
+.formula M|kbgruppieren = G|FALSE ? M|kbobjquellid
+.continue CLRTAB
+..
+.continue CLRTAB
+!GROUPS: Define databases
+.continue CLRTAB
+..
+!DATNAME: Name of database has changed
+.continue NODB   ? M|datnr = 127
+.continue ERROR2 ? M|datnr = 14 ; M|datnr = 52
+.continue CLRTAB
+..
+!NODB: No database wanted
+.continue CLRTAB
+..
+!CLRTAB: Clear table
+.make screen line -- ? M|tzeilen > 0
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERROR1: No database selected
+.cursor dn 0
+.error Bitte zuerst eine Datenbank bestimmen!
+.end 1
+..
+!ERROR2: Database is not allowed
+.cursor dn 0
+.error Die Datenbank 'M|dn' ist nicht erlaubt!
+.end 1
+..
+!ERROR3: client is not as source client in client list
+.cursor kquellmandant 0
+.error Quellmandant 'F|trim(M|kquellmandant^such)' in Mandantenliste nicht gefunden!
+.end 1
+..
+!ERROR4: client is not as destination client in client list
+.cursor kzielmandant 0
+.error Zielmandant 'F|trim(M|kzielmandant^such)' in Mandantenliste nicht gefunden!
+.end 1

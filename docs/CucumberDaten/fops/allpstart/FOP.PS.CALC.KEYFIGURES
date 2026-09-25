@@ -1,0 +1,960 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : allpstart/FOP.PS.CALC.KEYFIGURES
+.. Date           : 30.04.2013
+.. Version        :
+.. Author         : alltrotec/ts
+.. Copyright      : (c) 1990 - 2017 alltrotec GmbH
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+.set trans -
+..
+.input "allpstart/FOP.PS.CALC.KEYFIGURES.VAR"
+.. --> 'U|xtupvar'
+..
+..Accounts other costs of Config
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"       ? _F|defined(5|ypmsonstkost)
+!ACC1:
+.continue ACC2          ?  F|empty(5|ypmnrelkost)
+.load 8 add 5|ypmnrelkost
+.continue ACC2          ? _G|mehr
+!ACC1LINE:
+.load 8 line
+.continue ACC2          ? _G|mehr
+.continue ACC1LINE      ?  F|empty(8|konto)
+.continue ACC1LINE      ? _8|konto^dnr    = 5
+.continue ACC1LINE      ? _8|konto^gruppe = 1
+..only accounts
+.formula U|xtindex = 8|konto^nummer
+.type text xtnrelkost.xtindex           ? _F|defined(U|xtnrelkost.xtindex)
+.formula U|xtnrelkost.xtindex = 8|konto^id
+.continue ACC1LINE
+..
+!ACC2:
+.continue ACC3          ?  F|empty(5|ypmsonstkost)
+.load 8 add 5|ypmsonstkost
+.continue ACC3          ? _G|mehr
+!ACC2LINE:
+.load 8 line
+.continue ACC3          ? _G|mehr
+.continue ACC2LINE      ?  F|empty(8|konto)
+.continue ACC2LINE      ? _8|konto^dnr    = 5
+.continue ACC2LINE      ? _8|konto^gruppe = 1
+..only accounts
+.formula U|xtindex = 8|konto^nummer
+.type text xtsonstkost.xtindex          ? _F|defined(U|xtsonstkost.xtindex)
+.formula U|xtsonstkost.xtindex = 8|konto^id
+.continue ACC2LINE
+..
+!ACC3
+.continue ENDACC        ?  F|empty(5|ypmfertleist)
+.load 8 add 5|ypmfertleist
+.continue ENDACC        ? _G|mehr
+!ACC3LINE:
+.load 8 line
+.continue ENDACC        ? _G|mehr
+.continue ACC3LINE      ?  F|empty(8|konto)
+.continue ACC3LINE      ? _8|konto^dnr    = 5
+.continue ACC3LINE      ? _8|konto^gruppe = 1
+..only accounts
+.formula U|xtindex = 8|konto^nummer
+.type text xtfertleist.xtindex          ? _F|defined(U|xtfertleist.xtindex)
+.formula U|xtfertleist.xtindex = 8|konto^id
+.continue ACC3LINE
+..
+!ENDACC:
+..
+..Zeitbereich fˇÔøΩr abgeschlossene Projekte
+.. Monatsanfang des Voronats setzen
+.formula U|xdvon    = "<M-1M"
+.formula U|xdadatum = U|xdvon
+.. Monatsletzten des aktuellen Monats
+.formula U|xdbis    = ">M"
+.formula U|xdedatum = U|xdbis
+..
+.formula U|xdstatdat  = U|xdedatum
+.formula U|xdstichtag = 'U|xdbis:8'<<6 + "01"
+..
+.continue PROJECT       ? _F|empty(U|xtprojekt)
+..
+..load Projects
+..<META 7|='P86:1'>
+.load 7 group 'U|xydbgrprojekt' "!"
+!LOADPROJ:
+.continue END           ? _G|mehr
+.continue LOADNEXTPROJ  ?  7|yablage & (7|yabldat < U|xdadatum ; 7|yabldat > U|xdedatum)
+..
+.continue START
+..
+!PROJECT:
+.load 7 group 'U|xydbgrprojekt' 'U|xtprojekt'
+.continue END           ? _G|mehr
+..
+!START:
+..
+..*** key figures for quotations **********************************************
+..reset variables
+.input 'U|xtupvar'
+..
+!SALESORDER:
+..*** key figures for sales order (SalesAndPurchaseStatistics) ****************
+..reset variables
+.input 'U|xtupvar'
+..
+.formula U|xtsel = "$,,yprjmproj==" + 7|id + ";ktyp==(SalesOrder);@filingmode=(Both)"
+.load 0 group "3:22" 'U|xtsel'
+!SOLOAD:
+.continue SOSALESSTAT   ? _G|mehr
+.formula U|xianz  = U|xianz  + 1
+.formula U|xioanz = U|xioanz + 1        ? _0|ablagef
+.formula U|xiaanz = U|xiaanz + 1        ?  0|ablagef
+..
+..  .formula U|xrwert = U|xrwert + 0|sumnetto                                       ?  0|waehr = G|inland
+..  .formula U|xrwert = U|xrwert + F|fxamount(G|inland,0|sumnetto,,0|waehr,G|TRUE)  ? _0|waehr = G|inland & _0|kursfix
+..  .formula U|xrwert = U|xrwert + (0|sumnetto * 0|ewkurs)                          ? _0|waehr = G|inland &  0|kursfix
+..
+.load 0 continue
+.continue SOLOAD
+..
+!SOSALESSTAT:
+.formula U|xtsel = "$,,yprojekt==" + 7|id + ";ybezugsdatum==" + U|xdstatdat:8 + ";yekvk==(Sales);yalternativpos=(No);@filingmode=(Active)"
+.load 0 group 'U|xydbgrvkstat' 'U|xtsel'
+!SOLOADSTAT:
+.continue SOKF          ? _G|mehr
+..
+.formula U|xr1      = 0|ynwert                                                                  ? _0|ybrutto
+.formula U|xr1      = 0|ynwert   - 0|ystwert                                                    ?  0|ybrutto
+.formula U|xrwert   = U|xrwert   + U|xr1                                                        ?  0|ypland = G|inland
+.formula U|xrwert   = U|xrwert   + F|fxamount(G|inland,U|xr1,U|xdstichtag,0|ypland,G|TRUE)      ? _0|ypland = G|inland & _0|ykursfix
+.formula U|xrwert   = U|xrwert   + (U|xr1 * 0|yewkurs)                                          ? _0|ypland = G|inland &  0|ykursfix
+..
+.formula U|xr1      = 0|yeigenanteil                                                            ? _0|ybrutto
+.formula U|xr1      = 0|yeigenanteil / (1 + (0|ystsatz / 100))                                  ?  0|ybrutto
+.formula U|xrelwert = U|xrelwert + U|xr1                                                        ?  0|ypland = G|inland
+.formula U|xrelwert = U|xrelwert + F|fxamount(G|inland,U|xr1,U|xdstichtag,0|ypland,G|TRUE)      ? _0|ypland = G|inland & _0|ykursfix
+.formula U|xrelwert = U|xrelwert + (U|xr1 * 0|yewkurs)                                          ? _0|ypland = G|inland &  0|ykursfix
+..
+.formula U|xr1      = 0|yfremdanteil                                                            ? _0|ybrutto
+.formula U|xr1      = 0|yfremdanteil / (1 + (0|ystsatz / 100))                                  ?  0|ybrutto
+.formula U|xrflwert = U|xrflwert + U|xr1                                                        ?  0|ypland = G|inland
+.formula U|xrflwert = U|xrflwert + F|fxamount(G|inland,U|xr1,U|xdstichtag,0|ypland,G|TRUE)      ? _0|ypland = G|inland & _0|ykursfix
+.formula U|xrflwert = U|xrflwert + (U|xr1 * 0|yewkurs)                                          ? _0|ypland = G|inland &  0|ykursfix
+..
+.formula U|xr1      = 0|ysonstkost                                                              ? _0|ybrutto
+.formula U|xr1      = 0|ysonstkost / (1 + (0|ystsatz / 100))                                    ?  0|ybrutto
+.formula U|xrskwert = U|xrskwert + U|xr1                                                        ?  0|ypland = G|inland
+.formula U|xrskwert = U|xrskwert + F|fxamount(G|inland,U|xr1,U|xdstichtag,0|ypland,G|TRUE)      ? _0|ypland = G|inland & _0|ykursfix
+.formula U|xrskwert = U|xrskwert + (U|xr1 * 0|yewkurs)                                          ? _0|ypland = G|inland &  0|ykursfix
+..
+.formula U|xr1      = 0|yfertleist                                                              ? _0|ybrutto
+.formula U|xr1      = 0|yfertleist / (1 + (0|ystsatz / 100))                                    ?  0|ybrutto
+.formula U|xrfewert = U|xrfewert + U|xr1                                                        ?  0|ypland = G|inland
+.formula U|xrfewert = U|xrfewert + F|fxamount(G|inland,U|xr1,U|xdstichtag,0|ypland,G|TRUE)      ? _0|ypland = G|inland & _0|ykursfix
+.formula U|xrfewert = U|xrfewert + (U|xr1 * 0|yewkurs)                                          ? _0|ypland = G|inland &  0|ykursfix
+..
+..budget value
+.formula U|xr1      = 0|ybudgetwert
+.formula U|xr01wert = U|xr01wert   + U|xr1                                                      ?  0|ypland = G|inland
+.formula U|xr01wert = U|xr01wert   + F|fxamount(G|inland,U|xr1,U|xdstichtag,0|ypland,G|TRUE)    ? _0|ypland = G|inland & _0|ykursfix
+.formula U|xr01wert = U|xr01wert   + (U|xr1 * 0|yewkurs)                                        ? _0|ypland = G|inland &  0|ykursfix
+..
+..offener Liefer und Rechnungswert
+.continue SOSTATLOADNEXT        ? 0|ylimge = 0 & 0|yremge = 0
+.continue SOSTATLOADNEXT        ? 0|ymge = 0
+.continue SOSTATZUPO            ?  '0|yevtyp(L="0")' = "(12)"
+.formula U|xr1      = 0|ynwert                                                                  ? _0|ybrutto
+.formula U|xr1      = 0|ynwert - 0|ystwert                                                      ?  0|ybrutto
+.formula U|xr1      =  F|fxamount(G|inland,U|xr1,U|xdstichtag,0|ypland,G|TRUE)                  ? _0|ypland = G|inland & _0|ykursfix
+.formula U|xr1      = (U|xr1 * 0|yewkurs)                                                       ? _0|ypland = G|inland &  0|ykursfix
+..
+.formula U|xrolwert = U|xrolwert + 0|ylimge * (U|xr1 / 0|ymge)
+.formula U|xrorwert = U|xrorwert + 0|yremge * (U|xr1 / 0|ymge)
+.continue SOSTATLOADNEXT
+..
+!SOSTATZUPO:
+.formula U|xrolwert = U|xrolwert + 0|ylimge                                                     ?  0|ypland = G|inland
+.formula U|xrolwert = U|xrolwert + F|fxamount(G|inland,0|ylimge,U|xdstichtag,0|ypland,G|TRUE)   ? _0|ypland = G|inland & _0|ykursfix
+.formula U|xrolwert = U|xrolwert + (0|ylimge * 0|yewkurs)                                       ? _0|ypland = G|inland &  0|ykursfix
+.formula U|xrorwert = U|xrorwert + 0|yremge                                                     ?  0|ypland = G|inland
+.formula U|xrorwert = U|xrorwert + F|fxamount(G|inland,0|yremge,U|xdstichtag,0|ypland,G|TRUE)   ? _0|ypland = G|inland & _0|ykursfix
+.formula U|xrorwert = U|xrorwert + (0|yremge * 0|yewkurs)                                       ? _0|ypland = G|inland &  0|ykursfix
+..
+!SOSTATLOADNEXT:
+.load 0 continue
+.continue SOLOADSTAT
+..
+..
+!SOKF:
+!PS0004: key figure 0PS200004 - PRJMCOUNTSALESORDER
+.formula U|xtkennzahl = "0PS200004"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xianz
+.copy    U|xbnull     = U|xianz = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0006: key figure 0PS200006 - PRJMCOUNTFILEDSALESORDER
+.formula U|xtkennzahl = "0PS200006"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xiaanz
+.copy    U|xbnull     =  U|xiaanz = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0007: key figure 0PS200007 - PRJMSALESORDERVALUE
+.formula U|xtkennzahl = "0PS200007"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xrwert
+.copy    U|xbnull     =  U|xrwert = 0
+.input 'U|xtupkeyfigure'
+..
+..
+!PACKINGSLIP:
+..*** key figures for packing slip ********************************************
+..reset variables
+.input 'U|xtupvar'
+..
+.formula U|xtsel = "$,,projekt==" + 7|id + ";kotyp==(PackingSlip);@filingmode=(Both)"
+.load 0 group "3:2" 'U|xtsel'
+!PSLOAD:
+.continue PSKF          ? _G|mehr
+..
+.formula U|xt001  = ('0|kovom:8')<<6 + "01"
+.type real xrwert.xt001                                         ? _F|defined(U|xrwert.xt001)
+.type real xrelwert.xt001                                       ? _F|defined(U|xrelwert.xt001)
+.type real xrflwert.xt001                                       ? _F|defined(U|xrflwert.xt001)
+.type real xrskwert.xt001                                       ? _F|defined(U|xrskwert.xt001)
+.type real xrfewert.xt001                                       ? _F|defined(U|xrfewert.xt001)
+.type real xrniwert.xt001                                       ? _F|defined(U|xrniwert.xt001)
+..
+.formula U|xr1 = 0|nwert                                        ? _0|kobrutto
+.formula U|xr1 = 0|nwert / (1 + (0|stsatz / 100))               ?  0|kobrutto
+.formula U|xx1 = U|xr1                                          ?  0|pland = G|inland
+.formula U|xx1 = F|fxamount(G|inland,U|xr1,,0|pland ,G|TRUE)    ? _0|pland = G|inland & _0|kopf^kursfix
+.formula U|xx1 = (U|xr1 * 0|kopf^ewkurs)                        ? _0|pland = G|inland &  0|kopf^kursfix
+.formula U|xrwert       = U|xrwert       + U|xx1
+.formula U|xrwert.xt001 = U|xrwert.xt001 + U|xx1
+..
+.formula U|xr1 = 0|yprjmpeigenleist                             ? _0|kobrutto
+.formula U|xr1 = 0|yprjmpeigenleist / (1 + (0|stsatz / 100))    ?  0|kobrutto
+.formula U|xx1 = U|xr1                                          ?  0|pland = G|inland
+.formula U|xx1 = F|fxamount(G|inland,U|xr1,,0|pland ,G|TRUE)    ? _0|pland = G|inland & _0|kopf^kursfix
+.formula U|xx1 = (U|xr1 * 0|kopf^ewkurs)                        ? _0|pland = G|inland &  0|kopf^kursfix
+.formula U|xrelwert       = U|xrelwert       + U|xx1
+.formula U|xrelwert.xt001 = U|xrelwert.xt001 + U|xx1
+..
+.formula U|xr1 = 0|yprjmpfremdleist                             ? _0|kobrutto
+.formula U|xr1 = 0|yprjmpfremdleist / (1 + (0|stsatz / 100))    ?  0|kobrutto
+.formula U|xx1 = U|xr1                                          ?  0|pland = G|inland
+.formula U|xx1 = F|fxamount(G|inland,U|xr1,,0|pland ,G|TRUE)    ? _0|pland = G|inland & _0|kopf^kursfix
+.formula U|xx1 = (U|xr1 * 0|kopf^ewkurs)                        ? _0|pland = G|inland &  0|kopf^kursfix
+.formula U|xrflwert       = U|xrflwert       + U|xx1
+.formula U|xrflwert.xt001 = U|xrflwert.xt001 + U|xx1
+..
+.formula U|xr1 = 0|yprjmpsonstkost                              ? _0|kobrutto
+.formula U|xr1 = 0|yprjmpsonstkost  / (1 + (0|stsatz / 100))    ?  0|kobrutto
+.formula U|xx1 = U|xr1                                          ?  0|pland = G|inland
+.formula U|xx1 = F|fxamount(G|inland,U|xr1,,0|pland ,G|TRUE)    ? _0|pland = G|inland & _0|kopf^kursfix
+.formula U|xx1 = (U|xr1 * 0|kopf^ewkurs)                        ? _0|pland = G|inland &  0|kopf^kursfix
+.formula U|xrskwert       = U|xrskwert       + U|xx1
+.formula U|xrskwert.xt001 = U|xrskwert.xt001 + U|xx1
+..
+.formula U|xr1 = 0|yprjmpfertleist                              ? _0|kobrutto
+.formula U|xr1 = 0|yprjmpfertleist  / (1 + (0|stsatz / 100))    ?  0|kobrutto
+.formula U|xx1 = U|xr1                                          ?  0|pland = G|inland
+.formula U|xx1 = F|fxamount(G|inland,U|xr1,,0|pland ,G|TRUE)    ? _0|pland = G|inland & _0|kopf^kursfix
+.formula U|xx1 = (U|xr1 * 0|kopf^ewkurs)                        ? _0|pland = G|inland &  0|kopf^kursfix
+.formula U|xrfewert       = U|xrfewert       + U|xx1
+.formula U|xrfewert.xt001 = U|xrfewert.xt001 + U|xx1
+..
+..Sales: Delivered, not invoiced
+.formula U|xtsel = "$,,orig==" + 0|id + ";kotyp==(Invoice);@filingmode=(Both)"
+.load 1 group "3:2" 'U|xtsel'
+.continue PSNEXT        ? G|mehr
+.formula U|xr1 = 0|nwert                                        ? _0|kobrutto
+.formula U|xr1 = 0|nwert / (1 + (0|stsatz / 100))               ?  0|kobrutto
+.formula U|xx1 = U|xr1                                          ?  0|pland = G|inland
+.formula U|xx1 = F|fxamount(G|inland,U|xr1,,0|pland ,G|TRUE)    ? _0|pland = G|inland & _0|kopf^kursfix
+.formula U|xx1 = (U|xr1 * 0|kopf^ewkurs)                        ? _0|pland = G|inland &  0|kopf^kursfix
+.formula U|xrniwert       = U|xrniwert       + U|xx1
+.formula U|xrniwert.xt001 = U|xrniwert.xt001 + U|xx1
+..
+!PSNEXT:
+.load 0 continue
+.continue PSLOAD
+..
+..
+!PSKF:
+!PS0014: key figure 0PS200014 - PRJMPACKINGSLIPVALUE
+.formula U|xtkennzahl = "0PS200014"
+..      .formula U|xtvar      = "xrwert"
+..      .copy    U|xbmonwert  =  G|TRUE
+.formula U|xt001    = 'U|xdstichtag:8'
+.formula U|xrkfwert =  U|xrwert
+.copy    U|xbnull   =  U|xrwert= 0
+.input 'U|xtupkeyfigure'
+..
+..
+!INVOICE:
+..*** key figures for invoice *************************************************
+..reset variables
+.input 'U|xtupvar'
+..
+.formula U|xtsel = "$,,projekt==" + 7|id + ";kotyp==(Invoice);@filingmode=(Both)"
+.load 0 group "3:2" 'U|xtsel'
+!INLOAD:
+.continue INDOWNPAYMENT         ? _G|mehr
+..
+.formula U|xt001  = ('0|kopf^budat:8')<<6 + "01"
+.type real xrwert.xt001                                         ? _F|defined(U|xrwert.xt001)
+.type real xrelwert.xt001                                       ? _F|defined(U|xrelwert.xt001)
+.type real xrflwert.xt001                                       ? _F|defined(U|xrflwert.xt001)
+.type real xrskwert.xt001                                       ? _F|defined(U|xrskwert.xt001)
+.type real xrfewert.xt001                                       ? _F|defined(U|xrfewert.xt001)
+.type real xr01wert.xt001                                       ? _F|defined(U|xr01wert.xt001)
+..
+.formula U|xr1 = 0|nwert                                        ? _0|kobrutto
+.formula U|xr1 = 0|nwert / (1 + (0|stsatz / 100))               ?  0|kobrutto
+.formula U|xx1 = U|xr1                                          ?  0|pland = G|inland
+.formula U|xx1 = F|fxamount(G|inland,U|xr1,,0|pland ,G|TRUE)    ? _0|pland = G|inland & _0|kopf^kursfix
+.formula U|xx1 = (U|xr1 * 0|kopf^ewkurs)                        ? _0|pland = G|inland &  0|kopf^kursfix
+.formula U|xrwert       = U|xrwert       + U|xx1
+.formula U|xrwert.xt001 = U|xrwert.xt001 + U|xx1
+..
+.continue INNOZUPOS     ? _0|typ = G|ZUPOS
+.continue INNOZUPOS     ? _'0|art^kategorie(L=":")' = "(Downpayment)"
+..Downpayment
+.formula U|xr01wert       = U|xr01wert       + U|xx1
+.formula U|xr01wert.xt001 = U|xr01wert.xt001 + U|xx1
+..
+!INNOZUPOS
+.formula U|xr1 = 0|yprjmpeigenleist                             ? _0|kobrutto
+.formula U|xr1 = 0|yprjmpeigenleist / (1 + (0|stsatz / 100))    ?  0|kobrutto
+.formula U|xx1 = U|xr1                                          ?  0|pland = G|inland
+.formula U|xx1 = F|fxamount(G|inland,U|xr1,,0|pland ,G|TRUE)    ? _0|pland = G|inland & _0|kopf^kursfix
+.formula U|xx1 = (U|xr1 * 0|kopf^ewkurs)                        ? _0|pland = G|inland &  0|kopf^kursfix
+.formula U|xrelwert       = U|xrelwert       + U|xx1
+.formula U|xrelwert.xt001 = U|xrelwert.xt001 + U|xx1
+..
+.formula U|xr1 = 0|yprjmpfremdleist                             ? _0|kobrutto
+.formula U|xr1 = 0|yprjmpfremdleist / (1 + (0|stsatz / 100))    ?  0|kobrutto
+.formula U|xx1 = U|xr1                                          ?  0|pland = G|inland
+.formula U|xx1 = F|fxamount(G|inland,U|xr1,,0|pland ,G|TRUE)    ? _0|pland = G|inland & _0|kopf^kursfix
+.formula U|xx1 = (U|xr1 * 0|kopf^ewkurs)                        ? _0|pland = G|inland &  0|kopf^kursfix
+.formula U|xrflwert       = U|xrflwert       + U|xx1
+.formula U|xrflwert.xt001 = U|xrflwert.xt001 + U|xx1
+..
+.formula U|xr1 = 0|yprjmpsonstkost                              ? _0|kobrutto
+.formula U|xr1 = 0|yprjmpsonstkost  / (1 + (0|stsatz / 100))    ?  0|kobrutto
+.formula U|xx1 = U|xr1                                          ?  0|pland = G|inland
+.formula U|xx1 = F|fxamount(G|inland,U|xr1,,0|pland ,G|TRUE)    ? _0|pland = G|inland & _0|kopf^kursfix
+.formula U|xx1 = (U|xr1 * 0|kopf^ewkurs)                        ? _0|pland = G|inland &  0|kopf^kursfix
+.formula U|xrskwert       = U|xrskwert       + U|xx1
+.formula U|xrskwert.xt001 = U|xrskwert.xt001 + U|xx1
+..
+.formula U|xr1 = 0|yprjmpfertleist                              ? _0|kobrutto
+.formula U|xr1 = 0|yprjmpfertleist  / (1 + (0|stsatz / 100))    ?  0|kobrutto
+.formula U|xx1 = U|xr1                                          ?  0|pland = G|inland
+.formula U|xx1 = F|fxamount(G|inland,U|xr1,,0|pland ,G|TRUE)    ? _0|pland = G|inland & _0|kopf^kursfix
+.formula U|xx1 = (U|xr1 * 0|kopf^ewkurs)                        ? _0|pland = G|inland &  0|kopf^kursfix
+.formula U|xrfewert       = U|xrfewert       + U|xx1
+.formula U|xrfewert.xt001 = U|xrfewert.xt001 + U|xx1
+..
+..
+!INNEXT:
+.load 0 continue
+.continue INLOAD
+..
+.continue MAINPROJECT   ? _F|sysinfo(18)^allpstd
+..
+!INDOWNPAYMENT:
+..<META 0|='P3:24'>
+..Nur Anzahlungsrechnungen
+.formula U|xtsel = "$,,yprjmproj==" + 7|id + ";typ==(Invoice);vorganga==(Downpayment);@filingmode=(Filed)"
+.load 0 group "3:24" 'U|xtsel'
+!INDPL:
+.continue INKF          ? _G|mehr
+..
+.formula U|xt001  = ('0|budat:8')<<6 + "01"
+.type real xr02wert.xt001                                       ? _F|defined(U|xr02wert.xt001)
+..
+.continue INDPNEXT      ?  F|empty(0|ophist)
+..Wennn alles gezahlt ist, dann = Nettosumme aus Rechnung, nicht der wirklich gezahlte Betrag dafÅr aber 100%
+.continue INDPOP        ?  0|ophist^ablagef
+..
+..<META 1|='P100:2'>
+.formula U|xtsel = "$,,ophist==" + 0|ophist^id + ";opztyp==(Payment);@filingmode=(Both)"
+.load 1 group "100:2" 'U|xtsel'
+!INOPPAYMENT:
+.continue INDPNEXT      ? _G|mehr
+..wenn nicht vollstÑndig gezahlt Steuer Åber VerhÑltnis zur Nettisumme rausrechnen
+.formula U|xx1 = 0
+.formula U|xx1 = 100 * 1|budm / 0|sumbruttoinl     ? _0|sumbruttoinl = 0
+.formula U|xr02wert       = U|xr02wert       + (U|xx1 * 0|sumnettoinl / 100)
+.formula U|xr02wert.xt001 = U|xr02wert.xt001 + (U|xx1 * 0|sumnettoinl / 100)
+..  .formula U|xr02wert.xt001 = U|xr02wert.xt001 + 1|budm
+.load 1 continue
+.continue INOPPAYMENT
+..
+!INDPOP:
+.formula U|xr02wert       = U|xr02wert       + 0|sumnetto                                       ?  0|waehr = G|inland
+.formula U|xr02wert       = U|xr02wert       + F|fxamount(G|inland,0|sumnetto,,0|waehr,G|true)  ? _0|waehr = G|inland & _0|kursfix
+.formula U|xr02wert       = U|xr02wert       + (0|sumnetto * 0|ewkurs)                          ? _0|waehr = G|inland &  0|kursfix
+.formula U|xr02wert.xt001 = U|xr02wert.xt001 + 0|sumnetto                                       ?  0|waehr = G|inland
+.formula U|xr02wert.xt001 = U|xr02wert.xt001 + F|fxamount(G|inland,0|sumnetto,,0|waehr,G|true)  ? _0|waehr = G|inland & _0|kursfix
+.formula U|xr02wert.xt001 = U|xr02wert.xt001 + (0|sumnetto * 0|ewkurs)                          ? _0|waehr = G|inland &  0|kursfix
+..
+!INDPNEXT:
+.load 0 continue
+.continue INDPL
+..
+!INKF:
+!PS0020: key figure 0PS200020 - PRJMINVOICEVALUE
+.formula U|xtkennzahl = "0PS200020"
+..      .formula U|xtvar      = "xrwert"
+..      .copy    U|xbmonwert  =  G|TRUE
+.formula U|xt001    = 'U|xdstichtag:8'
+.formula U|xrkfwert =  U|xrwert
+.copy    U|xbnull   =  U|xrwert= 0
+.input 'U|xtupkeyfigure'
+..
+!PS0025: key figure 0PS200025 - PRJMINVOICEDOWNPAYMENTVALUE
+.formula U|xtkennzahl = "0PS200025"
+..      .formula U|xtvar      = "xr01wert"
+..      .copy    U|xbmonwert  =  G|TRUE
+.formula U|xrkfwert =  U|xr01wert
+.copy    U|xbnull   =  U|xr01wert= 0
+.input 'U|xtupkeyfigure'
+..
+!PS0026: key figure 0PS200026 - PRJMINVOICEDOWNPAYMENTPAID
+.formula U|xtkennzahl = "0PS200026"
+..      .formula U|xtvar      = "xr02wert"
+..      .copy    U|xbmonwert  =  G|TRUE
+.formula U|xrkfwert =  U|xr02wert
+.copy    U|xbnull   =  U|xr02wert= 0
+.input 'U|xtupkeyfigure'
+..
+..
+!MAINPROJECT:
+..*** key figures for main project ********************************************
+.continue EMAINPROJECT  ? _F|empty(7|yteilprojektzu)
+..reset variables
+.input 'U|xtupvar'
+..
+.formula U|xtsel = "$,,yteilprojektzu==" + 7|id + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrprojekt' 'U|xtsel'
+!MPRLOAD:
+.continue MPRSPACC      ? _G|mehr
+..
+.formula U|xianz  = U|xianz  + 1
+.formula U|xioanz = U|xioanz + 1        ? _0|ystatusk = "FTAB" & _0|ystatusk = "ABS" & _0|ystatusk = "08"
+.formula U|xiaanz = U|xiaanz + 1        ?  0|ystatusk = "FTAB" ;  0|ystatusk = "ABS" ;  0|ystatusk = "08"
+.formula U|xrwert = U|xrwert + 0|ytpwert
+..
+.load 0 continue
+.continue MPRLOAD
+..
+!MPRSPACC:SubprojectAccounting
+.formula U|xtsel = "$,,yhauptprojekt==" + 7|id + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrtpverrechanf' 'U|xtsel'
+.continue MPRKF         ? _G|mehr
+!MPRLSPACC:
+..
+.formula U|xr01wert = U|xr01wert + 0|ybetrag    ?  F|empty(0|ytransaktion)
+.formula U|xr02wert = U|xr02wert + 0|ybetrag    ? _F|empty(0|ytransaktion)
+..
+.load 0 continue
+.continue MPRLSPACC     ?  G|mehr
+..
+!MPRKF:
+!PS0029: key figure 0PS200029 - PRJMNUMBERSUBPROJECTS
+.formula U|xtkennzahl = "0PS200029"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xianz
+.copy    U|xbnull     =  U|xianz = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0030: key figure 0PS200030 - PRJMNUMBEROPENSUBPROJECTS
+.formula U|xtkennzahl = "0PS200030"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xioanz
+.copy    U|xbnull     =  U|xioanz = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0032: key figure 0PS200032 - PRJMINTERNALORDERVALUE
+.formula U|xtkennzahl = "0PS200032"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xrwert
+.copy    U|xbnull     =  U|xrwert = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0033: key figure 0PS200033 - PRJMREQUSUBPROJECTACCOUNTING
+.formula U|xtkennzahl = "0PS200033"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xr01wert
+.copy    U|xbnull     =  U|xr01wert = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0034: key figure 0PS200034 - PRJMRELEASSUBPROJECTACCOUNTING
+.formula U|xtkennzahl = "0PS200034"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xr02wert
+.copy    U|xbnull     =  U|xr02wert = 0
+.input 'U|xtupkeyfigure'
+..
+!EMAINPROJECT:
+!SUBPROJECT:
+..*** key figures for sub project *********************************************
+.continue ESUBPROJECT   ?  F|empty(7|yteilprojektzu)
+..reset variables
+.input 'U|xtupvar'
+..
+.formula U|xtsel = "$,,yprojekt==" + 7|id + ";ybezugsdatum==" + U|xdstatdat:8 + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrprojstat' 'U|xtsel'
+!SPLOAD:
+.continue SPRSPACC      ? _G|mehr
+..
+.formula U|xrwert   = U|xrwert   + 0|ytpaufwert
+.formula U|xrelwert = U|xrelwert + 0|ytpanteigenleist
+.formula U|xrflwert = U|xrflwert + 0|ytpantfremdleist
+.formula U|xrskwert = U|xrskwert + 0|ytpantsonstkost
+.formula U|xrfewert = U|xrfewert + 0|ytpantfertleist
+..
+!SPRSPACC:SubprojectAccounting
+.formula U|xtsel = "$,,yteilprojekt==" + 7|id + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrtpverrechanf' 'U|xtsel'
+.continue SPRKF         ? _G|mehr
+!SPRLSPACC:
+.formula U|xr01wert   = U|xr01wert   + 0|ybetrag        ?  F|empty(0|ytransaktion)
+.formula U|xr01elwert = U|xr01elwert + 0|yvaeigenleist  ?  F|empty(0|ytransaktion)
+.formula U|xr01flwert = U|xr01flwert + 0|yvafremdleist  ?  F|empty(0|ytransaktion)
+.formula U|xr01skwert = U|xr01skwert + 0|yvasonstkost   ?  F|empty(0|ytransaktion)
+.formula U|xr01fewert = U|xr01fewert + 0|yvafertleist   ?  F|empty(0|ytransaktion)
+.formula U|xr02wert   = U|xr02wert   + 0|ybetrag        ? _F|empty(0|ytransaktion)
+.formula U|xr02elwert = U|xr02elwert + 0|yvaeigenleist  ? _F|empty(0|ytransaktion)
+.formula U|xr02flwert = U|xr02flwert + 0|yvafremdleist  ? _F|empty(0|ytransaktion)
+.formula U|xr02skwert = U|xr02skwert + 0|yvasonstkost   ? _F|empty(0|ytransaktion)
+.formula U|xr02fewert = U|xr02fewert + 0|yvafertleist   ? _F|empty(0|ytransaktion)
+..
+.load 0 continue
+.continue SPRLSPACC     ?  G|mehr
+..
+!SPRKF:
+!PS0035: key figure 0PS200035 - PRJMINTERNALORDERVALUE
+.formula U|xtkennzahl = "0PS200035"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xrwert
+.copy    U|xbnull     =  U|xrwert   = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0040: key figure 0PS200040 - PRJMSPREQUSUBPROJECTACCINTACT
+.formula U|xtkennzahl = "0PS200040"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xr01wert
+.copy    U|xbnull     =  U|xr01wert = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0045: key figure 0PS200045 - PRJMSPRELEASSUBPROJECTACC
+.formula U|xtkennzahl = "0PS200045"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xr02wert
+.copy    U|xbnull     =  U|xr02wert = 0
+.input 'U|xtupkeyfigure'
+..
+!ESUBPROJECT:
+!INTERNALACTIVITY:
+..*** key figures for internal activity ***************************************
+..reset variables
+.input 'U|xtupvar'
+..
+.formula U|xtsel = "$,,yprojekt==" + 7|id + ";ybezugsdatum==" + U|xdstatdat:8 + ";yistblatt==1;ybprojektversion=(No);@filingmode=(Active)"
+.load 0 group 'U|xydbgrpvstat' 'U|xtsel'
+.continue EIALPVSTAT    ? _G|mehr
+!IALPVSTAT:
+.formula U|xr01wert   = U|xr01wert + 0|ypvsollstd
+.formula U|xr02wert   = U|xr02wert + 0|ypvplanstd
+.formula U|xr03wert   = U|xr03wert + 0|ypviststd
+..
+.load 0 continue
+.continue IALPVSTAT     ?  G|mehr
+!EIALPVSTAT:
+..
+.formula U|xtsel = "$,,yprojekt==" + 7|id + ";yadatum<=" + U|xdstatdat:8 + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrlnachweis' 'U|xtsel'
+.continue IAKF          ? _G|mehr
+!IALACTREP:
+..  .formula U|xr03wert   = U|xr03wert + 0|yarbzeit
+.formula U|xr04wert   = U|xr04wert + 0|yarbzeit         ? 0|ypersonal^yprjmperstypk = "EM"
+.formula U|xr05wert   = U|xr05wert + 0|yarbzeit         ? 0|ypersonal^yprjmperstypk = "FP"
+.formula U|xr06wert   = U|xr06wert + 0|yfaktzeit
+..
+.continue IANOPS        ? F|empty(0|ylsposid) ; 0|ylsposid = "(0,0,0)"
+.load 9 group "P3:2" '0|ylsposid'
+.continue IANOPS        ? _G|mehr
+.continue IANOPS        ?  9|kovom > U|xdstatdat
+.copy U|xb1 = G|TRUE
+!IANOPS:
+.continue IANOINV       ? F|empty(0|yreposid) ; 0|yreposid = "(0,0,0)"
+.load 9 group "P3:2" '0|yreposid'
+.continue IANOINV       ? _G|mehr
+.continue IANOINV       ?  9|kopf^budat > U|xdstatdat
+.copy U|xb2 = G|TRUE
+!IANOINV:
+.formula U|xr07wert   = U|xr07wert + 0|yfaktzeit        ? _U|xb1 & _U|xb2
+.formula U|xr08wert   = U|xr08wert + 0|yfaktzeit        ?  U|xb1
+.formula U|xr09wert   = U|xr09wert + 0|yfaktzeit        ?  U|xb2
+..
+.copy U|xb1 = G|false
+.copy U|xb2 = G|false
+..
+.load 0 continue
+.continue IALACTREP     ?  G|mehr
+..
+!IAKF:
+!PS0050: key figure 0PS200050 - PRJMINTACTBUDGETHOURS
+.formula U|xtkennzahl = "0PS200050"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xr01wert
+.copy    U|xbnull     =  U|xr01wert = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0051: key figure 0PS200051 - PRJMINTACTPLANHOURS
+.formula U|xtkennzahl = "0PS200051"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xr02wert
+.copy    U|xbnull     =  U|xr02wert = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0052: key figure 0PS200052 - PRJMINTACTACTUALHOURS
+.formula U|xtkennzahl = "0PS200052"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xr03wert
+.copy    U|xbnull     =  U|xr03wert = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0053: key figure 0PS200053 - PRJMINTACTHOURSINTERNALSTAFF
+.formula U|xtkennzahl = "0PS200053"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xr04wert
+.copy    U|xbnull     =  U|xr04wert = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0054: key figure 0PS200054 - PRJMINTACTHOURSEXTERNALSTAFF
+.formula U|xtkennzahl = "0PS200054"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xr05wert
+.copy    U|xbnull     =  U|xr05wert = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0055: key figure 0PS200055 - PRJMINTACTBILLABLEHOURS
+.formula U|xtkennzahl = "0PS200055"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xr06wert
+.copy    U|xbnull     =  U|xr06wert = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0056: key figure 0PS200056 - PRJMINTACTUNBILLEDHOURS
+.formula U|xtkennzahl = "0PS200056"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xr07wert
+.copy    U|xbnull     =  U|xr07wert = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0057: key figure 0PS200057 - PRJMINTACTDELIVEREDHOURS
+.formula U|xtkennzahl = "0PS200057"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xr08wert
+.copy    U|xbnull     =  U|xr08wert = 0
+.input 'U|xtupkeyfigure'
+..
+!PS0058: key figure 0PS200058 - PRJMINTACTBILLEDHOURS
+.formula U|xtkennzahl = "0PS200058"
+.formula U|xt001      = 'U|xdstichtag:8'
+.formula U|xrkfwert   =  U|xr09wert
+.copy    U|xbnull     =  U|xr09wert = 0
+.input 'U|xtupkeyfigure'
+..
+!REQUEST:
+..*** key figures for requests **********************************************
+..reset variables
+.input 'U|xtupvar'
+..
+..
+!PURCHASEORDER:
+..*** key figures for PurchaseOrder *******************************************
+..reset variables
+.input 'U|xtupvar'
+..
+.formula U|xtsel = "$,,yprjmproj==" + 7|id + ";ktyp==(PurchaseOrder);@filingmode=(Both)"
+.load 0 group "4:22" 'U|xtsel'
+!POLOAD:
+.continue POSALESSTAT   ? _G|mehr
+.formula U|xianz  = U|xianz  + 1
+.formula U|xioanz = U|xioanz + 1        ? _0|ablagef
+.formula U|xiaanz = U|xiaanz + 1        ?  0|ablagef
+..
+.load 0 continue
+.continue POLOAD
+..
+!POSALESSTAT:
+.formula U|xtsel = "$,,yprojekt==" + 7|id + ";ybezugsdatum<=" + U|xdstatdat:8 + ";yekvk==(Purchasing);yalternativpos=(No);@filingmode=(Active)"
+.load 0 group 'U|xydbgrvkstat' 'U|xtsel'
+!POLOADSTAT:
+.continue POKF          ? _G|mehr
+..
+.formula U|xt001   = ('0|ybezugsdatum:8')<<6 + "01"
+.formula U|xtindex = 0|ykonto^nummer
+..
+.formula U|xr1 = 0|ynwert                                                       ? _0|ybrutto
+.formula U|xr1 = 0|ynwert   - 0|ystwert                                         ?  0|ybrutto
+.formula U|xr1 = F|fxamount(G|inland,U|xr1,U|xdstichtag,0|ypland,G|TRUE)        ? _0|ypland = G|inland & _0|ykursfix
+.formula U|xr1 = U|xr1 * 0|yewkurs                                              ? _0|ypland = G|inland &  0|ykursfix
+..
+.continue POOVAL                                                                ? _0|ybezugsdatum = U|xdstatdat
+..
+.formula U|xrwert   = U|xrwert   + U|xr1
+..
+.formula U|xr03wert = U|xr03wert + U|xr1                                        ?  F|empty(0|yablagen)
+..
+.copy U|xb1 = G|TRUE                                                            ? _F|defined(U|xtsonstkost.xtindex) & _F|defined(U|xtfertleist.xtindex) & _F|defined(U|xtnrelkost.xtindex)
+.copy U|xb2 = G|TRUE                                                            ?  F|defined(U|xtsonstkost.xtindex) ;  F|defined(U|xtfertleist.xtindex) ;  F|defined(U|xtnrelkost.xtindex)
+..
+.formula U|xrflwert = U|xrflwert + U|xr1                                        ?  U|xb1
+.formula U|xrskwert = U|xrskwert + U|xr1                                        ?  U|xb2
+..
+!POOVAL:
+..offener Liefer und Rechnungswert
+.continue POSTATLOADNEXT        ? 0|ylimge = 0 & 0|yremge = 0
+.continue POSTATLOADNEXT        ? 0|ymge = 0
+..
+.type real xr01wert.xt001                                                       ? _F|defined(U|xr01wert.xt001)
+.type real xr01flwert.xt001                                                     ? _F|defined(U|xr01flwert.xt001)
+.type real xr01skwert.xt001                                                     ? _F|defined(U|xr01skwert.xt001)
+.type real xr02wert.xt001                                                       ? _F|defined(U|xr02wert.xt001)
+.type real xr02flwert.xt001                                                     ? _F|defined(U|xr02flwert.xt001)
+.type real xr02skwert.xt001                                                     ? _F|defined(U|xr02skwert.xt001)
+..
+.continue POSTATZUPO            ?  '0|yevtyp(L="0")' = "(12)"
+..
+.formula U|xr01wert.xt001   = U|xr01wert.xt001   + 0|ylimge * (U|xr1 / 0|ymge)
+.formula U|xr01flwert.xt001 = U|xr01flwert.xt001 + 0|ylimge * (U|xr1 / 0|ymge)  ? U|xb1
+.formula U|xr01skwert.xt001 = U|xr01skwert.xt001 + 0|ylimge * (U|xr1 / 0|ymge)  ? U|xb2
+.formula U|xr02wert.xt001   = U|xr02wert.xt001   + 0|yremge * (U|xr1 / 0|ymge)
+.formula U|xr02flwert.xt001 = U|xr02flwert.xt001 + 0|yremge * (U|xr1 / 0|ymge)  ? U|xb1
+.formula U|xr02skwert.xt001 = U|xr02skwert.xt001 + 0|yremge * (U|xr1 / 0|ymge)  ? U|xb2
+.continue POSTATLOADNEXT
+..
+!POSTATZUPO:
+.formula U|xr2 = 0|ylimge                                                       ?  0|ypland = G|inland
+.formula U|xr2 = F|fxamount(G|inland,0|ylimge,U|xdstichtag,0|ypland,G|TRUE)     ? _0|ypland = G|inland & _0|ykursfix
+.formula U|xr2 = 0|ylimge * 0|yewkurs                                           ? _0|ypland = G|inland &  0|ykursfix
+.formula U|xr01wert.xt001   = U|xr01wert.xt001   + U|xr2
+.formula U|xr01flwert.xt001 = U|xr01flwert.xt001 + U|xr2                        ?  U|xb1
+.formula U|xr01skwert.xt001 = U|xr01skwert.xt001 + U|xr2                        ?  U|xb2
+..
+.formula U|xr2 = 0|yremge                                                       ?  0|ypland = G|inland
+.formula U|xr2 = F|fxamount(G|inland,0|yremge,U|xdstichtag,0|ypland,G|TRUE)     ? _0|ypland = G|inland & _0|ykursfix
+.formula U|xr2 = 0|yremge * 0|yewkurs                                           ? _0|ypland = G|inland &  0|ykursfix
+.formula U|xr02wert.xt001   = U|xr02wert.xt001   + U|xr2
+.formula U|xr02flwert.xt001 = U|xr02flwert.xt001 + U|xr2                        ?  U|xb1
+.formula U|xr02skwert.xt001 = U|xr02skwert.xt001 + U|xr2                        ?  U|xb2
+..
+!POSTATLOADNEXT:
+.load 0 continue
+.continue POLOADSTAT
+..
+..
+!POKF:
+!PS0064: key figure 0PS200064 - PRJMPURCHASEORDERTOTALVALUE
+.formula U|xtkennzahl = "0PS200064"
+.formula U|xt001    = 'U|xdstichtag:8'
+.formula U|xrkfwert =  U|xrwert
+.copy    U|xbnull   =  U|xrwert= 0
+.input 'U|xtupkeyfigure'
+..
+..
+!PPACKINGSLIP:
+..*** key figures for purchase packing slip ********************************************
+..reset variables
+.input 'U|xtupvar'
+..
+.formula U|xtsel = "$,,projekt==" + 7|id + ";kotyp==(PackingSlip);@filingmode=(Both)"
+.load 0 group "4:2" 'U|xtsel'
+!PPSLOAD:
+.continue PPSKF         ? _G|mehr
+.formula U|xtindex = 0|konto^nummer
+..
+.formula U|xt001  = ('0|kovom:8')<<6 + "01"
+.type real xrwert.xt001                                         ? _F|defined(U|xrwert.xt001)
+.type real xrflwert.xt001                                       ? _F|defined(U|xrflwert.xt001)
+.type real xrskwert.xt001                                       ? _F|defined(U|xrskwert.xt001)
+.type real xrniwert.xt001                                       ? _F|defined(U|xrniwert.xt001)
+..
+.formula U|xr1 = 0|nwert                                        ? _0|kobrutto
+.formula U|xr1 = 0|nwert / (1 + (0|stsatz / 100))               ?  0|kobrutto
+.formula U|xx1 = U|xr1                                          ?  0|pland = G|inland
+.formula U|xx1 = F|fxamount(G|inland,U|xr1,,0|pland ,G|TRUE)    ? _0|pland = G|inland & _0|kopf^kursfix
+.formula U|xx1 = (U|xr1 * 0|kopf^ewkurs)                        ? _0|pland = G|inland &  0|kopf^kursfix
+.formula U|xrwert       = U|xrwert       + U|xx1
+.formula U|xrwert.xt001 = U|xrwert.xt001 + U|xx1
+..
+.copy U|xb1 = G|TRUE                                            ? _F|defined(U|xtsonstkost.xtindex) & _F|defined(U|xtfertleist.xtindex) & _F|defined(U|xtnrelkost.xtindex)
+.copy U|xb2 = G|TRUE                                            ?  F|defined(U|xtsonstkost.xtindex) ;  F|defined(U|xtfertleist.xtindex) ;  F|defined(U|xtnrelkost.xtindex)
+..
+.formula U|xrflwert       = U|xrflwert       + U|xr1            ?  U|xb1
+.formula U|xrflwert.xt001 = U|xrflwert.xt001 + U|xr1            ?  U|xb1
+.formula U|xrskwert       = U|xrskwert       + U|xr1            ?  U|xb2
+.formula U|xrskwert.xt001 = U|xrskwert.xt001 + U|xr1            ?  U|xb2
+..
+..Purchase: Delivered, not invoiced
+.formula U|xtsel = "$,,orig==" + 0|id + ";kotyp==(Invoice);@filingmode=(Both)"
+.load 1 group "4:2" 'U|xtsel'
+.continue PPSNEXT       ? G|mehr
+.formula U|xr1 = 0|nwert                                        ? _0|kobrutto
+.formula U|xr1 = 0|nwert / (1 + (0|stsatz / 100))               ?  0|kobrutto
+.formula U|xx1 = U|xr1                                          ?  0|pland = G|inland
+.formula U|xx1 = F|fxamount(G|inland,U|xr1,,0|pland ,G|TRUE)    ? _0|pland = G|inland & _0|kopf^kursfix
+.formula U|xx1 = (U|xr1 * 0|kopf^ewkurs)                        ? _0|pland = G|inland &  0|kopf^kursfix
+.formula U|xrniwert       = U|xrniwert       + U|xx1
+.formula U|xrniwert.xt001 = U|xrniwert.xt001 + U|xx1
+..
+!PPSNEXT:
+.load 0 continue
+.continue PPSLOAD
+..
+..
+!PPSKF:
+!PS0073: key figure 0PS200073 - PRJMPURCHPACKINGSLIPVALUE
+.formula U|xtkennzahl = "0PS200073"
+..      .formula U|xtvar      = "xrwert"
+..      .copy    U|xbmonwert  =  G|TRUE
+.formula U|xt001    = 'U|xdstichtag:8'
+.formula U|xrkfwert =  U|xrwert
+.copy    U|xbnull   =  U|xrwert= 0
+.input 'U|xtupkeyfigure'
+..
+..
+!PINVOICE:
+..*** key figures for purchase invoice *************************************************
+..reset variables
+.input 'U|xtupvar'
+..
+.formula U|xtsel = "$,,projekt==" + 7|id + ";kotyp==(Invoice);@filingmode=(Both)"
+.load 0 group "4:2" 'U|xtsel'
+!PINLOAD:
+.continue PINDOWNPAYMENT        ? _G|mehr
+..
+.formula U|xtindex = 0|konto^nummer
+.copy U|xb1 = G|TRUE                                            ? _F|defined(U|xtsonstkost.xtindex) & _F|defined(U|xtfertleist.xtindex) & _F|defined(U|xtnrelkost.xtindex)
+.copy U|xb2 = G|TRUE                                            ?  F|defined(U|xtsonstkost.xtindex) ;  F|defined(U|xtfertleist.xtindex) ;  F|defined(U|xtnrelkost.xtindex)
+..
+.formula U|xt001  = ('0|kopf^budat:8')<<6 + "01"
+.type real xrwert.xt001                                         ? _F|defined(U|xrwert.xt001)
+.type real xrflwert.xt001                                       ? _F|defined(U|xrflwert.xt001)
+.type real xrskwert.xt001                                       ? _F|defined(U|xrskwert.xt001)
+.type real xr01wert.xt001                                       ? _F|defined(U|xr01wert.xt001)
+..
+.formula U|xr1 = 0|nwert                                        ? _0|kobrutto
+.formula U|xr1 = 0|nwert / (1 + (0|stsatz / 100))               ?  0|kobrutto
+.formula U|xx1 = U|xr1                                          ?  0|pland = G|inland
+.formula U|xx1 = F|fxamount(G|inland,U|xr1,,0|pland ,G|TRUE)    ? _0|pland = G|inland & _0|kopf^kursfix
+.formula U|xx1 = (U|xr1 * 0|kopf^ewkurs)                        ? _0|pland = G|inland &  0|kopf^kursfix
+.formula U|xrwert       = U|xrwert       + U|xx1
+.formula U|xrwert.xt001 = U|xrwert.xt001 + U|xx1
+..
+.formula U|xrflwert       = U|xrflwert       + U|xr1            ?  U|xb1
+.formula U|xrflwert.xt001 = U|xrflwert.xt001 + U|xr1            ?  U|xb1
+.formula U|xrskwert       = U|xrskwert       + U|xr1            ?  U|xb2
+.formula U|xrskwert.xt001 = U|xrskwert.xt001 + U|xr1            ?  U|xb2
+..
+.continue PINNEXT               ? _0|typ = G|ZUPOS
+.continue PINNEXT               ? _'0|art^kategorie(L=":")' = "(Downpayment)"
+..Downpayment
+.formula U|xr01wert       = U|xr01wert       + U|xx1
+.formula U|xr01wert.xt001 = U|xr01wert.xt001 + U|xx1
+..
+!PINNEXT:
+.load 0 continue
+.continue PINLOAD
+..
+!PINDOWNPAYMENT:
+..<META 0|='P4:24'>
+..nur Anzahlungsrechnungen
+.formula U|xtsel = "$,,yprjmproj==" + 7|id + ";typ==(Invoice);vorganga==(Downpayment);@filingmode=(Filed)"
+.load 0 group "4:24" 'U|xtsel'
+!PINDPL:
+.continue PINKF         ? _G|mehr
+..
+.formula U|xt001  = ('0|budat:8')<<6 + "01"
+.type real xr02wert.xt001                                       ? _F|defined(U|xr02wert.xt001)
+..
+.continue PINDPNEXT     ?  F|empty(0|ophist)
+.continue PINDPOP       ?  0|ophist^ablagef
+..
+..<META 1|='P100:2'>
+.formula U|xtsel = "$,,ophist==" + 0|ophist^id + ";opztyp==(Payment);@filingmode=(Both)"
+.load 1 group "100:2" 'U|xtsel'
+!PINOPPAYMENT:
+.continue PINDPNEXT     ? _G|mehr
+.formula U|xx1 = 0
+.formula U|xx1 = 100 * 1|budm / 0|sumbruttoinl     ? _0|sumbruttoinl = 0
+.formula U|xr02wert       = U|xr02wert       + (U|xx1 * 0|sumnettoinl / 100)
+.formula U|xr02wert.xt001 = U|xr02wert.xt001 + (U|xx1 * 0|sumnettoinl / 100)
+.load 1 continue
+.continue PINOPPAYMENT
+..
+!PINDPOP:
+.formula U|xr02wert       = U|xr02wert       + 0|sumnetto                                       ?  0|land = G|inland
+.formula U|xr02wert       = U|xr02wert       + F|fxamount(G|inland,0|sumnetto,,0|land,G|true)   ? _0|land = G|inland & _0|kursfix
+.formula U|xr02wert       = U|xr02wert       + (0|sumnetto * 0|ewkurs)                          ? _0|land = G|inland &  0|kursfix
+.formula U|xr02wert.xt001 = U|xr02wert.xt001 + 0|sumnetto                                       ?  0|land = G|inland
+.formula U|xr02wert.xt001 = U|xr02wert.xt001 + F|fxamount(G|inland,0|sumnetto,,0|land,G|true)   ? _0|land = G|inland & _0|kursfix
+.formula U|xr02wert.xt001 = U|xr02wert.xt001 + (0|sumnetto * 0|ewkurs)                          ? _0|land = G|inland &  0|kursfix
+..
+!PINDPNEXT:
+.load 0 continue
+.continue PINDPL
+..
+!PINKF:
+!PS0077: key figure 0PS200077 - PRJMPURCHINVOICEVALUE
+.formula U|xtkennzahl = "0PS200077"
+..      .formula U|xtvar      = "xrwert"
+..      .copy    U|xbmonwert  =  G|TRUE
+.formula U|xt001    = 'U|xdstichtag:8'
+.formula U|xrkfwert =  U|xrwert
+.copy    U|xbnull   =  U|xrwert= 0
+.input 'U|xtupkeyfigure'
+..
+!PS0080: key figure 0PS200080 - PRJMPURCHINVOICEDOWNPAYMENTVAL
+.formula U|xtkennzahl = "0PS200080"
+..      .formula U|xtvar      = "xr01wert"
+..      .copy    U|xbmonwert  =  G|TRUE
+.formula U|xrkfwert =  U|xr01wert
+.copy    U|xbnull   =  U|xr01wert= 0
+.input 'U|xtupkeyfigure'
+..
+!PS0081: key figure 0PS200081 - PRJMpurchINVOICEDOWNPAYMENTPAID
+.formula U|xtkennzahl = "0PS200081"
+..      .formula U|xtvar      = "xr02wert"
+..      .copy    U|xbmonwert  =  G|TRUE
+.formula U|xrkfwert =  U|xr02wert
+.copy    U|xbnull   =  U|xr02wert= 0
+.input 'U|xtupkeyfigure'
+..
+..
+!LOADNEXTPROJ:
+.load 7 continue
+.continue LOADPROJ
+..
+..
+!END:
+.continue

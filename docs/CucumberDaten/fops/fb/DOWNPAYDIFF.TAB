@@ -1,0 +1,373 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..
+..  FOP-Name       : DOWNPAYDIFF.TAB
+..  Autor          : cl
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       :
+..
+..*****************************************************************************
+.set trans -
+.type ID3:22.24 xvkvorgang   ? _F|defined(U|xvkvorgang)
+.type ID4:22.24 xekvorgang   ? _F|defined(U|xekvorgang)
+.type ARTR53000 xbubetr      ? _F|defined(U|xbubetr)
+.type P3:1.24   xrechvk      ? _F|defined(U|xrechvk)
+.type P4:1.24   xrechek      ? _F|defined(U|xrechek)
+.type bool      xbinhier     ? _F|defined(U|xbinhier)
+.type ARTR53000 xmerkpreis   ? _F|defined(U|xmerkpreis)
+.type bool      xnext        ? _F|defined(U|xnext)
+.type text      xsel         ? _F|defined(U|xsel)
+.type text      xausgabefile ? _F|defined(U|xausgabefile)
+.type text      xend         ? _F|defined(U|xend)
+.type text      xgroup       ? _F|defined(U|xgroup)
+.type text      xopts1       ? _F|defined(U|xopts1)
+.type text      xopts2       ? _F|defined(U|xopts2)
+.type text      xname        ? _F|defined(U|xname)
+.type text      xi           ? _F|defined(U|xi)
+.type text      xsys         ? _F|defined(U|xsys)
+.type P3:2.22   x1           ? _F|defined(U|x1) & M|bverkauf
+.type P4:2.22   x1           ? _F|defined(U|x1) & M|beinkauf
+.type P3:1.24   x2           ? _F|defined(U|x2) & M|bverkauf
+.type P4:1.24   x2           ? _F|defined(U|x2) & M|beinkauf
+.type P3:1.2    x3           ? _F|defined(U|x3) & M|bverkauf
+.type P4:1.2    x3           ? _F|defined(U|x3) & M|beinkauf
+.type text      x4 x5 x6 x8 x9 x10 x11 x12 x13 x14
+.type P6:0      x7           ? _F|defined(U|x7)
+.type P6:0      x15          ? _F|defined(U|x15)
+.type bool      xnextline    ? _F|defined(U|xnextline)
+.type PS100:21  x16          ? _F|defined(U|x16)
+.type P100:2    x17          ? _F|defined(U|x17)
+.type A11       xname1       ? _F|defined(U|xname1)
+.type A11       xname2       ? _F|defined(U|xname2)
+..
+.file -tempname U|xausgabefile
+.file -tempname U|xend
+..
+.formula U|xbubetr = 0
+.formula U|xrechvk = ""       ? M|bverkauf
+.formula U|xrechek = ""       ? M|beinkauf
+.copy U|xbinhier = G|FALSE
+.copy U|xnext = G|FALSE
+.copy U|xnextline = G|FALSE
+.formula U|xmerkpreis = 0
+..
+.continue ANZRE ? (M|binrechnung ; M|binschluss)
+.formula U|xvkvorgang = M|auftrag^id ?  M|bverkauf & _F|empty(M|auftrag)
+.formula U|xekvorgang = M|bestellung^id ?  M|beinkauf & _F|empty(M|bestellung)
+..
+!AUBE: Selektion Auftrag / Bestellung
+.formula M|select = "$,,"
+.formula M|select = M|select + ";okopf^id=" + U|xvkvorgang    ?  M|bverkauf & _F|empty(M|auftrag)
+.formula M|select = M|select + ";okopf^id=" + U|xekvorgang    ?  M|beinkauf & _F|empty(M|bestellung)
+.formula M|select = M|select + ";konto=" + M|anzkonto^id       ? _F|empty(M|anzkonto)
+.. nur schlussgerechnete Zeilen (in Auftrag/Bestellung muss ein * stehen)
+.formula M|select = M|select + ";status<>`"
+.formula M|select = M|select + ";treart="
+.formula M|select = M|select + ";verw="
+.formula M|select = M|select + ";pwert="
+.formula M|select = M|select + ";kopf="
+.formula M|select = M|select + ";kategorie=(Downpayment);@ablageart=(Both)"
+.formula M|select = M|select + ";@ordnung=treart,kategorie,kopf,verw"
+..
+.load 0 sales 'M|select'      ? M|bverkauf
+.load 0 purchasing 'M|select' ? M|beinkauf
+.continue ERROR1 ? _G|mehr
+.continue TAB
+..
+!SEL2
+.set trans +
+.formula M|hinweis = "Der Vorgang ist noch nicht abgeschlossen."  ? F|empty(M|zabu) & M|tzeilen > 0
+.set trans -
+.load 0 sales      ? M|bverkauf
+.load 0 purchasing ? M|beinkauf
+.continue END ? _G|mehr
+.copy U|xnext = G|FALSE
+.continue TAB
+..
+!ANZRE: Selektion orig bestimmen
+.formula M|select = "$,,"
+.formula M|select = M|select + ";kopf=" + 'M|auftrag^id'    ?  M|bverkauf & _F|empty(M|auftrag)
+.formula M|select = M|select + ";kopf=" + 'M|bestellung^id' ?  M|beinkauf & _F|empty(M|bestellung)
+.formula M|select = M|select + ";@gruppe=2;kategorie=(Downpayment);@ablageart=(Both)"
+..
+.load 0 sales 'M|select'      ? M|bverkauf
+.load 0 purchasing 'M|select' ? M|beinkauf
+.continue ERROR1 ? _G|mehr
+.formula U|xvkvorgang = 0|okopf^id    ? M|bverkauf
+.formula U|xekvorgang = 0|okopf^id    ? M|beinkauf
+.continue AUBE
+..
+!TAB
+.make screen line +O
+.assign M|aunummer = 0|okopf   ? M|bverkauf & (M|binrechnung ; M|binschluss)
+.assign M|benummer = 0|okopf   ? M|beinkauf & (M|binrechnung ; M|binschluss)
+.assign M|aunummer = M|auftrag     ? M|bverkauf & M|binauftrag
+.assign M|benummer = M|bestellung  ? M|beinkauf & M|binbestellung
+.assign M|konto    = 0|konto
+.assign M|rechvk   = 0|kopf        ? M|bverkauf
+.assign M|rechek   = 0|kopf        ? M|beinkauf
+.assign M|posrechvk = 0|id         ? M|bverkauf
+.assign M|posrechek = 0|id         ? M|beinkauf
+.. A11 Anzahlung = "(Downpayment)" ; Rechnung = "(Invoice)"
+.assign M|vorganga = 0|treart
+.assign M|ophist   = 0|kopf^ophist
+.assign M|opz      = 0|kopf^opz
+.copy M|waehr      = 0|kopf^waehr    ? M|bverkauf
+.copy M|waehr      = 0|kopf^erfwaehr ? M|beinkauf
+.formula M|preis   = 0|pwert
+.formula U|xmerkpreis = M|preis
+.formula M|select = "$,,beleg="+'M|rechvk^nummer'  ?  F|empty(M|ophist) & M|bverkauf
+.formula M|select = "$,,beleg="+'M|rechek^nummer'  ?  F|empty(M|ophist) & M|beinkauf
+.load 3 entry 'M|select'                           ?  F|empty(M|ophist)
+.continue SEL2                                     ? _G|mehr
+.continue KONTO                                    ?  F|empty(M|ophist)
+.load 3 object 'M|ophist^id'                       ? _F|empty(M|ophist)
+.continue SEL2                                     ? _G|mehr
+..
+!L3INE
+.load 3 line
+.continue SEL2 ? _G|mehr
+.. A243 Zahlung = "(Payment)" ; Rechnung = "(Invoice)" ; Ausbuchung = "(DebitOI)" ; Verrechnung = "(Clearing)"
+.. AS11 Vorgangsart Anzahlung = "(Downpayment)"
+.continue L3INE ? _(F|equals(3|opztyp, "(Payment)") ; F|equals(3|opztyp, "(DebitOI)") ; F|equals(3|opztyp, "(Clearing)")) & F|equals(M|vorganga, "(Downpayment)")
+.continue L3INE ? _F|equals(3|opztyp, "(Invoice)") & F|equals(M|vorganga, "(Invoice)")
+.continue XNEXT ? (_U|xnext & (F|equals(M|vorganga, "(Downpayment)") ; F|equals(M|vorganga, "(CanceledDownpayment)") ; F|equals(M|vorganga, "(CancelationDownpayment)"))) ; F|equals(M|vorganga, "(Invoice)")
+..
+.make screen line +O
+.assign M|vorganga = 0|treart
+.formula M|konto   = 0|konto
+.assign M|aunummer = 0|okopf   ? M|bverkauf & (M|binrechnung ; M|binschluss)
+.assign M|benummer = 0|okopf   ? M|beinkauf & (M|binrechnung ; M|binschluss)
+.assign M|aunummer = M|auftrag     ? M|bverkauf & M|binauftrag
+.assign M|benummer = M|bestellung  ? M|beinkauf & M|binbestellung
+.assign M|posrechvk = 0|id         ? M|bverkauf
+.assign M|posrechek = 0|id         ? M|beinkauf
+.assign M|rechvk   = 0|kopf        ? M|bverkauf
+.assign M|rechek   = 0|kopf        ? M|beinkauf
+..
+!XNEXT
+.copy U|xnext = G|TRUE
+.continue ANZ  ?  F|equals(M|vorganga, "(Downpayment)")
+.continue RECH ? _F|equals(M|vorganga, "(Downpayment)")
+..
+!ANZ: Anzahlungsrechnung
+.assign M|habensoll = 3|zbush
+.assign M|zabu = 3|buch
+.load 5 entry '3|buch^id'
+.continue NOTMORE ? _G|mehr
+.load 5 line "$,,konto^dnr=5"
+.continue NOTMORE ? _G|mehr
+.continue START   ? '5|konto' <> 'M|anzkonto'
+.formula M|erfbetr = M|erfbetr + 5|ewbetr
+.continue NOTMORE ? _G|mehr
+..
+!START
+.load 5 line
+.continue NOTMORE ? _G|mehr
+.continue START   ? '5|konto' <> 'M|anzkonto'
+.formula M|erfbetr = M|erfbetr + 5|ewbetr
+.continue NOTMORE ? _G|mehr
+.continue START
+..
+!NOTMORE
+.set trans +
+.formula M|hinweis = "Der Vorgang ist noch nicht abgeschlossen."  ? F|empty(M|zabu)
+.set trans -
+.copy M|iwbu  = 0|kopf^iwbu
+.assign M|buza = 3|zabu
+.formula M|erfwaehr = M|rechvk^waehr
+.formula M|erfwaehr = 3|buch^erfwaehr
+.formula M|ewekurs = 3|zabu^eikurs
+.continue LOAD6   ? _F|equals(3|opztyp, "(Clearing)")
+.continue LOAD6   ?  M|buza^iwbu <> M|buza^erfwaehr
+..
+!LOAD7: Bei Verrechnung Åber Kurs aus Verursacher der Buchung
+.load 7 object 'M|buza^ursacheref^id'
+.continue LOAD6 ? _G|mehr
+..
+!L7INE
+.load 7 line
+.continue LOAD6 ? _G|mehr
+.continue L7INE ? 7|buchung <> M|buza
+.formula M|ewekurs = 7|eopzaiwkurs 
+..
+!LOAD6
+.load 6 object 'M|zabu^id'
+.continue L3INE ? _G|mehr
+..
+!L6INE
+.load 6 line
+.continue L3INE        ? _G|mehr
+.continue L6INE        ? '6|konto^id' <> 'M|anzkonto^id'
+.formula M|bubetr = M|bubetr + 6|betrag
+.formula U|xbubetr = U|xbubetr + 6|betrag  ? F|equals(M|vorganga, "(Downpayment)") & F|equals(M|habensoll, "(Debit)")
+.formula U|xbubetr = U|xbubetr - 6|betrag  ? F|equals(M|vorganga, "(Downpayment)") & F|equals(M|habensoll, "(Credit)")
+.continue L6INE
+..
+!KONTO
+.assign M|zabu = 3|nummer
+.copy U|xbinhier = G|TRUE
+.load 3 line "$,,konto^dnr=5"
+..
+!KMORE
+.continue END   ? _G|mehr
+.continue KLINE ? '3|konto' <> 'M|anzkonto'
+.continue KLINE ? 3|ewbetr = 0
+.formula M|erfbetr = M|erfbetr + 3|ewbetr
+.formula M|bubetr = 3|betrag
+.formula M|erfwaehr = 3|erfwaehr
+.formula M|ewekurs = 3|eikurs
+.formula M|iwbu = 3|iwbu
+.assign M|habensoll = "(Debit)" ? F|empty(M|habensoll) & F|equals(M|vorganga, "(Invoice)") & M|bverkauf
+.assign M|habensoll = "(Credit)" ? F|empty(M|habensoll) & F|equals(M|vorganga, "(Invoice)") & M|beinkauf
+..
+!KLINE
+.load 3 line
+.continue KMORE
+..
+!RECH: Rechnung
+.copy U|xnext = G|FALSE
+.copy U|xbinhier = G|TRUE
+.load 4 object 'M|opz^zabu^id'
+.continue SEL2 ? _G|mehr
+..
+!L4INE
+.load 4 line
+.continue END   ? _G|mehr
+.continue L4INE ? 4|konto^id <> M|anzkonto^id
+.continue N4EXT ? _U|xnextline
+.make screen line +O
+.assign M|vorganga  = 0|treart
+.formula M|konto    = 0|konto
+.continue BEINKAUF  ? M|beinkauf
+.assign M|aunummer  = 0|okopf     ? M|binrechnung ; M|binschluss
+.assign M|aunummer  = M|auftrag       ? M|binauftrag
+.assign M|posrechvk = 0|id
+.assign M|rechvk    = 0|kopf
+.copy M|waehr       = 0|kopf^waehr
+.continue N4EXT
+..
+!BEINKAUF
+.assign M|benummer  = 0|okopf     ? M|binrechnung ; M|binschluss
+.assign M|benummer  = M|bestellung    ? M|binbestellung
+.assign M|posrechek = 0|id
+.assign M|rechek    = 0|kopf
+.copy M|waehr       = 0|kopf^erfwaehr
+.continue N4EXT
+..
+!N4EXT
+.assign M|ophist   = 0|kopf^ophist
+.assign M|opz      = 0|kopf^opz
+.assign M|habensoll = 3|zbush
+.formula M|zabu = M|opz^zabu
+.formula M|ewekurs = M|ophist^ekkurs / M|ophist^feinh
+.copy M|erfwaehr = 4|erfwaehr
+.copy M|iwbu  = 4|iwbu
+.formula M|preis = 4|ewbetr * (-1)
+.formula M|bubetr = 4|betrag
+.formula U|xbubetr = U|xbubetr - M|bubetr ?  F|equals(M|vorganga, "(Invoice)") & F|equals(M|habensoll, "(Credit)")
+.formula U|xbubetr = U|xbubetr + M|bubetr ?  F|equals(M|vorganga, "(Invoice)") & F|equals(M|habensoll, "(Debit)")
+.formula M|erfbetr = 4|ewbetr
+.formula U|xrechvk = M|rechvk ? M|bverkauf
+.formula U|xrechek = M|rechek ? M|beinkauf
+.copy U|xnextline = G|TRUE
+.continue L4INE
+..
+!ERROR1
+.error Keine Anzahlungen gefunden
+.end 1
+.set trans -
+..
+..*****************************************************************************
+!END
+.continue LASTLINE ? _F|empty(M|hinweis)
+..
+.output new 'U|xausgabefile'
+.input "DATEI.F"
+.output
+.output new 'U|xend'
+.input "DATEI.F"
+.output
+.. Zeilen einlesen verdichten und wieder ausgeben
+.select screen header
+.output addedto 'U|xausgabefile'
+..
+!SELLINE
+.select screen line
+.continue WEITER ? _G|mehr
+?'M|aunummer^id'#'M|rechvk^id'#'M|posrechvk^id'#'M|vorganga'#'M|preis'#'M|waehr'#'M|zabu'#'M|konto'#'M|erfbetr'#'M|erfwaehr'#'M|bubetr'#'M|iwbu'#'M|habensoll'#'M|ewekurs'#'M|buza'#'M|ophist^id'#'M|opz^id'#  ? M|bverkauf
+?'M|benummer^id'#'M|rechek^id'#'M|posrechek^id'#'M|vorganga'#'M|preis'#'M|waehr'#'M|zabu'#'M|konto'#'M|erfbetr'#'M|erfwaehr'#'M|bubetr'#'M|iwbu'#'M|habensoll'#'M|ewekurs'#'M|buza'#'M|ophist^id'#'M|opz^id'#  ? M|beinkauf
+.continue SELLINE
+..
+!WEITER
+.output
+.input "is/TABLEEREN"
+..
+.formula U|xbubetr = 0
+.formula U|xopts1 = "opts1=("+G|dblquote+"-o9"+G|dblquote+" "+G|dblquote+"-s9"+G|dblquote+")"
+.formula U|xopts2 = "opts2=("+G|dblquote+"-o11"+G|dblquote+" "+G|dblquote+"-s11"+G|dblquote+")"
+.formula U|xgroup = "group_by.sh -n18 -o1 -k2 -o3x -o4 -s5 -o6 -k7 -o8 ${opts1[$i]} -o10 ${opts2[$i]} -o12 -o13 -o14 -o15 -o16x -o17x "
+.assign U|xname1  = "(Downpayment)"
+.assign U|xname2  = "(Invoice)"
+.formula U|xname  = "name=("+'U|xname1'+" "+'U|xname2'+")"
+.formula U|xi     = G|dblquote+"${name[$i]}"+G|dblquote
+..
+.formula U|xsys = U|xopts1+"; "+U|xopts2+"; "+U|xname+"; for i in 0 1;do grep " +U|xi+ " " +U|xausgabefile+ " | " + U|xgroup + ";done > " + U|xend
+.system 'U|xsys' background
+.continue ERROR ? _G|mehr
+..
+!SELFROM
+.select from 'U|xend' U|x1 # U|x2 # U|x3 # U|x4 # U|x5 # U|x6 # U|x7 # U|x8 # U|x9 # U|x10 # U|x11 # U|x12 # U|x13 # U|x14 # U|x15 # U|x16 # U|x17 #
+.continue LASTLINE ? _G|mehr
+..
+.make screen line +O
+.assign M|aunummer = U|x1  ? M|bverkauf
+.assign M|benummer = U|x1  ? M|beinkauf
+.assign M|rechvk = U|x2    ? M|bverkauf
+.assign M|rechek = U|x2    ? M|beinkauf
+.assign M|posrechvk = U|x3 ? M|bverkauf
+.assign M|posrechek = U|x3 ? M|beinkauf
+.assign M|vorganga = U|x4
+.formula M|preis = U|x5
+.formula M|waehr = U|x6
+.assign M|zabu = U|x7
+.formula M|konto = U|x8
+.formula M|erfbetr = U|x9
+.formula M|erfwaehr = U|x10
+.formula M|bubetr = U|x11
+.formula M|iwbu = U|x12
+.formula M|ewekurs = U|x14
+.copy M|buza = U|x15
+.assign M|ophist = U|x16
+.assign M|opz = U|x17
+.continue SELFROM  ? F|empty(U|x13)
+.formula M|habensoll = U|x13 
+.. Verkauf
+.formula U|xbubetr = U|xbubetr - M|bubetr ?  F|equals(M|vorganga, "(Downpayment)") & (M|bverkauf & F|equals(M|habensoll, "(Credit)"))
+.formula U|xbubetr = U|xbubetr + M|bubetr ? (F|equals(M|vorganga, "(Downpayment)") ; F|equals(M|vorganga, "(Invoice)")) & (M|bverkauf & F|equals(M|habensoll, "(Debit)"))
+.. Einkauf
+.formula U|xbubetr = U|xbubetr + M|bubetr ?  F|equals(M|vorganga, "(Downpayment)") & (M|beinkauf & F|equals(M|habensoll, "(Debit)"))
+.formula U|xbubetr = U|xbubetr - M|bubetr ? (F|equals(M|vorganga, "(Downpayment)") ; F|equals(M|vorganga, "(Invoice)")) & (M|beinkauf & F|equals(M|habensoll, "(Credit)"))
+.. 
+.continue SELFROM
+..
+!LASTLINE
+.input "fb/DOWNPAYDIFF.BFUSS"
+.select screen header
+.select screen line 'M|tzeilen'
+.make screen line +O
+.colour -background 'M|color' 'M|aktzeile'
+.formula M|bubetr = U|xbubetr 
+.formula M|iwbu = M|inlwaehr
+.set trans +
+.formula M|tsumme = "Kursdifferenz:"
+.formula M|thinweis = "Manuelle Buchungen wurden nicht berÅcksichtigt."
+.formula M|hinweis = "Der Vorgang ist noch nicht abgeschlossen."  ? _U|xbinhier
+.set trans -
+..
+.continue
+..
+!ERROR
+.error Verdichtung gescheitert!
+.end 1

@@ -1,0 +1,168 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : VENDORCONDITIONS.BFUSS
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  : set indicator 
+...Includes
+.. include ek/VENDORCONDITIONS.PREIS
+.. include ek/VENDORCONDITIONS.PREIS2
+.. include ek/VENDORCONDITIONS.AUF
+..*****************************************************************************
+.set trans -
+.type text       xinfosysout ? _F|defined(U|xinfosysout)
+.type text       xinfosyserr ? _F|defined(U|xinfosyserr)
+.type ARTR52002  xmerkpreis  ? _F|defined(U|xmerkpreis)
+.type IP3        xmerkterm   ? _F|defined(U|xmerkterm)
+.type integer    xmerkzn     ? _F|defined(U|xmerkterm)
+.type integer    xi          ? _F|defined(U|xi)
+.type integer    xvor        ? _F|defined(U|xvor)
+.type bool       xwinterm    ? _F|defined(U|xwinterm)
+.type bool       xwinpreis   ? _F|defined(U|xwinpreis)
+.type integer    xtzeilen    ? _F|defined(U|xtzeilen)
+.type integer    xdelzeile   ? _F|defined(U|xdelzeile)
+.type bool       xmerk       ? _F|defined(U|xmerk)
+.type text       xtsys       ? _F|defined(U|xtsys)
+.type P1:1       xtlief      ? _F|defined(U|xtlief)
+.type ARTR53000  xeffpreis   ? _F|defined(U|xeffpreis)
+.type integer    xzn         ? _F|defined(U|xzn)
+.type text       xselect     ? _F|defined(U|xselect)
+.type text       xskonto     ? _F|defined(U|xskonto)
+.type ID94:1     xauswaehr   ? _F|defined(U|xauswaehr)
+.type RP7.6      xrate       ? _F|defined(U|xrate)
+.type realx      xramount    ? _F|defined(U|xramount)
+.type realx      xiwbuamount ? _F|defined(U|xiwbuamount)
+.type realx      xrkurs      ? _F|defined(U|xrkurs)
+.type ID94:1     xiwbu       ? _F|defined(U|xiwbu)
+.type ID94:1     xland       ? _F|defined(U|xland)
+.type IP1        xrundung    ? _F|defined(U|xrundung)
+..
+.file -tempname U|xinfosysout
+.file -tempname U|xinfosyserr
+..
+.continue END    ? M|tzeilen = 0
+..
+!HEADER
+.select screen header
+.copy M|kmerkzeilen = M|tzeilen
+..
+!SELECT: Zeile 1 - 5
+.select screen line
+.continue SET                      ? _G|mehr
+..
+.formula U|xi = M|zn
+.type integer   'U|xmerkzn.xi'     ? _F|defined(U|xmerkzn.xi)
+.type ARTR52002 'U|xmerkpreis.xi'  ? _F|defined(U|xmerkpreis.xi)
+.type IP3       'U|xmerkterm.xi'   ? _F|defined(U|xmerkterm.xi)
+.type bool      'U|xwinterm.xi'    ? _F|defined(U|xwinterm.xi)
+.type bool      'U|xwinpreis.xi'   ? _F|defined(U|xwinpreis.xi)
+.formula U|xmerkzn.xi = M|zn
+.formula U|xmerkpreis.xi = M|tpwert 
+.formula U|xmerkterm.xi = M|tefrist
+.copy U|xwinterm.xi= G|TRUE   
+.copy U|xwinpreis.xi = G|TRUE 
+.formula U|xmerkterm = U|xmerkterm.xi   ? U|xi = 1 & U|xwinterm.xi
+.formula U|xmerkpreis = U|xmerkpreis.xi ? U|xi = 1 & U|xwinpreis.xi
+.continue SELECT                        ? U|xi = 1
+.copy U|xwinterm.xi = G|FALSE
+.copy U|xwinpreis.xi = G|FALSE
+.copy U|xwinterm.xi = G|TRUE            ? U|xmerkterm.xi <= U|xmerkterm
+.formula U|xmerkterm = U|xmerkterm.xi   ? U|xwinterm.xi
+.copy U|xwinpreis.xi = G|TRUE           ? U|xmerkpreis.xi <= U|xmerkpreis & U|xmerkpreis.xi <> 0
+.formula U|xmerkpreis = U|xmerkpreis.xi ? U|xwinpreis.xi
+.continue SELECT
+..
+!SET
+.select screen header
+.formula P|maskkontextfop = "notkbsid" ? F|empty(M|hinweis)
+.formula U|xtzeilen = M|tzeilen
+.. 
+!SETINDIKATOR
+.select screen line 'U|xtzeilen'
+.continue LOADIS                   ? _G|mehr
+.copy M|bestpreisz = M|indikatorz  ? U|xwinpreis.xtzeilen & U|xmerkpreis = M|tpwert
+.copy M|kliefzeitz = M|indikatorz  ? U|xwinterm.xtzeilen & U|xmerkterm = M|tefrist
+..
+!NEXT
+.continue END                      ? U|xtzeilen - 1 = 0
+.formula U|xtzeilen = U|xtzeilen - 1
+.continue SETINDIKATOR
+.. 
+.. ***************************************************************************
+!END    
+.formula P|maskkontextfop = "notkbsid" ?  F|empty(M|kbsid)
+.formula P|maskkontextfop = "kbsid"    ? _F|empty(M|hinweis) & _F|empty(M|kbsid)
+.formula P|maskkontextfop = "notkbsid" ?  F|empty(M|hinweis) & _F|empty(M|kbsid)
+.copy M|hintergrund = G|FALSE
+..
+.continue ENDE ? _M|anfrageja
+.formula P|maskkontextfop = "anfrage" 
+.select screen line 'M|tzeilen'
+..
+.formula U|xselect = "$,,;kotyp=(Request);artikel=" + M|kart^id + ";lgruppe=" + M|lgruppe^id + ";@ablageart=(Active);status=`;@gruppe=2;kopf^vom=" + 'M|anfragevon' + "!" + 'M|anfragebis' + ";@richtung=(Backwards)"
+.formula U|xselect = U|xselect + ";mge=0!" + 'M|mge' + ";wtterm=" + "!" + 'M|wtterm'
+.select purchasing 'U|xselect'
+.continue ENDE ? _G|mehr
+.make screen line +O
+.protection M|brueck 'M|tzeilen'
+..
+!ZEILE
+.make screen line +O
+.assign M|tlief  = H|lief
+.formula M|twaehrung = H|kopf^erfwaehr
+.formula M|anfrmenge = H|mge
+.formula M|tepe = H|artikel^vpe
+.assign M|vorgangid = H|id
+.assign M|vorgang = H|kopf^id
+.assign M|tausschreib = M|vorgang^ausschr   ?   _F|empty(M|vorgang^ausschr)
+.formula M|tmproz = H|proz
+.formula M|tpwert = H|pwert
+.formula M|tpreis = H|preis
+..
+.continue INLANDW   ?   M|waehrung = G|waehrung
+.formula U|xrundung    = M|waehrung^nkst
+.add H|kopf
+.copy U|xauswaehr = M|waehrung
+.assign U|xramount  = H|preis
+.copy U|xiwbu       = D|iwbu
+.copy U|xland       = D|land
+.assign U|xrkurs    = D|kurs
+.formula U|xrate    = F|fxrate(U|xauswaehr,D|budat,D|iwbu)
+.add
+.assign U|xiwbuamount = U|xramount / U|xrkurs
+.assign U|xramount    = U|xiwbuamount ? U|xauswaehr = U|xiwbu & U|xiwbu <> U|xland
+.assign U|xramount    = U|xramount    ? U|xauswaehr = U|xland
+.assign U|xramount    = F|round(U|xrate*U|xiwbuamount,U|xrundung) ? U|xauswaehr<>U|xland & U|xauswaehr<>U|xiwbu
+.formula M|tpreis    = U|xramount
+.copy M|twaehrung = M|waehrung
+..
+!INLANDW
+..
+.load 1 add H|kopf^zbed 
+.load 1 line                                           ? G|mehr
+.formula M|skonto = 1|skonto                           ? G|mehr
+.formula M|skontobetr = (1 - 1|skonto/100) * M|tpwert  ? G|mehr
+.formula M|effpreis =  M|skontobetr/M|anfrmenge        ? G|mehr
+.formula M|tzbed = 1|nummer                            ? G|mehr
+.formula M|tehe = H|he
+.formula M|tbstnr = H|bstnr
+.assign M|tlbed = M|tlief^lbed
+.copy M|skontomoeglz = M|indikatorz ? M|skonto > 0
+.protection M|brueck 'M|tzeilen'
+.continue SELECT2
+..
+!SELECT2
+.select purchasing 
+.continue ENDE ? _G|mehr
+.continue ZEILE
+..
+.continue
+..
+!ENDE
+.end 1
+..
+!ERROR
+.error Preisoptimierung gescheitert!
+.end 1
+

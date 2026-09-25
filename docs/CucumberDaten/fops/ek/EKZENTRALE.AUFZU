@@ -1,0 +1,161 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EKZENTRALE.AUFZU
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       :
+.. Functionality  :
+..
+.. include ek/EKZENTRALE.BN
+.. include ev/NONACHFOLGE
+..*****************************************************************************
+..
+.set trans -
+.type ID4      xkopf       ? _F|defined(U|xkopf)
+.type integer  xtstufe     ? _F|defined(U|xtstufe)
+.type integer  xistufe     ? _F|defined(U|xistufe)
+.type I5       xzn         ? _F|defined(U|xzn)
+.type integer  xtyp        ? _F|defined(U|xtyp)
+.type integer  xi          ? _F|defined(U|xi)
+.type text     xselect     ? _F|defined(U|xselect)
+.type integer  xtzeilen    ? _F|defined(U|xtzeilen)
+.type integer  xnewzn      ? _F|defined(U|xnewzn)
+..
+.. initialisieren
+.formula U|xistufe = 0
+..
+.continue ERROR1  ? M|tzeilen = 0
+..
+.input "ev/NONACHFOLGE"
+.continue AUSTAB   ? G|evtvar = "topen"
+..
+!AUSKOPF: aus Kopf
+.continue ALLCLOSE ? G|evtvar = "coll"
+.continue ALLOPEN  ? G|evtvar = "exp"
+.continue
+..
+!AUSTAB: aus Tabelle
+.continue KNOTEN ? M|topen = M|iopen
+.continue CLOSE  ? M|topen = "icon:folder_opened"
+.continue
+..
+!KNOTEN
+.formula U|xistufe = 0
+.continue OPEN
+..
+!OPEN: Vorgang aus Tabelle merken und îffnen
+.formula U|xkopf   = M|ttrans^id
+.formula U|xzn     = M|zn
+.formula U|xistufe = M|tstufe
+.. Ordner erst mal zu
+.formula M|topen   = M|iopen              ? _F|empty(M|topen)
+.load 7 purchasing 'F|formatstr("$,,;@gruppe=2;okopf={1};@ordnung=kopf;@ablageart=(Both)", M|ttrans^id)'
+.formula M|topen = ""                ? _G|mehr
+.continue MASKE                      ? _G|mehr
+.formula U|xistufe = U|xistufe + 1
+.formula M|topen = ""
+.formula M|topen = "icon:folder_opened" 
+..
+.continue LOAD7 ? _G|mehr
+.continue LOAD7 ?  G|evtvar = bstart & F|equals(M|ttrans^lsart, "(PackingSlip)") & (F|equals(7|tlsart, "(PackingSlipCanceled)") ; F|equals(7|tlsart, "(CanceledReturnPackingSlip)"))
+.continue LOAD7 ?  G|evtvar = bstart & F|equals(M|ttrans^lsart, "(PackingSlip)") & (F|equals(7|tlsart, "(PackingSlipReversal)") ; F|equals(7|tlsart, "(CancelationReturnPackingSlip)"))
+.continue LOAD7 ?  U|xkopf = 7|kopf^id
+.continue LOAD7 ?  F|empty(7|kopf)
+.formula M|topen = "icon:folder_opened"
+.input "ek/EKZENTRALE.BN"
+.formula U|xzn =  U|xzn + 1              ?  U|xistufe > M|stufe
+.continue MASKE                          ?  U|xistufe > M|stufe
+.formula U|xkopf = M|ttrans^id
+.continue NOLOAD ? U|xnoload
+..
+!LOAD7
+.load 7 purchasing
+.continue MASKE                          ? _G|mehr
+..
+!NOLOAD
+.continue LOAD7 ?  G|evtvar = bstart & F|equals(M|ttrans^lsart, "(PackingSlip)") & (F|equals(7|tlsart, "(PackingSlipCanceled)") ; F|equals(7|tlsart, "(CanceledReturnPackingSlip)"))
+.continue LOAD7 ?  G|evtvar = bstart & F|equals(M|ttrans^lsart, "(PackingSlip)") & (F|equals(7|tlsart, "(PackingSlipReversal)") ; F|equals(7|tlsart, "(CancelationReturnPackingSlip)"))
+.continue LOAD7 ?  U|xkopf = 7|kopf^id
+.continue LOAD7 ?  F|empty(7|kopf)
+.input "ek/EKZENTRALE.BN"
+.formula U|xzn =  U|xzn + 1              ?  U|xistufe > M|stufe
+.continue MASKE                          ?  U|xistufe > M|stufe
+.formula U|xkopf = M|ttrans^id
+.continue NOLOAD ? U|xnoload
+.continue LOAD7
+..
+!CLOSE
+.formula U|xtstufe = M|tstufe
+.formula M|topen = M|iopen               ? M|tstufe = 0 & _M|ttrans^typ = 5 & _F|empty(M|topen)
+.select screen line
+.continue END                             ? _G|mehr
+..
+!SINGLEDEL
+.continue SETICONCLOSE                    ? (M|tstufe <= U|xtstufe ; M|tstufe = 0)  &  M|tzeilen = M|zn
+.continue DELEND                          ?  M|tstufe <= U|xtstufe ; M|tstufe = 0
+.make screen line -O
+.continue SINGLEDEL
+..
+!ALLCLOSE
+.select screen line
+.continue END                             ? _G|mehr
+.formula M|topen = M|iopen                ?  M|topen = "icon:folder_opened"
+.continue ALLCLOSE                        ?  M|tstufe = 0
+.formula U|xtstufe = M|tstufe
+..
+!ODER
+.continue ALLCLOSE                        ?  M|tstufe <  U|xtstufe
+.continue DELETE
+..
+!DELETE
+.make screen line -O
+.formula M|topen = M|iopen               ? _M|ttrans^typ = 5 & _F|empty(M|topen)
+.continue ODER                            ?  M|tzeilen > 0
+.continue END
+..
+!ALLOPEN
+.formula U|xistufe = 0
+.select screen line
+.continue END                             ? _G|mehr
+.continue ALLOPEN                         ?  M|topen = "icon:folder_opened"
+.continue OPEN
+..
+!MASKE
+.select screen header
+.formula U|xtzeilen = M|tzeilen
+.continue END                             ? _G|mehr
+..
+!HOLMASKE: nochmal alle durchlaufen fÅr "icon:folder_closed"
+.continue END                             ?  U|xtzeilen < U|xzn
+.select screen line 'U|xzn'
+.continue END                             ? _G|mehr
+.continue END                             ? M|tstufe = 0 & G|evtvar = "topen"
+.continue END                             ? M|tstufe < U|xistufe & G|evtvar = "topen"
+.formula U|xzn = U|xzn + 1
+.formula U|xistufe = M|tstufe
+.continue HOLMASKE                        ? F|empty(M|topen)
+.continue HOLMASKE                        ? M|topen <> "icon:folder_closed"
+.. ab hier sind Ordner M|topen = "icon:folder_closed"
+.continue OPEN
+..
+!DELEND
+.continue END ? M|zn <= 1
+.continue END ? M|tzeilen = M|zn
+.formula U|xnewzn = M|zn - 1
+.select screen line 'U|xnewzn'
+.formula M|topen = M|iopen
+.continue END
+..
+!SETICONCLOSE
+.select screen line 'U|xznr'
+.copy M|topen = M|iopen
+.continue END
+..
+..****************************************************************************
+!END
+.continue
+..
+!ERROR1
+.error Keine Tabellenzeilen geladen!
+.end 1

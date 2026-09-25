@@ -1,0 +1,152 @@
+..!interpreter english translate noabbrev
+..<META M|='dfue/EDIEXPORT' >
+..*****************************************************************************
+.. FOP-Name       : EDIEXPORT.TAB
+.. Autor          : ok/mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : Holt und prueft fuer jede geladene Zeile
+..
+..   Argument     Meaning
+..   ---------------------------------------------------------
+..   xvvk         Link from sales id. number in EDI-Msg, xvvk^nummer has to be
+..                equal to H|nummer, if an EDI-msg already does exist
+..   xvsped       Link from shipping id number in EDI-Msg, xvsped^nummer has to
+..                be equal to H|nummer, if an EDI-msg already does exist
+..   xvorart      the output differs depending on "vorart"
+..*****************************************************************************
+.set trans -
+..
+.type text xKeinLieferschein  ? _F|defined(U|xKeinLieferschein)
+.type text xFalscheRechnungsart ? _F|defined(U|xFalscheRechnungsart)
+.type P109:2 xedinachr        ? _F|defined(U|xedinachr)
+.type text xtsel              ? _F|defined(U|xtsel)
+.type text xtext   ? _F|defined(U|xtext)
+.set trans +
+.formula U|xKeinLieferschein  = "Speditionsauftrag {1} hat keinen gÅltigen Lieferschein."
+.formula U|xFalscheRechnungsart = "Rechnungen mit Rechnungsart {1} werden nicht als EDI-Rechnung versendet."
+.set trans -
+..
+.make screen line +O
+.formula M|tvorgang = H|id
+.formula M|fotoz = G|icomessage
+.assign M|vorartname = U|xvorart
+.continue RE    ? U|xvorart="(Invoice)"
+.continue LS    ? U|xvorart="(PackingSlip)"
+.continue AB    ? U|xvorart="(SalesOrderConfirmation)"
+.continue LAKO  ? U|xvorart="(LoadCarrierAccountStatement)"
+.continue ENDE
+..
+!RE: invoice
+..<META H|='P3:1' >
+.formula M|vorgdat = H|vom
+.formula M|senden  = H|dfuesenden         ? U|xvvk^nummer <> H|nummer
+.formula M|senddat = H|dfuedat
+..**ok,25.08.2006 (kunde2 wird wieder verwendet)
+.. .formula M|kunde      = H|kunde2
+.formula M|rebetr   = H|rebetr
+.formula M|waehrung = H|land^iso3a
+.formula M|kunde    = H|kunde2^id
+.add H|kunde2^id
+.formula U|xedinachr = "2111"
+.input "DFUE.GET.PROTOK"
+.formula M|tabmodell = U|xediieabm
+.continue SCHUTZ                              ? U|xvvk^nummer = H|nummer
+.continue ERRINV ? _F|equals(H|vorganga, "(Invoice)") & _F|equals(H|vorganga, "(CreditNoteCommercial)")
+.continue ENDE
+..
+!LS: shipping orders -> delivery notes
+..<META H|='P53:1' >
+.copy M|vorgdat = H|datum
+.copy M|senden  = H|dfuesenden         ? U|xvsped^nummer <> H|nummer
+.copy M|senddat = H|uebdat
+.copy M|kunde   = H|kunde
+.copy M|lief    = H|spediteur
+.add H|kunde^id
+.continue XLS ? _G|mehr
+.formula U|xedinachr = "2108"
+.input "DFUE.GET.PROTOK"
+.copy M|tabmodell = U|xediieabm
+.add
+.. Check if previous EDI for same tvorgang had errors
+.load 1 edifact 'F|formatstr("$,,ideksvor=={1};@order=erfass.(Backwards);edinachr=={2}", H|nummer, U|xedinachr)'
+.continue XLS ? _G|mehr
+.formula M|fotoz = G|icoerror ? 1|fcode<>0
+.select from '1|ftext' M|fehltext^ ? _F|empty(1|ftext)
+!NFTEXT
+.continue EFTEXT ? _G|mehr ; F|empty(1|ftext)
+.select from '1|ftext' U|xtext^
+.formula M|fehltext = M|fehltext + ";" + U|xtext
+.continue NFTEXT
+!EFTEXT
+.load 1 
+!XLS
+.continue SCHUTZ                              ? U|xvsped^nummer = H|nummer
+.. check if shipping order has valid delivery notes
+.formula U|xtsel = F|formatstr("$,,;@gruppe=1;typ=(PackingSlip);lsart=(PackingSlip);@ablage=(3);@zeilen=(0);sped={1}", H|nummer)
+.load 0 sales 'U|xtsel'
+!NEXTDEL
+.continue ERRDEL ? _G|mehr
+!NEXTROW
+.load 0 line
+.continue NEXT   ? _G|mehr
+.continue ENDE   ?  0|mge > 0
+.continue NEXTROW
+!NEXT
+.load 0 sales
+.continue NEXTDEL
+..
+!AB: order confirmation
+..<META H|='P3:1' >
+.formula M|vorgdat = H|erfass
+.copy M|senden  = G|true     ? U|xvvk^nummer <> H|nummer
+.copy M|senddat = G|datum
+.copy M|senddat = H|dfuedat  ? 'H|dfuedat' <> ""
+.copy M|kunde   = H|kunde^id
+.add H|kunde^id
+.formula U|xedinachr = "2107"
+.input "DFUE.GET.PROTOK"
+.formula M|tabmodell = U|xediieabm
+.add
+.continue SCHUTZ ? U|xvvk^nummer = H|nummer
+.continue ENDE
+..
+!LAKO
+.formula M|vorgdat = H|erfass
+..<META H|='P159' >
+.add H|kreislauf^sendempf^id
+.add H|bhkto^partner^id  ? _G|mehr 
+.continue ENDE ? _G|mehr
+.formula M|kunde = D|id ? D|dnr=0
+.formula M|lief  = D|id ? D|dnr=1
+.formula U|xedinachr = "2114"
+.input "DFUE.GET.PROTOK"
+.formula M|tabmodell = U|xediieabm
+.copy    M|senden  = G|true  ? _F|empty(M|tabmodell) & U|xediaktiv
+.formula M|senddat = G|datum ? _F|empty(M|tabmodell) & U|xediaktiv
+.add
+.continue ENDE
+..
+!SCHUTZ: protect table if EDI-message has already been prepared
+.formula M|fotoz = G|icook
+.protection senden  'M|aktzeile'
+.protection senddat 'M|aktzeile'
+.continue ENDE
+..
+!ERRINV
+.formula M|fotoz = G|icoerror
+.copy M|senden = G|false
+.protection senden  'M|aktzeile'
+.protection senddat 'M|aktzeile'
+.formula M|fehltext = F|formatstr('U|xFalscheRechnungsart', 'H|vorganga')
+.continue ENDE
+..
+!ERRDEL
+.formula M|fotoz = G|icoerror
+.copy M|senden = G|false
+.protection senden  'M|aktzeile'
+.protection senddat 'M|aktzeile'
+.formula M|fehltext = F|formatstr('U|xKeinLieferschein', 'H|nummer')
+..*****************************************************************************
+!ENDE
+.continue

@@ -1,0 +1,71 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ATLASZENTRALE.TAB
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Zeilenfop - Zeigt Informationen zu einem Vorgang an
+.. Functionality  : row efop - show information for one transaction
+..  include     atlas/ATLASPARAMS
+..  include     atlas/ATLASSTATUS
+..*****************************************************************************
+.set trans -
+..
+.make screen line +O
+.assign M|tvorgang  = H|id
+... zuweisen M|tatlasgem = H|patlasgem
+.assign M|tvstaat   = H|vstaat
+.assign M|tkl       = H|kunde    ?  F|defined(H|kunde)
+.assign M|tkl       = H|lief     ?  F|defined(H|lief)
+.assign M|tklname   = M|tkl^sucherw
+.assign M|trebetr   = H|rebetr
+.assign M|tland     = H|land
+.assign M|tdatum    = H|vom
+..
+.. examine transaction and file
+.input "ATLASPARAMS"
+.assign T|xvatvorgang = H|id
+.input "ATLASSTATUS"
+..
+.. status
+.assign M|tatlasgem = true    ?  T|xbatgemeldet
+.assign M|tedi = T|xvatedi^id
+.formula M|tuebdatum = M|tedi^erfass  ? _F|empty(M|tedi)
+..
+.. Get invoice total and currence from edi message
+.continue EEDI ? F|empty(M|tedi)
+.load 1 edifact 'F|formatstr("$,,@zeilen=(Yes);id={1};text1=TOD", M|tedi^id)'
+.continue EEDI ? _G|mehr
+.continue EEDI ?  1|selzeile=0
+.load 1 edifact line '1|selzeile'
+.continue EEDI ? _G|mehr
+.formula M|trebetr = 1|text6
+.formula M|tland = 1|text7
+.load 1
+!EEDI
+..
+.. status icon
+.formula M|tstatus  = ""
+.formula M|tstatusz = G|icook      ?  T|xbatgemeldet
+.formula M|tstatusz = "icon:ball_blue"       ?  T|xbatgemeldet   &  T|xvatedi^status = 2
+.formula M|tstatusz = G|icowarn     ?  T|xbatgemeldet   &  F|empty(T|xvatedi)
+.formula M|tstatusz = G|icowarn     ? _T|xbatgemeldet   & _F|empty(T|xvatedi)
+.formula M|tstatusz = G|icoerror        ?  T|xbathaserror
+.formula M|tstatusz = "icon:ball_orange"     ?  T|xbatdonotsend
+.formula M|tstatusz = "icon:ball_orange"     ?  M|tedi^status = -9
+..
+.. icons for buttons with actions
+.formula M|tbuausfuhrz = "icon:process"
+.formula M|tbuvorschauz = "icon:screen_view"
+.formula M|tbuloeschenz = "icon:screen_delete"
+..
+.. filter rows, xbatdonotsend set in atlas/ATLASSTATUS
+.continue DELROW  ?  T|xbatdonotsend
+.continue DELROW  ? _M|kboffen        & _T|xbatgemeldet
+.continue DELROW  ? _M|kberledigt     &  T|xbatgemeldet       & _F|empty(T|xvatedi)
+.continue END
+!DELROW
+.make screen line -O
+..*****************************************************************************
+!END
+.continue

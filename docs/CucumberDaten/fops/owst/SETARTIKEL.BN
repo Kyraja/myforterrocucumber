@@ -1,0 +1,329 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SETARTIKEL.BSTART
+.. Date           : 24.04.19
+.. Version        : 2018r4n11
+.. Author         : system
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+.. Variablendefinition
+..*****************************************************************************
+.type text xtselect ? _F|defined(xtselect)
+..
+..*****************************************************************************
+.. EVENTHANDLING
+..*****************************************************************************
+.continue EINSTEL ? G|evtvar = "bstart"
+.continue ENDE
+!EINSTEL: Einstellungen prÅfen: Erst Stammdaten und danach offene VorgÑnge
+..        1.1 Stammdaten: gibt es Artikel mit earta == Åber StÅcklist und Beschaffungsart ungleich Eigenfertigung   -> FEHLER
+..        1.2 Lagergruppeneigenschaften                                                                             -> FEHLER
+..        2.1 gibt es offene VorgÑnge mit richtigen Set-Artikeln im EK, in Reservierungen, ZÑhllisten und BestÑnden -> FEHLER
+..        Logik: Man muss zuerst die Stammdaten korrigieren und dann die offenen VorgÑnge
+..*****************************************************
+.. Tabelle leeren und Icons auf Default-Wert
+..*****************************************************
+.select screen header
+.formula M|yartikelicon      = "icon:view_disabled"
+.formula M|ylagergruppenicon = "icon:view_disabled"
+.formula M|ybestaendeicon    = "icon:view_disabled"
+.formula M|yeinkauficon      = "icon:view_disabled"
+.formula M|yfertigungicon    = "icon:view_disabled"
+.formula M|yinventuricon     = "icon:view_disabled"
+.formula M|yreservierungicon = "icon:view_disabled"
+.select screen line
+.make screen line --
+...****************************************************
+.. 1.1 Stammdaten: falsch eingestelle Artikel
+..*****************************************************
+..******************
+.. - falsche Beschaffungs- oder Entnahmeart
+..*****************
+.continue NOSUCH1  ? _M|ybartikel
+.make screen line +o
+..beim Artikel gibt es mehrere FehlergrÅnde, es wird zuerst immer die gelbe Fehlerzeile ausgegeben
+..sonst mÅsste ich erste jeden Fehlergrund prÅfen, und wenn es Åberall keine Fehler gibt, die Zeile weglassen
+..-> wenn es keinen Fehler bei den Artikeln gibt, kommt trotzdem die gelbe Zeile 
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.colour -BACKGROUND 255 255 0 'M|aktzeile'
+.formula M|ytbeschreibung   = "falsche Einstellung im Artikel"
+.formula M|ytbeschreibung   = "wrong product settings"                 ? G|bsprache <> "D"
+.formula U|xtselect = "$,,nummer="+'M|yartikel'+";such=;earta==Åber StÅckliste;bsart<>Eigenfertigung;@gruppe=1;"
+.select PARTS 'U|xtselect'
+.continue NOARTIK ? _G|mehr
+!ARTIK
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.formula M|ytartikel       = H|id
+.formula M|ytobjekt        = H|id
+.formula M|ytbeschreibung   = "Beschaffungs- oder Entnahmeartart"
+.formula M|ytbeschreibung   = "procurement mode or withdrawal type"   ? G|bsprache <> "D"
+.select PARTS
+.continue ARTIK ? G|mehr
+.formula M|yartikelicon = "icon:ball_red"
+!NOARTIK
+.formula M|yartikelicon = "icon:ball_green"  ? M|yartikelicon ="icon:view_disabled"  
+..*****************
+.. - Setartikel mit fehlender StÅckliste 
+..****************
+.formula U|xtselect = "$,,nummer="+'M|yartikel'+";such=;earta==Åber StÅckliste;bsart==Eigenfertigung;ozeilen==0;@gruppe=1;"
+.select PARTS 'U|xtselect'
+.continue NOSUCH1 ? _G|mehr
+!SETOFL
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.formula M|ytartikel       = H|id
+.formula M|ytobjekt        = H|id
+.formula M|ytbeschreibung   = "Set-Artikel ohne Fertigungsliste"
+.formula M|ytbeschreibung   = "set product without BOM"           ? G|bsprache <> "D"
+.formula M|yartikelicon = "icon:ball_red"
+.select PARTS
+.continue SETOFL ? G|mehr
+!NOSUCH1 
+..*****************
+.. - Setartikel mit Werten fÅr Losgrî·e, minimale & max. Beschaffungsmenge und Mindesbestand
+..****************
+.formula U|xtselect = "$,,nummer="+'M|yartikel'+";such=;earta==Åber StÅckliste;bsart=Eigenfertigung;@gruppe=1;"
+.select PARTS 'U|xtselect'
+.continue NOSUCH8 ? _G|mehr
+!DISLOOP
+.continue LIST ? H|losgr    > 0
+.continue LIST ? H|mindest  > 0
+.continue LIST ? H|minbsmge > 0
+.continue LIST ? H|maxbsmge > 0
+.continue NEXT
+!LIST
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.formula M|ytartikel       = H|id
+.formula M|ytobjekt        = H|id
+.formula M|ytbeschreibung   = "Set-Artikel: Losgrî·e, min. max. Beschaffungsmenge und Mindestbestand auf 0 setzen"
+.formula M|ytbeschreibung   = "set product: set batch size, min. max. procurement qty and min. stock level to 0"           ? G|bsprache <> "D"
+.formula M|yartikelicon = "icon:ball_red"
+!NEXT
+.select PARTS
+.continue DISLOOP ? G|mehr
+!NOSUCH8
+..
+...****************************************************
+.. 1.2 Stammdaten: falsch eingestellte Lagergruppeneigenschaften
+..*****************************************************
+.continue NOSUCH2  ? _M|ylagergruppen
+..**************************
+.. falsche Beschaffungs oder Entnhameart auf externer Lagergruppe
+..**************************
+.formula U|xtselect = "$,,artikel="+'M|yartikel'+";lgruppe=;earta==Åber StÅckliste;bsart<>Eigenfertigung;@autostart=ja;@gruppe=3;@ablageart=(Active)"
+.select WAREHOUSEDATA 'U|xtselect'
+.continue NOLGEIG ? _G|mehr
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.colour -BACKGROUND 255 255 0 'M|aktzeile'
+.formula M|ytbeschreibung   = "falsche Einstellung in Lagergruppeneigeschaft"
+.formula M|ytbeschreibung   = "wrong warehouse group properties settings"                 ? G|bsprache <> "D"
+!LG1
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.formula M|ytartikel       = H|artikel
+.formula M|ytobjekt        = H|id
+.formula M|ytbeschreibung   = "Lagergruppeneigenschaft"
+.formula M|ytbeschreibung   = "warehouse group property"                 ? G|bsprache <> "D"
+.select WAREHOUSEDATA
+.continue LG1 ? G|mehr
+.formula M|ylagergruppenicon = "icon:ball_red"
+!NOLGEIG
+.formula M|ylagergruppenicon = "icon:ball_green"  ? M|ylagergruppenicon ="icon:view_disabled" 
+..**************************
+.. Set-Artikel in interner Lagergruppe, Lagergruppeneigenschaften auf externer Lagergruppe mÅssen dann auch Set sein
+..**************************
+.formula U|xtselect = "$,,nummer="+'M|yartikel'+";such=;earta==Åber StÅckliste;bsart==Eigenfertigung;@gruppe=1;"
+.select PARTS 'U|xtselect'
+.continue NOSET1 ? _G|mehr
+!SET1
+.formula U|xtselect = "$,,artikel="+'H|nummer'+";lgruppe=;@autostart=ja;@gruppe=3;@ablageart=(Active)"
+.load 1 WAREHOUSEDATA 'U|xtselect'
+.continue LG1OK ? _G|mehr
+.continue LG1OK ? 1|earta = "Åber StÅckliste" & 1|bsart = "Eigenfertigung"
+!LG2
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.formula M|ytartikel       = 1|artikel
+.formula M|ytobjekt        = 1|id
+.formula M|ytbeschreibung   = "intern Set-Artikel, extern kein Set-Artikel"
+.formula M|ytbeschreibung   = "internal set product, external no set product"                 ? G|bsprache <> "D"
+.formula M|ylagergruppenicon = "icon:ball_red"
+.load 1 WAREHOUSEDATA
+.continue LG2 ? G|mehr
+!LG1OK
+.select PARTS 
+.continue SET1 ? G|mehr
+!NOSET1
+..**************************
+.. KEIN Set-Artikel in interner Lagergruppe, Lagergruppeneigenschaften auf externer Lagergruppe dÅrfen dann auch kein Set sein
+..**************************
+.formula U|xtselect = "$,,nummer="+'M|yartikel'+";such=;earta<>Åber StÅckliste;@gruppe=1;"
+.select PARTS 'U|xtselect'
+.continue NOSET2 ? _G|mehr
+!SET2
+.formula U|xtselect = "$,,artikel="+'H|nummer'+";lgruppe=;earta==Åber StÅckliste;bsart=Eigenfertigung;@autostart=ja;@gruppe=3;@ablageart=(Active)"
+.load 1 WAREHOUSEDATA 'U|xtselect'
+.continue LG2OK ? _G|mehr
+!LG3
+..set debug + ? H|nummer = "10204"
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.formula M|ytartikel       = 1|artikel
+.formula M|ytobjekt        = 1|id
+.formula M|ytbeschreibung   = "intern KEIN Set-Artikel, extern Set-Artikel"
+.formula M|ytbeschreibung   = "internal no set product, external set product"                 ? G|bsprache <> "D"
+.formula M|ylagergruppenicon = "icon:ball_red"
+.load 1 WAREHOUSEDATA
+.continue LG3 ? G|mehr
+!LG2OK
+.select PARTS 
+.continue SET2 ? G|mehr
+!NOSET2
+!NOSUCH2  
+..***************************************************
+..2.1 Set-Artikel in EinkaufsvorgÑngen
+..***************************************************
+.continue NOSUCH3 ? _M|yeinkauf
+.formula U|xtselect = "$,,kopf=;artikel="+'M|yartikel'+";artikel^earta==Åber StÅckliste;artikel^bsart==Eigenfertigung;kotyp=;"
+.select PURCHASING 'U|xtselect'
+.continue NOEK ? _G|mehr
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.colour -BACKGROUND 255 255 0 'M|aktzeile'
+.formula M|ytbeschreibung   = "Set-Artikel in EinkaufsvorgÑngen"
+.formula M|ytbeschreibung   = "set product in purchasing objects"                 ? G|bsprache <> "D"
+!EK
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.formula M|ytartikel        = H|artikel
+.formula M|ytobjekt         = H|id
+.formula M|ytbeschreibung   = 'H|kotypa'
+.select PURCHASING
+.continue EK ? G|mehr
+.formula M|yeinkauficon = "icon:ball_red"
+!NOEK
+.formula M|yeinkauficon = "icon:ball_green"  ? M|yeinkauficon ="icon:view_disabled"   
+!NOSUCH3
+..***************************************************
+..2.2 FertigungsvorschlÑge in der Fertigung
+..***************************************************
+.continue NOSUCH4 ? _M|yfertigung
+.formula U|xtselect = "$,,artikel="+'M|yartikel'+";artikel^earta==Åber StÅckliste;artikel^bsart==Eigenfertigung;ba=;netmge="
+.select PURCHASING 'U|xtselect'
+.continue NOFERT ? _G|mehr
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.colour -BACKGROUND 255 255 0 'M|aktzeile'
+.formula M|ytbeschreibung   = "Set-Artikel in FertigungsvorschlÑgen"
+.formula M|ytbeschreibung   = "set product in work order suggestions"                 ? G|bsprache <> "D"
+!FERT
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.formula M|ytartikel        = H|artikel
+.formula M|ytobjekt         = H|id
+.formula M|ytbeschreibung   = "Fertigungsvorschlag"
+.formula M|ytbeschreibung   = "work order suggestions"                 ? G|bsprache <> "D"
+.select PURCHASING
+.continue FERT ? G|mehr
+.formula M|yfertigungicon = "icon:ball_red"
+!NOFERT
+.formula M|yfertigungicon = "icon:ball_green"  ? M|yfertigungicon ="icon:view_disabled"   
+!NOSUCH4
+..***************************************************
+..2.3 Reservierungen
+..***************************************************
+.continue NOSUCH5 ? _M|yreservierung
+.formula U|xtselect = "$,,elex="+'M|yartikel'+";elex^earta==Åber StÅckliste;elex^bsart==Eigenfertigung;elanzahl<>0;relevant=true;"
+.select PURCHASING 'U|xtselect'
+.continue NORESER ? _G|mehr
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.colour -BACKGROUND 255 255 0 'M|aktzeile'
+.formula M|ytbeschreibung   = "Set-Artikel in der AFL"
+.formula M|ytbeschreibung   = "set product in work order production list"                 ? G|bsprache <> "D"
+!RESERV
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.formula M|ytartikel        = H|artikel
+.formula M|ytobjekt         = H|id
+.formula M|ytbeschreibung   = "Zeile in AFL"
+.formula M|ytbeschreibung   = "item in work order production list"                 ? G|bsprache <> "D"
+.select PURCHASING
+.continue RESERV ? G|mehr
+.formula M|yreservierungicon = "icon:ball_red"
+!NORESER
+.formula M|yreservierungicon = "icon:ball_green"  ? M|yreservierungicon ="icon:view_disabled"   
+!NOSUCH5
+..***************************************************
+..2.4 BestÑnde
+..***************************************************
+.continue NOSUCH6  ? _M|ybestaende
+.formula U|xtselect = "$,,artikel="+'M|yartikel'+";artikel^earta==Åber StÅckliste;artikel^bsart==Eigenfertigung;platz<>`;@sort=Einzelmengen_auf_einem_Platz;"
+.select group "40:0" 'U|xtselect'
+.continue NOBEST ? _G|mehr
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.colour -BACKGROUND 255 255 0 'M|aktzeile'
+.formula M|ytbeschreibung   = "Set-Artikel mit Bestand"
+.formula M|ytbeschreibung   = "set prodcut with stock"                 ? G|bsprache <> "D"
+!BEST
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.formula M|ytartikel        = H|artikel
+.formula M|ytobjekt         = H|id
+.formula M|ytbeschreibung   = "Platzbestand"
+.formula M|ytbeschreibung   = "stock"                 ? G|bsprache <> "D"
+.select continue
+.continue BEST ? G|mehr
+.formula M|ybestaendeicon = "icon:ball_red"
+!NOBEST
+.formula M|ybestaendeicon = "icon:ball_green"  ? M|ybestaendeicon = "icon:view_disabled"  
+!NOSUCH6
+..***************************************************
+..2.5 Inventur
+..***************************************************
+.continue NOSUCH7  ? _M|yinventur
+.formula U|xtselect = "$,,nummer=;artikel="+'M|yartikel'+";artikel^earta==Åber StÅckliste;artikel^bsart==Eigenfertigung;platz=;abschluss=nein;"
+.select STOCKTAKING 'U|xtselect'
+.continue NOZL ? _G|mehr
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.colour -BACKGROUND 255 255 0 'M|aktzeile'
+.formula M|ytbeschreibung   = "Set-Artikel in ZÑhlliste"
+.formula M|ytbeschreibung   = "set product in inventory sheet"                 ? G|bsprache <> "D"
+!ZL
+.make screen line +o
+.colour -BACKGROUND -1 -1 -1  'M|aktzeile'
+.formula M|ytartikel        = H|artikel
+.formula M|ytobjekt         = H|zlsnr^id
+.formula M|ytbeschreibung   = "ZÑhlliste"
+.formula M|ytbeschreibung   = "inventory sheet"                 ? G|bsprache <> "D"
+.select STOCKTAKING 
+.continue ZL ? G|mehr
+.formula M|yinventuricon = "icon:ball_red" 
+!NOZL
+.formula M|yinventuricon = "icon:ball_green"  ? M|yinventuricon = "icon:view_disabled"  
+!NOSUCH7
+.continue ENDE
+..*****************************************************************************
+.. FEHLER
+..*****************************************************************************
+..
+..
+..*****************************************************************************
+.. ENDE
+..*****************************************************************************
+!ENDE

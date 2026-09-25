@@ -1,0 +1,246 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SAFAKTURA.TBUFAKT.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : as
+.. Funktion       : Erstellt mit Hilfe von EPI eine Rechnung zur geklickten
+..                  Zeile (eine Serviceanfrageposition),
+..                  oder eine Sammelrechnung fÅr die Zeilen, die zum gleichen
+..                  Kunden gehîren.
+.. Functionality  : Uses epi to create an invoice for the clicked row (which
+..                  represents a service request position), or an invoice
+..                  with all positions for the same customer.
+..*****************************************************************************
+.set trans -
+.type text  xtcmd
+.type text  xtepi
+.type text  xtout
+.type P0    xvkunde
+.type P3:24 xvrechn
+.type text  xt1
+.type text  xtrow
+.type text  xtrest
+.type text  xtdpidref
+.type text  xtdpidrefpattern
+.type integer   xi1
+.type integer   xirow
+.type bool  xbwarning
+.type bool  xberror
+..
+.. kfaktpos is the required invoice item
+.continue ERRART  ?  F|empty(M|kfaktpos)
+.. this row already has been invoiced
+.continue ERRPOS  ? _F|empty(M|tanfrechnr)
+.continue ERRPOS  ? 'M|tsbufakt' = "icon:ok"
+..
+.. remember customer of clicked row
+.assign T|xvkunde   = M|tkunde^id
+..
+.. assign file names
+.file -tempname T|xtepi
+.file -tempname T|xtout
+..
+..
+.. The following lines build an epi script to create an invoice for one or
+.. serveral rows from service requests.
+.. When the invoice is done, these items must be achieved:
+..
+.. * Service request pos must know invoice pos (c-core)
+.. * Invoice pos must know service request head
+.. * Invoice pos receives row-no of service request pos (temporary)
+..
+.. To be able to write the invoice into the service request, the service
+.. request has to be locked. The lock must last as briefly as possible.
+..
+.. output to file
+.output new 'T|xtepi'
+..
+.. epi script: logon + config
+LGN|'T|pid'|'T|einmalpw'||2||ser/SAFAKTURA|-
+SET|'T|pid'|CHARSET|EKS|
+SET|'T|pid'|LANG|'P|spr'|
+..
+.. epi script: start transaction
+TA|'T|pid'|START|
+..
+.. epi script: lock service requests
+.continue LOCKONE ? _M|kbsammel
+.select screen header
+!LOCK
+.select screen line
+.continue LOCKEND ? _T|mehr
+.continue LOCK    ?  M|tkunde^id <> T|xvkunde^id
+.continue LOCK    ? _F|empty(M|tanfrechnr)
+!LOCKONE: lock service request for current row
+UPD|'T|pid'||REF|'M|tanfrage^id'|
+.. remove fields in "new" row, and remove row, or COM will fail
+SFV|'T|pid'|#|tbearbeit||
+SFV|'T|pid'|#|datum||
+SFV|'T|pid'|#|uhrzvon||
+RDL|'T|pid'|#|
+COM|'T|pid'|
+.continue LOCKEND ? _M|kbsammel
+.continue LOCK
+!LOCKEND
+..
+.. epi script: new invoice
+NEW|'T|pid'|3:24|EMPTY|
+SFV|'T|pid'|0|kunde|'T|xvkunde^id'|
+SFV|'T|pid'|0|term|'T|datum:8'|
+SFV|'T|pid'|0|budat|'T|datum:8'|
+..
+.. epi script: insert rows
+.formula T|xirow = 1
+.continue ROWSONE ? _M|kbsammel
+.select screen header
+!ROWS
+.select screen line
+.continue ROWSEND ? _T|mehr
+.continue ROWS    ?  M|tkunde^id <> T|xvkunde^id
+.continue ROWS    ? _F|empty(M|tanfrechnr)
+!ROWSONE: invoice-row for current row
+.formula M|tsbufakt = "icon:process"
+.formula T|xtrest   = M|trmktxt
+RIN|'T|pid'|'T|xirow'|
+SFV|'T|pid'|'T|xirow'|artex|'M|kfaktpos^id'|
+SFV|'T|pid'|'T|xirow'|mge|'M|tmge'|
+SFV|'T|pid'|'T|xirow'|he|'M|the'|
+.. pass service request + row to invoice pos
+SFV|'T|pid'|'T|xirow'|fseranf|'M|tanfrage^id'|
+SFV|'T|pid'|'T|xirow'|fseranfzn|'M|tanfzeile'|
+!ROWSSFT: free text with multiple rows
+.formula T|xtrow  = T|xtrest << ";"
+.formula T|xtrest = T|xtrest >> ";"
+SFT|'T|pid'|'T|xirow'|pftext|'T|xtrow'\n
+.continue ROWSSFT ? +T|xtrest > 0
+.continue ROWSEND ? _M|kbsammel
+.formula T|xirow = T|xirow + 1
+.continue ROWS
+!ROWSEND
+..
+.. epi script: close transaction, fetch ref of new invoice
+COM|'T|pid'|
+GTS|'T|pid'|REF|
+TA|'T|pid'|COMMIT|
+.output
+..
+.. run epi script
+.formula T|xtcmd = "epi <" + T|xtepi + " >" + 'T|xtout'
+.system 'xtcmd' password background
+.continue ERRFAK  ? _T|mehr
+..
+.. evaluate epi output
+.. note: it is possible to receive errors, but still
+..       succeed with creating the invoice
+.formula T|xbwarning = false
+.formula T|xberror = false
+.formula T|xvrechn   = ""
+.. mh, 16.12.2009: helper-string to find the invoice number
+.formula T|xtdpidref= "D|" + 'T|pid' + "|REF|"
+.formula T|xtdpidrefpattern = "D\|" + 'T|pid' + "\|REF\|.*\|"
+!EPIROW: get one row from output file
+.select from 'T|xtout' xt1^
+.continue EPIEND  ? _T|mehr
+.formula T|xberror = true    ?  F|regmatch(T|xt1,"E.*ERROR.*")
+.formula T|xbwarning = true  ?  F|regmatch(T|xt1,"NAK.*")
+.continue EPIREF              ?  F|regmatch(T|xt1,'T|xtdpidrefpattern')
+.continue EPIROW
+!EPIREF: get invoice number from epi output
+.. mh, 14.09.2009: more | pipes at end of row , better start from front
+.. .. cut off "S|", cut off "4837|", cut off everything after next pipe, i.e. "|STATUS||etc"
+.. .. example:  S|4837|  400005|STATUS||
+.. .formel U|xt1=F|substr(U|xt1, F|strindex(T|xt1,"|")+1)
+.. .formel U|xt1=F|substr(U|xt1, F|strindex(T|xt1,"|")+1)
+.. .formel U|xt1=F|substr(U|xt1, 1, F|strindex(T|xt1,"|")-1)
+.. mh, 16.12.2009: D|23460|REF|(1582,3,0)| .. invoice number no longer in S-row
+.formula U|xt1 = U|xt1 >> T|xtdpidref
+.formula U|xt1 = U|xt1 << "|"
+.assign T|xvrechn = U|xt1
+.continue EPIROW
+!EPIEND
+.select from
+.continue ERRFAK  ?  F|empty(T|xvrechn)
+..
+.continue ECHOONE ? _M|kbsammel
+.select screen header
+!ECHO: show invoice number in infosystem
+.select screen line
+.continue ECHOEND ? _T|mehr
+.continue ECHO    ?  M|tsbufakt <> "icon:process"
+!ECHOONE: update one row
+.formula M|tsbufakt = "icon:ok"
+.formula M|tsbufakt = "icon:attention"   ?  T|xbwarning ; T|xberror
+.assign M|tanfrechnr = T|xvrechn^id
+.continue ECHOEND ? _M|kbsammel
+.continue ECHO
+!ECHOEND
+..
+.. epi produced an error, but still succeeded with the invoice
+.. keep error files
+.continue INVERR  ?  T|xberror
+.continue INVWARN ?  T|xbwarning
+..
+!CLEAN: remove temporary files
+.formula T|xtcmd = "rm -f " + T|xtepi + " " + T|xtout
+.system 'xtcmd' password background
+.output terminal
+..
+!SHOW: Show new invoice for editing
+.command -parallel 'F|formatstr("<(Sales)> {1} <(Edit)>", U|xvrechn^id)'  ?  M|kbzeigen
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERRART: missing service item
+.error Bitte geben Sie eine fakturierbare Dienstleistung an.
+.cursor kfaktpos 0
+.end 1
+..
+!ERRPOS: already been invoiced
+.error Diese Position wurde bereits fakturiert.
+.cursor tanfrechnr 'aktzeile'
+.end 1
+..
+!ERRANF: service data was altered
+.error Die Serviceanfrage wurde geÑndert, bitte aktualisieren Sie das Infosystem.
+.cursor tanfrage 'aktzeile'
+.end 1
+..
+!ERRFAK: invoicing failed
+.error Es konnte keine Rechnung erstellt werden.
+.continue SHOWERR
+..
+!INVWARN: epi produced a NAK, but still succeeded with the invoice
+.error Beim Erstellen der Rechnung sind Warnungen aufgetreten.
+.continue SHOWERR
+..
+!INVERR: epi produced an ERROR, but still succeeded with the invoice
+.error Beim Erstellen der Rechnung sind Fehler aufgetreten.
+.continue SHOWERR
+..
+..*****************************************************************************
+!SHOWERR: extract error and warning text from epi output file
+.output terminal
+!ERRROW: get one row from output file
+.select from 'T|xtout' xt1^
+.continue ERREND  ? _T|mehr
+.continue ERRERR  ?  F|regmatch(T|xt1,"E.*ERROR.*")
+.continue ERRNAK  ?  F|regmatch(T|xt1,"NAK.*")
+.continue ERRROW
+!ERRERR: example: E|1930|Einheit ist nicht beim Artikel definiert!|ERROR|2940|
+.formula T|xtrow  = "E|" +  'T|pid' + "|"
+.formula T|xtrest = T|xt1 >> 'T|xtrow'
+.formula T|xtrow  = T|xtrest << "|"
+'T|xtrow'
+.continue ERRROW
+!ERRNAK: example: NAK|1930|UngÅltiger Feldwert|
+.formula T|xtrow  = "NAK|" +  'T|pid' + "|"
+.formula T|xtrest = T|xt1 >> 'T|xtrow'
+.formula T|xtrow  = T|xtrest << "|"
+'T|xtrow'
+.continue ERRROW
+!ERREND
+.select from
+.end 1

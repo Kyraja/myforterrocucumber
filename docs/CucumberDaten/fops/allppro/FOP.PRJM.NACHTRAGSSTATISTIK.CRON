@@ -1,0 +1,305 @@
+..!interpreter english declaration noabbrev
+.. at 2016-12-23, 11:38
+.set trans -
+..========================================================================
+..==  Name              : FOP.PRJM.NACHTRAGSSTATISTIK.CRON
+..==  Pfad              : allppro
+..==  Funktion          : legt die Nachtragsstatistik an
+..==  Erstellungsdatum  : 29.02.2012
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2016 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allpstart/LART.KONFIG.INI"
+..====================================================
+.type text    xtsys xtcmd xtsel xtnachtrtypk
+.type realx   xxwert
+.type GD      xdadatum xdedatum xdawoche xdewoche
+.type GD19    xdzeitpunk xdvon xdbis xdlastrun
+.type ZAE1    xversionn
+.type bool    xbwochenbezogen
+.type integer xprocsp      ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Historiendatensatz_anlegen -----
+.select lock add H|id
+.continue EL001 ? _(G|mehr)
+.formula H|such              = 1|such
+.formula H|name              = 1|name
+.formula H|ygeloescht        = G|FALSE
+.formula H|yprojekt          = 0|id
+.formula H|ypvurspr          = 1|ypvurspr^id            ? F|defined(1|ypvurspr)
+.formula H|yabrechtypk       = 1|yabrechtypk            ? F|defined(1|yabrechtypk)
+.formula H|yerfass           = 1|erfass
+.formula H|yuebergabedat     = 1|yuebergabedat
+.formula H|yantwortdat       = 1|yantwortdat
+.formula H|yakzeptanz        = 1|yakzeptanz
+.formula H|yanfeigstd        = 1|yanfeigstd
+.formula H|yanfeigwert       = 1|yanfeigwert
+.formula H|yanffremdwert     = 1|yanffremdwert
+.formula H|yanfsonstwert     = 1|yanfsonstwert
+.formula H|yanffertwert      = 1|yanffertwert
+.formula H|yanfgeswert       = 1|yanfgeswert
+.formula H|yakzeigstd        = 1|yakzeigstd
+.formula H|yakzeigwert       = 1|yakzeigwert
+.formula H|yakzfremdwert     = 1|yakzfremdwert
+.formula H|yakzsonstwert     = 1|yakzsonstwert
+.formula H|yakzfertwert      = 1|yakzfertwert
+.formula H|yakzgeswert       = 1|yakzgeswert
+.formula H|ybem1             = 1|ybem1
+.formula H|ybem2             = 1|ybem2
+.formula H|yerfwahrsch       = 1|yerfwahrsch
+.formula H|yanferwwert       = 1|yanferwwert
+.formula H|ybnachtrfordzeile = 1|ybnachtrfordzeile      ? F|defined(1|ybnachtrfordzeile)
+.formula H|ynachtrfordid     = 1|ynachtrfordid          ? F|defined(1|ynachtrfordid)
+.formula H|ykalkposid        = 1|ykalkposid             ? F|defined(1|ykalkposid)
+.formula H|ynachtrnr         = 1|ynachtrnr
+.formula H|yort              = 1|yort
+.formula H|yfortschrittsgrad = 1|yfortschrgrad
+.continue EL002 ? _(F|defined(1|yauposeigenid))
+.formula H|yabgerechnet  = 0
+.assign  H|yletztrechdat = ""
+.formula H|yrechnr       = ""
+.continue EL003 ? _((_(F|empty(1|yauposeigenid))) & (1|yauposeigenid <> "(0,0,0)"))
+..= Summe aller Nettowerte aller gebuchten Rechnungspositionen zu allen Auftragspositionen mit Verweis auf diese Nachtragsanfrage / Nachtragsforderung
+.load 9 group "3:2" 'F|expr("$,,orig==" + 1|yauposeigenid + ";@ablageart=(3)")'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue BRK001 ? _(9|kotyp = G|REKO)
+.continue EL004 ? _(9|kopf^budat <= H|ybezugsdatum)
+.formula U|xxwert       = 9|nwert                                                                       ? _9|kopf^brutto
+.formula U|xxwert       = 9|nwert / (1 + (9|stsatz / 100))                                              ?  9|kopf^brutto
+.formula H|yabgerechnet = H|yabgerechnet + U|xxwert                                                     ?  9|pland =  G|inland
+.formula H|yabgerechnet = H|yabgerechnet + F|fxamount(G|inland,U|xxwert,H|ybezugsdatum,9|pland,G|TRUE)  ?  9|pland <> G|inland
+.formula H|yrechnr       = H|yrechnr +       9|kopf^nummer      ? F|empty(H|yrechnr)
+.formula H|yrechnr       = H|yrechnr + "," + 9|kopf^nummer      ? F|regindex(H|yrechnr, 9|kopf^nummer) = 0
+.formula H|yletztrechdat = 9|kovom      ? F|empty(H|yletztrechdat) ; 9|kovom > H|yletztrechdat
+!EL004
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(9|kotyp = G|LIKO)
+.load 8 group "3:2" 'F|expr("$,,orig==" + 9|id + ";kotyp==(" + F|tostring(G|REKO) + ");kopf^budat<=" + F|tostring(H|ybezugsdatum) + ";@ablageart=(3)")'
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.formula U|xxwert       = 8|nwert                                                                       ? _8|kopf^brutto
+.formula U|xxwert       = 8|nwert / (1 + (9|stsatz / 100))                                              ?  8|kopf^brutto
+.formula H|yabgerechnet = H|yabgerechnet + U|xxwert                                                     ?  8|pland =  G|inland
+.formula H|yabgerechnet = H|yabgerechnet + F|fxamount(G|inland,U|xxwert,H|ybezugsdatum,9|pland,G|TRUE)  ?  8|pland <> G|inland
+.formula H|yrechnr       = H|yrechnr +       8|kopf^nummer      ? F|empty(H|yrechnr)
+.formula H|yrechnr       = H|yrechnr + "," + 8|kopf^nummer      ? F|regindex(H|yrechnr, 8|kopf^nummer) = 0
+.formula H|yletztrechdat = 8|kovom      ? F|empty(H|yletztrechdat) ; 8|kovom > H|yletztrechdat
+.load 8 continue
+.continue LOOP002
+!ELOP002: ==============================
+.continue ESAC001
+!BRK002
+!ESAC001: =====   ENDCASE   =====
+.load 9 continue
+.continue LOOP001
+!ELOP001: ==============================
+!EL003
+!EL002
+.rewrite
+.continue FI001
+!EL001
+.set trans +
+FEHLER: Nachtragsstatistik fÅr Projekt '0|nummer' kann nicht bearbeitet werden.
+.set trans -
+!FI001
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Nachtraege_laden_und_Statistikdatensatz_anlegen -----
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.formula U|xtsel = "$,,ybezugsdatum==" + U|xdedatum:8 + ";yorigobjid==" + 1|id + ";ywochenbezogen==0;@ablageart=(1)"
+.select group 'U|xydbgrnachtrstatistik' 'U|xtsel'
+.continue EL005 ? _(_(G|mehr))
+.formula U|xtcmd = "make " + G|hdatname.xydbnachtrstatistik + " GROUP" + 'U|xygrnachtrstatistik'
+.'U|xtcmd'
+.formula H|such           = 1|such
+.formula H|name           = 1|name
+.formula H|yorigobjid     = 1|id
+.formula H|yprojekt       = 0|id
+.formula H|ybezugsdatum   = U|xdedatum
+.formula H|ynachtrtypk    = U|xtnachtrtypk
+.copy    H|ywochenbezogen = G|FALSE
+.rewrite
+!EL005
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.continue EL006 ? _(0|ywochenbezogen)
+.formula U|xtsel = "$,,ybezugsdatum==" + U|xdewoche:8 + ";yorigobjid==" + 1|id + ";ywochenbezogen==1;@ablageart=(1)"
+.select group 'U|xydbgrnachtrstatistik' 'U|xtsel'
+.continue EL007 ? _(_(G|mehr))
+.formula U|xtcmd = "make " + G|hdatname.xydbnachtrstatistik + " GROUP" + 'U|xygrnachtrstatistik'
+.'U|xtcmd'
+.formula H|such           = 1|such
+.formula H|name           = 1|name
+.formula H|yorigobjid     = 1|id
+.formula H|yprojekt       = 0|id
+.formula H|ybezugsdatum   = U|xdewoche
+.formula H|ynachtrtypk    = U|xtnachtrtypk
+.copy    H|ywochenbezogen = G|TRUE
+.rewrite
+!EL007
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+!EL006
+.load 1 continue
+.continue LOOP003
+!ELOP003: ==============================
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Projekte_laden -----
+.formula U|xtnachtrtypk = "NA"
+.load 1 group 'U|xydbgrnachtranfrage' 'F|expr("$,,yprojekt==" + 0|id + ";@ablageart=(1)")'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC002
+!RET003
+.formula xprocsp = xprocsp - 1
+.formula U|xtnachtrtypk = "NF"
+.load 1 group 'U|xydbgrnachtranford' 'F|expr("$,,yprojekt==" + 0|id + ";@ablageart=(1)")'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC002
+!RET004
+.formula xprocsp = xprocsp - 1
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.formula U|xdzeitpunk = G|zeitpunkt
+.formula U|xversionn  = G|versionneu
+.formula U|xdvon    = "<M-1M"
+.formula U|xdadatum = U|xdvon
+.formula U|xdbis    = ">M"
+.formula U|xdedatum = U|xdbis
+.formula U|xdawoche = G|datum - G|datum//7 + 1
+.formula U|xdewoche = U|xdawoche + 6
+.type text xtprojekt    ? _F|defined(U|xtprojekt)
+.continue EL008 ? _(_(F|empty(U|xtprojekt)))
+.load 0 group 'U|xydbgrprojekt' 'U|xtprojekt'
+.continue EL009 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC003
+!RET005
+.formula xprocsp = xprocsp - 1
+!EL009
+.continue FI008
+!EL008
+.select lock add F|sysinfo(10)^ykonfigprjm
+.continue EL010 ? _(G|mehr)
+.assign U|xdlastrun = H|ypmllaufnachtrstat
+.set trans +
+'G|txname       '       Nachtragsstatistik
+
+Nachtragsstatistik fÅr Zeitraum 'U|xdadatum' - 'U|xdedatum'
+
+letzter Lauf: 'U|xdlastrun'
+Start: 'G|zeitpunkt'
+.set trans -
+
+.formula U|xtsel = "$,,yablage==0;@ablageart=(1)"
+.load 0 group 'U|xydbgrprojekt' 'U|xtsel'
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC003
+!RET006
+.formula xprocsp = xprocsp - 1
+.load 0 continue
+.continue LOOP004
+!ELOP004: ==============================
+.formula U|xtsel = "$,,yablage==1;yabldat=" + U|xdadatum:8 + "!" + U|xdedatum:8 + ";@ablageart=(1)"
+.load 0 group 'U|xydbgrprojekt' 'U|xtsel'
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC003
+!RET007
+.formula xprocsp = xprocsp - 1
+.load 0 continue
+.continue LOOP005
+!ELOP005: ==============================
+.select lock add F|sysinfo(10)^ykonfigprjm
+.continue EL011 ? _(G|mehr)
+.formula H|ypmllaufnachtrstat = U|xdzeitpunk
+.formula H|yvnllaufnachtrstat = U|xversionn
+.rewrite
+
+.set trans +
+Ende : 'G|zeitpunkt'
+.set trans -
+.continue FI011
+!EL011
+.set trans +
+FEHLER: ProjectSuite Konfiguration kann nicht geîffnet werden.
+        Eintrag letzter Statistiklauf ist nicht mîglich
+.set trans -
+!FI011
+.continue FI010
+!EL010
+.set trans +
+FEHLER: ProjectSuite Konfiguration kann nicht geîffnet werden.
+PROGRAMMABBRUCH
+.set trans -
+.continue
+!FI010
+.formula U|xtsel = "$,,ybezugsdatum==" + U|xdedatum:8 + ";versionn<=" + 'U|xversionn' + ";ygeloescht=0;ywochenbezogen==0;@ablageart=(1)"
+.load 9 group 'U|xydbgrnachtrstatistik' 'U|xtsel'
+!LOOP006: ==============================
+.continue ELOP006 ? _(G|mehr)
+.load 0 object '9|yorigobjid'
+.continue EL012 ? _(_(G|mehr))
+.select lock add 9|id
+.continue EL013 ? _(G|mehr)
+.formula H|ygeloescht    = G|TRUE
+.rewrite
+.continue FI013
+!EL013
+FEHLER: Nachtragsstatistik fÅr Projekt '0|nummer' kann nicht bearbeitet werden.
+!FI013
+!EL012
+.load 9 continue
+.continue LOOP006
+!ELOP006: ==============================
+.formula U|xtsel = "$,,ybezugsdatum==" + U|xdewoche:8 + ";versionn<=" + 'U|xversionn' + ";ygeloescht=0;ywochenbezogen==1;@ablageart=(1)"
+.load 9 group 'U|xydbgrnachtrstatistik' 'U|xtsel'
+!LOOP007: ==============================
+.continue ELOP007 ? _(G|mehr)
+.load 0 object '9|yorigobjid'
+.continue EL014 ? _(_(G|mehr))
+.select lock add 9|id
+.continue EL015 ? _(G|mehr)
+.formula H|ygeloescht    = G|TRUE
+.rewrite
+.continue FI015
+!EL015
+FEHLER: Nachtragsstatistik fÅr Projekt '0|nummer' kann nicht bearbeitet werden.
+!FI015
+!EL014
+.load 9 continue
+.continue LOOP007
+!ELOP007: ==============================
+!FI008
+.continue

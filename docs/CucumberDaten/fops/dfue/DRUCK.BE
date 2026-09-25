@@ -1,0 +1,155 @@
+..!interpreter english translate
+..
+.. Programmkopf
+.continue INI
+..*******************************************************************************************************
+..*
+..*  Programmname : DRUCK.BE
+..*
+..*  Autor        : Ozan Kesim
+..*
+..*  Generiert am : 09.01.04
+..*  Funktion     : Druckt IHSS fÅr EDI-Auftrag (ORDERS)
+..*
+..*  Bemerkung    : Ist Unterprogramm von DRUCK.VORGANG
+..*******************************************************************************************************
+.set trans +
+!INI
+.type text xtfotmp
+.type integer  xi1zaehl
+.continue START
+..
+!START
+.up
+.page 1
+..
+..
+EDI-ID: 'H|num   '                                                    Mandant: 'mandant '
+vom   : 'H|ddatei '               IHSS fÅr EDI-Auftrag (ORDERS)       Datum  : 'datum   '
+Zeit  : 'H|zdatei '                                                   Seite  : 'seite   '
+------------------------------------------------------------------------------------------
+.continue MAIN0
+..
+!MAIN0
+.select line
+.continue ENDE0       ? _mehr
+..
+.continue M000                                   ?  H|text1 / "*000*"
+.continue M200                                   ?  H|text1 / "*200*"
+.continue M201                                   ?  H|text1 / "*201*"
+.continue M202                                   ?  H|text1 / "*202*"
+.continue M203                                   ?  H|text1 / "*203*"
+.continue M204                                   ?  H|text1 / "*204*"
+.continue M220                                   ?  H|text1 / "*220*"
+.continue M221                                   ?  H|text1 / "*221*"
+.continue M223                                   ?  H|text1 / "*223*"
+.continue M301                                   ?  H|text1 / "*301*"
+.continue MAIN0
+..
+!M000
+?Dokumentart                              : 'H|text3' ? 'H|text3'<>""
+?Beleg                                    : 'H|text4' ? 'H|text4'<>""
+?Belegart                                 : 'H|text5' ? 'H|text5'<>""
+?Absender                                 : 'H|text6' ? 'H|text6'<>""
+?Absender, verschl.                       : 'H|text7' ? 'H|text7'<>""
+?EmpfÑngerbezeichnung                     : 'H|text9' ? 'H|text9'<>""
+?EmpfÑnger, verschl.                      : 'H|text10' ? 'H|text10'<>""
+.type date xdatum
+.assign T|xdatum = 'H|text12'
+?Dateierstellung                          : 'T|xdatum'               ?  mehr & 'T|xdatum'<>""
+?Dateierstellung                          : 'H|text12'    ? _mehr & 'H|text12'<>""
+?Uhrzeit der Dateierstellung              : 'H|text13' ? 'H|text13'<>""
+.continue MAIN0
+..
+!M200
+------------------------------------------------------------------------------------------
+?Nachrichtentyp                           : 'H|text4' ? 'H|text4'<>""
+?Versionsnummer und Freigabenummer        : 'H|text5' ? 'H|text5'<>""
+?Belegart                                 : 'H|text6' ? 'H|text6'<>""
+?Verwaltende Organisation                 : 'H|text7' ? 'H|text7'<>""
+?Belegnummer                              : 'H|text8' ? 'H|text8'<>""
+?Funktion                                 : 'H|text9' ? 'H|text9'<>""
+.continue MAIN0
+..
+!M201
+.type date xdatum
+.assign T|xdatum = 'H|text3'
+?Belegdatum                               : 'T|xdatum'               ?  mehr & 'T|xdatum'<>""
+?Belegdatum                               : 'H|text3'    ? _mehr & 'H|text3'<>""
+.type date xdatum
+.assign T|xdatum = 'H|text5'
+?Lieferdatum                              : 'T|xdatum'               ?  mehr & 'T|xdatum'<>""
+?Lieferdatum                              : 'H|text5'    ? _mehr & 'H|text5'<>""
+.continue MAIN0
+..
+!M202
+------------------------------------------------------------------------------------------
+?Lieferanten-GLN-Nummer                   : 'H|text3' ? 'H|text3'<>""
+.continue MAIN0
+..
+!M203
+------------------------------------------------------------------------------------------
+?GLN-Nummer von Beteiligter               : 'H|text3' ? 'H|text3'<>""
+?Kundenname 1                             : 'H|text5' ? 'H|text5'<>""
+.continue MAIN0
+..
+!M204
+------------------------------------------------------------------------------------------
+?WarenempfÑnger-Name 1                    : 'H|text6' ? 'H|text6'<>""
+.continue MAIN0
+..
+!M205
+.continue MAIN0
+..
+!M206
+.continue MAIN0
+..
+!M207
+.continue MAIN0
+..
+!M208
+.continue MAIN0
+..
+!M220
+------------------------------------------------------------------------------------------
+?Positionsnummer                          : 'H|text4' ? 'H|text4'<>""
+?GTIN-Artikelnummer                       : 'H|text5' ? 'H|text5'<>""
+?Art der Beschreibung                     : 'H|text12' ? 'H|text12'<>""
+?Waren/Leistungsbeschreibung              : 'H|text13' ? 'H|text13'<>""
+?Artikelbezeichnung 1                     : 'H|text15' ? 'H|text15'<>""
+.continue MAIN0
+..
+!M221
+?Menge                                    : 'H|text3' ? 'H|text3'<>""
+?Menge, verschl.                          : 'H|text4' ? 'H|text4'<>""
+?Bestellmenge                             : 'H|text5' ? 'H|text5'<>""
+?Mengeneinheit                            : 'H|text6' ? 'H|text6'<>""
+.continue MAIN0
+..
+!M222
+.continue MAIN0
+..
+!M223
+?Preis, verschl.                          : 'H|text3' ? 'H|text3'<>""
+.formula xtext = 'H|text4'
+?Preis                                    : 'xtext' ? 'xtext'<>""
+?Preisbasis                               : 'H|text7' ? 'H|text7'<>""
+?Ma·einheit, verschl.                     : 'H|text8' ? 'H|text8'<>""
+?Nettopreis pro Handelseinheit            : 'H|text11' ? 'H|text11'<>""
+.continue MAIN0
+..
+!M224
+.continue MAIN0
+..
+!M225
+.continue MAIN0
+..
+!M300
+.continue MAIN0
+..
+!M301
+.continue MAIN0
+..
+!ENDE0
+.continue
+..

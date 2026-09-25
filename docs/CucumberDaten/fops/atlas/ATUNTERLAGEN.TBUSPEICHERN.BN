@@ -1,0 +1,109 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ATUNTERLAGEN.TBUSPEICHERN.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Unterlagen-Details in Freitext der Warennummer schreiben.
+.. Functionality  : Write document data into ftext of goods number object.
+..*****************************************************************************
+.set trans -
+..
+.continue NOEDIT  ? _M|tbmark
+..
+.type text   xtmpfile          ? _F|defined(U|xtmpfile)
+.type text   xtout             ? _F|defined(U|xtout)
+.type text   xterr             ? _F|defined(U|xterr)
+..
+.type PS12:3 xvahnum           ? _F|defined(xvahnum)
+.type PS97:1 xvstaatalt        ? _F|defined(xvstaatalt)
+.type text   xtempname         ? _F|defined(xtempname)
+..
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+.formula T|xvahnum = M|tahnum^id
+.formula T|xvstaatalt = ""
+..
+.select lock nowait company 'T|xvahnum^id'
+.continue ERRSPER ? _T|mehr
+.continue ERRSPER ? _T|gesperrt
+..
+.file -tempname U|xtempname
+.output new 'U|xtempname'
+.input "DATEI.F"
+.. --- --- --- ---
+#!ATUNTERLAGEN
+#
+#       ATLAS-Unterlagen fuer Warennummer 'M|tahnum8' (Identnummer: 'M|tahnum^nummer')
+#
+#  ***  Dieser Freitext wird vom Infosystem ATUNTERLAGEN erstellt.     ***
+#  ***  Dieser Freitext darf nicht manuell bearbeitet werden.          ***
+#
+#       Ein manuell bearbeiteter Freitext kann zum Scheitern bei der
+#       Anmeldung zur Ausfuhr fÅhren!
+#
+#       Erstellt am: 'T|datum'
+#       Bediener:    'T|bzeichen'
+#       Version:     'T|progvers'
+#
+
+.select screen header
+'M|kxvstaat'#'M|kxunttyp'#'M|kxuntqua'#'M|kxuntref'#'M|kxuntzus'#'M|kxuntdet'#'M|kxuntdataus'#'M|kxuntdatgue'#'M|kxuntwert'#'M|kxabsmgequa'#'M|kxabsmgeeinh'#'M|kxabsmgewert'#
+
+!NEXT
+.select screen line
+.continue FERTIG  ? _T|mehr
+.continue NEXT    ?  M|tahnum^id <> T|xvahnum^id
+.continue NEXT    ?  F|empty(M|tunt)
+.continue KEINSTA ?  F|empty(M|tvstaat)
+.continue STAAT   ?  T|xvstaatalt^id = M|tvstaat^id
+.formula T|xvstaatalt = M|tvstaat^id
+.. empty row
+
+!STAAT
+'M|tvstaat^such'#'M|tunttyp'#'M|tuntqua'#'M|tuntref'#'M|tuntzus'#'M|tuntdet'#'M|tuntdataus:8'#'M|tuntdatgue:8'#'M|tuntwert'#'M|tabsmgequa'#'M|tabsmgeeinh'#'M|tabsmgewert'#
+.continue NEXT
+!KEINSTA
+-#'M|tunttyp'#'M|tuntqua'#'M|tuntref'#'M|tuntzus'#'M|tuntdet'#'M|tuntdataus:8'#'M|tuntdatgue:8'#'M|tuntwert'#'M|tabsmgequa'#'M|tabsmgeeinh'#'M|tabsmgewert'#
+.continue NEXT
+!FERTIG
+.. --- ---- --- ---
+.output
+..
+.reserve
+.select -
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=12:3
+#!action=modify 
+#!flddelimiter=;
+#!charset=eks
+id;**ftext
+'T|xvahnum^id';'U|xtempname'
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2}  >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.select
+..
+.select screen header
+..
+!NEXT2:  Markierungen entfernen
+.select screen line
+.continue END     ? _T|mehr
+.copy M|tbmark = G|FALSE                 ?  M|tahnum^id = T|xvahnum^id
+.formula M|tbuspeichern = ""             ?  M|tahnum^id = T|xvahnum^id
+.formula M|tstatusz = G|icoukrit         ?  M|tahnum^id = T|xvahnum^id
+.formula M|tstatusz = G|icovkrit         ? _F|empty(M|tuntdatgue) & M|tuntdatgue < T|datum
+.continue NEXT2
+..*****************************************************************************
+!END
+.continue
+..
+!NOEDIT
+.error Diese Zeile ist nicht bearbeitet worden.
+.end 1
+..
+!ERRSPER
+.error Beim Sperren der Warennummer ist ein Problem aufgetreten.
+.end 1

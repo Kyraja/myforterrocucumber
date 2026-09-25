@@ -11,8 +11,10 @@
 import { useState } from 'react';
 import { chatWithAgentSync, isLoggedIn } from '../lib/myforterroApi';
 import { updateLastResponseSummary } from '../lib/tokenHistory';
-import { DEFAULT_RATING_PROMPT, parseRatingResponse } from '../lib/aiPrompt';
+import { getRatingPromptForLang, parseRatingResponse } from '../lib/aiPrompt';
 import type { AiPromptRating } from '../lib/aiPrompt';
+import type { WorkflowEmitter } from '../lib/workflowEmitter';
+import { getPhaseLabel } from '../lib/workflowLabels';
 
 /** Return value of {@link useAiRating}. */
 interface UseAiRatingResult {
@@ -26,7 +28,13 @@ interface UseAiRatingResult {
    * Send `text` to the AI agent and populate `rating` on success.
    * Guards against unauthenticated state and missing agent ID before making the call.
    */
-  requestRating: (text: string, model: string, agentId: string) => Promise<void>;
+  requestRating: (
+    text: string,
+    model: string,
+    agentId: string,
+    emitter?: WorkflowEmitter,
+    lang?: 'de' | 'en',
+  ) => Promise<void>;
   /** Reset rating and error back to their initial values. */
   clearRating: () => void;
 }
@@ -45,13 +53,23 @@ export function useAiRating(): UseAiRatingResult {
   const [error, setError] = useState<string | null>(null);
   const [rating, setRating] = useState<AiPromptRating | null>(null);
 
-  const requestRating = async (text: string, model: string, agentId: string) => {
+  const requestRating = async (
+    text: string,
+    model: string,
+    agentId: string,
+    emitter?: WorkflowEmitter,
+    lang: 'de' | 'en' = 'de',
+  ) => {
     if (!isLoggedIn()) {
-      setError('Nicht eingeloggt. Bitte zuerst anmelden.');
+      setError(lang === 'en' ? 'Not signed in. Please sign in first.' : 'Nicht eingeloggt. Bitte zuerst anmelden.');
       return;
     }
     if (!agentId) {
-      setError('Kein Agent ausgewählt. Bitte zuerst einen Agent erstellen oder auswählen.');
+      setError(
+        lang === 'en'
+          ? 'No agent selected. Please create or select an agent first.'
+          : 'Kein Agent ausgewählt. Bitte zuerst einen Agent erstellen oder auswählen.',
+      );
       return;
     }
 
@@ -59,25 +77,83 @@ export function useAiRating(): UseAiRatingResult {
     setLoading(true);
 
     try {
-      const userMessage = `AUFGABE: Bewerte den folgenden Anforderungstext. Generiere KEIN Gherkin, sondern antworte NUR mit JSON.\n\n${DEFAULT_RATING_PROMPT}\n\nAnforderungstext:\n\n${text}`;
-      const ratingDetails = `Bewertung | Modus: Agent (Editor) | Nur Beschreibungstext (${text.length} Zeichen), keine Tabellen`;
-      const result = await chatWithAgentSync(agentId, userMessage, null, 'rating', model, ratingDetails);
-      const parsed = parseRatingResponse(result.response);
+      const ratingPrompt = getRatingPromptForLang(lang);
+      const userMessage = lang === 'en'
+        ? `TASK: Rate the following requirements text. Do NOT generate Gherkin — respond ONLY with JSON.\n\n${ratingPrompt}\n\nRequirements text:\n\n${text}`
+        : `AUFGABE: Bewerte den folgenden Anforderungstext. Generiere KEIN Gherkin, sondern antworte NUR mit JSON.\n\n${ratingPrompt}\n\nAnforderungstext:\n\n${text}`;
+      const ratingDetails = lang === 'en'
+        ? `Rating | Mode: Agent (Editor) | Description text only (${text.length} chars), no tables`
+        : `Bewertung | Modus: Agent (Editor) | Nur Beschreibungstext (${text.length} Zeichen), keine Tabellen`;
+
+      emitter?.emitLocal({
+        phase: 'rating-input',
+        label: getPhaseLabel('rating-input', lang),
+        summary: `${text.length} ${lang === 'de' ? 'Zeichen Anforderungstext' : 'chars requirements text'}`,
+        inputText: text,
+      });
+
+      const response = emitter
+        ? await emitter.emitAiCall(
+            {
+              phase: 'rating-call',
+              label: getPhaseLabel('rating-call', lang),
+              agent: 'rating',
+              systemPrompt: ratingPrompt,
+              userPrompt: userMessage,
+              model,
+            },
+            async () => {
+              const r = await chatWithAgentSync(agentId, userMessage, 'rating', model, ratingDetails);
+              return r.response;
+            },
+          )
+        : (await chatWithAgentSync(agentId, userMessage, 'rating', model, ratingDetails)).response;
+
+      const parsed = parseRatingResponse(response);
 
       updateLastResponseSummary(
         parsed
-          ? `Antwort: Score ${parsed.score}% | ${parsed.reason} | ${parsed.suggestions.length} Vorschläge`
-          : `Antwort: Konnte nicht geparst werden | Rohantwort: ${result.response.slice(0, 200)}`
+          ? lang === 'en'
+            ? `Response: Score ${parsed.score}% | ${parsed.reason} | ${parsed.suggestions.length} suggestions`
+            : `Antwort: Score ${parsed.score}% | ${parsed.reason} | ${parsed.suggestions.length} Vorschläge`
+          : lang === 'en'
+            ? `Response: could not be parsed | Raw response: ${response.slice(0, 200)}`
+            : `Antwort: Konnte nicht geparst werden | Rohantwort: ${response.slice(0, 200)}`
       );
 
       if (!parsed) {
-        setError('KI-Antwort konnte nicht als Bewertung geparst werden.');
+        emitter?.emitLocal({
+          phase: 'rating-parse',
+          label: lang === 'de' ? 'Parse-Fehler' : 'Parse error',
+          summary: lang === 'de' ? 'Antwort nicht parsebar' : 'Response not parseable',
+          inputText: response,
+        });
+        setError(
+          lang === 'en'
+            ? 'AI response could not be parsed as a rating.'
+            : 'KI-Antwort konnte nicht als Bewertung geparst werden.',
+        );
         return;
       }
 
+      emitter?.emitLocal({
+        phase: 'rating-parse',
+        label: getPhaseLabel('rating-parse', lang),
+        summary: `Score ${parsed.score}% · ${parsed.suggestions.length} ${lang === 'de' ? 'Vorschläge' : 'suggestions'}`,
+        outputText: lang === 'en'
+          ? `Score: ${parsed.score}%\nReason: ${parsed.reason}\n\nSuggestions:\n${parsed.suggestions.map(s => `- ${s}`).join('\n')}`
+          : `Score: ${parsed.score}%\nGrund: ${parsed.reason}\n\nVorschläge:\n${parsed.suggestions.map(s => `- ${s}`).join('\n')}`,
+      });
+
       setRating(parsed);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler bei der KI-Bewertung');
+      setError(
+        err instanceof Error
+          ? err.message
+          : lang === 'en'
+            ? 'Error during AI rating'
+            : 'Fehler bei der KI-Bewertung',
+      );
     } finally {
       setLoading(false);
     }

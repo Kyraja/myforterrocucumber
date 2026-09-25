@@ -1,0 +1,114 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : LJPLANREL.TAB
+.. Autor/Author   : foe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       :
+..
+.. Program flow   :
+..*****************************************************************************
+.set trans -
+..
+.type date x1danf       ? _F|defined(U|x1danf)
+.type date x1dend       ? _F|defined(U|x1dend)
+.type text  xtjkey2      ? _F|defined(U|xtjkey2)
+.type text  x1tjourn     ? _F|defined(U|x1tjourn)
+.type text  x1tnum       ? _F|defined(U|x1tnum)
+.type VID9  xvorgang     ? _F|defined(U|xvorgang)
+.type VPK11 xvvorgang    ? _F|defined(U|xvvorgang)
+..
+.continue ERROR1 ? F|empty(M|product)
+.continue ERROR2 ? F|empty(M|kplanrel) & F|empty(M|knotplanrel)
+..
+!START
+.formula U|x1tnum = M|product^nummer
+.formula U|x1danf = M|vbudat
+.formula U|x1danf = "19810101" ? F|empty(M|vbudat)
+.formula U|x1dend = M|bbudat
+.formula U|x1dend = "."        ? F|empty(M|bbudat)
+..
+.input "JOURN.DAT"
+..
+.formula M|select = "$,,num10=" + U|x1tjourn
+.formula M|select = M|select + ";planrel=1" ? M|kplanrel & _M|knotplanrel
+.formula M|select = M|select + ";planrel=0" ? M|knotplanrel & _M|kplanrel
+.formula M|select = M|select + ";ursache=" + 'M|kursache' ? M|kursache <> ""
+.formula M|select = M|select + ";mge>" + 'M|quantity' ? M|quantity > 0
+.formula M|select = M|select + ";planrelaend=1;@ordnung=nummer.(Backwards);@gruppe=1;@ablageart=(Active)"
+.continue SELECT
+..
+!SELECT
+.load 2 journal 'M|select'
+.continue END ? _G|mehr
+.continue OUTPUT
+..
+!JOURNAL
+.load 2 journal
+.continue END ? _G|mehr
+.continue OUTPUT
+..
+!OUTPUT
+.continue JOURNAL ? _2|planrelaend
+.continue JOURNAL ? 2|buart=0 ; 2|buart=3 ; 2|buart=6 ; 2|buart=7 ; 2|buart=8 ; 2|buart=9; 2|buart=10
+..
+.make screen line +O
+.copy M|tid         = 2|id
+.copy M|art         = 2|art
+.copy M|planrel     = 2|planrel
+.protection bchangeplanrel 'M|aktzeile' ? _M|changeplanrel
+.copy M|ursache     = 2|ursache
+.assign M|pvorgang    = 2|vorgang
+.assign U|xvorgang    = 2|vorgang^id
+.copy M|vorgang     = U|xvorgang
+.assign U|xvvorgang   = U|xvorgang^kopf^id ? 2|vorgang^dnr <> 9
+.assign U|xvvorgang   = U|xvorgang^barm^id ? U|xvorgang^dnr = 9
+.copy M|vvorgang    = U|xvvorgang
+.formula   M|budat       = 2|budat
+.formula   M|vom         = 2|vom
+.formula   M|verw        = 2|verw
+.formula   M|mge         = 2|mge
+..
+.. Behandlung der buart ??
+.continue BZUGANG    ? 2|buart=1
+.continue BABGANG    ? 2|buart=2
+.continue BUMLAGER   ? 2|buart=4
+.continue BDURCHGANG ? 2|buart=5
+.continue END
+..
+!BZUGANG
+.set trans +
+.formula M|buart = "Zugang"
+.set trans -
+.continue JOURNAL
+..
+!BABGANG
+.set trans +
+.formula M|buart = "Abgang"
+.set trans -
+.continue JOURNAL
+..
+!BUMLAGER
+.set trans +
+.formula M|buart = "Umlagern"
+.set trans -
+.continue JOURNAL
+..
+!BDURCHGANG
+.set trans +
+.formula M|buart = "Durchgang"
+.set trans -
+.continue JOURNAL
+..
+..*****************************************************************************
+!END
+.continue
+....*****************************************************************************
+..
+!ERROR1
+.error -field M|product -message Bitte einen Artikel eintragen.
+.end 1
+..
+!ERROR2
+.error -message Bitte mindestens ein Bool-Feld zur Planungsrelevanz fÅllen.
+.end 1

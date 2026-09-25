@@ -8,7 +8,8 @@
  */
 import type { TableDef } from '../../types/gherkin';
 import type { FopBinding } from '../../types/fop';
-import type { IsBinding } from '../../lib/fopTxtParser';
+import type { IsBinding } from '../../lib/isBindingsParser';
+import { useTranslation } from '../../i18n';
 import styles from './DataStatusBar.module.css';
 
 interface DataStatusBarProps {
@@ -21,6 +22,8 @@ interface DataStatusBarProps {
 }
 
 export function DataStatusBar({ tableDefs, fopBindings, isBindings, kbDocumentCount, kbChunkCount, lang }: DataStatusBarProps) {
+  const { t } = useTranslation();
+  const locale = lang === 'de' ? 'de-DE' : 'en-US';
   const dbTables = tableDefs.filter(t => t.kind === 'database');
   const isTables = tableDefs.filter(t => t.kind === 'infosystem');
   const dbFields = dbTables.reduce((s, t) => s + t.fields.length, 0);
@@ -39,7 +42,7 @@ export function DataStatusBar({ tableDefs, fopBindings, isBindings, kbDocumentCo
   );
 
   const missing = (label: string) => (
-    <span className={styles.item} title={lang === 'de' ? 'Nicht hochgeladen' : 'Not uploaded'}>
+    <span className={styles.item} title={t('data.notUploaded')}>
       <span className={styles.dot} style={{ background: 'var(--color-text-muted)' }} />
       <span className={styles.labelMuted}>{label}:</span>
       <span className={styles.valMuted}>—</span>
@@ -51,35 +54,32 @@ export function DataStatusBar({ tableDefs, fopBindings, isBindings, kbDocumentCo
       {/* Left group: field data */}
       <span className={styles.group}>
         {dbTables.length > 0
-          ? ok(lang === 'de' ? 'Variablen' : 'Variables',
-              `${dbTables.length} DB · ${dbFields.toLocaleString()} ${lang === 'de' ? 'Felder' : 'fields'}`)
-          : missing(lang === 'de' ? 'Variablen' : 'Variables')}
+          ? ok(t('data.variables'), `${dbTables.length} DB · ${dbFields.toLocaleString(locale)} ${t('data.fields')}`)
+          : missing(t('data.variables'))}
 
         <span className={styles.sep} />
 
         {isTables.length > 0
-          ? ok('Infosysteme', `${isTables.length} IS · ${isFields.toLocaleString()} ${lang === 'de' ? 'Felder' : 'fields'}`)
-          : missing('Infosysteme')}
+          ? ok(t('csv.infosystem'), `${isTables.length} IS · ${isFields.toLocaleString(locale)} ${t('data.fields')}`)
+          : missing(t('csv.infosystem'))}
       </span>
 
       {/* Right group: program bindings */}
       <span className={styles.groupRight}>
         {fopBindings.length > 0
-          ? ok(lang === 'de' ? 'Masken-Anbindung' : 'Mask bindings',
-              `${fopBindings.length} ${lang === 'de' ? 'Bindungen' : 'bindings'} · ${uniqueFopMasks} ${lang === 'de' ? 'Masken' : 'masks'}`)
-          : missing(lang === 'de' ? 'Masken-Anbindung (FOP.txt)' : 'Mask bindings (FOP.txt)')}
+          ? ok(t('data.maskBindings'), `${fopBindings.length} ${t('data.bindings')} · ${uniqueFopMasks} ${t('data.masks')}`)
+          : missing(t('data.maskBindingsFop'))}
 
         <span className={styles.sep} />
 
         {isBindings.length > 0
-          ? ok(lang === 'de' ? 'IS-Anbindung' : 'IS bindings',
-              `${isBindings.length} ${lang === 'de' ? 'Programme' : 'programs'} · ${uniqueIsNames} IS`)
-          : missing(lang === 'de' ? 'IS-Anbindung' : 'IS bindings')}
+          ? ok(t('data.isBindings'), `${isBindings.length} ${t('data.programs')} · ${uniqueIsNames} IS`)
+          : missing(t('data.isBindings'))}
 
         {(kbDocumentCount ?? 0) > 0 && (
           <>
             <span className={styles.sep} />
-            {ok('📚 KB', `${kbDocumentCount} ${lang === 'de' ? 'Docs' : 'docs'} · ${kbChunkCount ?? 0} Chunks`)}
+            {ok('📚 KB', `${kbDocumentCount} ${t('data.docs')} · ${kbChunkCount ?? 0} ${t('data.chunks')}`)}
           </>
         )}
       </span>

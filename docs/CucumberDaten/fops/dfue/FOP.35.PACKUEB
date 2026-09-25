@@ -1,0 +1,271 @@
+..!interpreter english translate
+.. Programmname   : dfue/FOP.35.PACKUEB (neue Version)
+.. Programm von   : Ozan Kesim
+.. Programmiert am: 03.02.2005
+.. Verantwortlich : mh
+.. Funktion       : EFOP fÅr Lieferschein-Maske: Buttonnach: Packmittel Åbernehmen (vkpackueb)
+..                  Packmittelpositionen aus der Packanweisung in den Lieferschein Åbernehmen
+..
+.. Aenderungshistorie:
+.. #KOR#EDI-MODUL#DATUM#éNDERUNGS-INDEX#MitarbeiterkÅrzel#
+.. #KOR#EDI#21.02.2005#0#ok#n
+..
+.set trans -
+.type text  xpackanw       ? _defined(xpackanw)
+.type text  xtsel          ? _defined(xtsel)
+.type integer   xi             ? _defined(xi)
+..
+.. Liefermenge
+.type R6.3  xlmge          ? _defined(xlmge)
+.type R6.3  xlmge.xi       ? _defined(xlmge.xi)
+.. FÅllmenge
+.type MP7.2 xfmge          ? _defined(xfmge)
+.type MP7.2 xfmge.xi       ? _defined(xfmge.xi)
+.. Minumum FÅlmenge
+.type MP7.2 xmfmge         ? _defined(xmfmge)
+..
+.type text  xartikel       ? _defined(xartikel)
+.type text  xartname.xi    ? _defined(xartname.xi)
+.type text  xartrah.xi     ? _defined(xartrah.xi)
+..
+.type text  xartnum.xi     ? _defined(xartnum.xi)
+.type text  xpacknum.xi    ? _defined(xpacknum.xi)
+..
+.type integer  xartzeile       ? _defined(xartzeile)
+.type integer  xartzeilevor    ? _defined(xartzeilevor)
+..
+.. Packmittel-Liefermenge
+.type integer   xp.xi          ? _defined(xp.xi)
+.. Packmittel-Liefermenge (voll)
+.type integer   xpv.xi         ? _defined(xpv.xi)
+.. Packmittel-Liefermenge (unvoll)
+.type integer   xpuv.xi        ? _defined(xpuv.xi)
+.. FÅllmenge des unvollstÑndigen Packmittels
+.type integer   xpuvf.xi       ? _defined(xpuvf.xi)
+.. Packmittel-Liefermenge (leer)
+.type integer   xpl.xi         ? _defined(xpl.xi)
+.. Anzahl Packmittel pro Ebene
+.type integer   xanz.xi        ? _defined(xanz.xi)
+.. Ebene
+.type integer   xeb.xi         ? _defined(xeb.xi)
+.. Mindestebene
+.type integer   xmeb.xi        ? _defined(xmeb.xi)
+.. Anzahl Trennschichten
+.type integer   xanztr.xi      ? _defined(xanztr.xi)
+..
+.type integer   xtmp           ? _defined(xtmp)
+..
+.. Mehrere Artikel im Lieferschein
+.type bool  xmehrart       ? _defined(xmehrart)
+..
+!HM1
+.select screen line
+.continue MM ? _mehr
+.continue M3                       ?  M|art^packmit=true & xartzeilevor=0
+.continue M3                       ?  M|art^packmit=true & _xmehrart
+.continue HM1                      ?  M|art^packmit=true &  xmehrart
+..
+.continue HM1                      ?  M|aktzeile < xartzeilevor
+.formula xartikel  = M|art^num2       ?  M|mge<>0 & xartikel=""
+.formula xartzeile = M|aktzeile       ?  M|mge<>0 & xartikel<>"" & M|art^num2=xartikel
+..
+.formula xartname.xi = M|art^sucherw  ?  M|art^num2 = xartikel
+.formula xartnum.xi  = M|art^nummer   ?  M|art^num2 = xartikel
+.formula xartrah.xi  = M|zrahmen      ?  M|art^num2 = xartikel
+..
+.. === LIEFERMENGE EINES ARTIKELS AUFADDIEREN ===
+.formula xlmge  = xlmge + M|mge       ?  M|art^num2 = xartikel
+..
+.formula xmehrart     = true
+..
+..weiter MM                       ? 'M|aktzeile'='M|tzeilen'
+.continue HM1
+..
+!MM
+.continue M4                       ?  xlmge < 0 ; xlmge = 0
+..
+.formula xartzeilevor = xartzeile
+..
+.. === ARTIKELLIEFERMENGE
+.formula xlmge.xi    = xlmge
+..
+.. === RAHMENAUFTRAG-POSITION HOLEN ===
+.formula xtsel = "$,,;@gruppe=2;kopf=" + 'xartrah.xi' + ";kopf^kunde=" + M|kunde + ";kotyp=(BlanketOrder)"
+.formula xtsel = xtsel + ";artikel^nummer" + 'xartnum.xi' + ";@bereich=ja;@ablageart=(3)"
+.select sales 'xtsel'
+.continue M01 ? _mehr
+.continue M1  ? +'H|packanw' = 0
+..
+.. === FöLLMENGE ====
+.formula xfmge    = H|fmenge
+.formula xfmge.xi = H|fmenge
+.continue M5   ? H|fmenge=0
+..
+.. === PACKANWEISUNG HOLEN ===
+.select packinginstructions 'H|packanw^nummer'
+.continue M1  ? _mehr
+..
+.formula xpackanw = 'H|num106'
+..
+!HZ2
+.select line
+..
+.continue SON     ? _mehr
+.continue SPACK   ?  H|packmitken="S" ; H|packmitken="M"
+.continue GPACK   ?  H|packmitken="G"
+.continue ZUPACK  ?  H|packmitken=""
+.continue HZ2
+..
+..
+!SPACK: S-PACKMITTEL und M-PACKMITTEL
+..
+.type real xreal ? _defined(xreal)
+.formula xi = xi + 1
+.. Packmittel
+.type text  xpacknum.xi    ? _defined(xpacknum.xi)
+.. Packmittel-Liefermenge
+.type integer   xp.xi          ? _defined(xp.xi)
+.. Packmittel-Liefermenge (voll)
+.type integer   xpv.xi         ? _defined(xpv.xi)
+.. Packmittel-Liefermenge (unvoll)
+.type integer   xpuv.xi        ? _defined(xpuv.xi)
+.. FÅllmenge des unvollstÑndigen Packmittels
+.type integer   xpuvf.xi       ? _defined(xpuvf.xi)
+.. Packmittel-Liefermenge (leer)
+.type integer   xpl.xi         ? _defined(xpl.xi)
+.. Anzahl Packmittel pro Ebene
+.type integer   xanz.xi        ? _defined(xanz.xi)
+.. Ebene
+.type integer   xeb.xi         ? _defined(xeb.xi)
+.. Mindestebene
+.type integer   xmeb.xi        ? _defined(xmeb.xi)
+.. Anzahl Trennschichten
+.type integer   xanztr.xi      ? _defined(xanztr.xi)
+..
+.type MP7.2 xfmge.xi       ? _defined(xfmge.xi)
+..
+.formula xfmge.xi    = xfmge
+.formula xpacknum.xi = H|art^num2
+.formula xanz.xi     = H|anzahl
+.formula xeb.xi      = H|ebene
+.formula xmeb.xi     = H|minebene
+..
+.formula xreal       = xlmge / xfmge
+.formula xp.xi       = (xreal-0,5):0
+.formula xpv.xi      = xp.xi
+.formula xpuvf.xi    = xlmge - (xp.xi * xfmge)
+.formula xpuv.xi     = 0                             ? xpuvf.xi = 0
+.formula xpuv.xi     = 1                             ? xpuvf.xi > 0
+.formula xp.xi       = xpv.xi + xpuv.xi
+..
+.formula xtmp        = xi + 1
+.type integer   xp.xtmp        ? _defined(xp.xtmp)
+.type integer   xpv.xtmp       ? _defined(xpv.xtmp)
+.type integer   xpuv.xtmp      ? _defined(xpuv.xtmp)
+.type integer   xpuvf.xtmp     ? _defined(xpuvf.xtmp)
+..
+.formula xlmge       = xp.xi
+.formula xfmge       = xanz.xi * xeb.xi
+.formula xmfmge      = xanz.xi * xmeb.xi
+..
+.formula xreal       = xlmge / xfmge
+.formula xp.xtmp     = (xreal-0,5):0
+.. <===
+.formula xpv.xtmp    = xp.xtmp
+.formula xpuvf.xtmp  = xlmge - (xp.xtmp * xfmge)
+.formula xpuv.xtmp   = 0                             ? xpuvf.xtmp = 0
+.formula xpuv.xtmp   = 1                             ? xpuvf.xtmp > 0
+.formula xp.xtmp     = xpv.xtmp + xpuv.xtmp
+..
+.formula xpl.xi      = xmfmge - xpuvf.xtmp           ? xpuvf.xtmp > 0 & xmfmge > xpuvf.xtmp & H|auffuell
+.formula xpl.xi      = xfmge - xpuvf.xtmp            ? xpuvf.xtmp > 0 & xmfmge < xpuvf.xtmp & H|auffuell
+.formula xp.xi       = xp.xi + xpl.xi                ? xpuvf.xtmp > 0 & H|auffuell
+.formula xlmge       = xp.xi
+.formula xreal       = (xeb.xi - 1) * xp.xi / xfmge
+.formula xanztr.xi   = (xreal-0,5):0
+..
+.select screen line 'xartzeile' ? H|schl="kleinste Einheit"
+.continue VOLL
+..
+.continue HZ2
+..
+!VOLL
+.continue UNVOLL  ? xpv.xi = 0
+.. === PACKMITTEL (VOLL) EINFöGEN ===
+.make screen line +o
+.formula M|artex     =  'xpacknum.xi'
+.formula M|mge       =   xpv.xi
+.formula M|fmenge    =   xfmge.xi
+.formula M|packmitken=  ""                                    ? _H|mitwanh & H|schl<>"kleinste Einheit"
+..
+!UNVOLL
+.continue LEER  ? xpuv.xi = 0
+.. === PACKMITTEL (UNVOLL) EINFöGEN ===
+.make screen line +o
+.formula M|artex     =  'xpacknum.xi'
+.formula M|mge       =   xpuv.xi
+.formula M|fmenge    =   xpuvf.xi
+.formula M|packmitken=  ""                                    ? _H|mitwanh & H|schl<>"kleinste Einheit"
+..
+!LEER
+.continue HZ2  ? xpl.xi = 0
+.. === PACKMITTEL (LEER) EINFöGEN ===
+.make screen line +o
+.formula M|artex     =  'xpacknum.xi'
+.formula M|mge       =   xpl.xi
+.formula M|fmenge    =   0
+.formula M|packmitken=  ""                                    ? _H|mitwanh & H|schl<>"kleinste Einheit"
+.continue HZ2
+..
+..
+!GPACK
+.continue HZ2
+..
+!ZUPACK: Zusatz-Packmittel (Deckel, Zwischenlage, usw.)
+.continue HZ2      ? xp.xi = 0
+.make screen line +o
+.formula M|artex    = 'H|art^num2'
+.formula M|mge      =  xp.xi * H|anzahl                     ? H|schl=""
+..
+.. Anzahl der trennschicht-relevanten Packmittel
+.formula M|mge      =  xanztr.xi * H|anzahl                 ? H|schl="Trennmittel"
+.continue HZ2
+..
+!SON
+.formula xloop    = 0
+.formula xi       = 0
+.formula xtmp     = 0
+.formula xartikel = ""
+.formula xlmge    = 0
+.continue HM1
+..
+.. ==== FEHLERMELDUNGEN ===
+!M0
+.box Meldung
+Das Maskenfeld "Rahmenauftrag" ist leer! öbernahme ist nicht mîglich!
+.continue
+!M01
+.box Meldung
+Im Rahmenauftrag wurde fÅr den Artikel 'M|art' keine Position gefunden!
+.continue
+!M1
+.box Meldung
+Im Rahmenauftrag 'M|zrahmen' ist keine Packmittelanweisung fÅr den Artikel 'M|art' vorhanden!
+.continue
+!M2
+..box Meldung
+..Im Lieferschein sind keine Positionen vorhanden!
+.continue
+!M3
+.box Meldung
+Im Lieferschein sind bereits Packmittelpositionen vorhanden!
+.continue
+!M4
+..box Meldung
+..Die Liefermenge mu· grî·er als Null sein!
+.continue
+!M5
+.box Meldung
+Im Rahmenauftrag ist keine FÅllmenge fÅr den Artikel hinterlegt!
+.continue
+

@@ -1,0 +1,86 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LBU.ACCOUNT
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Verarbeitung zu einem Konto/einer Anlage
+.. Functionality  :
+..
+.. include fb/LBU.TAB
+.. include fb/LBU.RESOLVECO
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.formula U|ximodulo = U|ximodulo + 1
+.formula U|xbwrn01  = G|false
+..
+.continue KBEREICH ? M|datnr = 68
+.continue ENTRIES  ? M|datnr = 27
+.continue ENTRIES  ? M|datnr = 86
+.continue S1  ? _F|defined(H|bu)
+.continue CONSOL ? _H|bu
+!S1
+.formula M|esaldo = M|esaldo + H|esaldo
+.continue ENTRIES
+..
+..*****************************************************************************
+!KBEREICH: Account range
+..*****************************************************************************
+.formula M|esaldo = M|esaldo + 5|kbesaldo
+..copy account range to buffer 0
+.load 0 accrange 'F|expr("$,;@gruppe=" + F|tostring(F|eval(M|vgr + 16)) + ";id=" + F|tostring(5|id))'
+.continue END ? _G|mehr
+..
+..*****************************************************************************
+!KBER1:
+..*****************************************************************************
+.load 0 line
+.continue END   ? _G|mehr
+.continue KBER1 ? F|empty(0|konto)
+.continue KBER1 ? F|condexpr(F|defined(0|koobjber), _F|empty(0|koobjber) & F|empty(0|koobj), G|false)
+.. warning about cost calculation rules
+.continue WRN01 ? _U|xbwrn01 & 0|konto^dnr=60 & 0|konto^gruppe=2
+.continue KBER1 ?  0|konto^dnr=60 & 0|konto^gruppe=2
+.continue KTO   ?  0|gruppe=9
+.continue KOOBJ ?  F|condexpr(F|defined(0|koobjber), _F|empty(0|koobj), G|false)
+!KTO
+.select add 0|konto
+.copy U|xkst = 0|koobj ? 0|gruppe=9 & F|empty(M|kst)
+.continue ENTRIES
+!KOOBJ
+.select add 0|koobj
+.continue ENTRIES
+..
+..*****************************************************************************
+!CONSOL
+..*****************************************************************************
+.. we support consolidated accounts only if exactly one account is being analyzed
+.continue END ? F|empty(M|konto)
+.reserve
+.input "java:de.abas.jfop.is.IterateConsolidatedAccounts" bufname=H callback=fb/LBU.RESOLVECO 'F|formatstr("account={1}", H|id)'
+.select
+.continue END
+..
+..*****************************************************************************
+!ENTRIES
+..*****************************************************************************
+.input "fb/LBU.RESOLVECO"
+.continue KBER1 ? M|datnr = 68
+.continue END
+..
+..*****************************************************************************
+!END: End
+..*****************************************************************************
+.continue
+..
+..
+..*****************************************************************************
+!WRN01: Warning
+..*****************************************************************************
+.formula U|xbwrn01 = G|true
+.box Achtung!
+Rechenregeln werden nicht berÅcksichtigt.
+.continue KBER1

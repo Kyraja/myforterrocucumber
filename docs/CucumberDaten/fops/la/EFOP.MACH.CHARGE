@@ -1,0 +1,435 @@
+..!interpreter english translate
+..*****************************************************************************
+..
+..  FOP-Name       : EFOP.MACH.CHARGE
+..  Datum          : 20.04.2000
+..  Version        :
+..  Autor          : Dietmar Lang
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..
+..  Funktion       : EFOP zur Auswahl oder Erzeugung einer Charge
+..                   Aufgrund einer Eingabe in die externe Chargennummer
+..
+..  Ablauf         : Das EFOP darf nur beim Feldfuellevent aufgerufen werden.
+..                   Zuerst wird die Maske aus der das EFOP aufgerufen wird
+..                   bestimmt. Dann der Artikel fÅr den eine Charge angelegt
+..                   oder gesucht wird bestimmt. Per rohlingsloser Selektion
+..                   kann nun eine entsprechende Charge gesucht werden.
+..                   Wird keine gefunden oder die Selektion abgebrochen wird
+..                   Vorgeschlagen eine entsprechende Charge anzulegen.
+..                   Sofern die externe Chargennummer der neu angelegten Charge
+..                   eindeutig ist, wird der Kern diese aufgreifen und in das
+..                   zugehîrige Verweisfeld eintragen.
+..                   VORSICHT: Ist die externe Chargennummer je Artikel
+..                   mehrdeutig wird der Kern erneut eine Objektwahl erîffnen.
+..
+..  Einsetzbar bei folgenden Events und Masken
+..# fop fuer automatisches erzeugen und eintragen von Chargen
+..32  neu       feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..32  Ñndern    feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..35  neu       feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..35  Ñndern    feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..35  Lieferung feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..35  Lieferung feldfuell  *  tumcharge   T EFOP.MACH.CHARGE
+..35  neu       feldfuell  *  tumcharge   T EFOP.MACH.CHARGE
+..35  Ñndern    feldfuell  *  tumcharge   T EFOP.MACH.CHARGE
+..36  neu       feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..36  Ñndern    feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..36  Rechnung  feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..42  neu       feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..42  Ñndern    feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..45  neu       feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..45  Ñndern    feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..45  Lieferung feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..45  Lieferung feldfuell  *  tumcharge   T EFOP.MACH.CHARGE
+..45  neu       feldfuell  *  tumcharge   T EFOP.MACH.CHARGE
+..45  Ñndern    feldfuell  *  tumcharge   T EFOP.MACH.CHARGE
+..46  neu       feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..46  Ñndern    feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..46  Rechnung  feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..167 Fbuchung  feldfuell  *  trescharge  T EFOP.MACH.CHARGE
+..167 Fbuchung  feldfuell  *  tcharge     K EFOP.MACH.CHARGE
+..44  fertig    feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..44  Ñndern    feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..44  neu       feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..44  fertig    feldfuell  *  tkcharge    K EFOP.MACH.CHARGE
+..44  Ñndern    feldfuell  *  tkcharge    K EFOP.MACH.CHARGE
+..44  neu       feldfuell  *  tkcharge    K EFOP.MACH.CHARGE
+..142 Ñndern    feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..142 neu       feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..140 neu       feldfuell  *  tcharge2    T EFOP.MACH.CHARGE
+..140 neu       feldfuell  *  tcharge1    T EFOP.MACH.CHARGE
+..149 neu       feldfuell  *  tcharge1    T EFOP.MACH.CHARGE
+..65  neu       feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..65  Ñndern    feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..66  Ñndern    feldfuell  *  tcharge     T EFOP.MACH.CHARGE
+..
+..*****************************************************************************
+.set demand -
+.set trans -
+..
+.type text xtcharge xntcharge xausgabe xholtext xartid xchargeid xlieferantid xlieferant
+.type text xumplatz xexcharge
+.type bool xeigcharge xnotmehr
+.type bool xekmask xvkmask xinvmask xfemask xlbumask xlbemask xfbumask xmzmask
+.type integer  xlaenge
+.type text xtlief
+.type A65  xtmzart
+.type bool xbmzinek
+.type text xtmpfile 
+.type text xtout      
+.type text xterr
+.type text xselect
+..
+.error EFOP darf nur beim Feld-ausgefÅllt-Ereignis aufgerufen werden! ? _(G|evtartengl="FIELD_FILL")
+.end .                                                                ? _(G|evtartengl="FIELD_FILL")
+..
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+.copy U|xeigcharge = G|FALSE
+.copy U|xnotmehr   = G|FALSE
+..
+..Wenn das Textfeld leer gemacht wurde nichts tun
+.continue ENDE       ? F|empty(G|evtfeldneu)
+..
+..Auswahl der Maske in der man sich befindet
+.formula U|xvkmask  = G|TRUE ? G|evtmaske=32 ; G|evtmaske=35 ; G|evtmaske=36
+.formula U|xekmask  = G|TRUE ? G|evtmaske=42 ; G|evtmaske=45 ; G|evtmaske=46
+.formula U|xfbumask = G|TRUE ? G|evtmaske=167
+.formula U|xfemask  = G|TRUE ? G|evtmaske=44
+.formula U|xinvmask = G|TRUE ? G|evtmaske=65 ; G|evtmaske=66 ; G|evtmaske=67
+.formula U|xlbumask = G|TRUE ? G|evtmaske=140
+.formula U|xlbemask = G|TRUE ? G|evtmaske=149
+.formula U|xmzmask  = G|TRUE ? G|evtmaske=142
+..
+.. weiter, wenn nicht Materialzuordnung
+.continue HIMA  ? G|evtmaske <> 142
+.select screen header
+.. merken der Vorgangsart
+.copy U|xtmzart = M|mzart
+.. Lesen des Kopfes des Ahnen
+.select ascreen header
+.. dnr = 4 = Einkauf: die Gruppe zusÑtzlich prÅfen, da auch aus der
+.. manuellen Materialentnahme die Ausgangsmaske die 4 ist.
+.formula U|xtlief  = A|lief^id   ? A|dnr = 4 & A|gruppe = 1
+.copy U|xbmzinek = G|FALSE
+.copy U|xbmzinek = G|TRUE ? A|dnr = 4 & (A|typ= 4 ; A|typ = 5)
+.. wieder in Ausgangszustand zurÅck
+.select screen line 'G|evtzeile'
+..
+!HIMA
+.continue EK  ? U|xekmask
+.continue VK  ? U|xvkmask
+.continue FBU ? U|xfbumask
+.continue FE  ? U|xfemask
+.continue INV ? U|xinvmask
+.continue LBU ? U|xlbumask
+.continue LBE ? U|xlbemask
+.continue MZ  ? U|xmzmask
+..
+.error Unbekannte Maske.
+.end .
+..
+!EK: Einkauf
+.add M|artex
+.formula U|xartid = 'D|id'
+.add
+.select screen header
+.. wenn Umlagerungsplatz besetzt spielt Lieferant keine Rolle
+.formula U|xumplatz = M|umplatz
+.formula U|xekmask  = G|FALSE      ? _F|empty(U|xumplatz)
+.formula U|xvkmask  = G|TRUE       ? _F|empty(U|xumplatz)
+.select screen line 'G|evtzeile'   ? _F|empty(U|xumplatz)
+.continue SELEKTION                ? _F|empty(U|xumplatz)
+.add M|lief
+.formula U|xlieferant = 'D|id'
+.add
+.select screen line 'G|evtzeile'
+.continue SELEKTION
+..
+!VK: Verkauf
+.add M|artex
+.formula U|xartid = 'D|id'
+.add
+.continue SELEKTION
+..
+!FE: RÅckmeldung
+.continue FE1 ? G|evtzeile<>0
+.formula U|xeigcharge = G|TRUE
+.add M|art
+.formula U|xartid = 'D|id'
+.add
+.continue SELEKTION
+..
+!FE1: Tabellenfeld
+.continue FE2 ? F|empty(M|barm)
+.formula U|xeigcharge = G|TRUE
+!FE2
+..
+!INV: Inventur
+.add M|art
+.formula U|xartid = 'D|id'
+.add
+.continue SELEKTION
+..
+!LBE: Lagerbestandskorrektur
+!LBU: Lagerbuchungen
+.select screen header
+.add M|art
+.formula U|xartid = 'D|id'
+.add
+.select screen line 'G|evtzeile'
+.continue SELEKTION
+..
+!FBU: Materialentnahme
+.continue FBUTAB ? G|evtzeile<>0
+.add M|art
+.formula U|xartid = 'D|id'
+.add
+.continue SELEKTION
+..
+!FBUTAB
+.add M|elem
+.formula U|xartid = 'D|id'
+.add
+.continue SELEKTION
+..
+!MZ: Materialzuordnung
+.select screen header
+.add M|artikel
+.formula U|xartid = 'D|id'
+.add
+.select ascreen header
+.select screen line 'G|evtzeile'
+.continue SELEKTION
+..
+!SELEKTION: Selektion einer vorhandenen Charge
+.formula U|xtcharge = G|evtfeldneu
+..
+!PRUEF: Suchen ob externe Nummer schon vorhanden
+.formula U|xholtext = "$,artikel=" + U|xartid + ";exnum=" + U|xtcharge
+.formula U|xholtext = U|xholtext + ";@ordnung=artikel,exnum,eigcharge,lief;@gruppe=0;@ablageart=(Both)"
+.continue SELEKTEK ? U|xekmask
+.continue SELEKTFE ? U|xfemask & U|xeigcharge
+.continue HOLE
+..
+!SELEKTEK: Selektion im Einkauf
+.formula U|xholtext = U|xholtext + ";eigcharge=nein;.lief="+ U|xlieferant
+.continue HOLE
+..
+!SELEKTFE: Selektion Eigenfertigungscharge
+.formula U|xholtext = U|xholtext + ";eigcharge=ja"
+.continue HOLE
+..
+!HOLE
+.select lots 'U|xholtext'
+.continue MENUE ? _G|mehr
+.. noch mal die exnum vergleichen
+.continue MENUE ? H|exnum <> U|xtcharge
+..
+.. den Treffer merken
+.formula U|xchargeid = 'H|id'
+.formula U|xexcharge = 'H|exnum'
+.. jetzt pruefen, ob es noch weitere Treffer gibt
+.select lots
+.continue SEINTRAG ? _G|mehr
+.continue MENUE    ? H|exnum = U|xtcharge
+..
+.. Suche war eindeutig
+.continue SEINTRAG
+..
+!MENUE: MenÅ zum Anlegen einer neuen Charge
+.formula U|xholtext = "$," + (U|xholtext << -1)
+.select lots 'U|xholtext'
+.continue MENAUS ? _G|mehr
+.. prÅfen ob genau ein Treffer oder mehrere
+.continue MERK   ? U|xnotmehr
+.select lots
+.. only one hit, no dynamic selection
+.copy U|xnotmehr = G|TRUE ? _G|mehr
+.continue MENUE           ? _G|mehr
+..
+.formula U|xholtext = "%," + (U|xholtext << -1) + ";@obj=dyn;@autostart=ja"
+.select lots 'U|xholtext'
+.continue MENAUS          ? _G|mehr
+..
+!MERK: den treffer merken
+.copy U|xnotmehr = G|FALSE
+.formula U|xchargeid = 'H|id'
+.formula evtfeldneu  = H|exnum
+.. da am Ende nochmal evtfeldneu mit xtcharge befÅllt wird,
+.. wird hier in die Variable die aktuelle externe Nummer Åbernommen.
+.formula U|xtcharge  = H|exnum
+.continue SEINTRAG
+..
+!MENAUS
+.set trans +
+.menu Neue Charge anlegen
+1. Charge anlegen: 'xtcharge                   ' >> .continue MACH
+2. Chargennummer vervollstÑndigen                >> .continue BEARB
+3. Chargennummer neu eingeben                    >> .continue NEU
+4. Abbruch                                       >> .continue ABBRUCH
+.set trans -
+..
+.continue ABBRUCH ? F|empty(G|menue)
+..
+!BEARB: bearbeiten und LÑnge prÅfen
+.formula U|xausgabe = "Bitte vervollstÑndigen " + U|xtcharge
+.read 'xausgabe' U|xntcharge
+.formula U|xlaenge = 0
+.formula U|xlaenge = +xtcharge + +xntcharge
+.continue FLAENGE ? U|xlaenge  > 30
+.formula U|xtcharge = U|xtcharge + U|xntcharge
+.. prÅfen, ob es diese externe Chargennummer nicht schon gibt
+.continue PRUEF
+..
+!NEU: Charge eingeben und LÑnge prÅfen
+.read "Bitte Charge eingeben" U|xtcharge
+.continue FLAENGE ? +xtcharge > 30
+.continue PRUEF
+..
+!FLAENGE: Externe Nummer zu lang
+.set trans +
+Hinweis: Externe Nummer zu lang, bitte neu eingeben
+.set trans -
+.continue NEU
+..
+!MACH: Anlegen einer neuen Charge
+.. wenn man den Artikel belegt, ist die charge nicht mehr anonym.
+.. Damit wird der Kern sie im Dialog auch nicht sperren.
+.. Wenn das nicht gewuenscht ist, so muss hier der Artikel in die
+.. Charge eingetragen werden
+..
+.. eigcharge 1 = TRUE; eigcharge 0 = FALSE
+..
+.output new 'U|xtmpfile'
+.input "DATEI.F"
+#!action=new
+#!database=59
+#!group=0
+#!flddelimiter=#
+#!dontchange=~
+?artikel    #lief          #eigcharge#exnum  ? U|xfemask ; U|xmzmask ; U|xfbumask 
+?artikel    #lief          #exnum            ? U|xekmask ; U|xvkmask ; U|xinvmask ; U|xlbumask ; U|xlbemask
+..
+.continue EINKAUF         ? F|equals(U|xtmzart, "(Receipt)") & _F|empty(U|xtlief)
+.continue XFBUMASK        ? U|xfbumask
+?'U|xartid'#'U|xlieferant'#'U|xtcharge'            ? U|xekmask
+?'U|xartid'#~             #'U|xtcharge'            ? U|xvkmask
+?'U|xartid'#~             #1        #'U|xtcharge'  ? U|xfemask & _F|equals(M|artikel^bsart, "(ExternalProcurement)")
+?'U|xartid'#~             #0        #'U|xtcharge'  ? U|xfemask &  F|equals(M|artikel^bsart, "(ExternalProcurement)")
+?'U|xartid'#~             #'U|xtcharge'            ? U|xinvmask ; U|xlbumask ; U|xlbemask
+.. Zeilen dupliziert: man darf keine Eigencharge setzen, wenn ein Lieferant gesetzt wird
+?'U|xartid'#'U|xlieferant'#1        #'U|xtcharge'  ? U|xmzmask & F|empty(U|xlieferant) & _(F|equals(M|artikel^bsart, "(ExternalProcurement)") ; U|xbmzinek)
+?'U|xartid'#'U|xlieferant'#0        #'U|xtcharge'  ? U|xmzmask & F|empty(U|xlieferant) & (F|equals(M|artikel^bsart, "(ExternalProcurement)") ; U|xbmzinek)
+?'U|xartid'#'U|xlieferant'#~        #'U|xtcharge'  ? U|xmzmask & _F|empty(U|xlieferant) & _(F|equals(M|artikel^bsart, "(ExternalProcurement)") ; U|xbmzinek)
+?'U|xartid'#'U|xlieferant'#~        #'U|xtcharge'  ? U|xmzmask & _F|empty(U|xlieferant) & (F|equals(M|artikel^bsart, "(ExternalProcurement)") ; U|xbmzinek)
+.continue OUTPUT
+..
+!XFBUMASK
+?'U|xartid'#~             #1        #'U|xtcharge'  ? _F|defined(M|elex)
+.continue OUTPUT                                   ? _F|defined(M|elex)
+?'U|xartid'#~             #1        #'U|xtcharge'  ? F|defined(M|elex) & _F|equals(M|elex^bsart, "(ExternalProcurement)")
+?'U|xartid'#~             #0        #'U|xtcharge'  ? F|defined(M|elex) & F|equals(M|elex^bsart, "(ExternalProcurement)")
+.continue OUTPUT
+..
+!EINKAUF
+.continue EKXFBUMASK      ? U|xfbumask
+?'U|xartid'#'U|xtlief'    #'U|xtcharge'            ? U|xekmask
+?'U|xartid'#'U|xtlief'    #'U|xtcharge'            ? U|xvkmask
+.. Zeilen dupliziert s. oben
+?'U|xartid'#'U|xtlief'    #1        #'U|xtcharge'  ? U|xfemask & F|empty(U|xtlief) & _F|equals(M|artikel^bsart, "(ExternalProcurement)")
+?'U|xartid'#'U|xtlief'    #0        #'U|xtcharge'  ? U|xfemask & F|empty(U|xtlief) &  F|equals(M|artikel^bsart, "(ExternalProcurement)")
+?'U|xartid'#'U|xtlief'    #~        #'U|xtcharge'  ? U|xfemask & _F|empty(U|xtlief) & _F|equals(M|artikel^bsart, "(ExternalProcurement)")
+?'U|xartid'#'U|xtlief'    #~        #'U|xtcharge'  ? U|xfemask & _F|empty(U|xtlief) &  F|equals(M|artikel^bsart, "(ExternalProcurement)")
+?'U|xartid'#'U|xtlief'    #'U|xtcharge'            ? U|xinvmask ; U|xlbumask ; U|xlbemask 
+?'U|xartid'#'U|xtlief'    #1        #'U|xtcharge'  ? U|xmzmask & F|empty(U|xtlief) & _(F|equals(M|artikel^bsart, "(ExternalProcurement)") ; U|xbmzinek)
+?'U|xartid'#'U|xtlief'    #0        #'U|xtcharge'  ? U|xmzmask & F|empty(U|xtlief) & (F|equals(M|artikel^bsart, "(ExternalProcurement)") ; U|xbmzinek)
+?'U|xartid'#'U|xtlief'    #~        #'U|xtcharge'  ? U|xmzmask & _F|empty(U|xtlief) & _(F|equals(M|artikel^bsart, "(ExternalProcurement)") ; U|xbmzinek)
+?'U|xartid'#'U|xtlief'    #~        #'U|xtcharge'  ? U|xmzmask & _F|empty(U|xtlief) & (F|equals(M|artikel^bsart, "(ExternalProcurement)") ; U|xbmzinek)
+.continue OUTPUT
+..
+!EKXFBUMASK
+?'U|xartid'#'U|xtlief'    #1        #'U|xtcharge'  ? _F|defined(M|elex) & F|empty(U|xtlief)
+?'U|xartid'#'U|xtlief'    #~        #'U|xtcharge'  ? _F|defined(M|elex) & _F|empty(U|xtlief)
+.continue OUTPUT                                   ? _F|defined(M|elex)
+?'U|xartid'#'U|xtlief'    #1        #'U|xtcharge'  ? F|defined(M|elex) & F|empty(U|xtlief) & _F|equals(M|elex^bsart, "(ExternalProcurement)")
+?'U|xartid'#'U|xtlief'    #0        #'U|xtcharge'  ? F|defined(M|elex) & F|empty(U|xtlief) & F|equals(M|elex^bsart, "(ExternalProcurement)")
+?'U|xartid'#'U|xtlief'    #~        #'U|xtcharge'  ? F|defined(M|elex) & _F|empty(U|xtlief) & _F|equals(M|elex^bsart, "(ExternalProcurement)")
+?'U|xartid'#'U|xtlief'    #~        #'U|xtcharge'  ? F|defined(M|elex) & _F|empty(U|xtlief) & F|equals(M|elex^bsart, "(ExternalProcurement)")
+.continue OUTPUT
+..
+!OUTPUT
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR   ? _G|mehr
+..
+.formula U|xselect = "$,,artikel="+'U|xartid'+";exnum==" + U|xtcharge
+.select lots 'U|xselect'
+.continue ERROR ? _G|mehr
+.. Chargen-id merken
+.formula U|xchargeid = H|id
+.. Charge wieder weg
+.select -
+.. Eintragen der neuen Charge in den Vorgang
+.formula evtfeldneu = U|xtcharge
+..
+!SEINTRAG: Eintragen der neuen Charge in den Vorgang
+.continue EVEIN  ? U|xekmask ; U|xvkmask
+.continue FBUEIN ? U|xfbumask
+.continue FEEIN  ? U|xfemask
+.continue INVEIN ? U|xinvmask
+.continue LBUEIN ? U|xlbumask
+.continue LBEEIN ? U|xlbemask
+.continue MZEIN  ? U|xmzmask
+..
+!EVEIN: Ein- und Verkauf
+.continue EVEINUM  ? G|evtvar="tumcharge"
+.formula M|charge = U|xchargeid
+.continue ENDE
+..
+!EVEINUM
+.formula M|umcharge = U|xchargeid
+.continue ENDE
+..
+!MZEIN: Materialzuordnung
+!INVEIN: Inventur
+.formula M|charge = U|xchargeid
+.continue ENDE
+..
+!FEEIN: RÅckmeldung
+.formula M|kcharge = U|xchargeid   ? G|evtzeile = 0
+.formula M|charge  = U|xchargeid   ? G|evtzeile <> 0
+.continue ENDE
+..
+!LBEEIN: Lagerbestandskorrektur
+!LBUEIN: Lagerbuchung
+.continue LGCH2 ? G|evtvar = "tcharge2"
+.formula M|charge1 = U|xchargeid
+.continue ENDE
+..
+!LGCH2
+.formula M|charge2 = U|xchargeid
+.continue ENDE
+..
+!FBUEIN: Materialentnahme
+.formula M|charge    = U|xchargeid   ? G|evtzeile=0
+.formula M|rescharge = U|xchargeid   ? G|evtzeile<>0
+.continue ENDE
+..
+!ABBRUCH
+.error
+.end 2
+..
+!ENDE
+.formula evtfeldneu = U|xtcharge
+.continue 
+..
+!ERROR
+.input 'U|xterr'
+.error Charge anlegen gescheitert!
+.end 1
+

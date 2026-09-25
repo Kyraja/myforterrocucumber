@@ -1,0 +1,109 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : INTRASTATZENTRALE.TAB
+..  Datum          : 03.07.2010
+..  Version        : 2010
+..  Autor          : cl
+..  Verantwortlich : cl
+..  Kontrolle      : tiwe
+..  Funktion       :
+..  Ablauf         :
+..
+..  includes       :
+..*****************************************************************************
+.set trans -
+.type text xdntver  ? _F|defined(U|xdntver)
+.type text xtsel    ? _F|defined(U|xtsel)
+.type GD   xdatum   ? _F|defined(U|xdatum)
+.type text xddatum  ? _F|defined(U|xddatum)
+.type text xsys     ? _F|defined(U|xsys)
+.type text xtreffer ? _F|defined(U|xtreffer)
+.type text dtreffer ? _F|defined(U|dtreffer)
+.type text xtsys    ? _F|defined(U|xtsys)
+.type integer xmerkintra ? _F|defined(U|xmerkintra) 
+.type bool xbfirst  ? _F|defined(U|xbfirst)
+.type integer xipos1 ? _F|defined(U|xipos1)
+.type integer xipos2 ? _F|defined(U|xipos2)
+.type text xtext     ? _F|defined(U|xtext)
+..
+.continue TABELLE ? U|xbfirst
+..
+.file -tempname U|dtreffer
+.output new 'U|dtreffer'
+.input DATEI.F
+.output
+..
+.copy U|xbfirst = G|TRUE
+..
+!TABELLE
+.make screen line +o
+.protection tmark 'M|aktzeile' ? M|bgemeldet
+.protection tmark 'M|aktzeile' ? M|storniert 
+.assign M|vorgang   = U|xvorgang
+.assign M|vtyp      = U|xvktypa
+.assign M|etyp      = U|xektypa
+.formula M|iflow = "A" ? M|vorgang^dnr = 4
+.formula M|iflow = "D" ? M|vorgang^dnr = 3
+.. Krzel tauschen bei Kaufm„nnischen Gutschriften
+.formula M|iflow = "D" ? M|vorgang^dnr = 4 & F|equals(M|vorgang^vorganga, "(CreditNoteCommercial)")
+.formula M|iflow = "A" ? M|vorgang^dnr = 3 & F|equals(M|vorgang^vorganga, "(CreditNoteCommercial)")
+.assign M|handelsp  = 1|kopf^kunde  ? _F|empty(U|xvktypa)
+.assign M|handelsp  = 2|kopf^lief   ? _F|empty(U|xektypa)
+.. Vorgangsw„hrung
+.copy M|land      = 1|kopf^land   ? _F|empty(U|xvktypa)
+.copy M|land      = 2|kopf^land   ? _F|empty(U|xektypa)
+.copy M|vom       = U|xvorgang^budat
+.copy M|vstaat    = U|xvorgang^vstaat
+.. bei Gutschriften Verkauf laut stat. Bundesamt das Land aus den Betriebsdaten nehmen (Sitz der Firma)
+.copy M|vstaat    = F|sysinfo(10)^staat ? M|vorgang^dnr = 3 & F|equals(M|vorgang^vorganga, "(CreditNoteCommercial)")
+.copy M|tintra    = U|xvorgang^intra
+.formula M|tintra = U|xvorgang^stornopartnervorg^intra ? M|storniert
+.formula M|meldedatei = M|dntver ? _F|empty(M|tintra)
+.colour -background 'M|farbe' meldedatei  'M|aktzeile'  ? M|storniert
+..
+.formula xtsys = "ls -r sk/*.xml."+'M|tintra'+".* >>" + 'U|dtreffer'
+.system 'U|xtsys' background
+.continue VORGANG ? _G|mehr
+.select from 'U|dtreffer' U|xtreffer^
+.formula M|ueber = F|substr(U|xtreffer, -8, 8)
+.formula U|xipos1 = F|strindex('U|xtreffer', "/")
+.formula U|xipos1 = U|xipos1 + 1
+.formula U|xipos2 = F|strindex('U|xtreffer', ".")
+.formula U|xipos2 = U|xipos2 - U|xipos1
+.formula M|meldedatei = F|substr(U|xtreffer, U|xipos1, U|xipos2)
+.formula M|meldedatei = M|meldedatei + ".xml"
+..
+!VORGANG: Vorgang holen und Satznummer merken
+.select sales filingsystem 'M|vorgang^id'        ? _F|empty(M|vtyp)
+.select purchasing filingsystem 'M|vorgang^id'   ? _F|empty(M|etyp)
+.formula M|satznr = (G|dnsn >> "asn=") << " "
+..
+.. Variable ob Rechnung bereits in Rechnungsdatei
+.formula M|rgsnr = ""
+..
+.. Edi-Nachricht suchen
+.formula U|xtsel = "$,,bezobj=" + M|vorgang^id
+.formula U|xtsel = U|xtsel + ";vorart=90;imex=EX"
+.formula U|xtsel = U|xtsel + ";datenart=VK" ? M|vorgang^dnr = 3
+.formula U|xtsel = U|xtsel + ";datenart=EK" ? M|vorgang^dnr = 4
+.load 3 edifact 'U|xtsel'
+.formula M|edinachricht = 3|id ? G|mehr
+.continue CONTINUE ? _G|mehr
+.output addedto 'U|xftext'
+.input "DATEI.F"
+.formula U|xtext = '3|nummer'
+'U|xtext'
+.output
+.load 3
+.formula M|textedi2 = U|xftext
+..
+!CONTINUE
+.formula M|datummeld = M|edinachricht^erfass
+.formula M|statusz   = M|blauz   ?  F|empty(M|edinachricht) & M|tintra = 0
+.formula M|statusz   = M|gruenz  ?  M|vorgang^intra <> 0
+.formula M|statusz   = M|gelbz   ? _F|empty(M|edinachricht) & M|tintra = 0
+.formula M|bedi      = "icon:process"
+.formula M|pruefen   = "icon:screen_view"
+.formula M|loeschen  = "icon:screen_delete"
+.formula M|kkurs     = U|xkkurs
+.continue

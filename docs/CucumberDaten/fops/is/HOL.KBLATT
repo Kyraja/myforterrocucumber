@@ -1,0 +1,302 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : HOL.KBLATT
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : M|select fÅllen
+..*****************************************************************************
+.set trans -
+.input "ARB"
+..
+.type text xsel       ? _F|defined(U|xsel)
+.type text xtselect   ? _F|defined(U|xtselect)
+.type text xtvn       ? _F|defined(U|xtvn)
+.type bool xbba       ? _F|defined(U|xbba)
+.type bool xblebendig ? _F|defined(U|xblebendig)
+.type text xtherkunft ? _F|defined(U|xtherkunft)
+.type text xtitel     ? _F|defined(U|xtitel)
+.type bool xnotmehr   ? _F|defined(U|xnotmehr)
+..
+.input "is/TABLEEREN"
+.input "vo/KBLATT.FA"
+.copy U|xnotmehr = G|FALSE
+.atext -language 'G|bsprache' U|xtitel 1971 Vorkalkulation
+.continue KBLATT  ? _F|empty(M|kblatt)
+..
+.continue TAB ? (_F|empty(M|kauftrag) ; _F|empty(M|kbestellung)) & M|such65="KALKBAUM"
+..
+.formula M|select = M|kart^id     ? _F|empty(M|kart) & _M|baufnk
+.formula M|select = M|kba         ? _F|empty(M|kba)
+..
+.formula U|xbba   = G|TRUE        ? _M|select / "*,2,*"
+.set trans +
+.formula U|xtvn   = "Vorkalkulationsergebnisse"  ? M|baufvk ; M|bbestvk
+.formula U|xtvn   = "Nachkalkulationsergebnisse" ? M|baufnk ; M|bbestnk
+.set trans -
+..
+!SELOK
+.continue BA  ? _M|select / "*,2,*"
+..
+.formula U|xtselect = M|kart^id
+.formula U|xsel = "%,,herkunft=" + U|xtselect + ";flistestd=;lgruppe=;typ<>(FinalCosting);@gruppe=1;@title=" + U|xtitel + ";@autostart=ja"
+.formula U|xsel = "$,herkunft=" + M|select + ";typ=(FinalCosting);@gruppe=1" ? M|baufnk
+.continue AUSGABE
+..
+!AUFBEST
+.load 9 object 'M|select'
+.continue XSEL ? _G|mehr
+.continue XSEL ? _F|defined(9|kotyp)
+..
+.formula U|xtherkunft = ""
+.continue AUF1BEST ? 9|kotyp <> 35
+.continue AUF1BEST ? F|empty(9|verw)
+.. FÅr ReparaturauftrÑge werden Daten des Fertigungsvorschlags benîtigt
+.formula U|xtherkunft = "$,,id=;verw==" + 9|verw + ";@ablageart=(Filed);@gruppe=5"
+.select nolock purchasing 'U|xtherkunft'
+.continue AUF1BEST      ? _G|mehr
+.formula U|xtherkunft = H|id
+.select -
+..
+!AUF1BEST
+.formula U|xtselect = M|select
+.formula U|xsel = "%,,herkunft=" + U|xtselect + ";typ<>(FinalCosting);@gruppe=1;@title=" + U|xtitel + ";@autostart=ja" ? (M|baufvk ; M|bbestvk) & (9|kotyp = 2 ; 9|kotyp = 3 ; 9|kotyp = 34 ; 9|kotyp = 35)
+.formula U|xsel = "$,herkunft=" + U|xtselect + ";typ=(FinalCosting);@gruppe=1" ? M|baufnk ; M|bbestnk
+.continue AUSGABE
+..
+!XSEL
+.formula U|xtselect = M|select
+.formula U|xsel = "%,,herkunft=" + U|xtselect + ";typ<>(FinalCosting);@gruppe=1;@title=" + U|xtitel + ";@autostart=ja" ? (M|baufvk ; M|bbestvk)
+.formula U|xsel = "$,herkunft=" + U|xtselect + ";typ=(FinalCosting);@gruppe=1" ? M|baufnk ; M|bbestnk
+.continue AUSGABE
+..
+!BA
+.continue AUFBEST ? M|select / "*,3,*" ; M|select / "*,4,*"
+.continue ERROR2  ? M|select / "*!*"
+.load 1 workorder 'M|kba'
+.continue ABLAGE  ? _G|mehr
+.formula M|kba        = 1|nummer
+.formula M|kbaart     = 1|art
+.formula U|xblebendig = G|TRUE
+.continue AG
+..
+!ABLAGE
+.formula U|xsel = "$,,num4=" + M|select + ";@gruppe=5;@ablageart=(Filed)"
+.load 6 purchasing 'U|xsel'
+..
+.error Kein Betriebsauftrag 'M|select' vorhanden.  ? _G|mehr
+.end 1                                             ? _G|mehr
+..
+.continue AG              ? U|xnotmehr
+.load 6 purchasing
+.. only one hit, no dynamic selection
+.copy U|xnotmehr = G|TRUE ? _G|mehr 
+.continue ABLAGE          ? _G|mehr
+.. 
+.formula U|xsel = "%,,num4=" + M|select + ";artikel=" + M|kart^id + ";vom=;@gruppe=5;@ablageart=(Filed);@autostart=ja"
+.load 6 purchasing 'U|xsel'
+..
+.error Kein Betriebsauftrag 'M|select' vorhanden.  ? _G|mehr
+.end 1                                             ? _G|mehr
+..
+!AG
+.copy U|xnotmehr = G|FALSE
+.continue SELECT    ? _U|xblebendig
+.continue ERROR1    ? _F|empty(1|ag)
+.load 2 add 1|lres
+..
+.error Kein Fertigungsvorschlag zu 'M|select' vorhanden. ? _G|mehr
+.end 1                                                   ? _G|mehr
+..
+.formula U|xtselect = 2|id
+..
+!SELECT
+.formula U|xtselect = 6|id  ? G|mehr & _U|xblebendig
+.formula U|xsel = "%,,herkunft=" + U|xtselect + ";vnr=;typ=;@gruppe=1;@autostart=ja"
+..
+!AUSGABE: load product cost sheet
+.load 0 costsheet 'U|xsel'
+.continue WEITER
+..
+!KBLATT
+.load 0 costsheet 'M|kblatt^id'
+..
+!WEITER
+.continue SELDA ?  G|mehr
+.continue BOX   ? _M|select / "*,3,*" & _M|select / "*,4,*"
+..
+.continue FEHL1 ? _F|defined(kotyp)
+.error Es gibt keine 'U|xtvn' fÅr Artikel 'M|kaufart' des Auftrags.     ? _F|empty(M|kaufart) & 9|kotyp = 3
+.error Es gibt keine 'U|xtvn' fÅr Artikel 'M|kaufart' des Angebots.     ? _F|empty(M|kaufart) & 9|kotyp = 2
+.error Es gibt keine 'U|xtvn' fÅr Artikel 'M|kbestart' der Bestellung.  ? _F|empty(M|kbestart)
+.end 1
+..
+!FEHL1
+.error Es gibt keine 'U|xtvn' fÅr Artikel 'M|kaufart' des Vorgangs.     ? _F|empty(M|kaufart)
+.error Es gibt keine 'U|xtvn' fÅr Artikel 'M|kbestart' der Bestellung.  ? _F|empty(M|kbestart)
+.end 1
+..
+!BOX
+.error Es gibt keine 'U|xtvn' fÅr Artikel 'M|kart'. ? _F|empty(M|kart) & _F|empty(U|xtvn)
+.error Es gibt keine Nachkalkulationsergebnisse.    ?  U|xbba
+.error Vorgang wurde abgebrochen.                   ?  F|empty(U|xtvn)
+.end 1
+..
+!SELDA
+.formula M|kart = 0|art^id  ? _F|empty(M|kblatt)
+.formula M|kart = 1|art     ? F|defined(1|art) & _F|empty(M|kba)
+.assign M|kblatt = 0|id  ? F|empty(M|kblatt) & F|defined(0|id)
+.copy M|fehler = 0|fehler
+.assign M|ittyp  = 0|typ
+.assign M|herkunft =  M|kblatt^herkunft ? F|equals(M|ittyp, "(FinalCosting)")
+.input 'M|bkopf' ? _F|empty(M|bkopf)
+..
+.load 3 object 'M|select'
+..
+.continue TAB ? U|xbba
+.continue TAB ? _F|empty(M|kblatt)
+.continue TAB ? M|select / "*,2,*"
+.continue TAB ? M|select / "*,4,*" & '3|gruppe' = "5"
+..
+!LADE
+.load 4 add 3|kopf     ? (M|select / "*,3,*") ; (M|select / "*,4,*")
+.continue KOPF ? G|mehr
+..
+!FEHLER
+.error  Keinen Vorgang gefunden. Bitte Auswahl wiederholen.
+.end 1
+..
+!KOPF: head
+.assign M|kauftrag    = '4|num'  ? M|select / "*,3,*"
+.assign M|kbestellung = '4|num'  ? M|select / "*,4,*"
+..
+!TAB: Kopffelder laden
+.load 0 costsheet 'U|xsel'  ? _F|empty(M|kauftrag) ; _F|empty(M|kbestellung)
+.assign M|ittyp     = 0|typ
+.assign M|herkunft  = M|kblatt^herkunft ? F|equals(M|ittyp, "(FinalCosting)")
+.continue NKALK                          ? _M|nkalkinklvkalk & F|equals(M|ittyp, "(FinalCosting)")
+.formula M|kmatek   = 0|matek
+.formula M|kmatgk   = 0|matgk
+.formula M|kmatk    = 0|matk
+.formula M|kfremdek = 0|fremdek
+.formula M|kfremdk  = 0|fremdk
+.formula M|kfixfek  = 0|fixfek
+.formula M|kfixfgk  = 0|fixfgk
+.formula M|kfixfk   = 0|fixfk
+.formula M|kvarfek  = 0|varfek
+.formula M|kvarfgk  = 0|varfgk
+.formula M|kvarfk   = 0|varfk
+.formula M|khek     = 0|hek
+.formula M|khgk     = 0|hgk
+.formula M|khk      = 0|hk
+.formula M|hk2      = 0|hk2
+.formula M|hk3      = 0|hk3
+.formula M|vvgmk    = 0|vvgmk
+.continue GLEICH
+..
+!NKALK
+.formula M|kmatek   = 0|matekovk
+.formula M|kmatgk   = 0|matgkovk
+.formula M|kmatk    = 0|matkovk
+.formula M|kfremdek = 0|fremdekovk
+.formula M|kfremdk  = 0|fremdkovk
+.formula M|kfixfek  = 0|fixfekovk
+.formula M|kfixfgk  = 0|fixfgkovk
+.formula M|kfixfk   = 0|fixfkovk
+.formula M|kvarfek  = 0|varfekovk
+.formula M|kvarfgk  = 0|varfgkovk
+.formula M|kvarfk   = 0|varfkovk
+.formula M|khek     = 0|hekovk
+.formula M|khgk     = 0|hgkovk
+.formula M|khk      = 0|hkovk
+.formula M|hk2      = 0|hkovk2
+.formula M|hk3      = 0|hkovk3
+.formula M|vvgmk    = 0|vvgmkovk
+.continue GLEICH
+..
+!GLEICH   
+.formula M|vgzeit       = 0|vgzeit
+.formula M|vzeit        = 0|vzeit
+.formula M|basis        = 0|basis
+.formula M|brgewicht    = 0|brgewicht
+.formula M|kbfrist      = 0|kbfrist
+.formula M|lagereinheit = 0|le
+.formula M|deckbei1     = 0|deckbei1
+.formula M|deckbei2     = 0|deckbei2
+.formula M|waehr        = 0|waehr
+..
+.. GemeinkostensÑtze
+.formula M|matgks       = 0|matgks
+.formula M|fremdgks     = 0|fremdgks
+..
+.formula M|hkztext1     = 0|hkztext1
+.formula M|hkzart1      = 0|hkzart1
+.formula M|hkzsatz1     = 0|hkzsatz1
+.formula M|hkzbetrg1    = 0|hkzbetrg1
+.formula M|hkzpreis1    = 0|hkzpreis1
+.formula M|hkztext2     = 0|hkztext2
+.formula M|hkzart2      = 0|hkzart2
+.formula M|hkzsatz2     = 0|hkzsatz2
+.formula M|hkzbetrg2    = 0|hkzbetrg2
+.formula M|hkzpreis2    = 0|hkzpreis2
+.formula M|hkztext3     = 0|hkztext3
+.formula M|hkzart3      = 0|hkzart3
+.formula M|hkzsatz3     = 0|hkzsatz3
+.formula M|hkzbetrg3    = 0|hkzbetrg3
+.formula M|hkzpreis3    = 0|hkzpreis3
+.formula M|hkztext4     = 0|hkztext4
+.formula M|hkzart4      = 0|hkzart4
+.formula M|hkzsatz4     = 0|hkzsatz4
+.formula M|hkzbetrg4    = 0|hkzbetrg4
+.formula M|hkzpreis4    = 0|hkzpreis4
+.formula M|hkztext5     = 0|hkztext5
+.formula M|hkzart5      = 0|hkzart5
+.formula M|hkzsatz5     = 0|hkzsatz5
+.formula M|hkzbetrg5    = 0|hkzbetrg5
+.formula M|hkzpreis5    = 0|hkzpreis5
+..
+.formula M|selbstk      = 0|sk
+.formula M|skztext1     = 0|skztext1
+.formula M|skzart1      = 0|skzart1
+.formula M|skzsatz1     = 0|skzsatz1
+.formula M|skzbetrg1    = 0|skzbetrg1
+.formula M|skzpreis1    = 0|skzpreis1
+.formula M|skztext2     = 0|skztext2
+.formula M|skzart2      = 0|skzart2
+.formula M|skzsatz2     = 0|skzsatz2
+.formula M|skzbetrg2    = 0|skzbetrg2
+.formula M|skzpreis2    = 0|skzpreis2
+.formula M|skztext3     = 0|skztext3
+.formula M|skzart3      = 0|skzart3
+.formula M|skzsatz3     = 0|skzsatz3
+.formula M|skzbetrg3    = 0|skzbetrg3
+.formula M|skzpreis3    = 0|skzpreis3
+.formula M|skztext4     = 0|skztext4
+.formula M|skzart4      = 0|skzart4
+.formula M|skzsatz4     = 0|skzsatz4
+.formula M|skzbetrg4    = 0|skzbetrg4
+.formula M|skzpreis4    = 0|skzpreis4
+.formula M|skztext5     = 0|skztext5
+.formula M|skzart5      = 0|skzart5
+.formula M|skzsatz5     = 0|skzsatz5
+.formula M|skzbetrg5    = 0|skzbetrg5
+.formula M|skzpreis5    = 0|skzpreis5
+.formula M|preis        = 0|preis
+..
+.input 'M|tab'       ?  _F|empty(M|tab)
+.input 'M|bfuss'     ?  _F|empty(M|bfuss)
+.continue
+..
+!ERROR1
+.error Bitte einen Betriebsauftrag auswÑhlen.
+.formula M|kba       = ""
+.formula M|kbaart    = ""
+.cursor kba
+.end 1
+..
+!ERROR2
+.error Es ist keine Bereichsangabe erlaubt.
+.formula M|kba      = ""
+.formula M|kbaart   = ""
+.cursor kba
+.end 1

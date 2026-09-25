@@ -1,0 +1,275 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : AENDH.EV
+.. Autor          : erwo
+.. Verantwortlich : cl
+.. Kontrolle      : fwester
+.. Funktion       : Behandelt zentral Feld- und Zeilenereignisse.
+.. Ablauf         : Zentrales Ereignis-FOP
+..
+.. Functionality  : Central event handling efop
+.. Program flow   : Centrals event handling of fields and rows.
+...Includes        :
+.. include st/AENDERUNGSHISTORIE.FUELLK
+.. include st/AENDERUNGSHISTORIE.FUELLT
+..*****************************************************************************
+.set trans -
+..
+.type GL    zeilenselektion       ? _F|defined(U|zeilenselektion)
+.type text  xsel                  ? _F|defined(U|xsel)
+.type text  xnummer               ? _F|defined(U|xnummer)
+.type text  xgruppe               ? _F|defined(U|xgruppe)
+.type text  xstring               ? _F|defined(U|xstring)
+..
+.formula U|xstring = ""
+.formula U|xgruppe = ""
+.formula U|xnummer = ""
+..
+..------------------------- Kopf/Header ---------------------------------------
+.continue CLRHEADER  ? G|evtartengl="FIELD_EXIT"    & G|evtvar="kid"
+.continue EXITREC    ? G|evtartengl="FIELD_FILL"    & G|evtvar="kid"
+.. FOP h„ngt an datname ... weiter verwendet wird aber Alias dn
+.continue DATABASE   ? G|evtartengl="FIELD_EXIT"    & G|evtvar="datname"
+.continue FELDER     ? G|evtartengl="FIELD_EXIT"    & G|evtvar="felderkopf"
+.continue FELDER     ? G|evtartengl="FIELD_EXIT"    & G|evtvar="feldertabelle"
+.continue KAUSLOESER ? G|evtartengl="FIELD_FILL"    & G|evtvar="ausloeserkopf"
+.continue TAUSLOESER ? G|evtartengl="FIELD_FILL"    & G|evtvar="ausloesertabelle"
+.continue KAUSLOESER ? G|evtartengl="FIELD_EXIT"    & G|evtvar="ausloeserkopf"
+.continue TAUSLOESER ? G|evtartengl="FIELD_EXIT"    & G|evtvar="ausloesertabelle"
+.continue ALLEK      ? G|evtartengl="FIELD_EXIT"    & G|evtvar="allekopf"
+.continue ALLET      ? G|evtartengl="FIELD_EXIT"    & G|evtvar="alletabelle"
+.continue CLRHEADER  ? G|evtartengl="FIELD_EXIT"    & G|evtvar="vartabgruppe"
+.continue CLRTAB     ? G|evtartengl="FIELD_EXIT"    & G|evtvar="auchneu"
+.continue END
+..
+!FELDER
+.formula M|ausloeser2tabelle = "" ? _M|alletabelle
+.formula M|ausloeser2kopf = ""    ? _M|allekopf
+.continue CLRTAB
+..
+!CLRHEADER
+.formula M|ausloeserkopf = ""
+.formula M|ausloeser2kopf = ""
+.formula M|ausloesertabelle = ""
+.formula M|ausloeser2tabelle = ""
+.formula M|felderkopf = ""
+.formula M|feldertabelle = ""
+.protection -reset M|ausloeserkopf
+.protection -reset M|ausloesertabelle  ? _M|dbnotab
+.protection -reset M|felderkopf
+.protection -reset M|feldertabelle     ? _M|dbnotab
+.protection -reset M|ausloeser2kopf
+.protection -reset M|ausloeser2tabelle ? _M|dbnotab
+.protection -reset M|alletabelle       ? _M|dbnotab
+.copy M|allekopf = G|false
+.copy M|alletabelle = G|false
+.continue VARTAB     ? G|evtartengl="FIELD_EXIT"    & G|evtvar="vartabgruppe"
+.continue EXITREC    ? G|evtartengl="FIELD_EXIT"    & G|evtvar="kid"
+..
+!VARTAB
+.continue ERROR4 ? F|empty(M|vartabgruppe)
+.formula U|xstring =  M|vartabgruppe>>"-"
+.formula U|xstring =  U|xstring<<"-"
+.formula U|xstring =  U|xstring>>"0" ? F|regindex(U|xstring, "0") = 1
+.continue ERROR5 ? 'M|datnr' <> 'U|xstring' & _F|empty(U|xstring)
+.formula M|grliste = 'M|datnr'+":"+'M|vartabgruppe^vgr'
+..
+.formula U|xsel = "$,,such="+'M|vartabgruppe' 
+.load 5 company 'U|xsel'
+.continue ERROR8    ?  _G|mehr
+.continue ERROR7    ?  _5|vselect
+.continue CLRTAB
+..
+!ALLEK
+.continue ALLEKGEF ? M|allekopf 
+.formula M|ausloeserkopf = "" 
+.formula M|ausloeser2kopf = ""
+.formula M|ausloeser2tabelle = "" ? _F|empty(M|ausloesertabelle)
+.protection -reset felderkopf
+.protection -reset ausloeserkopf
+.protection -reset kopf
+.protection ausloeser2kopf
+.continue CLRTAB
+..
+!ALLEKGEF
+.continue ERROR6 ? F|empty(M|vartabgruppe)
+.formula M|ausloeserkopf = ""
+.formula M|felderkopf = ""
+.protection felderkopf
+.input "st/AENDERUNGSHISTORIE.FUELLK"
+.protection ausloeserkopf
+.protection ausloeser2kopf
+.protection kopf
+.continue CLRTAB
+..
+!ALLET
+.continue ALLETGEF ? M|alletabelle 
+.formula M|ausloesertabelle = "" 
+.formula M|ausloeser2tabelle = ""
+.formula M|ausloeser2kopf = "" ? _F|empty(M|ausloeserkopf)
+.protection -reset feldertabelle
+.protection -reset ausloesertabelle
+.protection ausloeser2tabelle
+.protection -reset tabelle
+.continue CLRTAB
+..
+!ALLETGEF
+.continue ERROR6 ? F|empty(M|vartabgruppe)
+.formula M|ausloesertabelle = ""
+.formula M|feldertabelle = ""
+.protection feldertabelle
+.input "st/AENDERUNGSHISTORIE.FUELLT"
+.protection ausloesertabelle
+.protection ausloeser2tabelle
+.protection tabelle
+.continue CLRTAB
+..
+!DATABASE 
+.formula M|ausloeserkopf = ""
+.formula M|ausloesertabelle = ""
+.formula M|felderkopf = ""
+.formula M|feldertabelle = ""
+.formula M|ausloeser2kopf = ""
+.formula M|ausloeser2tabelle = ""
+.protection -reset vartabgruppe
+.formula M|vartabgruppe = ""
+.continue ERROR1          ? M|datnr = 127
+.continue ERROR2          ? M|datnr = 14 
+.copy M|erlaubt = F|cmdpermitted(F|tovalue('M|datnr',"I9"), 12)
+.continue ERROR3          ? _M|erlaubt
+.formula U|xnummer =  'M|datnr'
+.formula U|xnummer =  ("0"+'M|datnr') >> 2 ? F|length(M|datnr) < 2
+.formula U|xsel = "%,,such=V-"+'U|xnummer'+"-"+";sucherw=;vselect=ja"
+.assign M|vartabgruppe = 'U|xsel'
+.copy M|erlaubt = G|FALSE ? M|datnr = 127 & F|empty(M|vartabgruppe)
+.continue CLRTAB          ? M|datnr = 127 & F|empty(M|vartabgruppe)
+.copy M|allekopf = G|FALSE
+.copy M|allekopf = G|TRUE         ? _F|empty(M|kid)
+.copy M|alletabelle = G|FALSE
+.copy M|alletabelle = G|TRUE      ? _F|empty(M|kid)
+.formula M|ausloeserkopf = ""     ? _F|empty(M|kid)
+.formula M|ausloesertabelle = ""  ? _F|empty(M|kid)
+.formula M|ausloeser2kopf = ""    ? _F|empty(M|kid)
+.formula M|ausloeser2tabelle = "" ? _F|empty(M|kid)
+.protection -reset ausloeserkopf      ? _M|allekopf
+.protection -reset ausloesertabelle   ? _M|alletabelle
+.protection -reset ausloeser2kopf     ? _M|allekopf
+.protection -reset ausloeser2tabelle  ? _M|alletabelle
+.input "st/AENDERUNGSHISTORIE.FUELLK" ? M|allekopf
+.input "st/AENDERUNGSHISTORIE.FUELLT" ? M|alletabelle
+.protection ausloeserkopf             ? M|allekopf
+.protection ausloesertabelle          ? M|alletabelle
+.protection ausloeser2kopf            ? M|allekopf
+.protection ausloeser2tabelle         ? M|alletabelle
+.continue CLRTAB
+..
+!EMPTY
+.protection vartabgruppe
+.continue CLRTAB
+..
+!EXITREC: Exit record
+.copy M|dbnotab = G|FALSE
+.protection -reset alletabelle
+.continue NOTEMPTY     ? _F|empty(M|kid)
+.copy M|dbnotab = G|FALSE
+.formula M|ksatzbez = ""
+.protection -reset dn
+.protection -reset vartabgruppe
+.formula M|vartabgruppe = ""
+.continue CLRTAB
+..
+!NOTEMPTY
+.formula M|ksatzbez = M|kid^sucherw
+.assign M|dn = M|kid^dnr
+.formula U|xnummer = 'M|datnr'
+.formula U|xnummer =  ("0"+'M|datnr') >> 2 ? F|length(M|datnr) < 2
+.formula U|xgruppe = 'M|kid^gruppe'
+.formula U|xgruppe = ("0"+'M|kid^gruppe') >> 2 ? F|length(M|kid^gruppe) < 2
+.formula M|grliste = 'M|datnr'+":"+'M|kid^gruppe'
+.formula U|xsel = "$,,such=V-"+'U|xnummer'+"-"+'U|xgruppe'
+.assign M|vartabgruppe = 'U|xsel'    
+.protection vartabgruppe
+.copy M|erlaubt = F|cmdpermitted(F|tovalue('M|datnr',"I9"), 12)
+.protection dn
+.copy M|allekopf = G|TRUE
+.copy M|alletabelle = G|TRUE
+.input "st/AENDERUNGSHISTORIE.FUELLK" ? M|allekopf
+.input "st/AENDERUNGSHISTORIE.FUELLT" ? M|alletabelle
+.protection ausloeserkopf             ? M|allekopf
+.protection ausloesertabelle          ? M|alletabelle
+.protection ausloeser2kopf            ? M|allekopf
+.protection ausloeser2tabelle         ? M|alletabelle
+.protection felderkopf                ? M|allekopf
+.protection feldertabelle             ? M|alletabelle
+.continue CLRTAB
+..
+!KAUSLOESER
+.copy M|allekopf = G|FALSE    ? F|empty(M|ausloeserkopf) & G|evtvar="ausloeserkopf"
+.copy M|allekopf = G|FALSE    ? F|empty(M|ausloeser2kopf) & G|evtvar="ausloeser2kopf"
+.formula M|ausloeser2kopf = ""  ? _M|allekopf
+.protection ausloeser2kopf
+.protection -reset kopf
+.protection -reset felderkopf
+.continue CLRTAB              ? F|empty(M|ausloeserkopf) & G|evtvar="ausloeserkopf"
+.continue CLRTAB              ? F|empty(M|ausloeser2kopf) & G|evtvar="ausloeser2kopf"
+.continue END
+..
+!TAUSLOESER
+.copy M|alletabelle = G|FALSE ? F|empty(M|ausloesertabelle) & G|evtvar="ausloesertabelle" 
+.copy M|alletabelle = G|FALSE ? F|empty(M|ausloeser2tabelle) & G|evtvar="ausloeser2tabelle"
+.formula M|ausloeser2tabelle = ""  ? _M|alletabelle
+.protection ausloeser2tabelle
+.protection -reset tabelle
+.protection -reset feldertabelle ? _M|dbnotab
+.protection -reset alletabelle   ? _M|dbnotab
+.continue CLRTAB              ? F|empty(M|ausloesertabelle) & G|evtvar="ausloesertabelle"
+.continue CLRTAB              ? F|empty(M|ausloeser2tabelle) & G|evtvar="ausloeser2tabelle"
+.continue END
+..
+!CLRTAB: Clear table
+.input "is/TABLEEREN"
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR1
+.error -field M|dn -message Bitte eine Datenbank angeben.
+.copy M|erlaubt = G|FALSE
+.end 1
+..
+!ERROR2: Database is not allowed
+.error -field M|dn -message Die Datenbank 'M|dn' ist nicht erlaubt!
+.copy M|erlaubt = G|FALSE
+.end 1
+..
+!ERROR3: Database is not allowed
+.error -field M|dn -message Das Kommando fr Datenbank 'M|dn' ist nicht erlaubt!
+.end 1
+..
+!ERROR4
+.error -field M|vartabgruppe -message Es fehlt die Angabe der Variablentabelle.
+.end 1
+..
+!ERROR5
+.error -field M|vartabgruppe -message Die Variablentabelle 'M|vartabgruppe' passt nicht zur Datenbank.
+.formula M|vartabgruppe = ""
+.formula U|xstring = ""
+.end 1
+..
+!ERROR6
+.error -field M|allekopf -message Bitte Datenbank mit Gruppe angeben.
+.copy M|allekopf = G|FALSE
+.copy M|alletabelle = G|FALSE
+.end 1
+..
+!ERROR7
+.error -field M|vartabgruppe -message Fr die Variablentabelle 'M|vartabgruppe' ist keine Selektion m”glich.
+.formula M|vartabgruppe = ""
+.formula U|xstring = ""
+.end 1
+..
+!ERROR8
+.error -field M|vartabgruppe -message Keine Variablentabelle vorhanden.
+.formula M|vartabgruppe = "" 
+.formula U|xstring = ""
+.end 1

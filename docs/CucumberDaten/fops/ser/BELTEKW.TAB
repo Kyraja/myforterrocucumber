@@ -1,0 +1,132 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BELTEKW.TAB
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Erstellt die Tabellenzeilen
+.. Functionality  : Creates table rows
+..*****************************************************************************
+.set trans -
+..
+.. Farben fÅr Zeilenausgabe laden
+.input "is/ABASFARBEN.DEF"
+..
+.formula T|xdvon = ""
+.formula T|xdbis = ""
+.formula T|xzvon = ""
+.formula T|xzbis = ""
+.formula T|xiwtagmin = 0
+.formula T|xiwtagmax = 0
+..
+.continue DATEROW ? M|aktzeile = 0
+..
+.. Aufruf fÅr Techniker
+..  (a) Techniker gibt es noch nicht
+..  (b) Techniker gibt es, aber aktuelle Zeile hat keinen Platz fÅr die Reservierung
+..  (c) Techniker gibt es, und aktuelle Zeile hat Platz fÅr die Reservierung
+.continue NEWROW  ? _T|xbtechhatres
+.assign T|xdvon      = H|termvon
+.assign T|xdbis      = H|termbis
+.assign T|xdvon      = M|kvon      ?  T|xdvon < M|kvon
+.assign T|xiwtagmin  = T|xdvon // 7
+.formula   T|xiwtagmax  = T|xiwtagmin + T|xdbis - T|xdvon
+.formula T|xint = T|xiwtagmin
+.. Neue Zeile wenn: Neuer Techniker (Tech ohne Reservierung / andere id als vorher)
+.continue NEWROW  ?  M|aktzeile = 1
+.select screen header
+.type text xtselROW      ? _F|defined(U|xtselROW)
+.formula U|xtselROW = "$,,;ttechniker==" + 0|id + ";tbel" + 'xint' + "=`"
+.select screen line 'U|xtselROW'
+.continue CHKCELL ?  G|mehr
+.formula U|xtselROW = "$,,;ttechniker==" + 0|id
+.continue CHKCELL ?  G|mehr
+.continue NEWROW
+.. PrÅfen ob Reservierung in voller LÑnge in aktuelle Kalenderzeile reinpasst
+!CHKCELL
+.continue NEWROW  ?  M|tbel.xint <> ""
+.formula T|xint = T|xint + 1
+.continue FILLROW ? T|xint > T|xiwtagmax ; T|xint > 7
+.continue CHKCELL
+..
+!DATEROW: Erste Zeile zeigt das Datum an, zusÑtzlich werden Merker "arbeitsfrei" fÅr jeden Wochentag gesetzt
+.make screen line +O
+.assign T|xdnext = M|kvon
+.formula T|xint = 1
+!NXTDATE
+.copy T|xbwende.xint = _F|isworkday(F|sysinfo(10), F|sysinfo(10)^intlgruppe, U|xdnext)
+.assign M|tbel.xint = 'T|xdnext'
+.copy U|xtag.xint = U|xdnext
+.formula T|xint = T|xint + 1
+.assign T|xdnext = T|xdnext + 1
+.continue NXTDATE ? T|xint < 8
+.continue COLOR
+..
+!NEWROW: Neue Zeile erstellen, und Reservierung dort ausgeben
+.select screen line 'M|tzeilen'
+.make screen line +O
+.assign M|ttechniker = 0|id
+..
+!COLOR: Arbeitsfreie Tage werden farblich hervorgehoben (alle Zeilen)
+.formula T|xint = 1
+!NXTCOL
+.formula U|xdvon=""
+.formula U|xdbis=""
+.formula U|xdvon = H|termvon ? F|defined(H|termvon)
+.formula U|xdbis = H|termbis ? F|defined(H|termbis)
+.formula T|xtvar = "tbel" + 'T|xint'
+.copy M|twende.xint = T|xbwende.xint
+.copy M|twende.xint = _F|isworkday(M|ttechniker, F|sysinfo(10)^intlgruppe, U|xtag.xint)  ? _F|empty(M|ttechniker) & _F|empty(U|xtag.xint)
+.colour -background -1 -1 -1 -foreground -1 -1 -1 'U|xtvar' 'M|aktzeile'            ? _M|twende.xint
+.colour -background 'U|xabasblue' -foreground 'U|xabaswhite' 'U|xtvar' 'M|aktzeile' ?  M|twende.xint
+.colour -background 'U|xabasyellow' -foreground -1 -1 -1 'U|xtvar' 'M|aktzeile'     ?  M|twende.xint & U|xdvon <= U|xtag.xint & U|xtag.xint <= U|xdbis
+.formula T|xint = T|xint + 1
+.continue NXTCOL  ?  T|xint < 8
+.continue END     ? _T|xbtechhatres
+..
+!FILLROW: Daten der Reservierung ausgeben (Achtung: Einsatz kann lÑnger als einen Tag dauern)
+.formula T|xint = T|xiwtagmin
+!FILLDAY: Tag 'xint' mit Daten fÅllen
+.assign M|treserv.xint   = H|id
+.assign M|tresname.xint  = H|sucherw
+.assign M|tresart.xint   = H|resart
+.assign M|twtdat.xint    = H|termvon
+.assign M|tauftrag.xint  = H|servaupos^kopf^id
+.assign M|tkunde.xint    = H|kunde^id                 ? _F|empty(H|kunde)
+.assign M|tkunde.xint    = H|servaupos^kopf^kunde^id  ?  F|empty(H|kunde)
+.assign M|ttequalif.xint = H|serqual^id
+.. mh, 16.07.2010: Korrektur Dienstleistungen
+.assign M|tanreidl.xint = H|dienstl^id
+.assign M|tanreidl.xint = H|servaupos^art^id ? F|empty(M|tanreidl.xint)
+..  .zuweisen M|tanreidl.xint  = H|emittel^id
+.assign M|ttermvon.xint  = H|termvon
+.assign M|ttermbis.xint  = H|termbis
+.. Termin und Uhrzeit: Termine die Åber den aktuellen Tag (T|xdtag) hinausreichen werden farbig kenntlich gemacht
+.assign T|xdvon = H|termvon
+.assign T|xdbis = H|termbis
+.assign T|xdtag = M|kvon + T|xint - 1
+.assign T|xzvon = "0000"
+.assign T|xzbis = "2359"
+.. Zeitpunkt GD19 zu sortierfÑhigem/sprachneutralem GD14 machen, Zeit extrahieren und Sekunden wegwerfen
+.assign T|xzvon = F|substr('H|termvon:14',9,4) ? +'H|termvon:14' > 9 & T|xdvon = T|xdtag
+.assign T|xzbis = F|substr('H|termbis:14',9,4) ? +'H|termbis:14' > 9 & T|xdbis = T|xdtag
+.assign M|ganztag.xint = H|ganztag
+.assign M|datumvon.xint = H|datumvon
+.assign M|zzvon.xint = H|zzvon
+.assign M|datumbis.xint = H|datumbis
+.assign M|zzbis.xint = H|zzbis
+.assign M|anreisedatumvon.xint = H|anreisedatumvon
+.assign M|anreisezvon.xint = H|anreisezvon
+.assign M|abreisedatumbis.xint = H|abreisedatumbis
+.assign M|abreisezbis.xint = H|abreisezbis
+.copy M|banreise.xint = G|TRUE       ? _F|empty(H|anreisedatumvon) ; _F|empty(H|abreisedatumbis)
+.formula  M|tbel.xint  = 'T|xzvon' + " - " + 'T|xzbis'
+.formula  T|xtvar = "tbel" + 'T|xint'
+.colour -background 'U|xabaslightgreen' -foreground  'U|xabasblack' 'U|xtvar' 'M|aktzeile' ?  'T|xzvon' = "0:00" ; 'T|xzbis' = "23:59"
+.. Reservierung fÅr mehr als einen Tag?
+.formula T|xint = T|xint + 1
+.continue END     ?  T|xint > T|xiwtagmax ; T|xint > 7
+.continue FILLDAY
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,133 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : FOP.SUCHURL
+.. Autor          : lei
+.. Verantwortlich : uko
+.. Kontrolle      : lei
+.. Funktion       : Formuliert und startet die Objektwahl fuer Verweisfelder.
+.. Functionality  : Builds and starts object selection for reference fields.
+..*****************************************************************************
+.set trans -
+..
+..set trace +
+..assign P|loglevel = 1
+.. Needs kernel field fill event
+.continue END ? G|evtartengl <> "FIELD_FILL_KERNEL"
+..
+.. Declarations
+.type text xcontent xfmt xurl xlhost xlport xbspr xsearchcontext xindex xindexhtml xsearchid xgrps xgrliste xtype xdn xvp xpw
+.type bool xistype xnosearch xurlmodified
+.type GL17 xlocale? _F|defined(U|xlocale)
+
+..
+.assign U|xnosearch  = G|false
+.continue TYPECHK
+
+..*****************************************************************************
+.. types
+..*****************************************************************************
+!TYPECHK
+.select screen line 'G|evtzeile'
+.assign U|xtype = F|typeof(M|.G|evtvar)
+.. Typ muss Verweis sein, normiere Typ
+.assign U|xistype = F|defined(M|.G|evtvar^id)
+.continue NOSEARCH ? _U|xistype
+
+..*****************************************************************************
+.. group list
+..*****************************************************************************
+!GRPS
+.println -debug xtype: 'U|xtype' ? P|loglevel > 0
+.continue PREFS1  ? F|regmatch(U|xtype, "P[ST]?[0-9]+")
+.continue PREFS2  ? F|regmatch(U|xtype, "P[ST]?[0-9]+:[0-9\.]+")
+
+.continue PREFS1 ? F|regmatch(U|xtype, "ID[0-9]+")
+.continue PREFS2 ? F|regmatch(U|xtype, "ID[0-9]+:[0-9\.]+")
+
+.continue VPREFS ? F|regmatch(U|xtype, "VP[NBK]?[ST]?[0-9]+")
+.continue VPREFS ? F|regmatch(U|xtype, "VID[0-9]+")
+
+.continue NOSEARCH
+
+.. needs xvp
+!VPREFS
+.assign U|xvp = F|regreplace(U|xtype, "[A-Z]+", "")
+.println -debug xvp: 'U|xvp' ? P|loglevel > 0
+.assign U|xgrps = "&filter=LINK,VP" + 'U|xvp'
+.continue URLCOMP
+
+.. needs xdn
+!PREFS1
+..
+.. case 1: only DB given
+.assign U|xdn = F|regreplace(U|xtype, "^P[ST]?", "") ? F|regmatch(U|xtype, "P[ST]?[0-9]+")
+.println -debug xdn: 'U|xdn' ? P|loglevel > 0
+.assign U|xgrps = "&filter=DB,(DB!," + 'U|xdn' + ")" ? _F|empty(U|xdn)
+.continue URLCOMP                         ? _F|empty(U|xdn)
+..
+!PREFS2
+.. case 2: DB and group(s) given
+.assign U|xdn = F|regreplace(U|xtype, "^P[ST]?", "") ? F|regmatch(U|xtype, "P.+")
+.assign U|xdn = F|regreplace(U|xtype, "^ID", "")     ? F|regmatch(U|xtype, "ID.+")
+.assign U|xdn = F|regreplace(U|xdn, ":.*$", "")
+.println -debug xdn: 'U|xdn' ? P|loglevel > 0
+.assign U|xgrliste = F|regreplace(U|xtype, ".+:", "")
+.println -debug xgrliste: 'U|xgrliste' ? P|loglevel > 0
+.assign U|xgrliste = U|xdn + ":" + F|regreplaceall(U|xgrliste, "\.", ";"+U|xdn+":")
+.continue URLCOMP
+
+..*****************************************************************************
+.. Compose URL
+..*****************************************************************************
+!URLCOMP
+
+.. 1.) manipulate variables (I-File)
+.input "is/FOP.SUCHEXT"
+
+.. 2.) check variables and set defaults
+.continue NOSEARCH ? U|xnosearch
+
+.println -debug xgrliste: 'U|xgrliste' ? P|loglevel > 0
+.. validation of xgrpliste
+.input "is/FOP.SUCHVALIDATION" ? _F|empty(U|xgrliste)
+.assign U|xgrps = "&filter=GROUP,(GROUP!," + F|regreplaceall(U|xgrliste, ";", "),(GROUP!,") + ")" ? _F|empty(U|xgrliste)
+.println -debug xgrps: 'U|xgrps' ? P|loglevel > 0
+
+.. select an index
+.continue NEXT   ? _F|empty(U|xindex)
+.continue GBLIDX ? F|empty(U|xdn)
+.assign U|xindex = "60014" ? F|regmatch(U|xdn, "[01]")
+.assign U|xindex = "60011" ? F|regmatch(U|xdn, "2")
+!GBLIDX
+.assign U|xindex = "60080" ? F|empty(U|xindex)
+.println -debug xindex: 'U|xindex' ? P|loglevel > 0
+
+!NEXT
+.continue CONFILE ? F|empty(U|xindexhtml)
+.assign U|xlocale = 'G|bspri'
+.assign U|xurl    = F|formatstr(U|xindexhtml, U|xlocale)
+.continue URL
+
+!CONFILE
+.input "is/FOP.SUCHCONFIG"
+
+!URL
+.. passed as arguments
+.assign U|xcontent       = F|urlencode('G|evtfeldneu') * "+LX/+/*%20/"
+.formula U|xcontent      = U|xcontent + "*" ? _(U|xcontent/"*\*")
+.assign U|xsearchid      = U|searchid
+.assign U|xsearchcontext = U|searchcontext
+.assign U|xpw            = F|urlencode('G|einmalpw')
+
+.. 3.) compose url
+.formula U|xurl = U|xurl + F|formatstr("#otp={1}", F|urlencode('G|einmalpw'))
+.formula U|xurl = U|xurl + F|formatstr("&query={1}", U|xcontent)
+.formula U|xurl = U|xurl + F|formatstr("&CONTEXT={1}", U|xsearchid)
+.formula U|xurl = U|xurl + F|formatstr("{1}", U|xgrps)
+.formula U|xurl = U|xurl + "&facet=FILED,(FILED!,Active)"
+.println -debug URL: 'U|xurl' ? P|loglevel > 0
+.end 0 'U|xurl'
+
+!NOSEARCH
+.println -debug Type: 'U|xtype' ? P|loglevel > 0
+.end 1 ""

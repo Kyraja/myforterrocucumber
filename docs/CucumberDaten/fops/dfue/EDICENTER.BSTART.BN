@@ -1,0 +1,101 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDICENTER.BSTART.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Lesen der EDI-Nachrichten
+.. Functionality  : Read edi messages
+..*****************************************************************************
+.set trans -
+..
+.. Queries
+.type text xtselEDI
+.type text xtselRAHPOS
+.type text xtselRAH
+..
+.. Avoid duplicates
+.type P3:1 xvrahkopf
+..
+.. colors
+.input "is/ABASFARBEN.DEF"
+..
+..
+.. Refine Query
+.. * Find sales blanket order (row) before reading edi messages
+.. * Expand edi message query
+.. ----------- ---------- ---------- -------------------------------------------
+.continue ARTBETR  ?  _F|empty(M|kbetreuer) & _F|empty(M|kartikel)
+.continue BETR     ?  _F|empty(M|kbetreuer)
+.continue ARTRAH   ?  _F|empty(M|krahmen)   ; _F|empty(M|kartikel)
+.. ----------- ---------- ---------- -------------------------------------------
+.continue SIMPLE
+..
+..
+!ARTBETR
+.formula U|xvrahkopf = ""
+.formula U|xtselEDI = M|select
+.formula U|xtselRAHPOS = "$,,;@gruppe=2;kotyp=(BlanketOrder)"
+.formula U|xtselRAHPOS = U|xtselRAHPOS + ";artex==" + M|kartikel^id           ? _F|empty(M|kartikel)
+.formula U|xtselRAHPOS = U|xtselRAHPOS + ";kopf^kunde==" + M|kwempf^id        ? _F|empty(M|kwempf)
+.formula U|xtselRAHPOS = U|xtselRAHPOS + ";kopf^kunde2==" + M|kkunde^id       ? _F|empty(M|kkunde)
+.formula U|xtselRAHPOS = U|xtselRAHPOS + ";kopf^betreuer==" + M|kbetreuer^id  ? _F|empty(M|kbetreuer)
+.formula U|xtselRAHPOS = U|xtselRAHPOS + ";kopf==" + M|krahmen^id             ? _F|empty(M|krahmen)
+.formula U|xtselRAHPOS = U|xtselRAHPOS + ";@ordnung=kopf"
+.load 9 sales 'U|xtselRAHPOS'
+.continue END  ? _G|mehr
+!LISTAB
+.formula U|xvrahkopf = 9|kopf^id
+.formula M|select = U|xtselEDI + ";ideksrah==" + 9|kopf^nummer + ";ideksart==" + M|kartikel^nummer
+.formula M|select = M|select + ";@ordnung=nummer"
+.input "is/HOL.LISTE"
+!NEXTAB
+.load 9 sales
+.continue END  ? _G|mehr
+.continue NEXTAB  ?  U|xvrahkopf^id = 9|kopf^id
+.continue LISTAB
+..
+..
+!BETR
+.formula U|xtselEDI = M|select
+.formula U|xtselRAH = "$,,;@gruppe=1;typ=(BlanketOrder)"
+.formula U|xtselRAH = U|xtselRAH + ";kunde==" + M|kwempf^id        ? _F|empty(M|kwempf)
+.formula U|xtselRAH = U|xtselRAH + ";kunde2==" + M|kkunde^id       ? _F|empty(M|kkunde)
+.formula U|xtselRAH = U|xtselRAH + ";betreuer==" + M|kbetreuer^id  ? _F|empty(M|kbetreuer)
+.formula U|xtselRAH = U|xtselRAH + ";id==" + M|krahmen^id          ? _F|empty(M|krahmen)
+.load 9 sales 'U|xtselRAH'
+.continue END  ? _G|mehr
+!LISTBE
+.formula U|xvrahkopf = 9|id
+.formula M|select = U|xtselEDI + ";ideksrah==" + 9|nummer
+.formula M|select = M|select + ";@ordnung=nummer"
+.input "is/HOL.LISTE"
+!NEXTBE
+.load 9 sales
+.continue END  ? _G|mehr
+.continue NEXTBE  ?  U|xvrahkopf^id = 9|id
+.continue LISTBE
+..
+..
+!ARTRAH
+.formula M|select = M|select + ";ideksrah==" + M|krahmen^nummer   ? _F|empty(M|krahmen)
+.formula M|select = M|select + ";ideksart==" + M|kartikel^nummer  ? _F|empty(M|kartikel) & _M|tabausf
+.formula M|select = M|select + ";tartikel==" + M|kartikel^id      ? _F|empty(M|kartikel) &  M|tabausf
+.formula M|select = M|select + ";@ordnung=nummer"
+.input "is/HOL.LISTE"
+.continue END
+..
+..
+!SIMPLE
+.formula M|select = M|select + ";@ordnung=nummer"
+.input "is/HOL.LISTE"
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERRNUM
+.error Die eingegebenen Werte sind keine gÅltigen Identnummern.
+.end 1

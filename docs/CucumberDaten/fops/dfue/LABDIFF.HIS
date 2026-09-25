@@ -1,0 +1,76 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LABDIFF.HIS
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Fllt Tabelle mit der Abrufhistorie
+.. Functionality  : Fills table with history of delivery forcast schedule messages
+...Includes       :
+..  include dfue/LABDIFF.SCREENCONTEXT.FOP
+..*****************************************************************************
+.set trans -
+..
+.. Query variables
+.type text   xtselEDI
+.type text   xtselSales
+.type text   xtselSalesF
+.type text   xtseltmp
+..
+..
+.. Start empty
+.make screen line -- ? M|tzeilen > 0
+..
+.. Show table for difflist and registers for lab/fab/vab
+.input "dfue/LABDIFF.SCREENCONTEXT.FOP"
+..
+..
+.. No forecast or blanket order, nothing to do
+.continue FORECAS  ? _F|empty(M|klab)
+.continue BLANKET  ? _F|empty(M|krahmen) & _F|empty(M|kartikel)
+.continue END
+..
+..
+!BLANKET: read with blanket order and product
+.formula U|xtselEDI = 'F|formatstr("$,,;@gruppe=0;vorart<>0;erfass={1}!{2};imex=IM;edinachr=2101!2104;ideksrah={3};idkundeab={4};ideksart={5};kuartnr={6};@ordnung=nummer.(Backwards)", M|klabhisvon, M|klabhisbis, M|krahmen^nummer, M|krahmen^kunde^nummer, M|kartikel^nummer, M|kkuartnr)'
+.formula U|xtselEDI = U|xtselEDI + ";@ablageart=(3)"  ?  M|kbablage
+.select edifact 'U|xtselEDI'
+.continue ENDHOL  ? _G|mehr
+.continue SHOW
+..
+..
+!FORECAS: read current forecast
+.select edifact 'M|klab^id'
+.continue ENDHOL  ? _G|mehr
+.formula U|xtselEDI = 'F|formatstr("$,,;@gruppe=0;vorart<>0;erfass={1}!{2};imex=IM;edinachr=2101!2104;ideksrah={3};idkundeab={4};ideksart={5};kuartnr={6};@ordnung=nummer.(Backwards)", M|klabhisvon, M|klabhisbis, H|ideksrah, H|idkundeab, H|ideksart, H|kuartnr)'
+.formula U|xtselEDI = U|xtselEDI + ";@ablageart=(3)"  ?  M|kbablage
+.select edifact 'U|xtselEDI'
+.continue ENDHOL  ? _G|mehr
+..
+..
+!SHOW
+.make screen line +O
+.colour -foreground -1 -1 -1 -background -1 -1 -1 'M|aktzeile'
+.formula M|tedinr    = H|id
+.copy M|tedinachr    = M|tedinr^edinachr
+.formula M|labnr     = H|labruf
+.formula M|labdat    = H|labrufd
+.formula M|lsnr      = H|leinlief
+.formula M|lsdat     = H|leinlida
+.formula M|lsmge     = 'H|mgellief'
+.formula M|teinfzahl = H|einfzahl
+.formula M|edidruckz = "icon:print"
+..
+.. last sales order
+.assign M|aunr = H|vkkopf^id 
+.assign M|audat = H|vkkopf^vom ? G|mehr
+..
+!NEXT: read next forecast
+.select edifact
+.continue SHOW    ?  G|mehr
+..
+!ENDHOL
+.select -
+..*****************************************************************************
+!END
+.continue

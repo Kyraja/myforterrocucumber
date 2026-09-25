@@ -1,0 +1,116 @@
+..!interpreter english  
+..noabbrev translate
+..*****************************************************************************
+.. Name           : DFUE.EXP.VKRE.VDA
+.. Author         : 
+.. Verantwortlich : mh
+.. Kontrolle      : 
+.. Functionality  : unterprogramm von DFUE.EXP
+..                      extrabehandlung fÅr VKRE nach VDA
+..*****************************************************************************
+.set trans -
+..
+.type date xdatum
+.type bool xmehr
+.type text xUebNrAlt
+.type text xUebNrNeu
+.type time xzeit
+..
+.. ----------------------------------------
+.reserve
+..**ok,18.06.2001 (jetzt idkunderab statt idkundeab)
+..
+.. Åbertragungsnummern im kunden
+..
+.continue EL001 ? _(+h|idkunderab > 0)
+.. IF001
+.select customer lock 'h|idkunderab'
+..
+..
+.continue EL002 ? _(mehr)
+.. IF002
+.type text xvorgang ? _F|defined(U|xvorgang)
+.formula U|xvorgang = "VKRE"
+.formula U|xediuebnrMOD = +1
+.input "DFUE.PUT.PROTOK.UEBNR"
+.copy U|xbreturn = G|true
+..
+.continue FI002
+!EL002
+.. fehler 52
+.formula xbreturn = false
+.formula xfcode = 52
+.. und wieder zurÅck
+.continue
+..
+!FI002
+..
+.continue FI001
+!EL001
+.. fehler 52
+.formula xbreturn = false
+.formula xfcode = 52
+.. und wieder zurÅck
+.continue
+..
+!FI001
+..
+.select
+.. ----------------------------------------
+..
+.. datum / zeit der dateierstellung
+.formula xdatum = datum
+.formula xzeit = zeit
+.formula h|dinhouse = xdatum
+.formula h|zinhouse = xzeit
+.formula h|ddatei   = xdatum
+.formula h|zdatei   = xzeit
+..
+.. Åbertragungsnr in den EDI-datensatz
+.formula h|uebnra = xUebNrAlt
+.formula h|uebnr  = xUebNrNeu
+.formula h|uebdat = datum
+.rewrite
+..
+.. dann mal die zeilen nach satz 000 und 400 durchsuchen
+.. satz 000 __mu·__ vor 400 kommen
+.select lock line
+.formula xmehr = mehr
+..
+..
+!LOOP001: ==============================
+.continue ELOP001 ? _(xmehr)
+..
+.continue EL003 ? _(h|text1 = "000")
+.. IF003
+.. datum und uhrzeit in satz 000 eintragen
+.formula h|text12 = xdatum:8
+.formula h|text13 = (("00" + ('xzeit' << ":")) >> 2) + (("00" + ('xzeit' >> ":")) >> 2)
+.rewrite
+..
+!EL003
+.. FI003
+..
+..
+.continue EL004 ? _(h|text1 = "400")
+.. IF004
+.. im ersten satz 400 Åbertragungsnr setzen -> vda4906-811
+.formula h|text5 = xUebNrAlt
+.formula h|text6 = xUebNrNeu
+.formula h|text7 = datum:8
+.rewrite
+.formula xmehr = false
+..
+.continue FI004
+!EL004
+.select lock line
+.formula xmehr = mehr
+..
+!FI004
+..
+.continue LOOP001
+!ELOP001: ==============================
+..
+..*****************************************************************************
+!END
+.continue

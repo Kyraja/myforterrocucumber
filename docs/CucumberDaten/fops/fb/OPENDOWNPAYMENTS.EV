@@ -1,0 +1,198 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : OPENDOWNPAYMENTS.EV
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..
+.. include fb/ACCOUNT.FIGURES
+..*****************************************************************************
+.set trans -
+.type integer  xgetfm        ? _F|defined(U|xgetfm)
+.type GJ       xgetfy        ? _F|defined(U|xgetfy)
+.type P5:1     xaccount      ? _F|defined(U|xaccount)
+.type GJ       xsyear        ? _F|defined(U|xsyear)
+.type GJ       xeyear        ? _F|defined(U|xeyear)
+.type integer  xsmonth       ? _F|defined(U|xsmonth)
+.type integer  xemonth       ? _F|defined(U|xemonth)
+.type GD       xtag          ? _F|defined(U|xtag)
+..
+.input "is/TABLEEREN"
+.formula M|summe = ""
+.formula M|endsaldo = ""
+.formula M|diff = ""
+.continue EVENT ? F|empty(M|stichtag) 
+.continue EVENT ? F|empty(M|anzkonto)
+.continue EVENT ? _M|bmonatsende
+.assign U|xtag   = M|stichtag
+.copy U|xsyear   = F|getfy(U|xtag)
+.copy U|xeyear   = F|getfy(U|xtag)
+.copy U|xsmonth  = F|getfm(U|xtag)
+.copy U|xemonth  = F|getfm(U|xtag)
+.copy U|xaccount = M|anzkonto
+..
+.formula U|xgetfy = F|getfy(M|stichtag)
+.formula U|xgetfm = F|getfm(M|stichtag)
+.formula U|xgetfm = F|getfm(M|stichtag, G|TRUE)  ? 'U|xgetfm' = 'F|lastfm(U|xgetfy)'
+.select year 'U|xgetfy' 1 'U|xgetfm'
+.load 0 account 'M|anzkonto'
+.formula M|endsaldo = 0|esaldo * (-1) ? M|bverkauf
+.formula M|endsaldo = 0|esaldo        ? M|beinkauf
+..
+!EVENT
+.continue EKVK      ? G|evtartengl = "FIELD_EXIT"   & (G|evtvar = "beinkauf" ; G|evtvar = "bverkauf")
+.continue STICHTAG  ? G|evtartengl = "FIELD_EXIT"   &  G|evtvar = "stichtag 
+.continue KONTO     ? G|evtartengl = "FIELD_EXIT"   &  G|evtvar = "anzkonto"
+.continue PROJEKT   ? G|evtartengl = "FIELD_EXIT"   &  G|evtvar = "projekt"
+.continue PROKUNDE  ? G|evtartengl = "FIELD_EXIT"   &  G|evtvar = "bprokunde"
+.continue PROLIEF   ? G|evtartengl = "FIELD_EXIT"   &  G|evtvar = "bprolief"
+.continue BSTART    ? G|evtartengl = "BUTTON_AFTER" &  G|evtvar = "bstart"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & (G|evtvar = "kunde" ; G|evtvar = "lief")
+.continue END
+..
+!PROKUNDE
+.protection -reset kunde       ? _M|bprokunde
+.protection -reset auftrag     ? _M|bprokunde
+.protection -reset anzkonto    ? _M|bprokunde
+.protection -reset projekt     ? _M|bprokunde
+.continue TABLEEREN            ? _M|bprokunde
+..
+.formula M|auftrag = ""
+.formula M|kunde = ""
+.formula M|anzkonto = ""
+.formula M|projekt = ""
+.formula M|endsaldo = ""
+.formula M|diff = ""
+.protection kunde
+.protection auftrag
+.protection anzkonto
+.protection projekt
+.continue TABLEEREN
+..
+!PROLIEF
+.protection -reset lief         ? _M|bprolief
+.protection -reset bestellung   ? _M|bprolief
+.protection -reset anzkonto     ? _M|bprolief
+.protection -reset projekt      ? _M|bprolief
+.continue TABLEEREN             ? _M|bprolief
+..
+.formula M|bestellung = ""
+.formula M|lief = ""
+.formula M|anzkonto = ""
+.formula M|projekt = ""
+.formula M|endsaldo = ""
+.formula M|diff = ""
+.protection lief
+.protection bestellung
+.protection anzkonto
+.protection projekt
+.continue TABLEEREN
+..
+!PROJEKT
+.continue TABLEEREN
+..
+!KONTO
+.formula M|summe = "" 
+.formula M|endsaldo = ""
+.formula M|diff = ""
+.continue TABLEEREN ? _M|bmonatsende
+.continue TABLEEREN ? F|empty(M|anzkonto)
+.continue ERROR1    ? F|empty(M|stichtag)
+.assign U|xtag   = M|stichtag
+.copy U|xsyear   = F|getfy(U|xtag)
+.copy U|xeyear   = F|getfy(U|xtag)
+.copy U|xsmonth  = F|getfm(U|xtag)
+.copy U|xemonth  = F|getfm(U|xtag)
+.copy U|xaccount = M|anzkonto
+.input "fb/ACCOUNT.FIGURES"
+.formula M|endsaldo = U|xcbalance      ? M|beinkauf
+.formula M|endsaldo = U|xcbalance * -1 ? M|bverkauf
+.continue TABLEEREN
+..
+!BSTART
+.continue ERROR1 ?  F|empty(M|stichtag)
+.continue INFOSYSCALL ? _F|empty(M|kundelief)
+!CALLEND
+.input 'M|tab'   ? _F|empty(M|tab)
+.input 'M|bfuss' ? _F|empty(M|bfuss)
+.continue END
+..
+!INFOSYSCALL
+.formula M|bverkauf = G|TRUE ? M|kundelief^dnr = 0
+.formula M|beinkauf = G|FALSE ? M|kundelief^dnr = 0
+.assign M|kunde = M|kundelief ? M|kundelief^dnr = 0
+..
+.continue CALLEND ? _F|empty(M|kunde)
+..
+.formula M|bverkauf = G|FALSE ? M|kundelief^dnr = 1
+.formula M|beinkauf = G|TRUE ? M|kundelief^dnr = 1
+.assign M|lief = M|kundelief ? M|kundelief^dnr = 1
+..
+.continue CALLEND
+..
+!STICHTAG
+.copy M|bmonatsende = G|FALSE 
+.continue ERROR1             ? F|empty(M|stichtag)
+.assign U|xtag      = M|stichtag
+.copy U|xsyear      = F|getfy(U|xtag)
+.copy U|xeyear      = F|getfy(U|xtag)
+.copy U|xsmonth     = F|getfm(U|xtag)
+.copy U|xemonth     = F|getfm(U|xtag)
+.formula U|xgetfy   = F|getfy(M|stichtag)
+.formula U|xgetfm   = F|getfm(M|stichtag)
+.copy M|bmonatsende = G|TRUE ? 'F|fyenddate(xgetfy,xgetfm):8' = 'M|stichtag:8'
+.formula M|endsaldo = ""     ? _M|bmonatsende
+.continue TABLEEREN
+..
+!EKVK
+.continue VERKAUF ?  M|bverkauf & G|evtvar = "bverkauf"
+.continue EINKAUF ? _M|bverkauf & G|evtvar = "bverkauf"
+.continue EINKAUF ?  M|beinkauf & G|evtvar = "beinkauf"
+.continue VERKAUF ? _M|beinkauf & G|evtvar = "beinkauf"
+..
+!EINKAUF
+.copy M|bverkauf = G|FALSE
+.copy M|beinkauf = G|TRUE
+.assign P|maskkontextfop = "Einkauf" ? M|beinkauf
+.formula M|auftrag = ""
+.formula M|kunde = ""
+.formula M|anzkonto = ""
+.copy M|bprokunde = G|FALSE
+.protection -reset lief
+.protection -reset bestellung
+.protection -reset bprolief
+.protection -reset anzkonto
+.protection kunde
+.protection auftrag
+.protection bprokunde
+.continue TABLEEREN
+..
+!VERKAUF
+.copy M|beinkauf = G|FALSE
+.copy M|bverkauf = G|TRUE
+.assign P|maskkontextfop = "Verkauf" ? M|bverkauf
+.formula M|bestellung = ""
+.formula M|lief = ""
+.formula M|anzkonto = ""
+.copy M|bprolief = G|FALSE
+.protection lief
+.protection bestellung
+.protection bprolief
+.protection -reset kunde
+.protection -reset auftrag
+.protection -reset bprokunde
+.protection -reset anzkonto
+.continue TABLEEREN
+..
+!TABLEEREN
+.input "is/TABLEEREN"
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR1
+.error Bitte Stichtag eintragen.
+.end 1

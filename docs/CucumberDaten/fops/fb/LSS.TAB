@@ -1,0 +1,137 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : LSS.TAB
+..  Datum          : 15.12.2009
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : Infosystem, Summen und Saldenliste, Tabellenzeigfop
+..*****************************************************************************
+..
+.set trans -
+..
+.continue ACCOUNT ? _F|defined(H|stat)
+..
+.formula U|xbstat = F|condexpr(H|dnr=60, H|stat, _F|empty(H|stat))
+..
+..*****************************************************************************
+!ACCOUNT:
+..*****************************************************************************
+.formula U|xbgv = G|FALSE
+.formula U|xbbu = G|FALSE
+.formula U|xbgv = H|gv   ? F|defined(H|gv)
+.formula U|xbbu = H|bu   ? F|defined(H|bu)
+.formula U|xbbu = G|TRUE ? H|dnr = 0 ; H|dnr = 1 ; H|dnr = 11
+..
+.formula U|xbsverd = G|FALSE
+.continue A2 ? U|xbbu
+.continue A2 ? H|dnr <> 5
+..
+.. check if the general ledger account has to be treated as a standard payables/receivables consolidation account
+.formula U|xbsverd = (H|id = M|ford ; H|id = M|verb ; H|id = M|sford ; H|id = M|sverb)
+.continue A2  ? U|xbsverd
+.continue A2  ? F|empty(M|hbkb)
+.type ID5   xpac ? _F|defined(U|xpac)
+.type P68:1 xpar ? _F|defined(U|xpar)
+.copy U|xpac = H|id
+.copy U|xpar = M|hbkb
+.input "fb/IS.AC.IN.AR"
+.formula U|xbsverd = U|xbresult
+..
+!A2
+.continue KTO2  ?  H|dnr  = 68
+.continue KONTO ?  H|dnr <> 5
+.continue END   ? _H|bu & _U|xbsverd & _M|verd
+.continue END   ? _H|bu &  U|xbsverd & _M|sverd
+.continue END   ?  U|xbgv & F|value(M|berichtsart, "AS231") = "(BalanceSheet)"
+.continue END   ? _U|xbgv & F|value(M|berichtsart, "AS231") = "(PLAccount)"
+..
+..*****************************************************************************
+!KONTO
+..*****************************************************************************
+.continue KTO2 ?  M|vdn <> 68 & M|vdn <> 5
+.continue END  ?  U|xbstat & _M|stat
+.continue END  ? _U|xbbu & _U|xbsverd & _M|verd
+.continue END  ? _U|xbbu &  U|xbsverd & _M|sverd
+.continue KTO2 ? _F|defined(H|gv)
+.formula U|xtkart = "G" ?  H|gv
+.formula U|xtkart = "B" ? _H|gv
+.formula U|xtkart = U|xtkart + "S" ?  U|xbstat
+.formula U|xtkart = U|xtkart + "V" ? _H|bu
+..
+..*****************************************************************************
+!KTO2:
+..*****************************************************************************
+.select year 'M|jahr' 'M|von' 'M|bis'
+.copy U|xbhasvalues1 = (H|asaldo<>0 ; H|esaldo<>0 ; H|ssum<>0 ; H|hsum<>0)
+.copy U|xbhasvalues2 = G|FALSE
+.continue OUT
+..
+..*****************************************************************************
+!OUT
+..*****************************************************************************
+.make screen line +O
+.assign M|tkbereich = H|id ? H|dnr  = 68
+.assign M|tkonto    = H|id ? H|dnr <> 68
+.assign M|tobjekt   = H|id
+.formula M|tbaumstat   = F|condexpr(F|empty(M|tkbereich), "", "+")
+.formula M|tbaumstufe  = M|stufe
+.formula M|kart        = U|xtkart
+.formula M|tasaldo     = H|asaldo
+.formula M|tssum       = H|ssum
+.formula M|thsum       = H|hsum
+.formula M|tesaldo     = H|esaldo
+.continue OUT2
+..
+!OUT2: Previous period
+.continue OUT3 ? _M|mitvorjahr
+.continue OUT3 ?  F|empty(M|jahr2) ; F|empty(M|von2) ; F|empty(M|bis2)
+.select year 'M|jahr2' 'M|von2' 'M|bis2'
+.copy U|xbhasvalues2 = (H|asaldo<>0 ; H|esaldo<>0 ; H|ssum<>0 ; H|hsum<>0)
+.formula M|tesaldo2 = H|esaldo
+.continue OUT3
+..
+!OUT3
+.continue DOSUM ? _M|mitgvkz
+.select year 'M|jahr1' "1" 'M|bis1'
+.formula M|tgssum = H|ssum
+.formula M|tghsum = H|hsum
+.continue DOSUM
+..
+!DOSUM
+.continue END ?  G|evtzeile > 0
+.make screen line -O ? _(U|xbhasvalues1 ; U|xbhasvalues2) & M|nonull
+.continue END           ? _(U|xbhasvalues1 ; U|xbhasvalues2) & M|nonull
+.. do not sum up if consolidation account and not standard one
+.continue END ? _U|xbbu & _U|xbsverd
+.. do not sum up if consolidation account consolidated to another one
+.continue END ? _U|xbbu & _F|empty(M|tkonto^verd) & M|verd
+.formula M|ganfs  = M|ganfs  + M|tasaldo  ? M|tasaldo  > 0
+.formula M|ganfh  = M|ganfh  - M|tasaldo  ? M|tasaldo  < 0
+..
+.formula M|gends  = M|gends  + M|tesaldo  ? M|tesaldo  > 0
+.formula M|gendh  = M|gendh  - M|tesaldo  ? M|tesaldo  < 0
+.formula M|gends2 = M|gends2 + M|tesaldo2 ? M|tesaldo2 > 0
+.formula M|gendh2 = M|gendh2 - M|tesaldo2 ? M|tesaldo2 < 0
+..
+.formula M|gvkzs  = M|gvkzs  + M|tssum
+.formula M|gvkzh  = M|gvkzh  + M|thsum
+.formula M|ggvkzs = M|ggvkzs + M|tgssum
+.formula M|ggvkzh = M|ggvkzh + M|tghsum
+..
+.. do only sum up accounts
+.continue END ? F|empty(M|tkonto)
+.formula M|guvs   = M|guvs   + M|tssum ?  U|xbgv & _U|xbstat
+.formula M|guvh   = M|guvh   + M|thsum ?  U|xbgv & _U|xbstat
+.formula M|bils   = M|bils   + M|tssum ? _U|xbgv & _U|xbstat
+.formula M|bilh   = M|bilh   + M|thsum ? _U|xbgv & _U|xbstat
+.formula M|statgs = M|statgs + M|tssum ?  U|xbgv &  U|xbstat
+.formula M|statgh = M|statgh + M|thsum ?  U|xbgv &  U|xbstat
+.formula M|statbs = M|statbs + M|tssum ? _U|xbgv &  U|xbstat
+.formula M|statbh = M|statbh + M|thsum ? _U|xbgv &  U|xbstat
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

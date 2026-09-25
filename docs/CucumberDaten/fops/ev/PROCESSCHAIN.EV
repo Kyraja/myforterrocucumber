@@ -1,0 +1,96 @@
+..!interpreter english translate noabbrev
+.. ****************************************************************************
+.. Name           : PROCESSCHAIN.EV
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  :
+..
+.. vorgang wird an drei seperate Felder bergeben. Es darf immer nur eines gesetzt
+.. sein, da die Business-Apps mit mehreren Diagrammen Probleme haben.
+..*****************************************************************************
+.set trans -
+.type text xkenn    ? _F|defined(U|xkenn)
+.type VPK2 xvorgang ? _F|defined(U|xvorgang)
+.type text xsel     ? _F|defined(U|xsel)
+.type text xkennerl ? _F|defined(U|xkennerl)
+.type text xkennera ? _F|defined(U|xkennera)
+.type text xkennerb ? _F|defined(U|xkennerb)
+..
+.formula M|service = ""
+.formula M|verkauf = ""
+.formula M|einkauf = ""
+.formula M|serkettebaurl0 = ""
+.formula M|vkkettebaurl0  = ""
+.formula M|ekkettebaurl0  = ""
+..
+.continue FELDAUS  ? G|evtvar = "vorgang" & G|evtart = "feldaus"
+.continue SERVICE  ? G|evtvar = "servorgang" & G|evtart = "feldaus"
+.continue END
+..
+!FELDAUS
+.continue END     ? F|empty(M|vorgang)
+.continue SALES   ? M|vorgang^dnr = 3
+.continue PURCHSE ? M|vorgang^dnr = 4
+.error -number 1111
+.continue
+..
+!SALES
+.formula U|xkennerl = F|sysinfo(10)^ekls ? M|vorgang^dnr = 4
+.formula U|xkennerl = F|sysinfo(10)^vkls ? M|vorgang^dnr = 3
+.continue NOSERVICE ? F|empty(M|vorgang^kenn)
+.continue SERVICE   ? M|vorgang^typ > 5
+.. alles rechts vom Komma mit Komma wegschneiden
+.formula U|xkenn = 'M|vorgang^kenn'<<","
+.continue SEL                           ? _F|regmatch(U|xkenn, U|xkennerl+".*")
+.. alles links vom Komma wegschneiden
+.formula U|xkenn = 'M|vorgang^kenn'>>","
+.formula U|xkenn = 'U|xkenn'<<","
+..
+!SEL
+.formula U|xkennera = F|sysinfo(10)^ekan ? M|vorgang^dnr = 4
+.formula U|xkennera = F|sysinfo(10)^vkan ? M|vorgang^dnr = 3
+.formula U|xkennerb = F|sysinfo(10)^ekbe ? M|vorgang^dnr = 4
+.formula U|xkennerb = F|sysinfo(10)^vkau ? M|vorgang^dnr = 3
+.formula U|xsel = "$,,nummer="+'F|regreplace(U|xkenn, U|xkennerb, "")'+";@gruppe=1;@ablageart=beides" ? F|regmatch(xkenn, U|xkennerb+"[0-9]*")
+.formula U|xsel = "$,,nummer="+'F|regreplace(U|xkenn, U|xkennera, "")'+";@gruppe=1;@ablageart=beides" ? F|regmatch(xkenn, U|xkennera+"[0-9]*")
+.continue NOSERVICE ? _(F|regmatch(xkenn, U|xkennera+".*") ; F|regmatch(xkenn, U|xkennerb+".*"))
+.continue NOSERVICE ? F|empty(U|xsel)
+.continue NOSERVICE ? F|regmatch(xkenn, "[0-9].*")
+.load 7 sales 'U|xsel' 
+.continue NOSERVICE ? _G|mehr
+.formula M|servorgang = M|vorgang  ?  G|mehr & 7|typ > 5
+.continue SERVICE                  ?  G|mehr & 7|typ > 5
+..
+!NOSERVICE
+.formula M|servorgang = "" 
+.assign M|verkauf = M|vorgang
+.continue END ? _G|mehr
+.. ohne Reiter URL
+.assign P|maskkontextfop = "urlvk"
+.. mit Reiter URL
+...assign P|maskkontextfop = "eingabe urlvk" 
+.continue END 
+..
+!PURCHSE
+.formula M|servorgang = ""
+.assign M|einkauf = M|vorgang
+.continue END ? _G|mehr
+.. ohne Reiter URL
+.assign P|maskkontextfop = "urlek"
+.. mit Reiter URL
+...assign P|maskkontextfop = "eingabe urlek"
+.continue END
+..
+!SERVICE
+.formula M|vorgang = ""
+.assign M|service = M|servorgang
+.continue END ? _G|mehr
+.. ohne Reiter URL
+.assign P|maskkontextfop = "urlser"
+.. mit Reiter URL
+...assign P|maskkontextfop = "eingabe urlser"
+..*****************************************************************************
+!END
+.continue
+

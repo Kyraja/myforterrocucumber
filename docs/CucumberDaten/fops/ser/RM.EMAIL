@@ -1,0 +1,162 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : RM.EMAIL
+.. Autor          : bheim
+.. Verantwortlich : as
+.. Kontrolle      : cl
+.. Funktion       :
+..
+.. Program flow   :
+..
+.. *********************************************************************
+.. Funktion: RÅckmeldung als eMail verschicken.
+..           Datengenerier-FOP im Druckparameter-Layout(RM.EMAIL)
+..
+.. Unterprogramm: RM.EMAIL.KOPF      - eMail-Kopf mit EmpfÑngerangaben
+..                RM.EMAIL.ANF       - Anfrage-Inhalt
+..                RM.EMAIL.FUSS      - eMail-Fuss mit Absenderangaben
+..                RM.EMAIL.XMAILUSER - eMail-Versand Åber PrintEngine
+...Includes       :
+.. *********************************************************************
+.set trans +
+.type text xtrmdatei    ? _defined(xtrmdatei)
+.type text xtemdatei    ? _defined(xtemdatei)
+.type text xtsys        ? _defined(xtsys)
+.type text xanrede      ? _defined(xanrede)
+.type text xspr         ? _defined(xspr)
+.type text xtfehler     ? _defined(xtfehler)
+.type text xtfeld       ? _defined(xtfeld)
+.type text xtfromadress ? _defined(xtfromadress)
+..
+.type integer xizeile       ? _defined(xizeile)
+.type integer xilge         ? _defined(xilge)
+..
+.type bool xbmehr       ? _defined(xbmehr)
+.type bool xbleer       ? _defined(xbleer)
+.type bool xnotaddpdf   ? _defined(xnotaddpdf)
+..
+.continue ZEIGEN   ? evtkommd = "zeigen"
+..
+.. Dummy-Datendatei erzeugen
+.formula T|xnotaddpdf = true
+.output new 'xxmldata'
+.input "DATEI.F"
+<?xml version="1.0" encoding="UTF-8"?>
+<ABASData abasversion="2006" source="Screen">
+   <RecordSet caption="0">
+      <Record caption="">
+         <Head caption="0">
+         </Head>
+      </Record>
+   </RecordSet>
+</ABASData>
+..
+.. eMail-Steuerungsdatei
+.formula T|xtemdatei = "rmtmp/XMAILUSER" + 'T|aufrufernr'
+.output new 'xtemdatei'
+.input "DATEI.F"
+..
+.. Druckwiederholung, wenn Tabellenzeilen-Druck-Button gedrÅckt
+.continue SPEMDAT    ? T|evtzeile > 0 & T|evtvar="budruck"
+..
+.. eMail komplett neu generieren
+.. PrÅfen, ob RÅckmeldungstext vorhanden
+.formula T|xtfehler = "Bitte geben Sie eine RÅckmeldung ein!"
+.formula T|xtfeld = "rmtext"
+.continue F1        ? M|rmtext = ""
+..
+.. PrÅfen, ob RÅckmeldungsempfÑnger vorhanden
+.formula T|xtfehler = "Bitte geben Sie einen RÅckmeldungsempfÑnger ein!"
+.formula T|xtfeld = "rman1"
+.continue F1        ? M|rman1 = ""
+..
+.. RÅckmeldungszeile anlegen
+.select screen header
+.select screen line 'M|tzeilen'
+.formula T|xbleer = false
+.formula T|xbleer = true           ? 'M|uhrzbis'="" & M|datum=T|datum & M|tanfbesch=""
+.make screen line +O             ? _T|xbleer
+.formula M|tbearbeit = M|bearbeit^id
+.formula M|datum     = T|datum
+.formula M|uhrzvon   = "."
+.formula M|tanfbesch = "RÅckmeldung verschickt."
+..
+.select screen header
+.select screen line 'M|tzeilen'
+..
+.formula T|xtrmdatei = "rmtmp/XRM.MAIL." + 'T|aufrufernr' + ".TMP"
+.output new 'xtrmdatei'
+.input "DATEI.F"
+..
+.select object 'M|rman1^id'
+.formula T|xbmehr = T|mehr
+.formula T|xspr = H|spr     ?  T|xbmehr
+.formula T|xspr = T|bspr    ? _T|xbmehr
+..
+.text xanrede 'xspr' Sehr geehrte Damen und Herren,
+.continue  SPEOBJ            ? _T|xbmehr
+.add H|as
+.input ANREDE            ?  T|mehr
+.continue  SPEOBJ            ? _T|mehr
+..
+.formula T|xanrede = T|xas  ? defined(xas)
+.add
+..
+!SPEOBJ:
+.select -
+..
+.input RM.EMAIL.KOPF
+.input RM.EMAIL.ANF
+.input RM.EMAIL.FUSS
+.output
+.. generierte RÅckmeldung der neuen Zeile zuweisen
+.formula M|trmtext = T|xtrmdatei
+.editing 'M|trmtext'
+.formula T|xizeile = M|aktzeile
+..
+.. RÅckmeldetext im Kopf zurÅcksetzen
+.output new 'xtrmdatei'
+.input "DATEI.F"
+.output
+.select screen header
+.formula M|rmtext = T|xtrmdatei
+..
+.. neu positionieren
+.select screen line 'xizeile'
+.continue SPEMDAT
+.. ---------------------------------------------------------------------------
+!SPEMDAT: .. eMail-Datei schreiben (xtemdatei)
+.. eMail-EmpfÑnger prÅfen
+.formula T|xtfehler = "Bitte geben Sie einen E-Mail-EmpfÑnger ein und senden Sie erneut."
+.formula T|xtfeld = "rman1"
+.continue F1       ? M|rman1^email=""
+..
+.formula T|xtfehler = "Bitte geben Sie eine RÅckmeldung ein und senden Sie erneut!"
+.formula T|xtfeld = "rmtext"
+.continue F1        ? M|trmtext = ""
+..
+.formula T|xtfehler = "E-Mail-Absender konnte nicht ermittelt werden. Bitte E-Mail erneut versenden."
+.formula T|xtfeld   = ""
+.load 0 company "$,,gruppe=10"
+.continue F1        ? _T|mehr
+.formula T|xtfromadress = 0|email
+.load 0
+..
+.. eMail-Datei mit Parametern schreiben
+.input RM.EMAIL.XMAILUSER
+.. -----------------------------------------------------------------
+.. Ende Zeit setzen
+.formula M|uhrzbis = "."               ? M|aktzeile <> 0
+.formula M|attach = M|attach           ? M|aktzeile <> 0 & M|attach <> ""
+.formula M|attach = " "                ? M|aktzeile <> 0 & M|attach <> ""
+.continue
+.. -----------------------------------------------------------------
+!ZEIGEN
+.formula T|xtfehler = "Drucken ist nicht im Zeigen-Modus mîglich!"
+.continue F1
+.. -----------------------------------------------------------------
+!F1: Fehler vorhanden
+.error 'xtfehler'
+.cursor 'xtfeld' 0         ? T|xtfeld <> ""
+.end 1
+

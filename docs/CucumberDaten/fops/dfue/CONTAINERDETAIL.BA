@@ -1,0 +1,91 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : CONTAINERDETAIL.BA
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type PS158:1 xbehaelterkonto ? _F|defined(U|xbehaelterkonto)
+.type VP17    xpartner        ? _F|defined(U|xpartner)
+.type GL25    xwerk           ? _F|defined(U|xwerk)
+.type text    xselect         ? _F|defined(U|xselect)
+..
+.continue ARTIKEL ? F|empty(M|behaelterkonto) & F|empty(M|kreislauf)
+..
+.assign U|xbehaelterkonto = M|behaelterkonto^id  ? _F|empty(M|behaelterkonto)
+..
+.continue BEHAELTER ? _F|empty(M|behaelterkonto)
+.continue KREISLAUF ? _F|empty(M|kreislauf)
+..
+!KREISLAUF: Mit Partner + Werk ermitteln
+.formula M|select = "$,,;@gruppe = 2;@zeilen=ja;@ablageart=(Active)" 
+.formula M|select = M|select + ";twerk =" + 'M|kwerk'                  ? _F|empty(M|kwerk)
+.formula M|select = M|select + ";id =" + 'M|kreislauf^id'
+.continue SELECT
+..
+!SELECT
+.load 1 containeraccount 'M|select'
+.continue END                         ? _G|mehr
+.load 1 line '1|selzeile'    
+..
+!MERK
+.continue END                         ? _G|mehr  
+.assign U|xpartner = 1|tpartner
+.formula U|xwerk   = 1|twerk
+..
+!NEXT: BehÑlterkonto
+.formula U|xselect = "$,,;artikel="+M|artikel^id+";partner="+'U|xpartner^id'+";werk="+'U|xwerk'+";@gruppe=1;@ablageart=(Active)"
+.load 2 containeraccount 'U|xselect'
+..
+!TAB
+.continue LOAD                        ? _G|mehr
+.. BehÑlterbuchungen selektieren zu selektiertem BehÑlterkonto 2|id
+.formula U|xselect = "$,,;bhkto="+ '2|id'
+.formula U|xselect = U|xselect + ";@gruppe=1;@ablageart=(Active)"
+.formula U|xselect = U|xselect + ";budat=" + 'M|von' + "!" + 'M|bis'   ? M|bbudat
+.formula U|xselect = U|xselect + ";beldat=" + 'M|von' + "!" + 'M|bis'  ? M|bbeldat
+.formula U|xselect = U|xselect + ";@ordnung=bhkto,budat"         ? M|bbudat
+.formula U|xselect = U|xselect + ";@ordnung=beldat"              ? M|bbeldat
+.select containeraccounting 'U|xselect' 
+.continue NEXTITEM         ? _G|mehr
+..
+!INPUT
+.input 'M|tab'             ? _F|empty(M|tab)
+.select containeraccounting
+.continue INPUT            ?  G|mehr
+..
+!NEXTITEM
+.load 2  containeraccount  ? _G|mehr
+.continue LOAD             ? _G|mehr
+.continue TAB
+..
+!LOAD
+.load 1 line
+.continue MERK
+..
+!BEHAELTER: Selektion Åber BehÑlterbuchung mit BehÑlterkonto
+.formula M|select = "$,,;@gruppe=1"        
+.formula M|select = M|select + ";bhkto=" + 'M|behaelterkonto^id'
+.formula M|select = M|select + ";budat=" + 'M|von' + "!" + 'M|bis'  ? M|bbudat
+.formula M|select = M|select + ";beldat=" + 'M|von' + "!" + 'M|bis' ? M|bbeldat
+.formula M|select = M|select + ";@ordnung=bhkto,budat"           ? M|bbudat
+.formula U|xselect = U|xselect + ";@ordnung=beldat"              ? M|bbeldat
+.select containeraccounting 'M|select'
+.continue END                         ? _G|mehr
+.input "is/HOL.LISTE"
+.continue END
+..
+!ARTIKEL: Keine Kopffelder gefÅllt oder nur Artikel -> Selektion Åber BehÑlterbuchungen
+.formula M|select = "$,,id=;@gruppe=1;budat=" + 'M|von' + "!" + 'M|bis'  ? M|bbudat
+.formula M|select = "$,,id=;@gruppe=1;beldat=" + 'M|von' + "!" + 'M|bis' ? M|bbeldat
+.formula M|select = M|select + ";bhkto^artikel=" + M|artikel^id ? _F|empty(M|artikel)
+.formula M|select = M|select + ";@ordnung=bhkto,budat"
+.input "is/HOL.LISTE"
+.continue END
+..
+..*****************************************************************************
+!END
+.copy M|aufruf = G|FALSE
+.continue

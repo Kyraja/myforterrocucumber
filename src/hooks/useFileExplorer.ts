@@ -32,12 +32,16 @@ import {
   deleteFolder as fsDeleteFolder,
   createFeatureFile as fsCreateFile,
   deleteFile as fsDeleteFile,
+  duplicateFile as fsDuplicateFile,
   moveFile as fsMoveFile,
   moveDirectory as fsMoveDirectory,
   renameEntry as fsRenameEntry,
   getParentHandle,
   getNameFromPath,
   sanitizeName,
+  loadRecentWorkspaces,
+  saveRecentWorkspace,
+  type RecentWorkspace,
 } from '../lib/fileSystemAccess';
 
 /** Complete return type of {@link useFileExplorer}. */
@@ -64,11 +68,17 @@ export interface UseFileExplorerReturn {
   rootHandle: FileSystemDirectoryHandle | null;
   /** Path currently highlighted as a drag-over target during drag-and-drop, or `null`. */
   dragOverPath: string | null;
+  /** Recently used workspace handles for quick switching. */
+  recentWorkspaces: RecentWorkspace[];
 
-  // ── Actions ──────────────────────────────────────────────────
+  // ── Actions ────────────────────────────────────────────
 
   /** Show the OS directory picker, then load the selected folder. */
   openDirectory: () => Promise<void>;
+  /** Create a new workspace below a user-selected parent folder. */
+  createWorkspace: (name: string) => Promise<void>;
+  /** Switch to an already-known workspace handle (from recent workspaces list). */
+  switchWorkspace: (handle: FileSystemDirectoryHandle) => Promise<void>;
   /** Release the current directory handle and return to standalone mode. */
   closeDirectory: () => void;
   /** Re-read the directory tree from disk, preserving expansion state. */
@@ -92,8 +102,8 @@ export interface UseFileExplorerReturn {
   saveActiveFile: (feature: FeatureInput) => void;
   /** Write any pending debounced save immediately (called before switching files). */
   flushSave: () => Promise<void>;
-  /** Prompt the user for a folder name and create it under `parentPath`. Returns the new path. */
-  createFolder: (parentPath: string) => Promise<string | null>;
+  /** Create a folder under `parentPath`; the name is supplied by the caller. */
+  createFolder: (parentPath: string, folderName?: string) => Promise<string | null>;
   /** Confirm and delete a folder by path. */
   deleteFolder: (path: string) => Promise<void>;
   /** Prompt the user for a file name and create a new `.feature` file under `parentPath`. */
@@ -102,6 +112,10 @@ export interface UseFileExplorerReturn {
   createFileWithName: (parentPath: string, fileName: string) => Promise<string | null>;
   /** Confirm and delete a file by path. */
   deleteFile: (path: string) => Promise<void>;
+  /** Duplicate a file in the same folder and select the duplicate. */
+  duplicateFile: (path: string) => Promise<string | null>;
+  /** Delete multiple files in one operation (no per-file confirm dialog). */
+  deleteFiles: (paths: string[]) => Promise<void>;
   /** Move a file or folder from `sourcePath` into `targetFolderPath`. */
   moveEntry: (sourcePath: string, targetFolderPath: string) => Promise<void>;
   /** Rename a file or folder in-place. */
@@ -133,6 +147,7 @@ export interface UseFileExplorerReturn {
  */
 export function useFileExplorer(): UseFileExplorerReturn {
   const [rootHandle, setRootHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [recentWorkspaces, setRecentWorkspaces] = useState<RecentWorkspace[]>([]);
   const [tree, setTree] = useState<FileTreeNode[]>([]);
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
   const [isVisible, setIsVisible] = useState(() => {
@@ -183,9 +198,10 @@ export function useFileExplorer(): UseFileExplorerReturn {
     }
   }, [buildTree]);
 
-  // Try to restore saved handle on mount
+  // Try to restore saved handle on mount; also load recent workspaces
   useEffect(() => {
     if (!isSupported) return;
+    void loadRecentWorkspaces().then(setRecentWorkspaces);
     let cancelled = false;
     (async () => {
       const savedHandle = await loadDirectoryHandle();
@@ -214,6 +230,8 @@ export function useFileExplorer(): UseFileExplorerReturn {
       setRootHandle(handle);
       rootHandleRef.current = handle;
       await saveDirectoryHandle(handle);
+      const updated = await saveRecentWorkspace(handle);
+      setRecentWorkspaces(updated);
       setIsLoading(true);
       setError(null);
       const newTree = await buildTree(handle);
@@ -226,6 +244,34 @@ export function useFileExplorer(): UseFileExplorerReturn {
       // User cancelled the picker - not an error
       if ((err as Error).name !== 'AbortError') {
         setError(`Failed to open directory: ${(err as Error).message}`);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [buildTree]);
+
+  // Create a child workspace below a user-selected parent directory.
+  const createWorkspace = useCallback(async (name: string) => {
+    const normalizedName = name.trim();
+    if (!normalizedName) return;
+    try {
+      const parentHandle = await pickDirectory();
+      const handle = await parentHandle.getDirectoryHandle(normalizedName, { create: true });
+      setRootHandle(handle);
+      rootHandleRef.current = handle;
+      await saveDirectoryHandle(handle);
+      const updated = await saveRecentWorkspace(handle);
+      setRecentWorkspaces(updated);
+      setIsLoading(true);
+      setError(null);
+      setTree(await buildTree(handle));
+      setActiveFilePath(null);
+      activeFileHandleRef.current = null;
+      setIsVisible(true);
+      localStorage.setItem('cucumbergnerator_explorer_visible', 'true');
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setError(`Failed to create workspace: ${(err as Error).message}`);
       }
     } finally {
       setIsLoading(false);
@@ -292,6 +338,30 @@ export function useFileExplorer(): UseFileExplorerReturn {
       console.warn('[FileExplorer] Auto-save failed:', err);
     }
   }, []);
+
+  // Switch to an existing workspace handle (from recent workspaces list)
+  const switchWorkspace = useCallback(async (handle: FileSystemDirectoryHandle) => {
+    await flushSave();
+    try {
+      const hasPermission = await verifyPermission(handle);
+      if (!hasPermission) return;
+      setRootHandle(handle);
+      rootHandleRef.current = handle;
+      await saveDirectoryHandle(handle);
+      const updated = await saveRecentWorkspace(handle);
+      setRecentWorkspaces(updated);
+      setIsLoading(true);
+      setError(null);
+      const newTree = await buildTree(handle);
+      setTree(newTree);
+      setActiveFilePath(null);
+      activeFileHandleRef.current = null;
+    } catch (err) {
+      setError(`Failed to switch workspace: ${(err as Error).message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [buildTree, flushSave]);
 
   // Select (open) a file in the editor
   const selectFile = useCallback(async (path: string): Promise<FeatureInput | null> => {
@@ -374,9 +444,9 @@ export function useFileExplorer(): UseFileExplorerReturn {
   }, []);
 
   // Create a folder
-  const createFolderAction = useCallback(async (parentPath: string): Promise<string | null> => {
+  const createFolderAction = useCallback(async (parentPath: string, folderName?: string): Promise<string | null> => {
     if (!rootHandleRef.current) return null;
-    const name = window.prompt('Ordnername:');
+    const name = folderName?.trim();
     if (!name) return null;
     try {
       let parentHandle: FileSystemDirectoryHandle;
@@ -403,10 +473,10 @@ export function useFileExplorer(): UseFileExplorerReturn {
   }, [refreshTree]);
 
   // Delete a folder
-  const deleteFolderAction = useCallback(async (path: string) => {
+  const deleteFolderAction = useCallback(async (path: string, confirmed = false) => {
     if (!rootHandleRef.current) return;
     const name = getNameFromPath(path);
-    if (!window.confirm(`"${name}" löschen?`)) return;
+    if (!confirmed) return;
     try {
       const parentHandle = await getParentHandle(rootHandleRef.current, path);
       await fsDeleteFolder(parentHandle, name);
@@ -445,9 +515,9 @@ export function useFileExplorer(): UseFileExplorerReturn {
   }, [refreshTree, flushSave]);
 
   // Create a file (with prompt dialog)
-  const createFileAction = useCallback(async (parentPath: string): Promise<string | null> => {
+  const createFileAction = useCallback(async (parentPath: string, fileName?: string): Promise<string | null> => {
     if (!rootHandleRef.current) return null;
-    const name = window.prompt('Dateiname:');
+    const name = fileName?.trim();
     if (!name) return null;
     try {
       // Flush any pending save before switching files
@@ -486,10 +556,10 @@ export function useFileExplorer(): UseFileExplorerReturn {
   }, [refreshTree, flushSave]);
 
   // Delete a file
-  const deleteFileAction = useCallback(async (path: string) => {
+  const deleteFileAction = useCallback(async (path: string, confirmed = false) => {
     if (!rootHandleRef.current) return;
     const name = getNameFromPath(path);
-    if (!window.confirm(`"${name}" löschen?`)) return;
+    if (!confirmed) return;
     try {
       const parentHandle = await getParentHandle(rootHandleRef.current, path);
       await fsDeleteFile(parentHandle, name);
@@ -500,6 +570,58 @@ export function useFileExplorer(): UseFileExplorerReturn {
       await refreshTree();
     } catch (err) {
       setError(`Failed to delete file: ${(err as Error).message}`);
+    }
+  }, [refreshTree, activeFilePath]);
+
+  // Duplicate a file in-place (same folder) and select the new copy
+  const duplicateFileAction = useCallback(async (path: string): Promise<string | null> => {
+    if (!rootHandleRef.current) return null;
+
+    try {
+      await flushSave();
+      const parentHandle = await getParentHandle(rootHandleRef.current, path);
+      const sourceName = getNameFromPath(path);
+      const { fileHandle, fileName } = await fsDuplicateFile(parentHandle, sourceName);
+
+      const parentPath = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+      const newPath = parentPath ? `${parentPath}/${fileName}` : fileName;
+
+      setActiveFilePath(newPath);
+      activeFileHandleRef.current = fileHandle;
+      await refreshTree();
+      return newPath;
+    } catch (err) {
+      setError(`Failed to duplicate file: ${(err as Error).message}`);
+      return null;
+    }
+  }, [flushSave, refreshTree]);
+
+  // Delete multiple files in one run (used by multi-select in the sidebar)
+  const deleteFilesAction = useCallback(async (paths: string[]) => {
+    if (!rootHandleRef.current || paths.length === 0) return;
+
+    const uniquePaths = Array.from(new Set(paths));
+    const errors: string[] = [];
+
+    for (const path of uniquePaths) {
+      try {
+        const name = getNameFromPath(path);
+        const parentHandle = await getParentHandle(rootHandleRef.current, path);
+        await fsDeleteFile(parentHandle, name);
+      } catch (err) {
+        errors.push(`${path}: ${(err as Error).message}`);
+      }
+    }
+
+    if (activeFilePath && uniquePaths.includes(activeFilePath)) {
+      setActiveFilePath(null);
+      activeFileHandleRef.current = null;
+    }
+
+    await refreshTree();
+
+    if (errors.length > 0) {
+      setError(`Failed to delete some files:\n${errors.join('\n')}`);
     }
   }, [refreshTree, activeFilePath]);
 
@@ -653,14 +775,14 @@ export function useFileExplorer(): UseFileExplorerReturn {
     const guid = makeFeatureGuid(namePrefix, rawName);
 
     // Build tags: replace or insert GUID tag
-    const GUID_RE = /^@[0-9a-f]{16}$/;
+    const GUID_RE = /^@(?:guid-)?([0-9a-f]{16})$/;
     const tags = [...pkg.feature.tags];
     const oldGuidIdx = tags.findIndex((t) => GUID_RE.test(t));
-    const oldGuid = oldGuidIdx >= 0 ? tags[oldGuidIdx].slice(1) : null;
+    const oldGuid = oldGuidIdx >= 0 ? tags[oldGuidIdx].match(GUID_RE)?.[1] ?? null : null;
     if (oldGuidIdx >= 0) {
-      tags[oldGuidIdx] = `@${guid}`;
+      tags[oldGuidIdx] = `@guid-${guid}`;
     } else {
-      tags.unshift(`@${guid}`);
+      tags.unshift(`@guid-${guid}`);
     }
 
     // Replace old GUID in steps if changed
@@ -909,7 +1031,10 @@ export function useFileExplorer(): UseFileExplorerReturn {
     rootFolderName,
     rootHandle,
     dragOverPath,
+    recentWorkspaces,
     openDirectory,
+    createWorkspace,
+    switchWorkspace,
     closeDirectory,
     refreshTree,
     toggleNode,
@@ -923,6 +1048,8 @@ export function useFileExplorer(): UseFileExplorerReturn {
     createFile: createFileAction,
     createFileWithName,
     deleteFile: deleteFileAction,
+    duplicateFile: duplicateFileAction,
+    deleteFiles: deleteFilesAction,
     moveEntry: moveEntryAction,
     renameEntry: renameEntryAction,
     deselectFile,

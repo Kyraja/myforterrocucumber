@@ -1,0 +1,85 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : HOL.VERWEND
+.. Author         : ds
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  : Gets uses in BOMs.
+.. Program flow   : After button efop
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type integer xcurrentrow
+.type bool  xbvorgaenger  ? _F|defined(xbvorgaenger)
+.type text  xtsel        ? _F|defined(U|xtsel)
+.type P2:1 xvvorgaenger  ? _F|defined(xvvorgaenger)
+.copy U|xbvorgaenger = G|false
+.. Open first node
+.. Es wird das direkte Vorkommen in der Fertigungsliste gefunden
+.. also alle Fertigunglisten, die kelem direkt enthalten
+.input 'M|openknot' ? _F|empty(M|openknot)
+..consider successorproduct 
+.continue HEAD ? _M|vorgaenger
+..Fertigungsmittel und ArbeitsgÑnge haben keine Nachfolger
+.continue HEAD ? M|kelem^gruppe <> 1
+.formula U|xtsel = "$,nummer=;such=;nachfolgeartikel="+'M|kelem^id'+";@gruppe=1;@ablageart=(Active);"
+.load 9 parts 'U|xtsel'
+.continue HEAD ? _G|mehr
+..Ermittlung des direkten VorgÑngers
+!NFLOOP1
+.copy U|xbvorgaenger = G|true
+.. Ein Artikel hat einen eingetragenen Nachfolgeartikel.
+.. Wenn dieser Nachfolgeartikel in kelem eingetragen ist,
+.. werden nun auch das direkte Vorkommen des VorgÑngers (9|Puffer) aufgelistet 
+.. diesen Zustand zeigt die Variable U|xbvorgaenger = G|true an 
+.. Die Suche nach den VorgÑngern erfolgt 2-stufig - ab Stufe 3 wird erwartet
+.. dass in den Fertigungslisten der Nachfolger eingetragen wurde. 
+.continue NEXTNF1  ? 9|lbsdatum >= G|datum
+.assign U|xvvorgaenger = 9|id
+.input 'M|openknot' ? _F|empty(M|openknot)
+!NEXTNF1
+..Ermittlung des indirekten VorgÑngers (Stufe 2)
+.formula U|xtsel = "$,nummer=;such=;nachfolgeartikel="+'9|id'+";@gruppe=1;@ablageart=(Active);"
+.load 8 parts 'U|xtsel'
+.continue AUSSEN ? _G|mehr
+!NFLOOP2
+.continue NEXTNF2  ? 8|lbsdatum >= G|datum
+.assign U|xvvorgaenger = 8|id
+.input 'M|openknot' ? _F|empty(M|openknot)
+!NEXTNF2
+.load 8 parts
+.continue NFLOOP2 ? G|mehr
+!AUSSEN
+.copy U|xbvorgaenger = G|false
+.load 9 parts
+.continue NFLOOP1 ? G|mehr
+.continue HEAD
+..
+!NEXT: Load next mask row
+.select screen line
+.continue FOOTER ? _G|mehr
+.continue NEXT   ? M|tbaumstat <> "+"
+.continue NEXT   ? M|tbaumstufe >= M|anzstufen
+.assign U|xcurrentrow = M|aktzeile
+.assign M|stufe = M|tbaumstufe
+.assign M|tbaumstat = "-"
+..
+!OPEN: Open current node
+.formula M|auswahl = M|tbaumtext
+.. es befinden sich hier alle direkte Vorkommen in der Tabelle
+.. nun werden darÅberliegende Baugruppen aufgelistet
+.input 'M|openknot' ? _F|empty(M|openknot)
+.select screen line 'U|xcurrentrow'
+.continue NEXT
+..
+!HEAD
+.select screen header
+.continue NEXT
+..
+!FOOTER: No where-used entries found
+..Ende des Programms
+.input "is/NICHTS.GEFUNDEN.BF"
+..*****************************************************************************
+!END
+.continue

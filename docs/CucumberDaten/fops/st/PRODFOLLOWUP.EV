@@ -1,0 +1,106 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PRODFOLLOWUP.EV
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : bheim
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text      xselect     ? _F|defined(U|xselect)
+.type ID2       xartikel    ? _F|defined(U|xartikel)
+.type IP4       xtbaumstufe ? _F|defined(U|xtbaumstufe)
+.type bool      xmehr       ? _F|defined(U|xmehr)
+..
+.continue ARTIKEL    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "artikel"
+.continue NACHFOLGER ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "nachfolger"
+.continue BSTART     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+.continue DATUM      ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "beschkonddatum"
+.continue DATUM      ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "verwkonddatum"
+.continue BASIS      ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "basisartikel"
+.continue END
+..
+!BASIS
+.formula M|artikel = "" ? _F|empty(M|basisartikel)
+.continue TABLEEREN
+..
+!DATUM
+.formula M|beschkonddatum = "" ? G|evtvar = "verwkonddatum" & _F|empty(M|verwkonddatum)
+.formula M|verwkonddatum = "" ? G|evtvar = "beschkonddatum" & _F|empty(M|beschkonddatum)
+.continue TABLEEREN ? G|evtvar = "beschkonddatum" 
+.continue TABLEEREN ? G|evtvar = "verwkonddatum"
+..
+!ARTIKEL    
+.assign M|nachfolger = M|artikel^nachfolgeartikel  ? _F|empty(M|artikel)
+.protection nachfolger 0                           ? _F|empty(M|artikel)
+.assign M|basisartikel = M|artikel^basisartikel    ? _F|empty(M|artikel)
+.formula M|nachfolger = ""                         ?  F|empty(M|artikel)
+.protection -reset nachfolger 0                    ?  F|empty(M|artikel)
+.continue TABLEEREN
+..
+!NACHFOLGER
+.protection artikel 0           ? _F|empty(M|nachfolger)
+.protection -reset artikel 0    ?  F|empty(M|nachfolger)
+.continue TABLEEREN
+..
+!BSTART
+.continue ERROR ? F|empty(M|verwkonddatum) & F|empty(M|beschkonddatum) & F|empty(M|artikel) & F|empty(M|nachfolger)
+..
+.copy U|xmehr = G|FALSE
+.input "is/TABLEEREN"
+..
+.formula U|xartikel = ""
+.assign U|xartikel = M|artikel
+.formula U|xtbaumstufe = 0
+..
+!SELARTIKEL
+.formula U|xselect = "$,,"
+.formula U|xselect = U|xselect + ";id=" + 'U|xartikel'      ? _F|empty(U|xartikel)
+.formula U|xselect = U|xselect + ";nachfolgeartikel<>`"     ?  F|empty(M|nachfolger)
+.formula U|xselect = U|xselect + ";nachfolgeartikel=" + U|xartikel^nachfolgeartikel^id ? _F|empty(M|nachfolger) & _F|empty(U|xartikel)
+.formula U|xselect = U|xselect + ";nachfolgeartikel=" + 'M|nachfolger^id' ? F|empty(U|xartikel) & _F|empty(M|nachfolger)
+.formula U|xselect = U|xselect + ";basisartikel=="  + 'M|basisartikel^id  ? _F|empty(M|basisartikel)
+.formula U|xselect = U|xselect + ";@gruppe=1"
+.select parts 'U|xselect'
+.continue END  ? _G|mehr
+..
+!BED
+.continue END ? F|empty(U|xartikel^nachfolgeartikel) & _F|empty(M|nachfolger) & _F|empty(U|xartikel)
+.continue SELPART ? 'H|lverwdatum:8' > 'M|verwkonddatum:8' & _F|empty(M|verwkonddatum)
+.continue SELPART ? 'H|lbsdatum:8' > 'M|beschkonddatum:8' & _F|empty(M|beschkonddatum)
+.continue TAB ? F|empty(M|beschkonddatum) & F|empty(M|verwkonddatum)
+.continue TAB ? 'H|lverwdatum:8' <= 'M|verwkonddatum:8' & _F|empty(M|verwkonddatum) 
+.continue TAB ? 'H|lbsdatum:8' <= 'M|beschkonddatum:8' & _F|empty(M|beschkonddatum)
+.continue TAB ? F|empty(H|lverwdatum) & _F|empty(M|verwkonddatum)
+.continue TAB ? F|empty(H|lbsdatum) & _F|empty(M|beschkonddatum)
+.assign U|xartikel = H|nachfolgeartikel^id
+.continue SELPART ? U|xmehr
+.continue SELARTIKEL 
+..
+!TAB
+.input 'M|tab'          ? _F|empty(M|tab)
+..
+.continue SELPARTS      ?  F|empty(M|artikel)
+.assign U|xartikel = M|tnachfolger^id
+.continue END ? U|xtbaumstufe = M|stufe
+.formula U|xtbaumstufe = M|tbaumstufe + 1
+.continue END ? F|empty(U|xartikel)
+.continue SELARTIKEL
+..
+!SELPARTS
+.copy U|xmehr = G|TRUE
+.select parts
+.continue END ? _G|mehr
+.continue BED
+..
+!TABLEEREN
+.input "is/TABLEEREN"
+.continue END
+..
+!ERROR
+.error Bitte ein Datum, ein Artikel oder einen Nachfolgeartikel eingeben.
+.end 1
+..
+..*****************************************************************************
+!END
+.continue

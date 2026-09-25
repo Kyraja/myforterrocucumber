@@ -1,0 +1,487 @@
+..!interpreter english declaration noabbrev
+.. at 2017-06-16, 15:46
+.set TRANS -
+..========================================================================
+..==  Name              : IS.PRJMPVAA.EV
+..==  Pfad              : allpstart
+..==  Funktion          : Anlage eines Projektplanes / Arbeitsaufgaben
+..==  Erstellungsdatum  : 21.03.2011
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF"
+..====================================================
+.type text    xtsys xtsel xtcmd xtedpdat xtedpout xtedperr xtedpmsg
+.type text    xykoobjekt xytaufrufernr xytzeitstempel xtsperrstempel
+.type text    xtftext xtext xtid xtindex xttitel xttext1 xttext2
+.type real    xrplan xrsoll
+.type integer xizeile xi1
+.type bool    xbmehr xbpvok xbaaok xbaktiv xbsetz xyberlaubt
+.type integer xprocsp   ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- SperreFreigeben -----
+.select screen header
+.select screen line
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL001 ? _(M|ytsperre)
+.continue EL002 ? _(_(F|empty(M|ypvorgang)))
+.select lock add M|ypvorgang
+.continue EL003 ? _(G|mehr)
+.copy H|ysperre = G|FALSE
+.rewrite
+.continue FI003
+!EL003
+.set TRANS +
+.box Hinweis
+Der Projektvorgang 'M|ypvorgang^nummer'/'M|ypvorgang^such' konnte nicht freigegeben werden.
+Bitte Sperre manuell entfernen.
+.set TRANS -
+!FI003
+!EL002
+.continue EL004 ? _(_(F|empty(M|yaufgabe)))
+.select lock add M|yaufgabe
+.continue EL005 ? _(G|mehr)
+.copy H|ysperre = G|FALSE
+.rewrite
+.continue FI005
+!EL005
+.set TRANS +
+.box Hinweis
+Die Arbeitsaufgabe 'M|yaufgabe^nummer'/'M|yaufgabe^such' konnte nicht freigegeben werden.
+Bitte Sperre manuell entfernen.
+.set TRANS -
+!FI005
+!EL004
+!EL001
+.select screen line
+.continue LOOP001
+!ELOP001: ==============================
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Tabelle_Leeren -----
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.make screen line --O
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Pruefung_anlegen -----
+.continue EL006 ? _((M|ytbaenderung) ; (U|xbsetz))
+.assign U|xbpvok = G|TRUE
+.assign U|xbaaok = G|TRUE
+.continue EL007 ? _((_(M|ytprojekt^ystatusk = "AKT")) & (_(F|empty(M|ytprojekt))) & (1=2))
+.continue EL008 ? _(_(U|xbsetz))
+.continue EL009 ? _(M|ybaaanlegen)
+.set trans +
+.formula U|xttitel = "Fehler"
+.formula U|xttext1 = F|formatstr("Das Projekt {1} hat den Status {2}{3}{2}.", M|yprojekt^such, G|dblquote, M|yprojekt^ystatus)
+.formula U|xttext2 = "Nur zu aktiven Projekten dÅrfen Arbeitsaufgaben erfasst oder geÑndert werden."
+.set trans -
+.box 'U|xttitel'
+'U|xttext1'
+'U|xttext2'
+.error
+.end 1
+!EL009
+!EL008
+.assign U|xbaaok      = G|FALSE
+!EL007
+.continue EL010 ? _((F|empty(M|ytpersonal)) & (F|empty(M|ytkstelle)) & (F|empty(M|ytprojteam)))
+.continue EL011 ? _(_(U|xbsetz))
+.continue EL012 ? _(_(F|empty(M|yaufgabe)))
+.set TRANS +
+.box Fehler
+Zur Arbeitsaufgabe muss der Bearbeiter, die Kostenstelle oder ein Projektteam eingetragen sein.
+.set TRANS -
+.error
+.cursor ytpersonal 'M|aktzeile'
+.end 1
+.assign U|xbaaok      = G|FALSE
+!EL012
+!EL011
+.continue FI010
+!EL010
+.formula U|xi1 = 0
+.formula U|xi1 = U|xi1 + 1      ? _F|empty(M|ytpersonal)
+.formula U|xi1 = U|xi1 + 1      ? _F|empty(M|ytkstelle)
+.formula U|xi1 = U|xi1 + 1      ? _F|empty(M|ytprojteam)
+.continue EL013 ? _(U|xi1 > 1)
+.continue EL014 ? _(_(U|xbsetz))
+.set TRANS +
+.box Fehler
+Es darf nur eines der Felder Bearbeiter, Kostenstelle oder Projektteam gefÅllt sein.
+.set TRANS -
+.error
+.cursor ytpersonal 'M|aktzeile'
+.end 1
+!EL014
+.assign U|xbpvok      = G|FALSE
+.assign U|xbaaok      = G|FALSE
+!EL013
+!FI010
+.continue EL015 ? _(F|empty(M|ytverantw))
+.continue EL016 ? _(_(U|xbsetz))
+.set TRANS +
+.box Fehler
+Zur Anlage eines Projektvorgangs muss der Verantwortliche bekannt sein.
+Bitte den Verantwortlichen eintragen.
+.set TRANS -
+.error
+.cursor ytverantw 'M|aktzeile'
+.end 1
+!EL016
+.assign U|xbpvok      = G|FALSE
+.assign U|xbaaok      = G|FALSE
+!EL015
+.continue EL017 ? _((F|empty(M|yadatum)) ; (F|empty(M|yedatum)))
+.continue EL018 ? _(_(U|xbsetz))
+.set TRANS +
+.box Fehler
+Start- und Enddatum mÅssen gefÅllt sein.
+Bitte eintragen.
+.set TRANS -
+.error
+.cursor yadatum 'M|aktzeile'           ? F|empty(M|yedatum)
+.cursor yedatum 'M|aktzeile'           ? F|empty(M|yedatum)
+.end 1
+!EL018
+.assign U|xbpvok      = G|FALSE
+.assign U|xbaaok      = G|FALSE
+!EL017
+.continue EL019 ? _(M|yedatum < M|yadatum)
+.continue EL020 ? _(_(U|xbsetz))
+.set TRANS +
+.box Fehler
+'M|yadatum' - 'M|yedatum' ist kein gÅltiger Zeitraum.
+.set TRANS -
+.error
+.cursor yadatum 'M|aktzeile'
+.end 1
+!EL020
+.assign U|xbpvok      = G|FALSE
+.assign U|xbaaok      = G|FALSE
+!EL019
+!EL006
+.continue 'xprocst.xprocsp'
+!PROC004: ----- Speichern -----
+.formula U|xytaufrufernr = G|aufrufernr
+.input "allpstart/GET.CALLERNO"
+.formula U|xtsperrstempel = U|xytzeitstempel
+.assign U|xbmehr = G|FALSE
+.assign U|xbpvok = G|FALSE
+.assign U|xbaaok = G|FALSE
+.select screen header
+.select screen line
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.continue EL021 ? _(M|ytbaenderung)
+.assign U|xbmehr = G|TRUE
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC003
+!RET002
+.formula xprocsp = xprocsp - 1
+!EL021
+.select screen line
+.continue LOOP002
+!ELOP002: ==============================
+.continue EL022 ? _(_(U|xbmehr))
+.error
+.end 1
+!EL022
+.select screen header
+.file -TEMPNAME U|xtedpdat
+.file -TEMPNAME U|xtedpout
+.file -TEMPNAME U|xtedperr
+.file -TEMPNAME U|xtedpmsg
+.output NEW 'U|xtedpdat' -ENCODING UTF-8
+.input DATEI.F
+<?xml version="1.0" encoding="UTF-8"?>
+<?edp langcode 'G|bsprache'?>
+<?edp updatemode strict?>
+<ABASData reftype="ref">
+  <RecordSet>
+.file -TEMPNAME U|xtftext
+.select screen line
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.continue EL023 ? _(M|ytbaenderung)
+.output ADDEDTO 'U|xtedpdat' -ENCODING UTF-8
+.load 0 add M|ytprojekt
+.assign U|xbaktiv = 0|ystatusk="AKT"
+.formula U|xrsoll  = M|ytsollstd
+.formula U|xrplan  = M|ytplanstd
+.formula U|xizeile = M|aktzeile
+.type text xtid.xizeile
+.formula U|xtid.xizeile = 'G|versionneu' + "-" + G|pid
+.continue EL024 ? _(_(F|empty(M|ypvorgang)))
+?        <Record database="'U|xydbpvorgang'" group="'U|xygrpvorgang'" action="NEW"                           tag="PV'U|xtid.xizeile'">  ?  F|empty(M|ypvorgang)
+?        <Record database="'U|xydbpvorgang'" group="'U|xygrpvorgang'" action="UPDATE" id="'M|ypvorgang^id'" tag="PV'U|xtid.xizeile'">   ? _F|empty(M|ypvorgang)
+?          <Field name="yistblatt">1</Field>                                    ?  F|empty(M|ypvorgang)
+?<Field name='G|dblquote'ysperre'G|dblquote'>1</Field>                                  ?  F|empty(M|ypvorgang)
+?<Field name='G|dblquote'yaufrufernr'G|dblquote'>'G|aufrufernr'</Field>                 ?  F|empty(M|ypvorgang)
+?<Field name='G|dblquote'yaufruferzp'G|dblquote'>'U|xtsperrstempel'</Field>             ?  F|empty(M|ypvorgang)
+
+?          <Field name="namebspr">'M|ytpvname'</Field>                          ?  F|empty(M|ypvorgang) ; M|ypvorgang^namebspr            <> M|ytpvname
+?          <Field name="yadatum">'M|yadatum:8'</Field>                         ?  F|empty(M|ypvorgang) ; M|ypvorgang^yadatum             <> M|yadatum
+?          <Field name="yedatum">'M|yedatum:8'</Field>                         ?  F|empty(M|ypvorgang) ; M|ypvorgang^yedatum             <> M|yedatum
+?          <Field name="ypvsollstd">'U|xrsoll'</Field>                          ?  F|empty(M|ypvorgang) ; M|ypvorgang^ypvsollstd          <> U|xrsoll
+?          <Field name="yarbpaket">'M|ytarbpaket^id'</Field>                    ?  F|empty(M|ypvorgang) ; M|ypvorgang^yarbpaket^id        <> M|ytarbpaket^id
+?<Field name="yposnum">'M|yposnum'</Field>                          ?  F|empty(M|ypvorgang) ; M|ypvorgang^yposnum             <> M|yposnum
+.continue EL025 ? _(F|sysinfo(18)^allpstd)
+?          <Field name="yvkartikel">'M|yvkartikel^id'</Field>                   ?  F|empty(M|ypvorgang) ; M|ypvorgang^yvkartikel^id       <> M|yvkartikel^id
+?          <Field name="ymaschvkart">'M|ymaschvkart^id'</Field>                 ?  F|empty(M|ypvorgang) ; M|ypvorgang^ymaschvkart^id      <> M|ymaschvkart^id
+?          <Field name="yvorpos">'M|yvorvp^id'</Field>                  ? _F|empty(M|yvorvp) & (F|empty(M|ypvorgang) ; M|ypvorgang^yvorpos <> M|yvorvp^id)
+?          <Field name="yvornum">'M|yvorvp^kopf^nummer'</Field>         ? _F|empty(M|yvorvp) & (F|empty(M|ypvorgang) ; M|ypvorgang^yvornum <> M|yvorvp^kopf^nummer)
+?          <Field name="yvorpos"></Field>                               ?  F|empty(M|yvorvp) & (F|empty(M|ypvorgang) ; M|ypvorgang^yvorpos <> "")
+?          <Field name="yvornum"></Field>                               ?  F|empty(M|yvorvp) & (F|empty(M|ypvorgang) ; M|ypvorgang^yvornum <> "")
+!EL025
+.continue EL026 ? _(F|empty(M|yaufgabe))
+?          <Field name="ypvplanstd">'U|xrplan'</Field>          ?  F|empty(M|ypvorgang) ; M|ypvorgang^ypvplanstd     <> U|xrplan
+?          <Field name="ypersonal">'M|ytpersonal^id'</Field>    ?  F|empty(M|ypvorgang) ; M|ypvorgang^ypersonal^id   <> M|ytpersonal^id
+?          <Field name="yprojteam">'M|ytprojteam^id'</Field>    ?  F|empty(M|ypvorgang) ; M|ypvorgang^yprojteam^id   <> M|ytprojteam^id
+?          <Field name="ykstelle">'M|ytkstelle^id'</Field>      ?  F|empty(M|ypvorgang) ; M|ypvorgang^ykstelle^id    <> M|ytkstelle^id
+?          <Field name="yverantw">'M|ytverantw^id'</Field>      ?  F|empty(M|ypvorgang) ; M|ypvorgang^yverantw^id    <> M|ytverantw^id
+?          <Field name="ystatusk">'M|ystatusk'</Field>          ? (F|empty(M|ypvorgang) ; M|ypvorgang^ystatusk       <> M|ystatusk)      & _F|empty(M|ystatusk)
+!EL026
+          <Field name="yextid">'U|xtid.xizeile'</Field>
+        </Record>
+!EL024
+.continue EL027 ? _(_(F|empty(M|yaufgabe)))
+?        <Record database="'U|xydbaufgabe'" group="'U|xygraufgabe'" action="NEW"                          tag="AA'U|xtid.xizeile'">     ?  F|empty(M|yaufgabe)
+?        <Record database="'U|xydbaufgabe'" group="'U|xygraufgabe'" action="UPDATE" id="'M|yaufgabe^id'" tag="AA'U|xtid.xizeile'">     ? _F|empty(M|yaufgabe)
+.continue EL028 ? _(_(F|empty(M|yaufgabe)))
+?          <Field name="yplanstd">'U|xrplan'</Field>            ?  M|yaufgabe^yplanstd      <> U|xrplan
+?          <Field name="ypersonal">'M|ytpersonal^id'</Field>    ?  M|yaufgabe^ypersonal^id  <> M|ytpersonal^id
+?          <Field name="yprojteam">'M|ytprojteam^id'</Field>    ?  M|yaufgabe^yprojteam^id  <> M|ytprojteam^id
+?          <Field name="ykstelle">'M|ytkstelle^id'</Field>      ?  M|yaufgabe^ykstelle^id   <> M|ytkstelle^id
+?          <Field name="yverantw">'M|ytverantw^id'</Field>      ?  M|yaufgabe^yverantw^id   <> M|ytverantw^id
+?          <Field name="yadatum">'M|yadatum:8'</Field>          ?  M|yaufgabe^yadatum       <> M|yadatum
+?          <Field name="yedatum">'M|yedatum:8'</Field>          ?  M|yaufgabe^yedatum       <> M|yedatum
+?          <Field name="ystatusk">'M|ystatusk'</Field>          ? _F|empty(M|ystatusk) & M|ystatusk <> M|yaufgabe^ystatusk
+.continue FI028
+!EL028
+<Field name='G|dblquote'ypvorgang'G|dblquote' reftag='G|dblquote'PV'U|xtid.xizeile''G|dblquote' reffield='G|dblquote'ref'G|dblquote' reftype='G|dblquote'status'G|dblquote'/>
+?<Field name='G|dblquote'ysperre'G|dblquote'>1</Field>
+?<Field name='G|dblquote'yaufrufernr'G|dblquote'>'G|aufrufernr'</Field>
+?<Field name='G|dblquote'yaufruferzp'G|dblquote'>'U|xtsperrstempel'</Field>
+!FI028
+          <Field name="yextid">'U|xtid.xizeile'</Field>
+        </Record>
+!EL027
+!EL023
+.select screen line
+.continue LOOP003
+!ELOP003: ==============================
+  </RecordSet>
+</ABASData>
+.output NEW WERF.WEG
+.formula U|xtsys = "xmlimport.sh"
+.formula U|xtsys =  U|xtsys + " -p " + G|einmalpw
+.formula U|xtsys =  U|xtsys + " -r NUM -T"
+.formula U|xtsys =  U|xtsys + " -I " + U|xtedpdat + " -H " + U|xtedpmsg + " 1>" + U|xtedpout + " 2>" + U|xtedperr
+.input "allpstart/FOP.ALL.EDP.CHECK"
+.formula U|xizeile = 0
+.formula U|xtindex = "0"
+.formula U|xtindex = F|nextelem(U|xtid, xtindex)
+.assign  U|xizeile = U|xtindex
+!LOOP004: ==============================
+.continue ELOP004 ? _(U|xizeile > 0)
+.select screen line 'U|xizeile'
+.continue EL029 ? _(G|mehr)
+.formula M|ytbaenderung = G|FALSE
+.colour -BACKGROUND 144 238 144 'M|aktzeile'
+!EL029
+.formula U|xtindex = F|nextelem(U|xtid, xtindex)
+.assign  U|xizeile = U|xtindex
+.continue LOOP004
+!ELOP004: ==============================
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.input "is/ABASFARBEN.DEF"
+.continue BRK001 ? _(G|evtart = "maskein")
+.input 'U|xtupprjmsel'
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "maskende")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+.end 1          ? M|ybmaskezu
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtart = "buttonvor")
+.continue BRK004 ? _(G|evtvar = "bstart")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC002
+!RET004
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK004
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK003
+.continue BRK005 ? _(G|evtart = "buttonnach")
+.continue BRK006 ? _(G|evtvar = "bstart")
+.formula U|xytaufrufernr = G|aufrufernr
+.input "allpstart/GET.CALLERNO"
+.formula U|xtsperrstempel = U|xytzeitstempel
+.input 'U|xtupprjmsel'
+.continue ESAC003
+!BRK006
+.continue BRK007 ? _(G|evtvar = "ybuspeichern")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC004
+!RET005
+.formula xprocsp = xprocsp - 1
+.continue ESAC003
+!BRK007
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC001
+!BRK005
+.continue BRK008 ? _(G|evtart = "feldfuell")
+.continue BRK009 ? _(G|evtvar = "yverantw")
+.input 'U|xtupyverantw'
+.continue ESAC004
+!BRK009
+.continue BRK010 ? _(G|evtvar = "ytverantw")
+.input 'U|xtupyverantw'
+.continue ESAC004
+!BRK010
+.continue BRK011 ? _(G|evtvar = "yvorvp")
+.input 'U|xtupyvor'         ? F|sysinfo(18)^allpstd
+.continue ESAC004
+!BRK011
+.continue BRK012 ? _(G|evtvar = "yvkartikel")
+.input 'U|xtupprojleistkat' ? F|sysinfo(18)^allpstd
+.continue ESAC004
+!BRK012
+.continue BRK013 ? _(G|evtvar = "ymaschvkart")
+.input 'U|xtupprojleistkat' ? F|sysinfo(18)^allpstd
+.continue ESAC004
+!BRK013
+.continue BRK014 ? _(G|evtvar = "ytarbpaket")
+.input "allpstart/FOP.PRJM.UP.SELCHECK.FF"
+.continue ESAC004
+!BRK014
+.continue BRK015 ? _(G|evtvar = "ystatus")
+.input "allpstart/FOP.PRJM.PVAA.YSTATUS"
+.continue ESAC004
+!BRK015
+!ESAC004: =====   ENDCASE   =====
+.continue ESAC001
+!BRK008
+.continue BRK016 ? _(G|evtart = "feldaus")
+.continue BRK017 ? _(G|evtvar = "ystatus")
+.input "allpstart/FOP.PRJM.PVAA.YSTATUS"
+.continue ESAC005
+!BRK017
+.continue BRK018 ? _(G|evtvar = "ypersonal")
+.input 'U|xtuppruefinaktiv'
+.continue ESAC005
+!BRK018
+.continue BRK019 ? _(G|evtvar = "yprojteam")
+.input 'U|xtuppruefinaktiv'
+.continue ESAC005
+!BRK019
+.continue BRK020 ? _(G|evtvar = "ykstelle")
+.continue EL030 ? _((U|xypmrepruefkst) & (_(F|empty(M|ykstelle))))
+.formula U|xykoobjekt = M|ykkstelle^id
+.input 'U|xypmrepruefkstprog'
+.continue EL031 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderliche Rechte fÅr diese Kostenstelle.
+.set TRANS -
+.formula M|ykkstelle = ""
+.continue
+!EL031
+!EL030
+.continue ESAC005
+!BRK020
+.continue BRK021 ? _(G|evtvar = "ytpersonal")
+.input 'U|xtuppruefinaktiv'
+.formula M|ytpersname  = M|ytpersonal^namebspr
+.formula M|ytprojteam  = ""                             ? _F|empty(M|ytpersonal)
+.formula M|ytkstelle   = ""                             ? _F|empty(M|ytpersonal)
+.continue ESAC005
+!BRK021
+.continue BRK022 ? _(G|evtvar = "ytprojteam")
+.input 'U|xtuppruefinaktiv'
+.formula M|ytpteamname = M|ytprojteam^namebspr
+.formula M|ytpersonal  = ""                             ? _F|empty(M|ytprojteam)
+.formula M|ytkstelle   = ""                             ? _F|empty(M|ytprojteam)
+.continue ESAC005
+!BRK022
+.continue BRK023 ? _(G|evtvar = "ytkstelle")
+.continue EL032 ? _((U|xypmrepruefkst) & (_(F|empty(M|ytkstelle))))
+.formula U|xykoobjekt = M|ytkstelle^id
+.input 'U|xypmrepruefkstprog'
+.continue EL033 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderliche Rechte fÅr diese Kostenstelle.
+.set TRANS -
+.formula M|ykstelle = ""
+.continue
+!EL033
+!EL032
+.formula M|ytkstname  = M|ytkstelle^namebspr
+.formula M|ytprojteam = ""                              ? _F|empty(M|ytkstelle)
+.formula M|ytpersonal = ""                              ? _F|empty(M|ytkstelle)
+.continue ESAC005
+!BRK023
+.continue BRK024 ? _(G|evtvar = "yvorvp")
+.continue EL034 ? _(F|sysinfo(18)^allpstd)
+.input 'U|xtupyvor'
+!EL034
+.continue ESAC005
+!BRK024
+.continue EL035 ? _(G|evtzeile = 0)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC001
+!RET006
+.formula xprocsp = xprocsp - 1
+.input 'U|xtupprjmsel'
+!EL035
+!ESAC005: =====   ENDCASE   =====
+.continue EL036 ? _(G|evtzeile > 0)
+.assign M|ytbaenderung = G|TRUE
+.colour -BACKGROUND -1 -1 -1          'M|aktzeile'
+!EL036
+.continue ESAC001
+!BRK016
+.continue BRK025 ? _(G|evtart = "zeileeinvor")
+.error
+.end 1
+.continue ESAC001
+!BRK025
+.continue BRK026 ? _(G|evtart = "zeileloevor")
+.error
+.end 1
+.continue ESAC001
+!BRK026
+!ESAC001: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJMPVAA.EV")'       ? F|fileexists(F|foppath("IFOP.IS.PRJMPVAA.EV"))
+.continue

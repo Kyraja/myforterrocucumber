@@ -1,0 +1,71 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SVERWEND.BSTART.BV
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Stelle Selektionskriterien Zusammen
+.. Functionality  : Builds selection string
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.type text xtsel
+..
+.. check required fields
+.continue ERRKOMP     ?   F|empty(M|kkomp) & M|kbarchiv
+.continue ERRKOMP     ?   F|empty(M|kkomp) & M|kbdienstl & F|empty(M|kserprod) & F|empty(M|kartikel)
+..
+.. check date range
+.continue ERRDATE     ?  _F|empty(M|kvom) & _F|empty(M|kbis) & ( M|kbis < M|kvom )
+..
+.. build selection string with component
+.formula M|select = "$,,;@ordnung=elex;@ablageart=(3);@zeilen=(Yes);elex=" + 'M|kkomp^id'
+..
+.. restrict by product and customer
+.formula M|select = M|select + ";serprod="         + 'M|kserprod^id'     ? _F|empty(M|kserprod)
+.formula M|select = M|select + ";serprod^artikel=" + 'M|kartikel^id'     ? _F|empty(M|kartikel) & M|kbarchiv
+.formula M|select = M|select + ";artikel="         + 'M|kartikel^id'     ? _F|empty(M|kartikel) & M|kbdienstl
+.formula M|select = M|select + ";zcharge="         + 'M|kcharge^id'      ? _F|empty(M|kcharge)
+.formula M|select = M|select + ";dienstl="         + 'M|kdienstl^id'     ? _F|empty(M|kdienstl)
+..
+.. restrict by date
+.formula M|select = M|select + ";einsatzv=" + 'M|kvom' + "!"             ? _F|empty(M|kvom)
+.formula M|select = M|select + ";einsatzb=19810101!"   + 'M|kbis'        ? _F|empty(M|kbis)
+..
+.. restrict by bom-type
+.formula M|select = M|select + ";@gruppe=3" ?  M|kbarchiv  & _M|kbdienstl
+.formula M|select = M|select + ";@gruppe=5" ? _M|kbarchiv  &  M|kbdienstl
+..
+.. remember partial selection
+.formula T|xtsel  = M|select
+..
+!START
+.make screen line -- ? M|tzeilen > 0
+.formula M|stufe = 1
+..
+.continue EORT    ? _M|kbmixkunde  ;  F|empty(M|kkunde)
+.formula M|select = T|xtsel  + ";serprod^aukunde=" + 'M|kkunde^id'
+.. these lines are required to avoid duplicate rows
+.formula M|select = M|select + ";serprod^kunde<>"  + 'M|kkunde^id'
+.formula M|kaukunde = ""
+.input "is/HOL.LISTE"
+!EORT
+..
+.formula M|select = T|xtsel
+.formula M|select = M|select + ";serprod^kunde="   + 'M|kkunde^id'       ? _F|empty(M|kkunde)
+.formula M|select = M|select + ";serprod^aukunde=" + 'M|kaukunde^id'     ? _F|empty(M|kaukunde)
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERRDATE: date range is invalid
+.error Bitte geben Sie einen gÅltigen Zeitraum ein.
+.cursor kvom 0
+.end 1
+..
+!ERRKOMP: required field missing
+.error Bitte geben Sie eine Komponente ein.
+.cursor kkomp 0
+.end 1

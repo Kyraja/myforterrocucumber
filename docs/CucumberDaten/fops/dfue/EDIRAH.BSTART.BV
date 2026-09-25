@@ -1,0 +1,78 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDIRAH.BSTART.BV
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : Reads all blanket orders matching the entry parameters.
+..                  Performs consitency checks for input field data.
+..*****************************************************************************
+.set trans -
+..
+.type text   xtselBO
+..
+.. Color constants
+.input "is/ABASFARBEN.DEF"
+..
+.. Prevent accidental price upgrades when using administration mode
+.copy M|kpreisprozentneu = 0.0
+..
+.. Start with empty table
+.make screen line -- ? M|tzeilen > 0
+..
+..
+.. Query arguments used for sales blanket orders as well as purchasing blanket orders:
+.. + show active blanket orders
+.. + do not show cancelled blanket order items (storno) -> status=`
+.formula T|xtselBO = "$,,;@gruppe=2;kotyp=(BlanketOrder);ablagef=(No);status=`;@ordnung=kopf^nummer"
+.formula T|xtselBO = T|xtselBO + ";artikel^packmit=(No)"                  ? _M|mitpack
+.formula T|xtselBO = T|xtselBO + ";artikel=" + M|art^id                   ? _F|empty(M|art)
+.formula T|xtselBO = T|xtselBO + ";packanw=" + M|kpackanw^id              ? _F|empty(M|kpackanw)
+.. Arguments for blanket order header
+.formula T|xtselBO = T|xtselBO + ";kopf^werk=" + M|werk                   ? _F|empty(M|werk)
+.formula T|xtselBO = T|xtselBO + ";kopf^ablstelle=" + M|ablstelle         ? _F|empty(M|ablstelle)
+.formula T|xtselBO = T|xtselBO + ";kopf^abschlnr=" + M|kabschlnr          ? _F|empty(M|kabschlnr)
+.formula T|xtselBO = T|xtselBO + ";kopf^verwschl=" + M|kverwschl          ? _F|empty(M|kverwschl)
+.formula T|xtselBO = T|xtselBO + ";kopf^betreuer=" + M|kbetreuer^id       ? _F|empty(M|kbetreuer)
+.formula T|xtselBO = T|xtselBO + ";kopf^spediteur=" + M|kspediteur^id     ? _F|empty(M|kspediteur)
+..
+..
+.. Do not show sales blanket orders, if
+.. -> only purchasing checkbox is marked
+.. -> trade partner is not a customer and not a customer contact
+.continue VKEND  ? _M|verkauf & M|einkauf
+.continue VKEND  ?  M|kunde^dnr<>0 & _F|empty(M|kunde)
+.formula M|select = U|xtselBO
+.formula M|select = M|select + ";zkuartnr=="   + M|kuartnr   ? _F|empty(M|kuartnr)
+.formula M|select = M|select + ";kopf^kunde2=" + M|kunde^id  ?  M|kunde^gruppe=1
+.formula M|select = M|select + ";kopf^kunde="  + M|kunde^id  ?  M|kunde^gruppe=2
+.select sales 'M|select'
+!VKHOL
+.continue VKEND  ? _G|mehr
+.input 'M|tab'
+.select sales
+.continue VKHOL
+!VKEND
+..
+..
+.. Do NOT show purchasing blanket orders, if..
+.. -> only sales checkbox is marked
+.. -> trade partner is not a supplier and not a supplier contanct
+.. -> a customer product number is given
+.continue EKEND  ? _M|einkauf & M|verkauf
+.continue EKEND  ?  M|kunde^dnr<>1 & _F|empty(M|kunde)
+.continue EKEND  ? _F|empty(M|kuartnr)
+.formula M|select = U|xtselBO
+.formula M|select = M|select + ";kopf^lief2=" + M|kunde^id  ?  M|kunde^gruppe=1
+.formula M|select = M|select + ";kopf^lief="  + M|kunde^id  ?  M|kunde^gruppe=2
+.select purchasing 'M|select'
+!EKHOL
+.continue EKEND  ? _G|mehr
+.input 'M|tab'
+.select purchasing
+.continue EKHOL
+!EKEND
+..
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,60 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SAFAKTURA.TAB
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : as
+.. Funktion       : Erstellt eine Zeile pro Aufruf,  die Zeilen enthalten
+..                  je eine noch zu fakturierende Serviceanfrageposition
+.. Functionality  : builds one row ber call, the rows are to be invoiced
+..                  service request positions
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.. helper for calculating gp3 to real
+.type real xrmin ? _F|defined(xrmin)
+.type real xrhur ? _F|defined(xrhur)
+.type real xrday ? _F|defined(xrday)
+..
+.select line 'selzeile'
+..
+.. only show service request row, if it has a duration (no duration -> no invoice)
+.continue END     ?  F|empty(H|dauer)
+.continue END     ? _F|empty(H|serau)
+..
+.make screen line +O
+.formula   M|tdatum     = H|datum
+.formula   M|tanfbearb  = H|tbearbeit^id
+.formula   M|tuhrzvon   = H|uhrzvon
+.formula   M|tuhrzbis   = H|uhrzbis
+.formula   M|trmktxt    = H|tanfbesch
+.formula   M|tanfdau    = H|dauer
+..
+.. calculate real-type hours from GP3 field, e.g. "0D01h00m"
+.formula   M|the        = "h"
+.formula   T|xrmin      = F|substr('M|tanfdau',-2,-2)
+.formula   T|xrhur      = F|substr('M|tanfdau',-5,-2)
+.formula   T|xrday      = F|substr('M|tanfdau',-8,-1)
+.formula   M|tmge       = 0 + T|xrmin / 60 + T|xrhur + T|xrday * 24
+..
+.. the row index is needed later to update the invoice number into the service request
+.formula   M|tanfzeile  = H|znum
+..
+.formula   M|tsbufakt = "icon:screen_edit"   ?  F|empty(H|repos)
+.continue   SPKOPF                            ?  F|empty(H|repos)
+..
+.load 0 sales 'H|repos^id'
+.continue SPKOPF         ? _T|mehr
+.formula   M|tanfrechnr   = 0|id
+.load 0
+..
+!SPKOPF: service request
+.select header
+.assign M|tanfrage   = H|id
+.formula   M|tanfsts    = H|anfstatus
+.assign M|tkunde     = H|kunde^id
+.assign M|tserprod   = H|serprod^id
+..*****************************************************************************
+!END
+.continue

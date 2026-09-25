@@ -1,0 +1,157 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..
+..  FOP-Name       : DOWNPAYDIFF.EV
+..  Autor          : cl
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       :
+..
+..*****************************************************************************
+.set trans -
+.formula M|hinweis = ""
+.continue EKVK      ? G|evtartengl = "FIELD_EXIT"   & (G|evtvar = "beinkauf" ; G|evtvar = "bverkauf")
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & (G|evtvar = "kunde" ; G|evtvar = "lief")
+.continue BSTART    ? G|evtartengl = "BUTTON_AFTER" &  G|evtvar = "bstart"
+.continue KONTO     ? G|evtartengl = "FIELD_EXIT"   &  G|evtvar = "anzkonto"
+.copy M|binauftrag    = G|FALSE
+.copy M|binrechnung   = G|FALSE
+.copy M|binschluss    = G|FALSE
+.copy M|binbestellung = G|FALSE
+.continue VORGVK    ? G|evtartengl = "FIELD_EXIT"   &  G|evtvar = "auftrag"
+.continue VORGEK    ? G|evtartengl = "FIELD_EXIT"   &  G|evtvar = "bestellung"
+.continue END
+..
+!VORGVK
+.formula M|kunde = ""
+.formula M|vwaehr = M|auftrag^waehr
+.assign M|kunde = M|auftrag^kunde  ? _F|empty(M|auftrag)
+.assign M|kunde = M|auftrag^kunde  ? _F|empty(M|auftrag)
+.copy M|binauftrag  = G|TRUE       ? M|auftrag^typ = 3
+.copy M|binrechnung = G|TRUE       ? M|auftrag^typ = 5 & F|equals(M|auftrag^vorganga, "(Downpayment)")
+.copy M|binschluss  = G|TRUE       ? M|auftrag^typ = 5 & F|equals(M|auftrag^vorganga, "(Invoice)")
+.continue ERROR2                   ? M|auftrag^waehr = M|inlwaehr
+..
+.. Konto fÅr Anzahlung aus Vorgang herauslesen und eintragen.
+.formula M|select = "$,,"
+.formula M|select = M|select + ";kopf^id=" + 'M|auftrag^id'  ?   _F|empty(M|auftrag)
+.formula M|select = M|select + ";kategorie=(Downpayment);@ablageart=(Both)"
+.formula M|select = M|select + ";@ordnung=id"
+.load 5 sales 'M|select'
+.continue ERROR3   ? _G|mehr
+.assign M|anzkonto = 5|konto
+..
+!L5INE
+.load 5 sales
+.continue TABLEEREN        ? _G|mehr
+.set trans +
+.formula M|hinweis = ""
+.formula M|hinweis = "Es gibt noch weitere Anzahlungskonten." ? G|mehr & 5|konto <> M|anzkonto
+.set trans -
+.continue TABLEEREN ? _F|empty(M|hinweis)
+.continue L5INE
+..
+!VORGEK
+.formula M|lief = ""
+.formula M|vwaehr = M|bestellung^erfwaehr
+.assign M|lief = M|bestellung^lief ? _F|empty(M|bestellung)
+.copy M|binbestellung = G|TRUE     ? M|bestellung^typ=3
+.copy M|binrechnung = G|TRUE       ? M|bestellung^typ=5 & F|equals(M|bestellung^vorganga, "(Downpayment)")
+.copy M|binschluss  = G|TRUE       ? M|bestellung^typ=5 & F|equals(M|bestellung^vorganga, "(Invoice)")
+.continue ERROR2                   ? M|bestellung^erfwaehr = M|inlwaehr
+..
+.. Konto fÅr Anzahlung aus Vorgang herauslesen und eintragen.
+.formula M|select = "$,,"
+.formula M|select = M|select + ";kopf^id=" + 'M|bestellung^id'  ?   _F|empty(M|bestellung)
+.formula M|select = M|select + ";kategorie=(Downpayment);@ablageart=(Both)"
+.formula M|select = M|select + ";@ordnung=id"
+.load 5 purchasing 'M|select'
+.continue ERROR3    ? _G|mehr
+.assign M|anzkonto = 5|konto
+..
+!EKL5INE
+.load 5 purchasing
+.continue TABLEEREN ? _G|mehr
+.set trans +
+.formula M|hinweis = ""
+.formula M|hinweis = "Es gibt noch weitere Anzahlungskonten." ? G|mehr & 5|konto <> M|anzkonto
+.set trans -
+.continue TABLEEREN ? _F|empty(M|hinweis)
+.continue EKL5INE
+..
+!KONTO
+.continue TABLEEREN
+..
+!BSTART
+.continue ERROR1 ? F|empty(M|auftrag)    & M|bverkauf
+.continue ERROR1 ? F|empty(M|bestellung) & M|beinkauf
+.continue ERROR  ? F|empty(M|anzkonto)
+.continue ERROR2 ? M|vwaehr = M|inlwaehr
+.input "is/TABLEEREN" ?  M|tzeilen > 0
+.input 'M|tab'        ? _F|empty(M|tab)
+.continue END
+..
+!EKVK
+.continue VERKAUF ?  M|bverkauf & G|evtvar = "bverkauf"
+.continue EINKAUF ? _M|bverkauf & G|evtvar = "bverkauf"
+.continue EINKAUF ?  M|beinkauf & G|evtvar = "beinkauf"
+.continue VERKAUF ? _M|beinkauf & G|evtvar = "beinkauf"
+..
+!EINKAUF
+.copy M|bverkauf = G|FALSE
+.copy M|beinkauf = G|TRUE
+.formula M|vwaehr = ""
+.assign P|maskkontextfop = "Einkauf" ? M|beinkauf
+.formula M|auftrag = ""
+.formula M|kunde = ""
+.formula M|anzkonto = ""
+.copy M|binbestellung = G|FALSE
+.copy M|binrechnung = G|FALSE
+.copy M|binschluss = G|FALSE
+.protection -reset lief
+.protection -reset bestellung
+.protection -reset anzkonto
+.protection kunde
+.protection auftrag
+.continue TABLEEREN
+..
+!VERKAUF
+.copy M|beinkauf = G|FALSE
+.copy M|bverkauf = G|TRUE
+.formula M|vwaehr = ""
+.assign P|maskkontextfop = "Verkauf" ? M|bverkauf
+.formula M|bestellung = ""
+.formula M|lief = ""
+.formula M|anzkonto = ""
+.copy M|binauftrag = G|FALSE
+.copy M|binrechnung = G|FALSE
+.copy M|binschluss = G|FALSE
+.protection lief
+.protection bestellung
+.protection -reset kunde
+.protection -reset auftrag
+.protection -reset anzkonto
+.continue TABLEEREN
+..
+!TABLEEREN
+.input "is/TABLEEREN"
+.continue END
+..
+!ERROR
+.error Bitte ein Konto eintragen.
+.end 1
+..
+!ERROR1
+.error Bitte einen Vorgang eingeben.
+.end 1
+..
+!ERROR2
+.error Infosystem wertet nur VorgÑnge mit VorgangswÑhrung ungleich InlandswÑhrung aus.
+.end 1
+..
+!ERROR3
+.error Keine Anzahlungszeile gefunden.
+.end 1
+..*****************************************************************************
+!END
+.continue

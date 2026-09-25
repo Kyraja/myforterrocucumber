@@ -1,0 +1,168 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : MPSLISTE.PLAN
+.. Author         : foe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  :
+..*****************************************************************************
+..
+..*****************************************************************************
+.set trans -
+.type ARTR51200 xmist     ? _F|defined(U|xmist)
+.type R13.2   xwist       ? _F|defined(U|xwist)
+.type integer xi          ? _F|defined(U|xi)
+.type GD      xanfdat     ? _F|defined(U|xanfdat)
+.type GD      xenddat     ? _F|defined(U|xenddat)
+.type GD      xenddatz    ? _F|defined(U|xenddatz)
+.type text    xsel        ? _F|defined(U|xsel)
+.type text    xtext       ? _F|defined(U|xtext)
+.type bool    xbende      ? _F|defined(U|xbende)
+.type bool    xbnach      ? _F|defined(U|xbnach)
+.type bool    xbaussen    ? _F|defined(U|xbaussen)
+..
+.formula U|xbende       = FALSE
+.formula U|xbnach       = FALSE
+.formula U|xbaussen     = FALSE
+.formula U|xmist        = 0.0
+.formula U|xwist        = 0.0
+.formula U|xi           = 0
+.formula U|xanfdat      = M|tadatum
+.formula U|xenddat      = M|tedatum
+.formula U|xi           = 1 ? M|tzeitraumvor = ""
+.formula U|xtext        = M|tzeitraumvor >> "-" ? U|xi = 0
+.formula U|xtext        = M|tzeitraum1 >> "-"   ? U|xi = 1
+.assign  U|xenddatz     = U|xtext
+.formula U|xsel = "$,,id="+M|tart^id+";@gruppe=1"
+.select parts  'U|xsel'
+.. Lagergruppe berÅcksichtigen wenn <> interne Lagergruppe!
+.select parts specific 'M|tlgruppe' ? M|tlgruppe^id <> F|sysinfo(10)^intlgruppe^id
+..
+!PLANKARTE
+.select planchart
+.formula U|xbende = TRUE ? _G|mehr
+.continue ZSCHR          ? _G|mehr
+.continue PLANKARTE  ? H|dnr <> 4 ; H|typ <> G|RESERV
+.continue PLANKARTE  ? H|vor^dnr = 3 & _H|vor^planrel
+.. Alle limgen <= 0.0 ueberspringen. Ausnahme: Zugang aus Koppelproduktion
+.continue PLANKARTE  ? H|limge = 0.0 ; (H|limge < 0.0 & (H|mge >= 0.0 ; H|typ <> G|RESERV)) 
+.formula U|xbaussen = TRUE ? H|tterm > U|xenddat
+.continue NEXT       ? H|tterm <= U|xenddatz ; U|xbnach
+.continue VORHER     ? U|xi = 0 & H|tterm >= U|xanfdat
+..
+!ZSCHR
+.continue VORHER  ? U|xi = 0
+.continue NACHHER ? U|xi > 60 ; U|xbnach
+.formula M|treservmge.U|xi = U|xmist
+.formula M|mist.U|xi       = M|tljmge.U|xi + M|treservmge.U|xi
+.formula M|tgesbedarf.U|xi = M|treservmge.U|xi
+.formula M|tgesbedarf.U|xi = M|tgesbedarf.U|xi + M|tofplanmge.U|xi ? M|tofplanmge.U|xi > 0
+.formula U|xsist           = U|xsist + M|mist.U|xi
+.formula M|tist.U|xi       = U|xwist
+.formula U|xmabw           = M|mist.U|xi - M|mplan.U|xi
+.formula U|xmist           = 0.0
+.formula U|xwist           = 0.0
+.formula U|xmabw           = M|mist.U|xi - M|mplan.U|xi
+.formula U|xtgesamtabs     = U|xtgesamtabs + U|xmabw
+.formula M|mabw.U|xi       = U|xmabw
+.formula M|mabwproz.U|xi   = 0
+.formula M|mabwproz.U|xi   = 100                                ? M|mplan.U|xi =  0 & M|mist.U|xi > 0
+.formula M|mabwproz.U|xi   = -100                               ? M|mplan.U|xi =  0 & M|mist.U|xi < 0
+.formula M|mabwproz.U|xi   = (M|mist.U|xi*100/M|mplan.U|xi)-100 ? M|mplan.U|xi <> 0
+.formula U|xmgeproz        = U|xmgeproz +  M|mabwproz.U|xi
+.formula M|tnflagz.U|xi    = G|icook                            ? M|mabwproz.U|xi = 0
+.formula M|tpflagz.U|xi    = G|icook                            ? M|mabwproz.U|xi = 0
+.continue NEG                                                   ? M|mabwproz.U|xi < 0
+.continue POS                                                   ? M|mabwproz.U|xi > 0
+.continue ZAEHL
+..
+!VORHER: Vor dem Zeitraum
+.formula M|treservmgevor = U|xmist
+.formula M|mistvor       = M|tljmgevor + M|treservmgevor
+.formula M|tgesbedarfvor = M|treservmgevor
+.formula M|tgesbedarfvor = M|tgesbedarfvor + M|tofplanmgevor ? M|tofplanmgevor > 0
+.formula U|xsist         = U|xsist + M|mistvor
+.formula M|tistvor       = U|xwist
+.formula U|xmabw         = M|mistvor - M|mplanvor
+.formula U|xmist         = 0.0
+.formula U|xwist         = 0.0
+.formula U|xmabw         = M|mistvor - M|mplanvor
+.formula U|xtgesamtabs   = U|xtgesamtabs + U|xmabw
+.formula M|mabwvor       = U|xmabw
+.formula M|mabwprozvor   = 0
+.formula M|mabwprozvor   = 100                                ? M|mplanvor =  0 & M|mistvor > 0
+.formula M|mabwprozvor   = -100                               ? M|mplanvor =  0 & M|mistvor < 0
+.formula M|mabwprozvor   = (M|mistvor*100/M|mplanvor)-100 ? M|mplanvor <> 0
+.formula U|xmgeproz      = U|xmgeproz +  M|mabwprozvor
+.continue NZEILE
+..
+!NACHHER: Nach dem Zeitraum
+.formula M|tzeitraumnach = 'M|tzeitraumnach' + "+" ? U|xbaussen
+.formula M|treservmgenach = U|xmist
+.formula M|mistnach       = M|tljmgenach + M|treservmgenach
+.formula M|tgesbedarfnach = M|treservmgenach
+.formula M|tgesbedarfnach = M|tgesbedarfnach + M|tofplanmgenach ? M|tofplanmgenach > 0
+.formula U|xsist          = U|xsist + M|mistnach
+.formula M|tistnach       = U|xwist
+.formula U|xmabw          = M|mistnach - M|mplannach
+.formula U|xmist          = 0.0
+.formula U|xwist          = 0.0
+.formula U|xmabw          = M|mistnach - M|mplannach
+.formula U|xtgesamtabs    = U|xtgesamtabs + U|xmabw
+.formula M|mabwnach       = U|xmabw
+.formula M|mabwproznach   = 0
+.formula M|mabwproznach   = 100                              ? M|mplannach =  0 & M|mistnach > 0
+.formula M|mabwproznach   = -100                             ? M|mplannach =  0 & M|mistnach < 0
+.formula M|mabwproznach   = (M|mistnach*100/M|mplannach)-100 ? M|mplannach <> 0
+.formula U|xmgeproz       = U|xmgeproz +  M|mabwproznach
+.continue NZEILE
+..
+!NEG
+.. rot negativ
+.formula M|tnflagz.U|xi   = G|icoerror  ? M|mabwproz.U|xi < (M|kzneggelb * (-1))
+.. gelb negativ
+.formula M|tnflagz.U|xi   = G|icowarn   ? M|mabwproz.U|xi < (M|kzneggruen * (-1)) & M|mabwproz.U|xi >= (M|kzneggelb * (-1))
+.. gruen negativ
+.formula M|tnflagz.U|xi   = G|icook     ? M|mabwproz.U|xi >= (M|kzneggruen * (-1))
+.continue ZAEHL
+..
+!POS
+.. rot positiv
+.formula M|tpflagz.U|xi   = G|icoerror  ? M|mabwproz.U|xi > M|kzposgelb
+.. gelb positiv
+.formula M|tpflagz.U|xi   = G|icowarn   ? M|mabwproz.U|xi > M|kzposgruen & M|mabwproz.U|xi <= M|kzposgelb
+.. gruen positiv
+.formula M|tpflagz.U|xi   = G|icook     ? M|mabwproz.U|xi <= M|kzposgruen
+.continue ZAEHL
+..
+!ZAEHL
+.formula U|xgelbp         = U|xgelbp  + 1 ? M|tpflagz.U|xi = G|icowarn
+.formula U|xgelbn         = U|xgelbn  + 1 ? M|tnflagz.U|xi = G|icowarn
+.formula U|xgruenp        = U|xgruenp + 1 ? M|tpflagz.U|xi = G|icook & M|mabwproz.U|xi <> 0
+.formula U|xnull          = U|xnull   + 1 ? M|tpflagz.U|xi = G|icook & M|mabwproz.U|xi = 0
+.formula U|xgruenn        = U|xgruenn + 1 ? M|tnflagz.U|xi = G|icook & M|mabwproz.U|xi <> 0
+.formula U|xrotp          = U|xrotp   + 1 ? M|tpflagz.U|xi = G|icoerror
+.formula U|xrotn          = U|xrotn   + 1 ? M|tnflagz.U|xi = G|icoerror
+..
+!NZEILE
+.. NÑchste Zeile
+.formula U|xi           = U|xi + 1
+.continue ENDEPLAN   ? U|xbnach
+.formula U|xbnach       = TRUE                     ? U|xbaussen
+.continue NACH                                     ? U|xbaussen
+.formula U|xbnach       = TRUE                     ? U|xi > 60 ; M|tzeitraum.U|xi = ""
+.formula U|xtext        = M|tzeitraumnach >> "-"   ? U|xbnach
+.assign  U|xenddatz     = U|xtext                  ? U|xbnach
+.formula U|xtext        = M|tzeitraum.U|xi >> "-"  ? U|xi <= 60
+.assign  U|xenddatz     = U|xtext                  ? U|xi <= 60 
+!NACH
+.continue ZSCHR      ? U|xbende 
+.continue ZSCHR      ? H|tterm > U|xenddatz & _U|xbnach
+..
+!NEXT
+.formula U|xmist        = U|xmist + H|limge
+.formula U|xwist        = U|xmist * U|xplanpreis
+.continue PLANKARTE
+..
+!ENDEPLAN
+.continue

@@ -1,0 +1,129 @@
+..!interpreter english translate noabbrev
+.. ****************************************************************************
+.. FOP-Name       : XMLLAYGEN
+.. Autor          : mg
+.. Verantwortlich : TeamReport
+.. Kontrolle      : mg
+.. Funktion       : Startet Erzeugung der XML-Layoutdatei eines Infosystems
+..
+.. Hinweis zur XML-Datengenerierung: Es wird eine OVR-Datei erzeugt die spezielle
+.. Bandinformationen. Sie wird mit dem XML-Converter in das XML-Format umgesetzt.
+.. ****************************************************************************
+.set trans -
+..
+.. Declarations
+.type text xisnum       ? _F|defined(U|xisnum)
+.type text xovrgenfop   ? _F|defined(U|xovrgenfop)
+.type text xmainfile    ? _F|defined(U|xmainfile)
+.type text xovrfile     ? _F|defined(U|xovrfile)
+.type text xapsfile     ? _F|defined(U|xapsfile)
+.type text xaplfile     ? _F|defined(U|xaplfile)
+.type text xstdoutfile  ? _F|defined(U|xstdoutfile)
+.type text xstderrfile  ? _F|defined(U|xstderrfile)
+.type text xtestfile    ? _F|defined(U|xtestfile)
+.type text xkanalsuch   ? _F|defined(U|xkanalsuch)
+.type text xgendirovw   ? _F|defined(U|xgendirovw)
+.type text xgendirapl   ? _F|defined(U|xgendirapl)
+.type text xgendiraps   ? _F|defined(U|xgendiraps)
+..
+.. Load infosystem
+.formula U|xisnum = F|trim(M|kontext^nummer) ? F|defined(M|kontext)
+.formula U|xisnum = F|trim(M|nummer) ? F|empty(U|xisnum)
+.select infosystem 'U|xisnum'
+.continue ERROR01 ? _G|mehr
+..
+.. Initializations
+.formula U|xkanalsuch = "XMLPRINT"
+..
+.. Files
+.file -tempname U|xstdoutfile
+.file -tempname U|xstderrfile
+.formula U|xmainfile = -H|arb + -H|such
+.formula U|xovrfile = U|xmainfile + ".OVR"
+.formula U|xapsfile = U|xmainfile + ".aps"
+.formula U|xaplfile = U|xmainfile + ".apl"
+.file -tempname U|xovrgenfop
+.formula U|xgendirovw = "gen/ovw/layout/" + H|arb
+.formula U|xgendirapl = "gen/xmlprint/layout/" + H|arb
+.formula U|xgendiraps = "gen/xmlprint/layoutstyles/" + H|arb
+.file -tempname U|xtestfile
+..
+.. Create gen directories
+.system 'F|formatstr("mkdir -p {1} {2} {3}", U|xgendirovw, U|xgendirapl, U|xgendiraps)' background
+..
+.. Does ovr file exist?
+.continue CREATEOVR ? _F|fileexists(F|formatstr("{1}{2}", U|xgendirovw, U|xovrfile))
+..
+.. Load xml print parameter
+.type text xdat xsek xtime ? _F|defined(U|xdat)
+.load 9 printparameter 'F|formatstr("$,,@gruppe=3;kontext={1};kanal=={2}", H|id, U|xkanalsuch)'
+.continue CREATEOVR ? _G|mehr
+..
+.. Extract last modification time
+.formula U|xdat = '9|versionn'
+.formula U|xtime =  U|xdat << 12
+.formula U|xsek = (U|xdat << 14) >> 2
+..
+.. Create test file for modification time check
+.system 'F|formatstr("TZ=GMT0 touch -t {1}.{2} {3}", U|xtime, U|xsek, U|xtestfile)' background
+.continue CREATEOVR ? _G|mehr
+..
+.. Is layout data object younger than ovr layout?
+.continue CREATEOVR ? _F|filenewer(U|xtestfile, F|formatstr("{1}/{2}", U|xgendirovw, U|xovrfile))
+.continue CREATEAPL
+..
+!CREATEOVR: Remove old files and generate new ones
+.system 'F|formatstr("rm -f {1}/{2} {3}/{4} {5}/{6}", U|xgendirovw, U|xovrfile, U|xgendirapl, U|xaplfile, U|xgendiraps, U|xapsfile)' background
+..
+.. Create generator fo program xovrgen
+.input "is/INFOSYS.OVRGEN"
+.output new WERF.WEG
+..
+.. Execute generator fo program to get layout file
+.input 'U|xovrgenfop'
+.output new WERF.WEG
+..
+.. Force move of layout file from tmp to gen directory
+.system 'F|formatstr("mv -f rmtmp/{1} {2}/{3}", U|xovrfile, U|xgendirovw, U|xovrfile)' background
+..
+.. Check result files
+.continue ERROR02 ? _F|fileexists(F|formatstr("{1}/{2}", U|xgendirovw, U|xovrfile))
+..
+!CREATEAPL: Create xml and xsl file based on ovr file
+.system 'F|formatstr("xmlprint.sh -m PREOV -s 0 -l {1}/{2} -b >>{3} 2>>{4}", U|xgendirovw, U|xovrfile, U|xstdoutfile, U|xstderrfile)' background
+..
+.. Check for existance of style sheet
+.continue ERROR03 ? _F|fileexists(F|formatstr("{1}/{2}", U|xgendiraps, U|xapsfile))
+..
+!CHCKERR: Check existance of error file
+.continue SHOWERR ? F|filenotempty(U|xstderrfile)
+.continue END
+..
+!SHOWERR: Convert error file and show error messages
+.output terminal
+.format ABAS
+.system 'F|formatstr("s3_conv 11 {1}", U|xstderrfile)' background
+..
+'U|xstderrfile'
+=================
+.input -text 'U|xstderrfile'
+.continue BREAK
+.. ****************************************************************************
+!END
+.end 0
+.. ****************************************************************************
+..
+!ERROR01: Missing infosystem!
+.error -message Das Infosystem 'U|xisnum' wurde nicht gefunden!
+.continue BREAK
+..
+!ERROR02: Error occurs while generating layout!
+.error -message Achtung! Fehler bei der Generierung des OnlineView-Layouts.
+.continue CHCKERR
+..
+!ERROR03: Error occurs while generating layout!
+.error -message Achtung! Fehler bei der Generierung der XML-Layoutdatei. Fehler siehe Meldungsfenster.
+.continue CHCKERR
+..
+!BREAK
+.end 1

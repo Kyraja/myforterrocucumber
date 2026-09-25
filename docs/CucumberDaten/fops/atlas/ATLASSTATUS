@@ -1,0 +1,76 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ATLASSTATUS
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Wertet einen Vorgang bezÅglich ATLAS aus: damit ein
+..                  Vorgang fÅr ATLAS relevant ist, muss der Vorgang
+..                  zu versendende Mengen enthalten.
+..                  Desweiteren wird geprÅft, ob zu einem Vorgang bereits
+..                  eine EDI-Nachricht zu ATLAS vorhanden ist.
+.. Functionality  : Evaluates a transaction in regards to ATLAS: for a
+..                  transaction to be of interrest for ATLAS, it has to have
+..                  sendable quantities.
+..                  Additionally a check is made, if there already is an
+..                  edi message for ATLAS.
+..  include     atlas/ATLASPARAMS
+..  include     atlas/ATLASAUSFUHRDATEI
+..*****************************************************************************
+.set trans -
+..
+.type text   xtsel               ? _F|defined(T|xtsel)
+..
+.type bool   xbatdonotsend       ? _F|defined(T|xbatdonotsend)
+.type bool   xbathaserror        ? _F|defined(T|xbathaserror)
+.type bool   xbathasfile         ? _F|defined(T|xbathasfile)
+.type bool   xbatgemeldet        ? _F|defined(T|xbatgemeldet)
+.type bool   xbatrelevant        ? _F|defined(T|xbatrelevant)
+.type M9.3   xratmenge           ? _F|defined(T|xratmenge)
+..
+.formula T|xbatdonotsend = false
+.formula T|xbathaserror = false
+.formula T|xbathasfile = false
+.formula T|xbatgemeldet = false
+.formula T|xbatrelevant = false
+.formula T|xratmenge = 0.0
+..
+.. get edi number
+.formula T|xvatedi = ""
+.formula T|xtsel = "$,,;ideksvor==" + 'T|xvatvorgang^nummer' + ";such=ATAUS;@richtung=(1)"
+.load 1 edifact 'T|xtsel'
+.assign T|xvatedi = 1|id   ? T|mehr
+..
+.. define file names
+.input "ATLASAUSFUHRDATEI"
+..
+.. check state of transaction
+.load 1 sales 'T|xvatvorgang^id'  ?  T|xvatvorgang^dnr = 3
+.load 1 purchasing 'T|xvatvorgang^id'  ?  T|xvatvorgang^dnr = 4
+.continue END     ? _T|mehr
+!NROW: check flag "patlasgem" for each row in transaction
+.load 1 line
+.continue EROW    ? _T|mehr
+.continue NROW    ?  1|typ <> arpos
+.assign T|xbatrelevant = true                 ?  1|patlasrel
+.assign T|xratmenge = T|xratmenge + 1|mge     ?  1|patlasrel  &  1|mge > 0.0   & T|xvatvorgang^dnr = 3
+.assign T|xratmenge = T|xratmenge - 1|mge     ?  1|patlasrel  &  1|mge < 0.0   & T|xvatvorgang^dnr = 4 & _F|equals(T|xvatvorgang^bsart, "(Relocation)")
+.assign T|xratmenge = T|xratmenge - 1|mge     ?  1|patlasrel  &  1|mge > 0.0   & T|xvatvorgang^dnr = 4 & F|equals(T|xvatvorgang^bsart, "(Relocation)")
+.assign T|xbatgemeldet = true                 ?  1|patlasrel  &  1|patlasgem
+.assign T|xbatgemeldet = false                ?  1|patlasrel  & _1|patlasgem   &  T|xbatgemeldet
+.continue NROW
+!EROW
+.load 1
+..
+.. check file
+.formula T|xbathasfile = true    ?  F|fileexists(T|xtatausfuhrdatei)
+..
+.. not relevant for atlas, or no quantity
+.formula T|xbatdonotsend = true  ? _T|xbatrelevant  ;  T|xratmenge = 0.0
+.. wrong type of transaction,
+.. i.e. delivery note that is flagged to register with its invoice
+.formula T|xbatdonotsend = true  ?  T|xvatvorgang^atmitls  &  T|xvatvorgang^ktyp <> liko
+.formula T|xbatdonotsend = true  ? _T|xvatvorgang^atmitls  &  T|xvatvorgang^ktyp <> reko
+..*****************************************************************************
+!END
+.continue

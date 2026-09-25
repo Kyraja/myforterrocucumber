@@ -1,0 +1,311 @@
+..!interpreter english declaration noabbrev
+.. at 2016-12-23, 11:57
+.set TRANS -
+..========================================================================
+..==  Name              : IS.PRJMNACHTRUEBER.EV
+..==  Pfad              : allppro
+..==  Funktion          : Das Infosystem "NachtragsÅbersicht" (PRJMNACHTRUEBER) dient der Auswertung der
+..==                      laufenden und akzeptierten Nachtragsanfragen und Nachtragsforderungen.
+..==  Erstellungsdatum  : 28.02.2012
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2016 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input allpstart/PRJM.KONFIG.INI
+.input allppro/LV.KONFIG.INI
+.input allpstart/FOP.PRJM.UP.DEF
+..====================================================
+.type text    xtsys xtsel xykoobjekt xtnachtrtyp xtsumme xtprojekt xtid
+.type bool    xyberlaubt xbmehr
+.type GD      xdatum xdstichtag xdewoche xdawoche
+.type real    xranfeigstd  xranfgeswert  xrakzeigstd  xrakzgeswert  xrabgerechnet  xranferwwert  xrkuerzakz  xrkuerzabl  xrkuerzges
+.type real    xrpanfeigstd xrpanfgeswert xrpakzeigstd xrpakzgeswert xrpabgerechnet xrpanferwwert xrpkuerzakz xrpkuerzabl xrpkuerzges
+.type real    xrganfeigstd xrganfgeswert xrgakzeigstd xrgakzgeswert xrgabgerechnet xrganferwwert xrgkuerzakz xrgkuerzabl xrgkuerzges
+.type bool    xbstart
+.type integer xprocsp      ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Stichtag -----
+.continue EL001 ? _(M|ybwochenbezogen)
+.make screen line --o
+.formula U|xdstichtag = M|ystichtag - M|ystichtag//7 + 7    ? _F|empty(M|ystichtag)
+.formula U|xdstichtag = G|datum     - G|datum//7     + 7    ?  F|empty(M|ystichtag)
+.formula M|ystichtag  = U|xdstichtag
+.formula M|ykalwoche  = M|ystichtag
+.continue FI001
+!EL001
+.make screen line --o
+.formula U|xdstichtag = ('M|ystichtag:8')<<6 + "01"     ? _F|empty(M|ystichtag)
+.formula U|xdstichtag = ('G|datum:8')<<6     + "01"     ?  F|empty(M|ystichtag)
+.formula U|xdstichtag = U|xdstichtag + 31
+.formula U|xdstichtag = ('U|xdstichtag:8')<<6 + "01"
+.formula M|ystichtag  =  U|xdstichtag - 1
+.formula M|ykalwoche  = M|ystichtag
+!FI001
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Tabelle_laden -----
+.make screen line --O
+.copy U|xbstart = G|TRUE
+.input is/ABASFARBEN.DEF    ? _F|defined(U|xabaslightgreen)
+.translate -LANGUAGE 'G|bsprache' -TEXT "Summe" -VARIABLE U|xtsumme
+.formula U|xtsumme = "Summe"            ? F|empty(U|xtsumme)
+.continue EL002 ? _((F|empty(M|ypvorgang)) & (F|empty(M|ykalkpos)))
+.input 'U|xtupprjmsel'
+.make screen line +O
+.formula M|ytnachtrname   = U|xtsumme
+.formula M|ytanfeigstd    = U|xrganfeigstd
+.formula M|ytanfgeswert   = U|xrganfgeswert
+.formula M|ytanferwwert   = U|xrganferwwert
+.formula M|ytakzeigstd    = U|xrgakzeigstd
+.formula M|ytakzgeswert   = U|xrgakzgeswert
+.formula M|ytabgerechnet  = U|xrgabgerechnet
+.formula M|ytkuerzakz     = U|xrgkuerzakz
+.formula M|ytkuerzabl     = U|xrgkuerzabl
+.formula M|ytkuerzges     = U|xrgkuerzges
+.protection ytfortschrgrad 'M|aktzeile'
+.colour -BACKGROUND 'U|xabaslightgreen' 'M|aktzeile'
+.continue FI002
+!EL002
+.input 'M|tab'
+!FI002
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskein")
+.input 'U|xtupprjmsel'
+.formula U|xdstichtag = ('G|datum:8')<<6     + "01"
+.formula U|xdstichtag = U|xdstichtag + 31
+.formula U|xdstichtag = ('U|xdstichtag:8')<<6 + "01"
+.formula M|ystichtag  =  U|xdstichtag - 1
+.formula U|xdstichtag = G|datum     - G|datum//7     + 7
+.formula M|ykalwoche  = M|ystichtag
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "feldfuell")
+.continue BRK003 ? _(G|evtvar = "ypvorgang")
+.continue EL003 ? _(_(F|empty(M|yprojekt)))
+.input "allpstart/FOP.PRJM.UP.SELCHECK.FF"
+!EL003
+.continue ESAC002
+!BRK003
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK002
+.continue BRK004 ? _(G|evtart = "feldaus")
+.continue BRK005 ? _(G|evtvar = "yprojekt")
+.formula M|ypvorgang    = ""
+.formula M|ykalkpos     = ""
+.continue ESAC003
+!BRK005
+.continue BRK006 ? _(G|evtvar = "ypvorgang")
+.continue EL004 ? _(_(F|empty(M|ypvorgang)))
+.continue EL005 ? _(U|xypmrepruefkst)
+.formula U|xykoobjekt = M|ypvorgang^yprojekt^yverantwkst^id
+.input 'U|xypmrepruefkstprog'
+.continue EL006 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderlichen Rechte fÅr dieses Projekt.
+.set TRANS -
+.formula M|ypvorgang = ""
+.continue
+!EL006
+!EL005
+.continue EL007 ? _(U|xypmrepruefktr)
+.formula U|xykoobjekt = M|ypvorgang^yprojekt^yktr^id
+.input 'U|xypmrepruefktrprog'
+.continue EL008 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderlichen Rechte fÅr dieses Projekt.
+.set TRANS -
+.formula M|ypvorgang = ""
+.continue
+!EL008
+!EL007
+.continue EL009 ? _(U|xypmrepruefind)
+.input 'U|xypmrepruefindprog'
+.continue EL010 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderlichen Rechte fÅr dieses Projekt.
+.set TRANS -
+.formula M|ypvorgang = ""
+.continue
+!EL010
+!EL009
+!EL004
+.continue EL011 ? _(_(F|empty(M|ypvorgang)))
+.assign  M|yballekst        = G|true
+.assign  M|ykalkpos         = ""
+.assign  M|yprojekttyp      = ""
+.assign  M|yprojleit        = ""
+.assign  M|ykunde           = ""
+.assign  M|yprojverantw     = ""
+!EL011
+.continue ESAC003
+!BRK006
+.continue BRK007 ? _(G|evtvar = "ykalkpos")
+.continue EL012 ? _(_(F|empty(M|ykalkpos)))
+.load 0 group 'U|xydbgrlvkalkblatt' 'M|ykalkpos^ykblattid'
+.continue EL013 ? _(G|mehr)
+.continue EL014 ? _(U|xypmrepruefkst)
+.formula U|xykoobjekt = 0|yverantwkst^id
+.input 'U|xypmrepruefkstprog'
+.continue EL015 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderlichen Rechte fÅr dieses Projekt.
+.set TRANS -
+.formula M|ykalkpos = ""
+.continue
+!EL015
+!EL014
+!EL013
+!EL012
+.continue EL016 ? _(_(F|empty(M|ykalkpos)))
+.copy    M|yballekst        = G|true
+.assign  M|ypvorgang        = ""
+.assign  M|yprojekttyp      = ""
+.assign  M|yprojleit        = ""
+.assign  M|ykunde           = ""
+.assign  M|yprojverantw     = ""
+!EL016
+.continue ESAC003
+!BRK007
+.continue BRK008 ? _(G|evtvar = "ystichtag")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.continue ESAC003
+!BRK008
+.continue BRK009 ? _(G|evtvar = "ybwochenbezogen")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+.continue ESAC003
+!BRK009
+.continue BRK010 ? _(G|evtvar = "ytfortschrgrad")
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ybezugsdatum=="   + M|ystichtag:8
+.formula U|xtsel = U|xtsel + ";ywochenbezogen==" +'M|ybwochenbezogen(L="0")'
+.formula U|xtsel = U|xtsel + ";yorigobjid=="     + M|ytnachtr^id
+.formula U|xtsel = U|xtsel + ";ybnachtrfordzeile==0"
+.formula U|xtsel = U|xtsel + ";@ablageart=(1)"
+.load 9 group 'U|xydbgrnachtrstatistik' 'U|xtsel'
+.continue EL017 ? _(G|mehr)
+.select lock add 9|id
+.continue EL018 ? _(_(G|mehr))
+.set TRANS +
+.box Fehler
+Der Historiendatensatz zum Natrag 'M|ytnachtr' kann nicht bearbeitet werden
+Der Fortschrittsgrad kann nicht erfasst werden.
+.set TRANS -
+.error
+.end 1
+!EL018
+.continue FI017
+!EL017
+.formula U|xtcmd = "make " + G|hdatname.xydbnachtrstatistik + " GROUP" + 'U|xygrnachtrstatistik'
+.'U|xtcmd'
+.formula H|such            = M|ytpvorgang^such
+.formula H|name            = M|ytpvorgang^name
+.formula H|yorigobjid      = M|ytpvorgang^id
+.copy    H|yprojekt        = M|ytpvorgang^yprojekt
+.copy    H|ynachtrtyp      = M|ytnachtrtyp
+.copy    H|ybezugsdatum    = M|ystichtag
+.copy    H|ybwochenbezogen = M|ybwochenbezogen
+!FI017
+.formula H|yfortschrittsgrad = M|ytfortschrgrad
+.rewrite
+.formula U|xdewoche = M|ystichtag
+.formula U|xdawoche = U|xdewoche - 6
+.continue EL019 ? _(((_(M|ybwochenbezogen)) & (('G|datum:8')<<6 = ('M|ystichtag:8')<<6)) ; ((M|ybwochenbezogen) & (G|datum >= U|xdawoche) & (G|datum <= U|xdewoche)))
+.select lock add M|ytnachtr
+.continue EL020 ? _(_(G|mehr))
+.set TRANS +
+.box Fehler
+Der Natrag 'M|ytnachtr' kann nicht bearbeitet werden
+Der Fortschrittsgrad kann nicht erfasst werden.
+.set TRANS -
+.continue FI020
+!EL020
+.formula H|yfortschrgrad   = M|ytfortschrgrad
+.rewrite
+!FI020
+!EL019
+.formula M|ytfortschrwert = M|ytakzgeswert * M|ytfortschrgrad / 100     ?  M|ytakpzeptanzk = "1"
+.formula M|ytfortschrwert = M|ytanferwwert * M|ytfortschrgrad / 100     ? _M|ytakpzeptanzk = "1"
+.continue ESAC003
+!BRK010
+!ESAC003: =====   ENDCASE   =====
+.input 'U|xtupprjmsel'  ? G|evtzeile = 0
+.continue ESAC001
+!BRK004
+.continue BRK011 ? _(G|evtart = "buttonvor")
+.make screen line --O
+.continue ESAC001
+!BRK011
+.continue BRK012 ? _(G|evtart = "buttonnach")
+.continue BRK013 ? _(G|evtvar = "bstart")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC002
+!RET003
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK013
+.continue BRK014 ? _(G|evtvar = "ybunachtrstat")
+.continue EL021 ? _(M|tzeilen = 0)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC002
+!RET004
+.formula xprocsp = xprocsp - 1
+!EL021
+.continue EL022 ? _(M|tzeilen <= 1)
+.output new WERF.WEG
+.formula U|xtprojekt = ""
+.input "allppro/FOP.PRJM.NACHTRAGSSTATISTIK.CRON"
+.continue FI022
+!EL022
+.formula U|xtprojekt = ""
+.select screen header
+.select screen line
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL023 ? _((_(F|empty(M|ytprojekt))) & ((U|xtprojekt <> M|ytprojekt^id) ; (F|empty(U|xtprojekt))))
+.formula U|xtprojekt = M|ytprojekt^id
+.input "allppro/FOP.PRJM.NACHTRAGSSTATISTIK.CRON"
+!EL023
+.select screen line
+.continue LOOP001
+!ELOP001: ==============================
+!FI022
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC002
+!RET005
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK014
+!ESAC004: =====   ENDCASE   =====
+.continue ESAC001
+!BRK012
+!ESAC001: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJMNACHTRUEBER.EV")'    ? F|fileexists(F|foppath("IFOP.IS.PRJMNACHTRUEBER.EV"))
+.continue

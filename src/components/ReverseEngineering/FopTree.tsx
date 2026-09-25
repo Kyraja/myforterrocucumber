@@ -11,7 +11,7 @@
  */
 import { useState, useMemo } from 'react';
 import type { FopTreeNode, FopUsage, FopBinding } from '../../types/fop';
-import type { IsBinding } from '../../lib/fopTxtParser';
+import type { IsBinding } from '../../lib/isBindingsParser';
 import type { TableDef } from '../../types/gherkin';
 import { makeFopGuid } from '../../lib/featureGuid';
 import { resolveMaskName } from '../../lib/fopOrchestrator';

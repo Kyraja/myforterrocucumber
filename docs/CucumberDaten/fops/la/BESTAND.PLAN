@@ -1,0 +1,112 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : BESTAND.PLAN
+..  Autor          : cl
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..
+..
+..  Funktion  : BestandsÅbersicht: Plankarteninfos
+..
+..  Ablauf    :
+..
+..*****************************************************************************
+..                           SUBROUTINE
+..                           ----------
+..
+..*****************************************************************************
+.set trans -
+!START
+.type real0 xlbest xbesch xfreig xreserv xverfueg xlosgr xmin
+.type text xdispo xbez xtlgrid xsel
+.type real xmenge
+..
+.formula U|xsel = "$,,id="                ? F|empty(M|artikel)
+.formula U|xsel = "$,,id="+'M|artikel^id' ? _F|empty(M|artikel)
+.formula U|xsel = U|xsel + ";basisartikel="+'M|basisartikel^id'  ? _F|empty(M|basisartikel)
+.formula U|xsel = U|xsel + ";@gruppe=1"
+..
+.select parts 'U|xsel'
+.. Lagergruppe berÅcksichteigen wenn <> interne Lagergruppe!
+.formula H|lgruppean = M|klgruppe ? M|klgruppe^id <> F|sysinfo(10)^intlgruppe^id
+..
+!ARTIKEL: spez-Teil holen
+.formula U|xbesch  = 0.0
+.formula U|xreserv = 0.0
+.formula U|xfreig  = 0.0
+.formula U|xlbest  = H|gbest
+.formula U|xdispo  = H|dispo
+.formula U|xmin    = H|mindest
+.formula U|xlosgr  = H|losgr
+.reserve
+..
+!PLANKARTE
+.select planchart
+.continue ENDEPLAN   ? _G|mehr
+.continue WERTEREIHE ? H|dnr = 121
+.continue PLANKARTE  ? H|dnr = 40
+.. Alle limgen <= 0.0 ueberspringen. Ausnahme: Zugang aus Koppelproduktion
+.continue PLANKARTE  ? H|limge = 0.0 ; (H|limge < 0.0 & (H|mge >= 0.0 ; H|typ <> G|RESERV))
+.continue PFV  ? H|typ=G|fevor
+.continue PRES ? H|typ=G|reserv
+.continue BESTELL
+..
+!BESTELL: Bestellvorschlag / Bestellposition
+.formula U|xmenge = H|limge * H|lehe
+.formula U|xbesch = U|xbesch + U|xmenge
+.add kopf
+.formula U|xfreig = U|xfreig + U|xmenge ? G|mehr
+.continue PLANKARTE
+..
+!PFV: Fertigungsvorschlag
+.formula U|xbesch = U|xbesch + H|limge
+.formula U|xfreig = U|xfreig + H|frgmge
+.continue PLANKARTE
+..
+!PRES: Reservierung
+.continue KOPPEL     ? H|limge < 0.0
+.formula U|xreserv = U|xreserv + H|limge
+.continue PLANKARTE
+..
+!KOPPEL: Koppelproduktion - geplanter Zugang
+.formula U|xbesch = U|xbesch - H|limge
+.continue PLANKARTE
+..
+!WERTEREIHE: rollierende Planung
+.continue PLANKARTE  ? H|mgeabweich <= 0.0
+.formula U|xreserv = U|xreserv + H|mgeabweich
+.continue PLANKARTE
+..
+!ENDEPLAN: Ende Plankarte
+.select
+.formula U|xverfueg = U|xlbest + U|xbesch - U|xreserv
+.continue HOLTEIL   ? U|xlbest = 0 & _M|nullmge
+.continue HOLTEIL   ? U|xlbest > 0 &  M|nurnegativ
+.continue HOLTEIL   ? _H|packmit & M|packm
+.continue TABELLE
+..
+!TABELLE
+.make screen line +O
+.assign M|tartikel = H|id
+.assign M|tartikeltyp  = M|tartikel^elementicon
+.assign M|tbasisartikel = M|tartikel^basisartikel
+.copy M|lgruppe     = M|klgruppe
+.formula M|tlginfo  = M|iconinternlg ? M|lgruppe^intlager
+.formula M|tlginfo  = M|iconexternlg ? _M|lgruppe^intlager
+.formula M|lemge    = U|xlbest
+.formula M|leinheit = H|le
+.formula M|tdispo   = U|xdispo
+.formula M|besch    = U|xbesch
+.formula M|freig    = U|xfreig
+.formula M|reserv   = U|xreserv
+.formula M|verfueg  = U|xverfueg
+..
+!HOLTEIL
+.select parts
+.continue ENDE    ? _G|mehr
+.formula H|lgruppean = M|klgruppe^id  ? M|klgruppe^id <> F|sysinfo(10)^intlgruppe^id
+.continue ARTIKEL ? G|mehr
+.continue ENDE
+..
+!ENDE
+.continue

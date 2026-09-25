@@ -1,0 +1,208 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..
+..  FOP-Name       : MISSINGPARTSLIST.TAB
+..  Autor          : cl
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..
+..  Funktion       : Infosystem, Liste Fehlteile
+..                   Tabellenzeigfop
+..
+..  Ablauf         :
+..  Includes       :
+.. include is/PRUEFEVERFUEG
+..
+..*****************************************************************************
+.set trans -
+.type text    xbanum        ? _F|defined(U|xbanum)
+.type text    xselect       ? _F|defined(U|xselect)
+.type VPK2    xidverfueg    ? _F|defined(U|xidverfueg)
+.type GD      xwunschtermin ? _F|defined(U|xwunschtermin)
+.type bool    xbhol         ? _F|defined(U|xbhol)
+.type text    xlabel        ? _F|defined(U|xlabel)
+.type integer xmerkhaupt    ? _F|defined(U|xmerkhaupt)
+..
+.continue      ?  F|empty(H|ba) & M|bba
+.continue      ? _F|empty(H|ba) & M|bfv
+.continue      ?  F|empty(H|ba) & H|ablagef
+..
+.continue MAKE ? M|tzeilen = 0
+.make screen line -O ? M|nurfehlmge & M|zn = U|xmerkhaupt
+..
+!MAKE
+.continue END ? _F|empty(M|basisartikel) & 'M|basisartikel^id' <> 'H|art^basisartikel^id'
+.make screen line +O
+.colour -background 'M|farbe1' 'M|aktzeile'
+.formula M|kenn    = "icon:folder_closed" ? _M|detail
+.formula M|kenn    = "icon:folder_opened" ?  M|detail
+.formula M|kenn2   = "-"                  ?  M|detail
+.formula M|kenn2   = "+"                  ? _M|detail
+.formula M|linie   = 1
+.assign M|art      = H|art
+.assign M|tbasisartikel = H|art^basisartikel
+.add H|art
+.copy M|stl = G|TRUE ? D|ozeilen > 0
+.add
+.formula M|verw    = H|verw
+.assign M|projekt  = H|projekt
+.formula M|vorgang = H|id
+.assign M|lgruppe  = H|lgruppe
+.formula M|tbetreuer = ""
+.formula M|engmatz = M|prverfuegz ? F|equals(H|dispoa, "(EmptyEntry)") ; F|equals(H|dispoa, "(RemainingQuantitiesRelated)") ; F|equals(H|dispoa, "(RemainingQuantityRelatedNone)") ; F|equals(H|dispoa, "(MinimumStockLevelRelated)") ; F|equals(H|dispoa, "(EmptyNone)") ;  F|equals(H|dispoa, "(MinimumStockLevelRelatedNone)")
+.assign U|xidverfueg     = M|vorgang^id
+.. FrÅhester End-Termin aus FV
+.formula U|xwunschtermin = 'H|tfterm'
+.. Endtermin aus FV
+.formula U|xwunschtermin = 'M|vorgang^wtterm'  ?  F|empty(U|xwunschtermin)
+.. VerfÅgbarkeitstermin aus Maske
+.formula U|xwunschtermin = M|wterm             ? _F|empty(M|wterm)
+.formula U|xwunschtermin = G|datum             ? 'U|xwunschtermin:8' < 'G|datum:8'
+.input "is/PRUEFEVERFUEG"
+.assign M|gesmge     = U|xgesmge
+.assign M|wunsch     = U|xwunschtermin
+.assign M|kterm      = U|xkterm
+.assign M|geseinheit = U|xgeseinheit
+.continue VER1FUEG   ? _U|xtableempty
+.formula U|xlabel = "AUFZU"
+.continue NOVERFUEG
+..
+!VER1FUEG
+.assign M|verfuegmge = U|xverfuegmge
+.assign M|vplgmge    = U|xvplgmge
+.assign M|vpbsmge    = U|xvpbsmge
+.formula M|ofmge     = U|xofmge
+.formula M|hinweis   = ""
+.assign M|gesmge     = U|xgesmge
+.copy M|tableempty   = U|xtableempty
+.formula M|fehlmge   = M|verfuegmge - M|ofmge
+.formula M|engmatz   = "icon:box_red"   ? (M|vplgmge + M|vpbsmge) < M|ofmge
+.formula M|vaufzu    = "icon:plus" 
+..
+!AUFZU
+.continue DAZUBA                    ?  F|empty(M|aufzu)
+.copy M|tbetreuer    = H|betreuer   ? _F|empty(H|betreuer)
+..
+!DAZUBA
+.add H|ba
+.continue XX                        ? _G|mehr
+.formula M|order = D|id
+..
+.formula U|xbanum = 'M|order'+"001!"+'M|order'+"999"
+.formula U|xselect = "$,,@numsuch="+'U|xbanum'+";@.gruppe=2;@.ablage=(Filed)"
+.load 5 workorder 'U|xselect'
+.load 5                             ?  G|mehr
+..
+.add D|barm
+.. RÅckmeldung vorhanden wenn aus barm D|id <> ""
+.continue BARM                      ? G|mehr
+.. ba-Puffer schlie·en
+.add
+.continue XX
+..
+!BARM: RÅckmeldung vorhanden, zuweisen, anschlie·end barm-Puffer schlie·en
+.assign M|barm = D|id
+.add
+..
+!XX
+.formula U|xmerkhaupt = M|zn ? _F|empty(M|aufzu)
+.make screen line -O ? M|fehlmge = 0 & M|nurfehlmge & F|empty(M|aufzu)
+.continue END                       ? _M|detail
+..
+!DETAIL: lade dazu Reservierung
+.select add H|eres
+.continue               ? _G|mehr & M|tzeilen = 0
+.formula M|kenn    = "" ? _G|mehr
+.continue               ? _G|mehr
+..
+!MACHZEILE
+.. keinen Arbeitsgang ausgeben wenn Anfahrmenge und Anzahl null sind oder Beistellteile
+.continue HZ ? (H|amge = 0 & H|anzahl = 0) ; H|lfbeist
+.. nicht relevante Reservierungen Åberspringen
+.continue HZ ? _H|relevant
+.continue HZ ? H|elem^gruppe <> 1
+..
+.make screen line +O
+.colour -background 'M|farbe1' 'M|aktzeile'
+.formula M|kenn2  = "O"
+.assign M|art     = H|elem
+.copy M|stl = G|TRUE ? M|art^ozeilen > 0
+.assign M|lgruppe = H|lgruppe
+.assign M|vorgang = H|id
+.formula M|tbetreuer = ""
+.continue DAZUAS                        ?  F|empty(M|aufzu)
+.copy M|tbetreuer = H|betreuer          ? _F|empty(H|betreuer)
+..
+!DAZUAS
+.. merk/hole is only required, if buffer h in the calling fop
+.formula U|xbhol  =  F|defined(H|id)
+.formula U|xwunschtermin = 'H|fterm' ?  U|xbhol
+.reserve        ?  U|xbhol
+..
+.formula M|engmatz = M|prverfuegz ? F|equals(H|dispoa, "(EmptyEntry)") ; F|equals(H|dispoa, "(RemainingQuantitiesRelated)") ; F|equals(H|dispoa, "(RemainingQuantityRelatedNone)") ; F|equals(H|dispoa, "(MinimumStockLevelRelated)") ; F|equals(H|dispoa, "(EmptyNone)") ;  F|equals(H|dispoa, "(MinimumStockLevelRelatedNone)")
+.. Endtermin aus FV
+.formula U|xwunschtermin = 'M|vorgang^wtterm'  ?  F|empty(U|xwunschtermin)
+.. VerfÅgbarkeitstermin aus Maske
+.formula U|xwunschtermin = M|wterm             ? _F|empty(M|wterm)
+.formula U|xwunschtermin = G|datum             ? 'U|xwunschtermin:8' < 'G|datum:8'
+..
+.make mallocation group4
+..
+.assign H|matbedarfobj = M|vorgang^id
+.formula H|verfuegterm = U|xwunschtermin
+..
+.. Button drÅcken
+.formula H|verfuegpruef = ""
+.. get result H|verfuegmge (Quantity available)
+.assign M|gesmge        = H|gesmge
+.assign M|kterm         = H|kterm
+.assign M|wunsch        = U|xwunschtermin
+.assign M|geseinheit    = H|geseinheit
+.continue VERFUEG ? H|tzeilen > 0
+.formula U|xlabel = "COLOR"
+..
+!NOVERFUEG
+.set trans +
+.formula M|hinweis = "VerfÅgbarkeitsprÅfung fÅr noch nicht eingeplante Bedarfe nicht mîglich."
+.set trans -
+.formula M|vaufzu       = ""
+.formula M|ofmge        = U|xofmge
+.formula M|fehlmge      = 0            
+.formula M|engmatz = "icon:date_disabled" 
+.continue 'U|xlabel'
+..
+!VERFUEG
+.assign M|verfuegmge    = H|verfuegmge
+.. verfueglgmge VerfÅgbare Menge auf Lager
+.assign M|vplgmge       = H|verfueglgmge
+.. verfuegbsmge VerfÅgbare Menge durch Beschaffungen
+.assign M|vpbsmge       = H|verfuegbsmge
+.formula M|ofmge        = H|ofmge
+.formula M|fehlmge      = M|verfuegmge - M|ofmge
+.formula M|engmatz      = "icon:box_red"   ? (M|vplgmge + M|vpbsmge) < M|ofmge
+.formula M|vaufzu       = "icon:plus"  
+..
+!COLOR
+.colour -background 'M|farbe2' 'M|aktzeile'
+.formula M|linie = 0
+.make screen line -O ? M|fehlmge = 0 & M|nurfehlmge & F|empty(M|aufzu)
+..
+!RELEASE
+.select -
+.select   ?  U|xbhol
+..
+!HZ
+.select line
+.continue HZE         ? _G|mehr
+.. keinen Arbeitsgang ausgeben wenn Anfahrmenge und Anzahl null sind oder Beistellteile
+.continue HZ          ? (H|amge = 0 & H|anzahl = 0) ; H|lfbeist
+.continue HZ          ? _H|relevant
+.continue MACHZEILE
+..
+!HZE
+.select add
+..
+!END
+.continue            ? M|tzeilen = 0
+.make screen line -O ? M|nurfehlmge & M|zn = U|xmerkhaupt
+.continue

@@ -1,0 +1,84 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : DATEVEKVK.ST.VERTEIL
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Verteilung einer Rundungsdifferenz in der Umsatzsteuer
+..                  welche sich aufrund der Berechnung des Bruttos aus dem
+..                  Netto ergeben kann. Die Differenz wird auf die Position
+..                  (Buchungszeile) mit dem gr”áten Betrag aufgeschlagen.
+.. Functionality  :
+..
+.. include fb/DATEVEKVK.SET.DIFFS
+..
+..*****************************************************************************
+..
+.type integer   xirestart   ? _F|defined(U|xirestart)
+.type integer   ximaxzeile  ? _F|defined(U|ximaxzeile)
+.type real  xrmaxbetr   ? _F|defined(U|xrmaxbetr)
+.type real  xrrebrutto  ? _F|defined(U|xrrebrutto)
+.type VID99 xplrechnung ? _F|defined(U|xplrechnung)
+.type bool  xbende      ? _F|defined(U|xbende)
+.type integer   xizeile     ? _F|defined(U|xizeile)
+.type integer   xifaktor    ? _F|defined(U|xifaktor)
+.type real  xrrebetr    ? _F|defined(U|xrrebetr)
+.type RP6.9 xrhilf      ? _F|defined(U|xrhilf)
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.continue END ? M|tzeilen = 0
+..
+.select screen header
+.formula U|xirestart = 1
+..
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+.select screen line
+.formula U|xbende = _G|mehr
+.continue PRUEF ? _G|mehr
+.continue PRUEF ? M|trechnung^id <> U|xplrechnung & _F|empty(U|xplrechnung)
+..
+..*****************************************************************************
+!SUM
+..*****************************************************************************
+.formula   U|xrrebrutto  = U|xrrebrutto + M|tbruttoumsatz
+.copy U|xplrechnung = M|trechnung
+.formula   U|ximaxzeile  = M|aktzeile             ? F|abs(M|tbruttoumsatz) > U|xrmaxbetr
+.formula   U|xrmaxbetr   = F|abs(M|tbruttoumsatz) ? F|abs(M|tbruttoumsatz) > U|xrmaxbetr
+.continue LOOP
+..
+..*****************************************************************************
+!PRUEF
+..*****************************************************************************
+.formula U|xizeile = M|aktzeile
+.formula U|xifaktor =  1
+.formula U|xifaktor = -1 ? U|xplrechnung^dnr = 4
+.formula U|xrrebetr = U|xplrechnung^rebetr * U|xifaktor
+.continue OK ? U|xrrebetr = U|xrrebrutto
+.. Differenz zum Gesamtrechnungsbetrag dem Brutto der Position mit
+.. dem groessten Betrag zuordnen.
+.select screen line 'U|ximaxzeile'
+.formula M|tbruttoumsatz = M|tbruttoumsatz + (U|xrrebetr - U|xrrebrutto)
+.input "fb/DATEVEKVK.ZEILE"
+.select screen line 'U|xizeile'
+.continue OK
+..
+..*****************************************************************************
+!OK
+..*****************************************************************************
+.continue END ? U|xbende
+.formula U|ximaxzeile = M|aktzeile
+.formula U|xrmaxbetr  = F|abs(M|tbruttoumsatz)
+.formula U|xrrebrutto = 0
+.formula U|xirestart  = M|aktzeile
+.continue SUM
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.input "fb/DATEVEKVK.SET.DIFFS"
+.continue

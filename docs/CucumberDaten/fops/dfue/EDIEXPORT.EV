@@ -1,0 +1,243 @@
+..!interpreter english translate noabbrev
+..!meta M|=dfue/EDIEXPORT
+..*****************************************************************************
+.. FOP-Name       : EDIEXPORT.EV
+.. Autor          : ok
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : General event handling
+..*****************************************************************************
+.set trans -
+..
+.type date xdatum  ? _F|defined(U|xdatum)
+.type date xdatum1 ? _F|defined(U|xdatum1)
+.type text xSPEDnr ? _F|defined(U|xSPEDnr)
+.type text xtsel   ? _F|defined(U|xtsel)
+.type text xcom    ? _F|defined(U|xcom)
+.type text xtxt1   ? _F|defined(U|xtxt1)
+.type text xtxt1   ? _F|defined(U|xtxt1)
+.type integer xiIR ? _F|defined(xiIR)
+.type bool xbstart ? _F|defined(U|xbstart)
+.type text xtext   ? _F|defined(U|xtext)
+..
+.type bool xbinfo  ? _F|defined(U|xbinfo)
+.copy U|xbinfo = true
+..
+.type integer xiaktzeile
+..
+..
+.. event evaluation
+.. ----------- ----- Header Events ---------------------------------------------
+.continue VORGSEL  ? G|evtartengl = "BUTTON_BEFORE"  & G|evtvar = "buvorgang"
+.continue EXPORT   ? G|evtartengl = "BUTTON_BEFORE"  & G|evtvar = "vorgueb"
+.continue FEHLVOR  ? G|evtartengl = "BUTTON_BEFORE"  & G|evtvar = "fehlvorg"
+.continue KDNAME   ? G|evtartengl = "FIELD_EXIT"     & G|evtvar = "kkunde"
+.continue LNAME    ? G|evtartengl = "FIELD_EXIT"     & G|evtvar = "klief"
+.continue EDIVERZ  ? G|evtartengl = "BUTTON_BEFORE"  & G|evtvar = "sendverz"
+.continue AUFZ     ? G|evtartengl = "FIELD_EXIT"     & G|evtvar = "kvorart"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+!AUFZ
+.formula P|maskkontextfop = "keinLieferschein" ? _('M|kvorart(L=":")' = "(PackingSlip)")
+.formula P|maskkontextfop = "Lieferschein" ? 'M|kvorart(L=":")' = "(PackingSlip)"
+.continue ERROR  ? _('M|kvorart(L=":")' = "(Invoice)") & _('M|kvorart(L=":")' = "(PackingSlip)") & _('M|kvorart(L=":")' = "(SalesOrderConfirmation)") & _('M|kvorart(L=":")' = "(LoadCarrierAccountStatement)")  & _('M|kvorart(L=":")' = "(EmptyEntry)")
+.continue
+..
+!EDIVERZ
+.command -parallel "(Infosystem) EDIVERZ ? sendverz=(Yes) | bstart="
+.continue END
+..
+..
+..
+!EXPORT
+.select screen header
+.continue END  ? _G|mehr
+!LOOP
+.select screen line
+.continue ENDE   ? _G|mehr
+.continue LOOP   ? _M|senden
+.continue EXPLS1 ?  'M|vorartname(L=":")' = "(PackingSlip)"
+.continue JEDIEX ? _F|empty(M|tabmodell)
+.continue EXPRE  ?  'M|vorartname(L=":")' = "(Invoice)"
+.continue EXPAB  ?  'M|vorartname(L=":")' = "(SalesOrderConfirmation)"
+.continue EXLAKO ?  'M|vorartname(L=":")' = "(LoadCarrierAccountStatement)"
+.continue END
+..
+!JEDIEX
+.continue JEDIINVOICE ? 'M|vorartname(L=":")' = "(Invoice)"
+.continue JEDISOC     ? 'M|vorartname(L=":")' = "(SalesOrderConfirmation)"
+..
+.formula M|fehltext=""
+.input de.abas.edi.JEdi.java -id 'M|tabmodell^nummer' -exportid 'M|tvorgang^nummer'
+.formula M|fotoz = G|icoerror ? G|status <> 0
+.. icook is set on JEDIEND
+.continue JEDIEND
+..
+!JEDIINVOICE
+.. Rechnungsexport nur einmal pro Rechnungsempfaenger starten
+.. start export for invoices only one time per invoice recipient
+..
+.formula U|xiIR = 'M|kunde^nummer'
+.copy U|xbstart = false
+.formula U|xbstart = true ? _F|defined(U|xINVRECIPIENT.xiIR)
+.type bool xINVRECIPIENT.xiIR ? _F|defined(U|xINVRECIPIENT.xiIR)
+..
+.formula M|fehltext=""
+.input de.abas.edi2.JEdi.java -id 'M|tabmodell^nummer' -exportid 'M|kunde^nummer' -ref xdatumbis='M|wdatum' ? U|xbstart
+.formula U|xINVRECIPIENT.xiIR = G|status<>0 ? U|xbstart
+.formula M|fotoz = G|icoerror ?  U|xINVRECIPIENT.xiIR
+.formula M|fotoz = G|icook    ? _U|xINVRECIPIENT.xiIR
+.. must not use JEDIEND, M|tvorgang is not updated for invoices 
+.continue LOOP    
+..
+!JEDISOC
+.. Auftragsbestaetitungsexport starten
+.. start export for sales order confirmation
+..
+.formula M|fehltext=""
+.input de.abas.edi2.JEdi.java -id 'M|tabmodell^nummer' -exportid 'M|tvorgang^nummer'
+.formula M|fotoz = G|icoerror ? G|status <> 0
+.. icook is set on JEDIEND
+..
+!JEDIEND
+.assign M|tvorgang = M|tvorgang^id
+.formula M|fotoz = G|icook    ? _F|empty(M|tvorgang^edifact)
+.formula M|fotoz = G|icook    ? _F|empty(M|tvorgang^ediid)
+.. Im Fehlerfall sind m|tvorgang^edifact + M|tvorgang^ediid LEER
+.. Der Fehler wird in  eine Edi-Nachricht protokolliert, in der ideksvor == m|tvorgang^nummer gilt
+.continue LOOP ? _F|empty(M|tvorgang^ediid)
+.load 1 edifact 'F|formatstr("$,,ideksvor=={1};@order=erfass.(Backwards)", M|tvorgang^nummer)'
+.continue LOOP ? _G|mehr
+.formula M|fotoz = G|icoerror ? 1|fcode<>0
+.select from '1|ftext' M|fehltext^ ? _F|empty(1|ftext)
+!NFTEXT
+.continue EFTEXT ? _G|mehr ; F|empty(1|ftext)
+.select from '1|ftext' U|xtext^ 
+.formula M|fehltext = M|fehltext + ";" + U|xtext
+.continue NFTEXT
+!EFTEXT
+.load 1 
+.continue LOOP
+..
+!EXPLS1
+.continue EXPLS2  ?  F|empty(M|tabmodell)
+.continue LOOP    ? _M|senden
+.continue LSDRUCK ?  M|tvorgang^druck
+.formula M|fehltext=""
+.input de.abas.edi2.JEdi.java -id 'M|tabmodell^nummer' -exportid 'M|tvorgang^nummer'
+.formula M|fotoz = G|icoerror ? _G|mehr
+.continue JEDIEND
+..
+!LSDRUCK
+.set trans +
+.formula M|fehltext = "Zuerst mÅssen die Speditionspapiere gedruckt werden!"
+.set trans -
+.formula M|fotoz = G|icoerror
+.continue LOOP
+..
+!EXPLS2
+.formula U|xSPEDnr = 'M|tvorgang^id'
+.input "EDI.EXP.LS.MAN"
+.formula M|fehltext = U|xtxt1 + " " + U|xtxt2
+.formula U|xtxt1=""
+.formula U|xtxt2=""
+.formula M|ptext = xdFEDI
+.formula M|fotoz = G|icook    ? _F|filenotempty(U|xdFEDI) &  F|empty(F|trim(M|fehltext))
+.formula M|fotoz = G|icoerror ?  F|filenotempty(U|xdFEDI) ; _F|empty(F|trim(M|fehltext))
+.continue LOOP
+..
+!EXPRE
+.formula T|xiaktzeile = M|aktzeile
+.input "DFUE.VK2EDI"
+.select screen line 'T|xiaktzeile'
+.load 0 nolock sales 'M|tvorgang^id'
+.continue LOOP ? _G|mehr
+.formula M|fotoz = G|icoerror                ? '0|ident'/"*ERROR*"
+.formula M|fotoz = G|icook                   ? _0|dfuesenden & +'0|dfuedat'<>0 & _'0|ident'/"*ERROR*"
+.protection senden  'M|aktzeile' ? M|fotoz=G|icook
+.protection senddat 'M|aktzeile' ? M|fotoz=G|icook
+.load 0
+.continue LOOP
+..
+!EXPAB
+.input "EDI.EXP.ORDERSSP"
+.load 0 nolock sales 'M|tvorgang^id'
+.continue LOOP ? _G|mehr
+.formula M|fotoz            = G|icoerror                ? '0|ident'/"*ERROR*"
+.formula M|fehltext = xtxt1 + " " + xtxt2               ? '0|ident'/"*ERROR*"
+.formula M|fotoz            = G|icook                   ? 0|dfuesenden=false & _'0|ident'/"*ERROR*"
+.formula M|fehltext = ""                                ? 0|dfuesenden=false & _'0|ident'/"*ERROR*"
+.protection senden  'M|aktzeile' ? M|fotoz=G|icook
+.protection senddat 'M|aktzeile' ? M|fotoz=G|icook
+.load 0
+.continue LOOP
+..
+!EXLAKO
+.continue LOOP ?  F|empty(M|tabmodell)
+.continue LOOP ? _M|senden
+.input de.abas.edi.JEdi.java -id 'M|tabmodell^nummer' -exportid 'M|tvorgang^nummer'
+.formula M|fotoz = G|icoerror ? _G|mehr
+.formula M|fotoz = G|icook    ? _F|empty(M|tvorgang^edifact)
+.continue LOOP
+..
+!ENDE
+.select screen header
+.continue END ? _G|mehr
+!NEXTEND
+.select screen line
+.continue END      ? _G|mehr
+.continue NEXTEND  ? 'M|vorartname' <> "(SalesOrderConfirmation)"
+.continue NEXTEND  ? M|senden=false
+.continue NEXTEND  ? _F|empty(M|tvorgang^ediid)
+.formula U|xtsel = "$,,;@gruppe=0;erfass=.;edinachr="(SalesOrderConfirmation)";status=2;ideksvor=" + 'M|tvorgang^nummer'
+.select edifact 'U|xtsel'
+.formula M|fotoz = G|icoerror         ? _G|mehr
+.formula M|fotoz = G|icook            ?  G|mehr
+.protection senden  'M|aktzeile' ? M|fotoz=G|icook
+.protection senddat 'M|aktzeile' ? M|fotoz=G|icook
+.select -
+.continue NEXTEND
+..
+!KDNAME
+.formula M|kdname  = M|kkunde^sucherw
+.continue
+..
+!LNAME
+.formula M|liefname = M|klief^sucherw
+.continue
+..
+!FEHLVOR
+.input "is/TABLEEREN"
+.input "is/KOPFLEEREN"
+.formula U|xdatum  = datum - 60
+.formula U|xdatum1 = datum - 120
+.formula U|xcom = "$,,;@gruppe=1;@ablage=(Filed);vom=" + 'U|xdatum1' + "!" + 'datum' + ";dfuesenden=0;ablagef=1;"
+.formula U|xcom = U|xcom + "ident=ERROR;ktyp=(Invoice);dfuedat=" + 'U|xdatum' + "!" + 'datum'
+.load 0 sales 'U|xcom'
+!NFEHL
+.continue END  ? _G|mehr
+.make screen line +O
+.formula M|tvorgang   = 0|id
+.formula M|vorgdat    = 0|vom
+.formula M|senden     = 0|dfuesenden
+.formula M|senddat    = 0|dfuedat
+.formula M|kunde      = 0|kunde2
+.formula M|rebetr     = 0|rebetr
+.formula M|waehrung   = 0|land
+.formula M|vorartname = "(Invoice)"
+.formula M|fotoz      = G|icoerror                ? '0|ident'/"*ERROR*"
+.load 0 sales
+.continue NFEHL
+..
+!ERROR
+.error Diese Vorgangsart wird nicht unterstÅtzt
+.formula M|kvorart = ""
+.continue
+..
+.set trans -
+..
+..*****************************************************************************
+!END
+.continue
+

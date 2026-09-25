@@ -1,0 +1,263 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..
+..  FOP-Name       : IS.SETPERIOD
+..  Datum          : 02.03.04
+..  Version        : 1
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..
+..  Funktion       : Setzt die Periode in Infosystemen (EFOP-Subroutine)
+..
+..  Voraussetzungen:
+..                1) Die folgenden Felder sind in der Maske
+..                   des Infosystems mit folgender Semantik definiert:
+..                   - von:  Anfangsdatum
+..                   - anfm: Anfangs-Gesch„ftsmonat
+..                   - anfj: Anfangs-Gesch„ftsjahr
+..                   - bis:  Enddatum
+..                   - endm: End-Gesch„ftsmonat
+..                   - endj: End-Gesch„ftsjahr
+..
+..                2) Beim Feldevent dieser Felder wird dieses FOP ausgefhrt
+..
+..  Schnittstelle (Parameter und ihre Bedeutung)
+..    verwendet Arrayparameter (arg.i)          : nein
+..    verwendet Namensparameter (xpname=wert)   : nein
+..
+..    Parameter    Bedeutung
+..    ---------------------------------------------------------
+..    xp...        ...
+..
+..  Ablauf         :
+..*****************************************************************************
+..
+..  functionality  :
+..
+..  interface (argument with meaning)
+..    used array argument (arg.i)           : no
+..    used name arguement  (xpname=value)   : no
+..
+..    argument     meaning
+..    ---------------------------------------------------------
+..    xp...        ...
+..
+..  program flow  :
+... includes      :
+..*****************************************************************************
+.. variable starting month
+.type text xxtsmon    ? _F|defined(U|xxtsmon)
+.. variable starting year
+.type text xxtsyear   ? _F|defined(U|xxtsyear)
+.. variable ending month
+.type text xxtemon    ? _F|defined(U|xxtemon)
+.. variable ending year period 2
+.type text xxteyear   ? _F|defined(U|xxteyear)
+.. variable date from
+.type text xxtfromd   ? _F|defined(U|xxtfromd)
+.. variable date to
+.type text xxttod     ? _F|defined(U|xxttod)
+..
+.type integer xximaxmon   ? _F|defined(U|xximaxmon)
+..
+.. extra months not allowed
+.type bool xxbknbm    ? _F|defined(U|xxbknbm)
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.. set default variable names
+.formula U|xxtsmon  = "anfm" ? F|empty(U|xxtsmon)
+.formula U|xxtemon  = "endm" ? F|empty(U|xxtemon)
+.formula U|xxtsyear = "anfj" ? F|empty(U|xxtsyear)
+.formula U|xxteyear = "endj" ? F|empty(U|xxteyear)
+.formula U|xxtfromd = "von"  ? F|empty(U|xxtfromd)
+.formula U|xxttod   = "bis"  ? F|empty(U|xxttod)
+..
+.formula U|xxteyear = U|xxtsyear ? _F|defined(M|.U|xxteyear)
+..
+.continue END    ? _F|defined(M|.U|xxtsmon)
+.continue END    ? _F|defined(M|.U|xxtemon)
+.continue END    ? _F|defined(M|.U|xxtsyear)
+.continue END    ? _F|defined(M|.U|xxtfromd)
+.continue END    ? _F|defined(M|.U|xxttod)
+..
+.formula U|xximaxmon = 15
+.continue SWITCH ? _U|xxbknbm
+.type P60:5 xxpcostaccconfig ? _F|defined(U|xxpcostaccconfig)
+.formula U|xxpcostaccconfig = "$,@gruppe=5;gruppe=5;@maxtreffer=1"
+.formula U|xximaxmon = F|condexpr(U|xxpcostaccconfig^ilvnach14, 14, 13)
+.continue SWITCH
+..
+..*****************************************************************************
+!SWITCH
+..*****************************************************************************
+.continue ANFM   ? G|evtvar = U|xxtsmon
+.continue ENDM   ? G|evtvar = U|xxtemon
+.continue ANFJ   ? G|evtvar = U|xxtsyear
+.continue ENDJ   ? G|evtvar = U|xxteyear
+.continue VON    ? G|evtvar = U|xxtfromd
+.continue BIS    ? G|evtvar = U|xxttod
+.continue
+..
+..*****************************************************************************
+!ANFM
+..*****************************************************************************
+.continue ERR01 ? M|.U|xxtsmon > U|xximaxmon
+.type GJ  xxgj ? _F|defined(U|xxgj)
+.formula U|xxgj = F|condexpr(F|empty(M|.U|xxtsyear) & G|evtvar = U|xxtsmon, F|currentfy(), M|.U|xxtsyear)
+.copy M|.G|evtvar = M|.G|evtvar ? G|evtartengl="FIELD_VALIDATION"
+.formula M|.U|xxtsyear = U|xxgj
+..
+.select year 'M|.U|xxtsyear' 'M|.U|xxtsmon' ? _F|empty(M|.U|xxtsmon)
+.select year 'M|.U|xxtsyear'              ?  F|empty(M|.U|xxtsmon)
+.formula M|.U|xxtsmon = G|amonat         ?  M|.U|xxtsmon < G|amonat
+.formula M|.U|xxtsmon = G|emonat         ?  M|.U|xxtsmon > G|emonat
+..
+.formula M|.U|xxtsmon = F|lastfm(M|.U|xxtsyear) ? M|.U|xxtsmon > F|lastfm(M|.U|xxtsyear) & M|.U|xxtsmon < 13
+..
+.copy M|.G|evtvar = M|.G|evtvar ? G|evtartengl="FIELD_VALIDATION"
+.formula M|.U|xxtfromd = F|fystartdate(M|.U|xxtsyear, M|.U|xxtsmon) ? F|getfm(M|.U|xxtfromd) <> M|.U|xxtsmon & M|.U|xxtsmon <= 12
+.copy    M|.U|xxttod   = M|.U|xxtfromd ?  M|.U|xxttod < M|.U|xxtfromd
+.formula M|.U|xxttod   = F|fyenddate(M|.U|xxtsyear, M|.U|xxtsmon)   ? M|.U|xxtemon < M|.U|xxtsmon & M|.U|xxtsyear = M|.U|xxteyear & G|evtvar = U|xxtsmon
+.formula M|.U|xxtemon  = M|.U|xxtsmon  ? M|.U|xxtemon < M|.U|xxtsmon & M|.U|xxtsyear = M|.U|xxteyear & G|evtvar = U|xxtsmon
+..
+.continue END  ? G|evtvar = U|xxtsyear & U|xxtsyear <> U|xxteyear
+.continue ENDJ ? G|evtvar = U|xxtsyear & U|xxtsyear  = U|xxteyear
+..
+..*****************************************************************************
+!ANFJ
+..*****************************************************************************
+.copy M|.G|evtvar = M|.G|evtvar ? G|evtartengl="FIELD_VALIDATION"
+.formula M|.U|xxtsyear = F|getfy(M|.U|xxtfromd)       ? F|empty(M|.U|xxtsyear)
+.formula M|.U|xxtfromd = F|fystartdate(M|.U|xxtsyear) ? F|getfy(M|.U|xxtfromd) <> M|.U|xxtsyear
+.. kommen wir von ANFM?
+.continue ANFM ? G|evtvar <> U|xxtsmon
+..
+..*****************************************************************************
+!ENDM
+..*****************************************************************************
+.continue ERR02 ? M|.U|xxtemon > U|xximaxmon & _F|empty(M|.U|xxtemon)
+.type GJ  xxgj ? _F|defined(U|xxgj)
+.type integer xxgm ? _F|defined(U|xxgm)
+.formula U|xxgj = F|condexpr(F|empty(M|.U|xxteyear), F|currentfy(), M|.U|xxteyear)
+.continue ERR03 ? M|.U|xxtsmon > M|.U|xxtemon & M|.U|xxtsyear = U|xxgj & _F|empty(M|.U|xxtemon) & G|evtvar = U|xxtemon
+.formula U|xxgm = F|condexpr(F|empty(M|.U|xxtemon), F|getfm(M|.U|xxttod, G|TRUE), M|.U|xxtemon)
+..
+.copy M|.G|evtvar = M|.G|evtvar ? G|evtartengl="FIELD_VALIDATION"
+.formula M|.U|xxteyear = F|currentfy() ? F|empty(M|.U|xxteyear) & G|evtvar = U|xxtemon
+.formula M|.U|xxtemon  = F|getfm(M|.U|xxttod, G|TRUE) ? F|empty(M|.U|xxtemon)
+..
+.select year 'M|.U|xxteyear' 'M|.U|xxtemon' ? _F|empty(M|.U|xxtemon)
+.select year 'M|.U|xxteyear'              ?  F|empty(M|.U|xxtemon)
+.formula M|.U|xxtemon = G|emonat         ?  M|.U|xxtemon > G|emonat
+..
+.formula M|.U|xxtemon = F|lastfm(M|.U|xxteyear) ?  M|.U|xxtemon > F|lastfm(M|.U|xxteyear) & M|.U|xxtemon < 13
+..
+.formula M|.U|xxttod  = F|fyenddate(M|.U|xxteyear, M|.U|xxtemon) ? F|getfm(M|.U|xxttod) <> M|.U|xxtemon & M|.U|xxtemon <= 12
+.formula M|.U|xxtemon = M|.U|xxtsmon ? M|.U|xxtsmon > M|.U|xxtemon & M|.U|xxtsmon > 12 & F|getfy(M|.U|xxtfromd) = F|getfy(M|.U|xxttod)
+.continue END  ? G|evtvar = U|xxteyear
+..
+..*****************************************************************************
+!ENDJ
+..*****************************************************************************
+.type GJ  xxgj ? _F|defined(U|xxgj)
+.type GD  xxgd ? _F|defined(U|xxgd)
+.formula U|xxgj = F|condexpr(F|empty(M|.U|xxteyear) & _F|empty(M|.U|xxttod), F|getfy(M|.U|xxttod), M|.U|xxteyear)
+.formula U|xxgd = F|condexpr(F|getfy(M|.U|xxttod) <> U|xxgj, F|fyenddate(U|xxgj), M|.U|xxttod)
+.continue ERR03 ? U|xxgd < M|.U|xxtfromd & G|evtvar = U|xxteyear
+.copy M|.G|evtvar = M|.G|evtvar ? G|evtartengl="FIELD_VALIDATION"
+.formula M|.U|xxteyear = U|xxgj
+.formula M|.U|xxttod   = U|xxgd
+.continue END   ? G|evtvar =  U|xxtsmon
+.continue ENDM  ? G|evtvar <> U|xxtemon
+.continue END   ? G|evtvar =  U|xxtemon
+..
+..*****************************************************************************
+!VON
+..*****************************************************************************
+.continue VON2  ? F|empty(M|.U|xxtfromd)
+.continue ERR04 ? M|.U|xxtfromd < F|fystartdate(F|firstfy())
+.continue ERR06 ? M|.U|xxtfromd > F|fyenddate(F|lastfy())
+.copy M|.G|evtvar = M|.G|evtvar ? G|evtartengl="FIELD_VALIDATION"
+.formula M|.U|xxtsyear = F|getfy(M|.U|xxtfromd)
+.formula M|.U|xxtsmon  = F|getfm(M|.U|xxtfromd) ? M|.U|xxtsmon <= 12
+.continue END
+..
+..*****************************************************************************
+!VON2: date from is empty
+..*****************************************************************************
+.continue END ? F|empty(M|.U|xxtsmon) ; F|empty(M|.U|xxtsyear)
+.formula M|.U|xxtfromd = F|fystartdate(M|.U|xxtsyear, M|.U|xxtsmon)
+.continue END
+..
+..*****************************************************************************
+!BIS
+..*****************************************************************************
+.continue BIS2  ? F|empty(M|.U|xxttod)
+.continue ERR03 ? M|.U|xxttod < M|.U|xxtfromd
+.continue ERR04 ? M|.U|xxttod < F|fystartdate(F|firstfy())
+.continue ERR06 ? M|.U|xxttod > F|fyenddate(F|lastfy())
+.copy M|.G|evtvar = M|.G|evtvar ? G|evtartengl="FIELD_VALIDATION"
+.formula M|.U|xxtemon  = F|getfm(M|.U|xxttod, G|TRUE) ? M|.U|xxtemon <= 12 ; M|.U|xxteyear <> F|getfy(M|.U|xxttod)
+.formula M|.U|xxtemon  = M|.U|xxtsmon                 ? M|.U|xxtsmon > M|.U|xxtemon & M|.U|xxtsmon > 12 & F|getfy(M|.U|xxtfromd) = F|getfy(M|.U|xxttod)
+.formula M|.U|xxteyear = F|getfy(M|.U|xxttod)
+.continue END ? F|empty(G|abgjahr)
+.formula M|.U|xxtemon  = U|xximaxmon ? M|.U|xxtemon <= 12 & F|fycmp(M|.U|xxteyear,G|abgjahr) <= 0
+.continue END
+..
+..*****************************************************************************
+!BIS2: date to is empty
+..*****************************************************************************
+.continue END ? F|empty(M|.U|xxtemon) ; F|empty(M|.U|xxteyear)
+.formula M|.U|xxttod = F|fyenddate(M|.U|xxteyear, M|.U|xxtemon)
+.continue END
+..
+..*****************************************************************************
+!ERR01: Kein korrekter Gesch„ftsmonat (anfm)
+..*****************************************************************************
+.error Kein korrekter Gesch„ftsmonat
+.cursor 'G|evtvar'
+.end 1
+..
+..*****************************************************************************
+!ERR02: Kein korrekter Gesch„ftsmonat (endm)
+..*****************************************************************************
+.error Kein korrekter Gesch„ftsmonat
+.cursor 'G|evtvar'
+.end 1
+..
+..*****************************************************************************
+!ERR03: Ungltiger Zeitraum
+..*****************************************************************************
+.error Kein korrekter Zeitraum
+.cursor 'G|evtvar'
+.end 1
+..
+..*****************************************************************************
+!ERR04: Zeitpunkt vor Beginn in Termindatensatz
+..*****************************************************************************
+.error Zeitpunkt vor Beginn der Gesch„ftst„tigkeit
+.cursor 'G|evtvar'
+.end 1
+..
+..*****************************************************************************
+!ERR06
+..*****************************************************************************
+.error Kein passendes Gesch„ftsjahr im Termindatensatz vorhanden
+.cursor 'G|evtvar'
+.end 1
+..
+.set trans -
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue ? U|xxtsyear <> U|xxteyear
+.continue ? G|evtvar    = U|xxttod
+.continue ? _F|defined(M|.U|xxttod)
+.continue ? F|empty(M|.U|xxttod)
+.continue ? F|empty(M|.U|xxteyear)
+.formula M|.U|xxttod = F|fyenddate(F|getfy(M|.U|xxttod)) ? M|.U|xxteyear <> F|getfy(M|.U|xxttod)
+.continue

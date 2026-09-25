@@ -1,0 +1,322 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LMB.TAB
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Erzeugt eine Tabellenzeile
+.. Ablauf         : Tabellen-EFOP
+...Includes        :
+.. includes JOURN.DAT
+..*****************************************************************************
+..
+.set trans -
+.type IP6   xatg1        ? _F|defined(U|xatg1)
+.type IP6   xatg2        ? _F|defined(U|xatg2)
+.type IP6   xatg3        ? _F|defined(U|xatg3)
+.type IP6   xatg4        ? _F|defined(U|xatg4)
+.type IP3   xbfrist      ? _F|defined(U|xbfrist)
+.type integer   xnmin        ? _F|defined(U|xnmin)
+.type real2 xdiff        ? _F|defined(U|xdiff)
+.type M7.3  xums         ? _F|defined(U|xums)
+.type M7.3  xaums        ? _F|defined(U|xaums)
+.type M7.3  xjahr        ? _F|defined(U|xjahr)
+.type M7.3  xgesjahr     ? _F|defined(U|xgesjahr)
+.type text  xtlmenge     ? _F|defined(U|xtlmenge)
+.type M7.3  xlbest       ? _F|defined(U|xlbest)
+.type IP3   xwbz         ? _F|defined(U|xwbz)
+.type GD    x1danf       ? _F|defined(U|x1danf)
+.type GD    x1dend       ? _F|defined(U|x1dend)
+.type GD    xdat1        ? _F|defined(U|xdat1)
+.type GD    xdat2        ? _F|defined(U|xdat2)
+.type GD    xdat3        ? _F|defined(U|xdat3)
+.type GD    xdat4        ? _F|defined(U|xdat4)
+.type GD    xvom         ? _F|defined(U|xvom)
+.type text  x1tnum       ? _F|defined(U|x1tnum)
+.type integer   i            ? _F|defined(i)
+.type M7.3  xdtv         ? _F|defined(U|xdtv)
+.type M12.3 xmlb         ? _F|defined(U|xmlb)
+.type real2 xydiff       ? _F|defined(U|xydiff)
+.type text  xt           ? _F|defined(U|xt)
+.type M7.3  xmge         ? _F|defined(U|xmge)
+.type M7.3  xamge        ? _F|defined(U|xamge)
+.type text  xy           ? _F|defined(U|xy)
+.type ARTR51001 xmin     ? _F|defined(U|xmin)
+.type text  xtjlgrid     ? _F|defined(U|xtjlgrid)
+.type text  xtlgrid      ? _F|defined(U|xtlgrid)
+.type ID39:2 xintlgruppe ? _F|defined(U|xintlgruppe)
+.type text  xsel         ? _F|defined(U|xsel)
+.type text  xtsel        ? _F|defined(U|xtsel)
+.type bool  xbschutz     ? _F|defined(U|xbschutz)
+.type ID2   xartikel     ? _F|defined(U|xartikel)
+.type ARTR51001 xandler      ? _F|defined(U|xandler)
+.type M12.3 xgesbed      ? _F|defined(U|xgesbed)
+.type R7.4  xvarhk       ? _F|defined(U|xvarhk)
+.type MP4.2 xrundung     ? _F|defined(U|xrundung)
+.type A79   xbsart       ? _F|defined(U|xbsart)
+.type realx xrech        ? _F|defined(U|xrech)
+.type text  xselect      ? _F|defined(U|xselect)
+.type bool  xbbasis       ? _F|defined(U|xbbasis)
+.set trans +
+..
+.assign U|xintlgruppe = F|sysinfo(10)^intlgruppe
+.copy U|xbschutz = G|TRUE ? U|xintlgruppe <> M|klgruppe^id
+.. xbbasis auf true, dann eine Zeile fÅr den Basisartikel
+.. alle Versionen werden aufsummiert 
+.copy U|xbbasis = G|TRUE ? (_F|empty(M|kbasisvon) ; _F|empty(M|kbasisvon)) & G|evtvar = "bstart" 
+.. beim Aufklappen Åber taufzu soll das bisherige Verhalten gelten
+.copy U|xbbasis = G|FALSE ? (_F|empty(M|kbasisvon) ; _F|empty(M|kbasisvon)) & G|evtvar = "taufzu" 
+..
+.formula H|lgruppean = M|klgruppe^id
+.continue END  ? _G|mehr
+.continue END  ?  F|equals(H|bsart, "(InhouseProduction)")   & _M|beigen
+.continue END  ?  F|equals(H|bsart, "(ExternalProcurement)") & _M|bfremd
+.continue END  ?  F|equals(H|bsart, "(Relocation)")          & _M|bumlagern
+.continue END  ?  F|equals(H|bsart, "(Subcontracting)")      & _M|blohnfert
+.copy U|xartikel = H|id
+.formula U|xrundung = H|rundung
+.formula U|xbsart   = H|bsart
+.formula U|xtlgrid  = M|klgruppe^id
+.formula U|xdtv     = 0.0
+.formula U|xums     = 0.0
+.continue NOTNULL ? U|xbbasis
+.formula U|xnmin    = 0.0
+.formula U|xdiff    = 0.0
+.formula U|xaums    = 0.0
+.formula U|xjahr    = 0.0
+.formula U|xgesjahr = 0.0
+.formula U|xlbest   = 0
+.formula U|xwbz     = 0
+.formula U|xmlb     = 0
+.formula U|xmge     = 0
+!NOTNULL
+..
+.reserve
+..Lagergruppenmengen laden
+.formula U|xtlmenge ="$,,artikel=" + U|xartikel + ";lgruppe=" + M|klgruppe^id + ";@ablageart=(Active)"
+.formula U|xlbest = 0
+.load 0 group "40:5" 'U|xtlmenge'
+.continue LMGEEND ? _G|mehr
+!LGLOOP
+.formula U|xlbest = U|xlbest + 0|dbestand 
+.load 0 squantity
+.continue LGLOOP ? G|mehr
+!LMGEEND: Ende Lagergruppenmenge
+..
+.. xwbz=Wiederbeschaffungszeit=Beschaffungsfrist(in Arbeitstagen)
+.. xwbz=Replacement lead time=procurement period(in calendar days)
+.. wenn fixiert, dann immer bfrist 
+.formula U|xwbz   = H|bfrist    ? H|fixbfrist
+.formula U|xselect = "$,,herkunft=" + U|xartikel^id + ";typ=(StandardPreliminaryCostingOfProduct);@gruppe=1"
+.load 2 costsheet 'U|xselect'
+.. wenn eigengefertigt oder umgelagert und nicht fixiert, dann kbfristmax aus der Standard Artikelvorkalkulation 
+.formula U|xwbz   = 2|kbfristmax ? G|mehr &  _H|fixbfrist & (F|equals(H|bsart, "(InhouseProduction)") ; F|equals(H|bsart, "(Relocation)"))
+.. wenn fremdbeschafft und nicht fixiert, dann efrist
+.formula U|xwbz   = H|efrist     ? _H|fixbfrist & F|equals(H|bsart, "(ExternalProcurement)")
+..
+.. xwbz=Vorhaltezeit
+.formula U|xwbz   = M|vorhalt ? M|vorhalt <> 0
+..
+.. Lagerjournal fÅr Umsatz durchsuchen / Check stock journal for turnover
+.formula U|x1danf = M|zum - 360
+.formula U|x1dend = M|zum
+.formula U|x1tnum = H|nummer
+..
+.input "JOURN.DAT"
+.load 1 journal 'U|x1tjourn'
+..
+.formula U|xdat1  = M|zum - 60
+.formula U|xdat2  = U|xdat1 - 60
+.formula U|xdat3  = U|xdat2 - 60
+.formula U|xdat4  = U|xdat3 - 180
+.formula i        = 0
+.formula U|xvom   = M|zum
+..
+!HOLE
+.continue RECHN                    ? _G|mehr
+.formula U|xtjlgrid = 1|lgruppe^id
+.continue HOLN         ? U|xtlgrid <> U|xtjlgrid
+..
+.formula U|xt     = 1|such << -1
+.. es werden nur die LagerabgÑnge und Umlagerungen berÅcksichtigt
+.continue HOLN                     ? 1|buart <> 2  & 1|buart <> 4
+.. nur Umlagerungen mit unterschiedlichen Lagergruppen
+.continue HOLN   ? 1|buart = 4 & (1|platz^lgruppe^id = 1|platz2^lgruppe^id)
+.. Umlagerungen, die die Verkerzahlen nicht erhîhen sollen, sollen auch nicht in den Verbrauch eingerechnet werden.
+.continue HOLN ? 1|ekumlag & _1|vkzakt
+.continue WEITER ? 1|buart = 4 & (1|platz^lgruppe^id <> 1|platz2^lgruppe^id)
+.continue WEITER ? 1|buart = 2 & (_F|equals(1|detursache, "(PickingQtyPackingSlipS)") & _F|equals(1|detursache, "(PickingQtyPackingSlipP)") & _F|equals(1|detursache, "(ManualTransfer)") & _F|equals(1|detursache, "(ContainerStockAdjustment)"))
+..
+.. hier buart = 2 und 3 bestimmte detursachen
+.. hierfÅr passende buart = 1 finden
+.type text xtljkey ? _F|defined(U|xtljkey)
+.formula U|xtljkey = "$,,num10=" + U|x1tjourn
+.formula U|xtljkey = U|xtljkey + ";@gruppe=1;@ablageart=(Active)"
+.formula U|xtljkey = U|xtljkey + ";detursache=(PickingQtyPackingSlipS);zuord="+'1|zuord'+";buart=1;mge="+'1|mge'  ? F|equals(1|detursache, "(PickingQtyPackingSlipS)")
+.formula U|xtljkey = U|xtljkey + ";detursache=(PickingQtyPackingSlipP);zuord="+'1|zuord'+";buart=1;mge="+'1|mge'  ? F|equals(1|detursache, "(PickingQtyPackingSlipP)")
+.formula U|xtljkey = U|xtljkey + ";detursache=(ManualTransfer);zuord="+'1|zuord'+";buart=1;mge="+'1|mge'          ? F|equals(1|detursache, "(ManualTransfer)")
+.formula U|xtljkey = U|xtljkey + ";detursache=(ContainerStockAdjustment);zuord="+'1|zuord'+";buart=1;mge="+'1|mge' ? F|equals(1|detursache, "(ContainerStockAdjustment)")
+.load 3 journal 'U|xtljkey'
+.continue HOLN ? _G|mehr
+.continue WEITER ? G|mehr & '3|lgruppe^id' <> '3|lj^lgruppe^id'
+..
+!LADE3
+.load 3 journal
+.continue HOLN   ? _G|mehr
+.continue WEITER ? G|mehr & '3|lgruppe^id' <> '3|lj^lgruppe^id'
+.continue HOLN
+..
+!WEITER
+.formula U|xvom   = 1|vom         ? i = 0
+.formula i        = 1             ? i = 0
+.formula G|adatum = M|zum & -1
+..
+!ARBEITSTAGE: Arbeitszeit pro Arbeitstag + Arbeitstage
+.select planchart
+.formula G|adatum = M|zum
+.formula G|edatum = G|adatum + 1
+..
+.. die ersten 60 Kalendertage beinhalten wieviel Arbeitstage?
+.formula G|adatum = U|xdat1 + 1
+.formula G|edatum = M|zum + 1
+.formula U|xatg1 = F|numworkdays("", M|klgruppe, G|adatum, G|edatum)
+..
+.. die nÑchsten 60 Kalendertage beinhalten wieviel Arbeitstage?
+.formula G|adatum = U|xdat2 + 1
+.formula G|edatum = U|xdat1 + 1
+.formula U|xatg2 = F|numworkdays("", M|klgruppe, G|adatum, G|edatum)
+..
+.. die letzten 60 Kalendertage beinhalten wieviel Arbeitstage?
+.formula G|adatum = U|xdat3 + 1
+.formula G|edatum = U|xdat2 + 1
+.formula U|xatg3 = F|numworkdays("", M|klgruppe, G|adatum, G|edatum)
+..
+.. die vorigen 180 Kalendertage beinhalten wieviel Arbeitstage?
+.formula G|adatum = U|xdat4 + 1
+.formula G|edatum = U|xdat3 + 1
+.formula U|xatg4 = F|numworkdays("", M|klgruppe, G|adatum, G|edatum)
+..
+.select -
+.continue NGEW                     ? _M|gewicht
+..
+!GEW: Mit Gewichtung der Monate / With weighting of months
+.formula U|xmge = 0
+.formula U|xmge = 1|mge*3 / U|xatg1 ? (1|vom <= M|zum)   & (1|vom >= U|xdat1)
+.formula U|xmge = 1|mge*2 / U|xatg2 ? (1|vom <= U|xdat1) & (1|vom >= U|xdat2)
+.formula U|xmge = 1|mge*1 / U|xatg3 ? (1|vom <= U|xdat2) & (1|vom >= U|xdat3)
+.continue XATG4 ? U|xmge = 0
+.formula U|xums = U|xums + U|xmge
+.continue XATG4
+..
+!NGEW: Ohne Gewichtung der Monate / Without weighting of months
+.formula U|xmge = 0
+.formula U|xmge = 1|mge*2 / U|xatg1 ? (1|vom <= M|zum)   & (1|vom >= U|xdat1)
+.formula U|xmge = 1|mge*2 / U|xatg2 ? (1|vom <= U|xdat1) & (1|vom >= U|xdat2)
+.formula U|xmge = 1|mge*2 / U|xatg3 ? (1|vom <= U|xdat2) & (1|vom >= U|xdat3)
+.continue XATG4 ? U|xmge = 0
+.formula U|xums = U|xums + U|xmge
+..
+!XATG4
+.formula U|xjahr    = 1|mge
+.formula U|xgesjahr = U|xgesjahr + U|xjahr
+.formula U|xamge    = 1|mge*2 / U|xatg4 ? (1|vom <= U|xdat3) & (1|vom >= U|xdat4)
+.formula U|xaums    = U|xaums + U|xamge
+.continue LADE3
+..
+!HOLN
+.load 1 journal
+.continue HOLE
+..
+!RECHN
+.select
+.reserve
+.formula U|xsel ="$,,art=" + H|id + ";lgruppe=" + M|klgruppe^id + ";@ablageart=(Active);@gruppe=3"
+.select warehousedata 'U|xsel'
+.copy U|xbschutz = G|FALSE    ?  G|mehr
+.select                            ? _G|mehr
+..
+.. xdtv=average daily consumption of the last 6 month
+.. xdtv=durchschnittl. tÑglicher Verbrauch der letzten 6 Monate (gewichtet nach Datum)
+.formula U|xdtv    = U|xums/6
+.. xmlb=min-stock-level=average consumption*duration of calculation
+.. xmlb=Soll-Mindestbestand=Durchschnittl. Verbrauch*Dauer d. Berechnung fÅr Teile/Fertigw.-Lager
+.. H|mindest = Ist-Mindestbestand
+.formula U|xmlb      = U|xdtv * U|xwbz
+.formula U|xmlb      = U|xmlb:0
+.formula U|xdiff     = H|mindest:0 - U|xmlb
+.formula U|xydiff    = U|xdiff / U|xmlb * 100  ? U|xmlb <> 0
+.formula U|xy        = U|xydiff
+.formula U|xmin      = H|mindest
+.formula U|xy        = "*"             ? U|xmlb = 0  & U|xmin <> 0
+.formula U|xy        = "0"             ? U|xmlb = U|xmin
+.formula U|xvarhk    = 0
+..
+.formula U|xtsel = "$,,herkunft=" + U|xartikel + ";lgruppe=" + M|klgruppe^id + ";flistestd=" + U|xartikel^flistestd^id + ";@richtung=(Backwards);typ=Standard Artikelvorkalkulation;@autostart=(1);@gruppe=1" ? _F|empty(U|xartikel^flistestd)
+.formula U|xtsel = "$,,herkunft=" + U|xartikel + ";lgruppe=" + M|klgruppe^id + ";flistestd=`;@richtung=(Backwards);typ=Standard Artikelvorkalkulation;@autostart=(1);@gruppe=1" ?  F|empty(U|xartikel^flistestd)
+.load 3 costsheet 'U|xtsel'
+.continue MACHEZEILE ? _G|mehr
+.. Gesamtkosten: Herstellkosten
+.formula U|xvarhk = 3|hk
+..
+!MACHEZEILE
+.continue NOTAB   ? M|aktzeile = 0
+.continue TABFILL ? M|aktzeile > 0
+!NOTAB: Tabelle ohne Zeile
+.make screen line +O  
+.continue FILLINE
+!TABFILL: Tabelle enthÑlt schon Zeilen
+.make screen line +O   ? _U|xbbasis 
+.make screen line +O   ? U|xbbasis & M|basisartikel^id <> U|xartikel^basisartikel^id 
+.continue FILLINE
+!FILLINE: Werte in die Tabellenzeile schreiben
+.formula M|taufzu = M|iconzu  ? U|xbbasis
+.protection tauswahl 'M|aktzeile'  ? M|protokoll
+.protection tauswahl 'M|aktzeile'  ? _F|empty(M|taufzu)
+.colour -background -1 -1 -1 andlerlos 'M|aktzeile'
+.assign M|artikel     = U|xartikel                ? _U|xbbasis
+.assign M|basisartikel = U|xartikel^basisartikel
+.copy M|stdvers       = U|xartikel^stdvers        ? _U|xbbasis
+.formula M|tverbrauchbasis = M|iconverbrauch      ? M|stdvers &  (_F|empty(M|kbasisvon) ; _F|empty(M|kbasisbis))
+.copy M|bsart         = U|xbsart                 ? _U|xbbasis
+.formula M|lbest      = U|xlbest                 ? _U|xbbasis
+.formula M|lbest      = M|lbest + U|xlbest       ?  U|xbbasis  
+.formula M|iconz      = ""
+.formula M|wbz        = U|xwbz                   ? _U|xbbasis
+.formula M|dtv        = U|xdtv                   ? _U|xbbasis
+.formula M|dtv        = M|dtv + U|xdtv           ?  U|xbbasis
+.formula M|losgr      = H|losgr                  ? _U|xbbasis
+.formula M|andlerlos  = 0                          ? _M|bandler
+.colour -background 'M|warnfarbe' andlerlos 'M|aktzeile' ? M|bandler & U|xvarhk = 0
+.colour -background 'M|warnfarbe' andlerlos 'M|aktzeile' ? M|bandler & M|dtv = 0
+.formula M|andlerlos  = 0                          ? M|bandler & U|xvarhk = 0
+.formula M|lhaltkost  = 1                          ? M|bandler & M|lhaltkost = 0
+.continue MLB              ? _M|bandler
+.formula U|xrech = 0
+.formula U|xrech = (2 * M|beschkost * U|xgesjahr / (U|xvarhk * M|lhaltkost / 100)) ? U|xvarhk <> 0
+.colour -background 'M|warnfarbe' andlerlos 'M|aktzeile' ? M|bandler & U|xrech < 0
+.continue MLB                                      ? U|xrech < 0
+.continue ANDLER 
+..
+!ANDLER
+.formula M|andlerlos  = F|sqrt(U|xrech)                           ? M|bandler & U|xvarhk <> 0
+.formula M|andlerlos  = (M|andlerlos / U|xrundung):0 * U|xrundung ? U|xrundung <> 0
+.formula M|andlerlos  = 0  ? U|xbbasis 
+..
+!MLB
+.continue NOMLB ? U|xbbasis
+.formula M|mlb        = U|xmlb    
+.formula M|mlb        = (U|xmlb/U|xrundung):0 * U|xrundung        ? U|xrundung <> 0
+.formula M|min        = H|mindest  
+.formula M|abs        = U|xdiff
+.formula M|proz       = U|xy
+.copy M|schutz   = U|xbschutz
+.formula M|iconz = M|iconinfo ?    M|mlb = 0
+!NOMLB
+..
+.protection losgr 'M|aktzeile'  ? M|protokoll ; (M|zurueck & (F|equals(M|artikel^bsart, "(Subcontracting)") ; F|equals(M|artikel^dispoa, "(VariantRelated)") ; F|equals(M|artikel^dispoa, "(SalesOrderRelated)") ; (U|xbschutz & U|xintlgruppe <> M|klgruppe^id) ; U|xbbasis ))
+.protection min   'M|aktzeile'  ? M|protokoll ; (M|zurueck & (F|equals(M|artikel^bsart, "(Subcontracting)") ; F|equals(M|artikel^dispoa, "(VariantRelated)") ; (U|xbschutz & U|xintlgruppe <> M|klgruppe^id) ; U|xbbasis ))
+.protection tauswahl 'M|aktzeile'  ? F|protected(M|losgr,M|aktzeile) & F|protected(M|min,M|aktzeile)
+.select                     
+..
+!END
+.continue

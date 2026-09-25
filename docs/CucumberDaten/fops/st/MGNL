@@ -1,0 +1,308 @@
+..!interpreter english translate
+..*****************************************************************************
+..
+..  Name      : MGNL
+..  Datum     : 01.02.2000
+..  Vers.     : 9.5
+..  Autor     : Charis Lang
+..
+..  Verantwortlich : cl
+..
+..  Funktion  : MENGEN숥ERSICHTSST숦KLISTE
+..
+..  Ablauf    : Grundlage ist das FOP SSTL.
+..              Nach der Eingabe eines Artikels werden die Zeilen der Struktur-
+..              st갷kliste in eine ASCII-Datei geschrieben, nach id sortiert,
+..              die Gesamtmenge der identischen Artikel aufsummiert und in
+..              einer Liste nach Suchwort oder Identnummer sortiert auf dem
+..              Bildschirm, Browser oder Drucker ausgegeben.
+..              Auswahl: Standartversion oder Varianten
+..
+..*****************************************************************************
+..                           SUBROUTINE
+..                           ----------
+.input "ARB"
+..*****************************************************************************
+!START
+.set trans +
+.type integer    xeb xart
+.type bool   xerst browseraus
+.type text   M0 M1 xt xptext x2 x4 xtstring xname xbesch xles xein xd xv
+.type text   xtmp xb xtger:15 x8 x9 x10 xlinie xtstand xtident xflb xtzeit
+.type text   x0 x1 xid0 xid1 xid2 x3 x6 x7 xtbesch xbart xtflb xtbasis xptxt
+.type real0  xm xmen xanz xmm.xeb xmenge xmm1 xmm2 xmm3 xmm4 xmm5 xmm6 xmm7
+.type realx  xges xgesamt x5 xrflb
+.type GD     xdatum
+..
+.continue A1
+..Kopf f걊 Browserauagabe
+!BROWSER
+.print sg.3
+.print sf.gruen
+Bearbeiter: 'bzeichen        '
+Mandant: 'Mandant         '
+'txname            '
+'datum'
+'xtzeit'
+.print sg.5
+       Mengen갶ersichtsst갷kliste
+..
+.continue KOPF
+..
+!A1:
+.set question ?
+.up
+.down
+.output terminal ? geraet = ""
+.input BILD.F
+?                         Mengen갶ersichtsst갷kliste   ? _grafik
+?                         컴컴컴컴컴컴컴컴컴컴컴컴컴   ? _grafik
+..
+.continue HOTE
+!MENUE
+.set question ?
+.formula xtstand = "Standard"
+.formula xtident = "Identnummer"
+.formula xtstand = "Alle Varianten" ?  M0="B"
+.formula xtident = "Suchwort" ? M1="D"
+.formula xbart = "alle" ? xtbesch="G"
+.formula xbart = "nur EF" ? xtbesch="E"
+.formula xbart = "nur B" ? xtbesch="F"
+
+.input BROWSER.INI
+..
+.formula xtzeit = 'zeit'
+.formula xdatum = datum
+..
+.menu Auswahlm봥lichkeiten f걊 st/MGNL
+Liste des gew꼑lten Artikels ausgeben         >>  .continue ARTI
+Sortierung:      z.Zt. nach 'xtident        ' >>  .continue MSORT
+Variante:        z.Zt. 'xtstand             ' >>  .continue STAND
+Beschaffungsart: z.Zt. 'xbart'                >>  .continue BART
+FL-Basis:        z.Zt. 'xflb                ' >>  .continue FLBASIS
+Artikelwahl 꼗dern                            >>  .continue HOTE
+Beenden                                       >>  .continue BEENDEN
+..
+.continue BEENDEN  ?  F|empty(G|menue)
+.continue ARTI
+..
+!MSORT: Sortierkriterium w꼑len
+.menu Sortierauswahl
+Artikelliste sortiert nach Identnummer      >>  .formula M1 = "C"
+Artikelliste sortiert nach Suchwort         >>  .formula M1 = "D"
+zur갷k zum Hauptmenue                       >>  .continue MENUE
+..
+.continue MENUE
+..
+!STAND
+.menu Varianten
+Standardversion           >> .formula M0 = "A"
+Alle Varianten            >> .formula M0 = "B"
+zur갷k zum Hauptmenue     >> .continue MENUE
+..
+.continue MENUE
+..
+!BART: Beschaffungsart w꼑len
+.menu Beschaffungsarten
+nur Eigenfertigungsartikel  >>  .formula xtbesch="E"
+nur Beschaffungsartikel     >>  .formula xtbesch="F"
+alle                        >>  .formula xtbesch="G"
+zur갷k zum Hauptmenue       >>  .continue MENUE
+..
+.continue MENUE
+..
+!FLBASIS
+.read "Neue Fertigungslistenbasis eingeben, Fl-Basis beibehalten mit <return>" xtflb
+.formula xtflb = xflb ? xtflb = ""
+?Unzul꼜sige Angabe! Bitte Fl-Basis als Zahl eingeben      ? xtflb /"*(A-Z)*"
+?Unzul꼜sige Angabe! Bitte Fl-Basis als Zahl eingeben      ? xtflb /"*(a-z)*"
+?Fl-Basis zu gross  ? xtflb / "???????????*"
+.continue FLBASIS ? xtflb /"*(A-Z)*"
+.continue FLBASIS ? xtflb /"*(a-z)*"
+.continue FLBASIS ? xtflb / "???????????*"
+.formula xflb  = xtflb
+.continue MENUE
+..
+!HOTE: Teil einlesen
+.formula xtbesch = "G" ? xtbesch = ""
+.formula M0 = "A" ? M0 = ""
+.formula M1 = "C" ? M1 = ""
+.formula xtmp = "X" + pid + ".TMP"
+.read "Artikel eingeben, beenden mit <return>" xein
+.continue BEENDEN ? xein = ""
+.select parts 'xein'
+?Artikel 'xein' nicht vorhanden  ?  _mehr
+.continue HOTE                     ?  _mehr
+.continue FL ? gruppe <> 1
+..
+.formula xeb=0 ? gruppe = 1
+.formula xflb=1 ? gruppe = 1
+.formula xflb=flbasis ? flbasis<>0.0
+!FL
+.continue MENUE ? gruppe=1
+Teil ist kein Artikel:  Teil 'ident        ' 'sucherw'
+..
+.continue HOTE
+..
+!ARTI
+.input "DATEI.F"
+.output new 'xtmp'
+.formula xname=ident+" "+sucherw
+.formula xart=1
+.formula xm=xflb
+.continue HOZE
+..
+!A11: .. Ausgabe Artikel in Datei
+.formula xd=dispo
+.formula xb = "F" ? bsart="Fremdbeschaffung"
+.formula xb = "E" ? bsart="Eigenfertigung"
+.formula xb = "L" ? bsart="Lohnfertigung"
+.continue A2 ? (xtbesch="E"&('xb'/"B*"))
+.continue A2 ? (xtbesch="F"&(_'xb'/"B*"))
+?'          num'#'id'#'such'#'id'#'xb'#'xd'#'0xmen'#'le'#'xv'# #        ? xptext = ""
+?'          num'#'id'#'such'#'id'#'xb'#'xd'#'0xmen'#'le'#'xv'#'xptext'# ? xptext <> ""
+.add
+.continue A2
+!A2: .............. n꼊hste St갷klistenzeile
+..
+!HOZE:
+.continue E ? tzeilen=0
+.select line
+.continue E ? _mehr
+.formula xart=elart
+.continue HOZE ? M0="A"&((xart=2;xart=3);(var<>""&var<>"N"))
+.continue HOZE ? M0="B"&(xart=2;xart=3)
+.continue HOZE ? xart=2;xart=3
+.formula xges=(menge*xm) ?xart=1 ; xart=4
+.formula xges=anzahl ?xart=2
+.formula xges=(xm*anzahl) ?xart=3
+.formula xmen=(xges):4
+.formula xv=var
+.formula xptext=ptext
+..... Eine Ebene tiefer
+.reserve lifo
+.formula xeb=xeb+1
+.formula xmm.xeb=xm
+.formula xm=xm*menge ? xart=1 ; xart=4
+.select add elem
+.continue E ? _mehr
+.continue A11
+..
+!E:  Eine Ebene h봦er
+.select lifo
+.continue SORTID ? _mehr&M1="C"
+.continue SORT   ? _mehr&M1="D"
+.formula xm=xmm.xeb
+.formula xeb=xeb-1
+.continue HOZE
+..
+!SORT: Sortiere nach Suchwort
+.formula xtstring = "sort -t# -k3,3 -k4,4 -o " + xtmp + " " + xtmp
+.system 'xtstring' background
+.continue AUS
+! SORTID: Sortiere nach Identnummer
+.formula xtstring = "sort -t# -k1,1 -k2,2 -o " + xtmp + " " + xtmp
+.system 'xtstring' background
+..
+!AUS: Ausgabe auf ausgew꼑ltes Ausgabemedium
+.output terminal
+.formula browseraus = false
+.input DRUCKER
+.justified
+.formula xtger = geraet
+.formula xtger = "Bildschirm"  ?  geraet = ""
+.formula xtger = "Internet-Browser" ? browseraus
+.input BLANKOB.F
+.formula x0 = 0
+.formula x8 = 0
+.formula x9 = 0
+.formula xgesamt = 0.0
+.formula xerst = true
+!R4:
+.page 1 ? _browseraus
+.formula xlinie = "--------------------------------------------------------------------------------------------------------------------------"
+.continue BROWSER ? browseraus
+..
+!NBROWSER
+.up
+'mandant           '              Mengen갶ersichtsst갷kliste                           '  xdatum'        Seite'     sei'
+'txname            '              ==========================                            ' xtzeit' / 'bzeichen          '
+
+f걊 Artikel: 'xname                                         '   FL-Basis: '     xflb'
+
+  Ident-Nummer   Suchwort        Bezeichnung                         BArt      Disp         Gesamt      Einheit      Var
+'xlinie'
+..
+!KOPF
+.print sf.rot
+?f걊 Artikel: 'xname                                         '   FL-Basis: '     xflb' ? browseraus
+.tablerecord title
+.tablerecord headline
+?  Ident-Nummer   Suchwort        Bezeichnung                         BArt      Disp         Gesamt      Einheit      Var ? browseraus
+..
+!R1:
+.select from 'xtmp' x1 # xid1 # x2 # xid2 # x3 # x4 # x5 # x6 # x7 # xptext #
+.continue R6 ? _mehr
+.continue R2 ? xerst
+.continue R3 ? xid0<>xid1
+.formula x0=x1
+.formula x8=x3
+.formula x9=x4
+.formula xid0=xid1
+.formula xgesamt = xgesamt + x5
+.formula xptxt=xptext
+.continue R1
+!R6:
+.continue E1 ? xerst
+.formula xerst = true
+.continue R3
+!R2:
+.formula xerst = false
+.formula xgesamt = xgesamt + x5
+.formula x0=x1
+.formula x8=x3
+.formula x9=x4
+.formula x10=x7
+.formula xid0=xid1
+.formula xptxt=xptext
+.continue R1
+!R3:  Ausgabe
+.continue E1 ? _mehr & _xerst
+.formula xmenge=(xgesamt):4
+.select parts 'xid0'
+.continue BEENDEN ? _mehr
+.tablerecord line
+'           x0'  'h|such       ' 'h|sucherw                    '   ' x8'    ' x9''             xmenge'  'h|le  ' ' x10'
+?                 'xptxt                                                                                               ' ? xptxt<>""
+..
+!NULL
+.formula xgesamt = x5
+.formula x0 = x1
+.formula x8 = x3
+.formula x9 = x4
+.formula x10 = x7
+.formula xid0=xid1
+.formula xptxt=xptext
+.continue R1 ? _xerst
+!E1:
+?'xlinie'  ? browseraus = false
+.tablerecord end
+.input BROWSER
+.formula xtstring = "rm " +xtmp
+.system 'xtstring' background
+..
+!PRUEF:
+.formula M0="A"
+.formula M1="C"
+.formula xtbesch="G"
+.format EKS
+.set question *
+..
+.output terminal ... * geraet = ""
+.input BILD.F
+..
+.continue A1
+..
+!BEENDEN
+.set question ?
+.end .

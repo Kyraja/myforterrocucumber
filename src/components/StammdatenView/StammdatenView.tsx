@@ -10,15 +10,18 @@
  * (FieldsDetail, FopMaskDetail, IsDetail), and expose the "assume exists"
  * toggle that influences AI prompt generation.
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { TableDef, FieldDef } from '../../types/gherkin';
 import type { FopBinding } from '../../types/fop';
-import type { IsBinding } from '../../lib/fopTxtParser';
+import type { IsBinding } from '../../lib/isBindingsParser';
 import type { KBDocument } from '../../types/knowledgeBase';
+import type { LearningEntry } from '../../types/learning';
 import { CsvUpload } from '../CsvUpload/CsvUpload';
 import { EventChip } from '../EventChip/EventChip';
+import { useTranslation } from '../../i18n';
 import KnowledgeBaseTab from './KnowledgeBaseTab';
-import { isKnowledgeBaseEnabled } from '../../lib/settings';
+import LearningTab from './LearningTab';
+import { isAiEnabled, isKnowledgeBaseEnabled } from '../../lib/settings';
 import styles from './StammdatenView.module.css';
 
 // ── Types ──────────────────────────────────────────────────────
@@ -32,10 +35,24 @@ interface StammdatenViewProps {
   onIsBindingsChange: (bindings: IsBinding[]) => void;
   kbDocuments: KBDocument[];
   onKBDocumentsChange: (docs: KBDocument[]) => void;
+  rootHandle: FileSystemDirectoryHandle | null;
+  onLearningsChanged?: (entries: LearningEntry[]) => void;
+  learningAgentApiId?: string | null;
+  learningModel?: string;
+  initialTab?: StammdatenTab;
   lang: 'de' | 'en';
 }
 
-type Tab = 'variablen' | 'infosysteme' | 'fop' | 'is' | 'wissensdatenbank';
+export type StammdatenTab = 'variablen' | 'infosysteme' | 'fop' | 'is' | 'wissensdatenbank' | 'learning';
+type Tab = StammdatenTab;
+
+function getUploadedTableName(table: TableDef): string {
+  return table.name || table.nameDe || table.nameEn || table.tableRef;
+}
+
+function getUploadedFieldDescription(field: FieldDef): string {
+  return field.description || field.descriptionDe || field.descriptionEn || '';
+}
 
 // ── Highlight helper ────────────────────────────────────────────
 
@@ -58,12 +75,12 @@ interface TableListItemProps {
   table: TableDef;
   isSelected: boolean;
   searchQuery: string;
-  lang: 'de' | 'en';
   onClick: () => void;
 }
 
-function TableListItem({ table, isSelected, searchQuery, lang, onClick }: TableListItemProps) {
-  const displayName = lang === 'de' ? (table.nameDe ?? table.name) : (table.nameEn ?? table.name);
+function TableListItem({ table, isSelected, searchQuery, onClick }: TableListItemProps) {
+  const { t } = useTranslation();
+  const displayName = getUploadedTableName(table);
   const label = table.maskNr !== undefined
     ? `${displayName} (${table.maskNr} - ${table.tableRef})`
     : `${displayName} (${table.tableRef})`;
@@ -74,7 +91,7 @@ function TableListItem({ table, isSelected, searchQuery, lang, onClick }: TableL
       onClick={onClick}
     >
       <span className={styles.listItemLabel}>
-        {table.assumeExists && <span className={styles.assumeExistsBadge} title={lang === 'de' ? 'Daten vorhanden' : 'Data exists'}>E</span>}
+        {table.assumeExists && <span className={styles.assumeExistsBadge} title={t('data.exists')}>E</span>}
         {highlight(label, searchQuery)}
       </span>
       <span className={styles.listItemBadge}>{table.fields.length}</span>
@@ -84,35 +101,34 @@ function TableListItem({ table, isSelected, searchQuery, lang, onClick }: TableL
 
 interface FieldsDetailProps {
   table: TableDef;
-  lang: 'de' | 'en';
   onToggleAssumeExists?: (tableRef: string) => void;
 }
 
-function FieldsDetail({ table, lang, onToggleAssumeExists }: FieldsDetailProps) {
-  const displayName = lang === 'de' ? (table.nameDe ?? table.name) : (table.nameEn ?? table.name);
+function FieldsDetail({ table, onToggleAssumeExists }: FieldsDetailProps) {
+  const { t } = useTranslation();
+  const displayName = getUploadedTableName(table);
   return (
     <div className={styles.detailPanel}>
       <div className={styles.detailHeader}>
         <span className={styles.detailTitle}>{table.tableRef} — {displayName}</span>
-        <span className={styles.detailMeta}>{table.fields.length} {lang === 'de' ? 'Felder' : 'fields'}</span>
-        <label className={styles.assumeExistsToggle} title={lang === 'de'
-          ? 'Wenn aktiv: KI verwendet vorhandene Datensätze statt neue anzulegen (STORE/NEW)'
-          : 'When active: AI uses existing records instead of creating new ones (STORE/NEW)'}>
+        <span className={styles.detailMeta}>{table.fields.length} {t('data.fields')}</span>
+        <label className={styles.assumeExistsToggle} title={t('stammdaten.assumeExistsHint')}>
           <input
             type="checkbox"
             checked={!!table.assumeExists}
             onChange={() => onToggleAssumeExists?.(table.tableRef)}
           />
-          <span>{lang === 'de' ? 'Daten vorhanden' : 'Data exists'}</span>
+          <span>{t('data.exists')}</span>
         </label>
       </div>
       <div className={styles.detailTable}>
         <table>
           <thead>
             <tr>
-              <th>{lang === 'de' ? 'Feldname' : 'Field Name'}</th>
-              <th>{lang === 'de' ? 'Beschreibung' : 'Description'}</th>
-              <th>{lang === 'de' ? 'Typ' : 'Type'}</th>
+              <th>{t('stammdaten.fieldName')}</th>
+              <th>{t('stammdaten.description')}</th>
+              <th>{t('stammdaten.abasType')}</th>
+              <th>{t('stammdaten.type')}</th>
             </tr>
           </thead>
           <tbody>
@@ -120,15 +136,14 @@ function FieldsDetail({ table, lang, onToggleAssumeExists }: FieldsDetailProps) 
               <tr key={idx}>
                 <td className={styles.monoCell}>{field.name}</td>
                 <td title={`desc="${field.description}" de="${field.descriptionDe}" en="${field.descriptionEn}"`}>
-                  {lang === 'de'
-                    ? (field.descriptionDe ?? field.description)
-                    : (field.descriptionEn ?? field.description)}
+                  {getUploadedFieldDescription(field)}
                 </td>
+                <td className={styles.monoCell}>{field.dataType ?? '—'}</td>
                 <td className={styles.monoCell}>
                   <span className={field.isTableField ? styles.tagTable : styles.tagHead}>
                     {field.isTableField
-                      ? (lang === 'de' ? 'Tabelle' : 'Table')
-                      : (lang === 'de' ? 'Kopf' : 'Header')}
+                      ? t('stammdaten.table')
+                      : t('stammdaten.header')}
                   </span>
                   {field.skip && <span className={styles.tagSkip}>Skip</span>}
                   {field.readonly && <span className={styles.tagReadonly}>RO</span>}
@@ -149,30 +164,32 @@ interface FopMaskDetailProps {
 }
 
 function scopeLabel(scope: 'K' | 'T' | '*', lang: 'de' | 'en'): React.ReactNode {
-  if (scope === 'K') return <span className={styles.tagK}>{lang === 'de' ? 'Kopf' : 'Header'}</span>;
-  if (scope === 'T') return <span className={styles.tagT}>{lang === 'de' ? 'Tabelle' : 'Table'}</span>;
+  void lang;
+  if (scope === 'K') return <span className={styles.tagK}>K</span>;
+  if (scope === 'T') return <span className={styles.tagT}>T</span>;
   return null;
 }
 
 function FopMaskDetail({ mask, bindings, lang }: FopMaskDetailProps) {
+  const { t } = useTranslation();
   const maskLabel = mask === '*'
-    ? (lang === 'de' ? 'Alle Masken' : 'All Masks')
-    : `${lang === 'de' ? 'Maske' : 'Mask'} ${mask}`;
+    ? t('stammdaten.allMasks')
+    : `${t('stammdaten.mask')} ${mask}`;
   return (
     <div className={styles.detailPanel}>
       <div className={styles.detailHeader}>
         <span className={styles.detailTitle}>{maskLabel}</span>
-        <span className={styles.detailMeta}>{bindings.length} {lang === 'de' ? 'Bindungen' : 'bindings'}</span>
+        <span className={styles.detailMeta}>{bindings.length} {t('data.bindings')}</span>
       </div>
       <div className={styles.detailTable}>
         <table>
           <thead>
             <tr>
-              <th>{lang === 'de' ? 'Ereignis' : 'Event'}</th>
-              <th>{lang === 'de' ? 'K/T' : 'H/T'}</th>
-              <th>{lang === 'de' ? 'Feld' : 'Field'}</th>
-              <th>{lang === 'de' ? 'Befehl' : 'Command'}</th>
-              <th>{lang === 'de' ? 'FOP-Pfad' : 'FOP Path'}</th>
+              <th>{t('stammdaten.event')}</th>
+              <th>{t('stammdaten.kt')}</th>
+              <th>{t('stammdaten.field')}</th>
+              <th>{t('stammdaten.command')}</th>
+              <th>{t('stammdaten.fopPath')}</th>
             </tr>
           </thead>
           <tbody>
@@ -202,6 +219,7 @@ interface IsDetailProps {
 }
 
 function IsDetail({ isSearchWord, bindings, tableDefs, lang }: IsDetailProps) {
+  const { t } = useTranslation();
   const isName = bindings[0]?.isName ?? isSearchWord;
 
   // Lookup K/T for field-level events where scope='*'
@@ -224,16 +242,16 @@ function IsDetail({ isSearchWord, bindings, tableDefs, lang }: IsDetailProps) {
     <div className={styles.detailPanel}>
       <div className={styles.detailHeader}>
         <span className={styles.detailTitle}>{isSearchWord} — {isName}</span>
-        <span className={styles.detailMeta}>{bindings.length} {lang === 'de' ? 'Programme' : 'programs'}</span>
+        <span className={styles.detailMeta}>{bindings.length} {t('data.programs')}</span>
       </div>
       <div className={styles.detailTable}>
         <table>
           <thead>
             <tr>
-              <th>{lang === 'de' ? 'Ereignis' : 'Event'}</th>
-              <th>{lang === 'de' ? 'K/T' : 'H/T'}</th>
-              <th>{lang === 'de' ? 'Feld' : 'Field'}</th>
-              <th>{lang === 'de' ? 'FOP-Pfad' : 'FOP Path'}</th>
+              <th>{t('stammdaten.event')}</th>
+              <th>{t('stammdaten.kt')}</th>
+              <th>{t('stammdaten.field')}</th>
+              <th>{t('stammdaten.fopPath')}</th>
             </tr>
           </thead>
           <tbody>
@@ -263,9 +281,15 @@ export function StammdatenView({
   onIsBindingsChange,
   kbDocuments,
   onKBDocumentsChange,
+  rootHandle,
+  onLearningsChanged,
+  initialTab,
+  learningAgentApiId,
+  learningModel,
   lang,
 }: StammdatenViewProps) {
-  const [activeTab, setActiveTab] = useState<Tab>('variablen');
+  const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab ?? 'variablen');
   const [searchQuery, setSearchQuery] = useState('');
   const [stammdatenLeftWidth, setStammdatenLeftWidth] = useState(380);
   const [selectedTableRef, setSelectedTableRef] = useState<string | null>(null);
@@ -281,12 +305,12 @@ export function StammdatenView({
         .filter((t) => t.kind === 'database')
         .filter((t) => {
           if (!q) return true;
-          const name = lang === 'de' ? (t.nameDe ?? t.name) : (t.nameEn ?? t.name);
-          if (`${t.tableRef} ${name} ${t.maskNr ?? ''}`.toLowerCase().includes(q)) return true;
+          const displayName = getUploadedTableName(t);
+          if (`${t.tableRef} ${displayName} ${t.maskNr ?? ''}`.toLowerCase().includes(q)) return true;
           return t.fields.some(
             (f) =>
               f.name.toLowerCase().includes(q) ||
-              (f.descriptionDe ?? f.description).toLowerCase().includes(q)
+              getUploadedFieldDescription(f).toLowerCase().includes(q)
           );
         })
         .sort((a, b) => {
@@ -294,7 +318,7 @@ export function StammdatenView({
           const [bDb, bGrp] = b.tableRef.split(':').map(Number);
           return aDb !== bDb ? aDb - bDb : aGrp - bGrp;
         }),
-    [tableDefs, q, lang]
+    [tableDefs, q]
   );
 
   const isTables = useMemo(
@@ -303,16 +327,16 @@ export function StammdatenView({
         .filter((t) => t.kind === 'infosystem')
         .filter((t) => {
           if (!q) return true;
-          const name = lang === 'de' ? (t.nameDe ?? t.name) : (t.nameEn ?? t.name);
-          if (`${t.tableRef} ${name}`.toLowerCase().includes(q)) return true;
+          const displayName = getUploadedTableName(t);
+          if (`${t.tableRef} ${displayName}`.toLowerCase().includes(q)) return true;
           return t.fields.some(
             (f) =>
               f.name.toLowerCase().includes(q) ||
-              (f.descriptionDe ?? f.description).toLowerCase().includes(q)
+              getUploadedFieldDescription(f).toLowerCase().includes(q)
           );
         })
         .sort((a, b) => a.tableRef.localeCompare(b.tableRef)),
-    [tableDefs, q, lang]
+    [tableDefs, q]
   );
 
   // ── FOP.txt mask list ──────────────────────────────────────────
@@ -383,33 +407,33 @@ export function StammdatenView({
 
   // ── Tab labels ─────────────────────────────────────────────────
   const tabs: Array<{ id: Tab; label: string }> = [
-    { id: 'variablen', label: lang === 'de' ? 'Variablen' : 'Variables' },
-    { id: 'infosysteme', label: lang === 'de' ? 'Infosysteme' : 'Infosystems' },
+    { id: 'variablen', label: t('data.variables') },
+    { id: 'infosysteme', label: t('csv.infosystem') },
     { id: 'fop', label: 'FOP.txt' },
-    { id: 'is', label: lang === 'de' ? 'IS-Anbindung' : 'IS Binding' },
-    ...(isKnowledgeBaseEnabled() ? [{ id: 'wissensdatenbank' as Tab, label: lang === 'de' ? 'Wissensdatenbank' : 'Knowledge Base' }] : []),
+    { id: 'is', label: t('data.isBindings') },
+    ...(isKnowledgeBaseEnabled() ? [{ id: 'wissensdatenbank' as Tab, label: t('stammdaten.knowledgeBase') }] : []),
+    ...(isAiEnabled() ? [{ id: 'learning' as Tab, label: t('stammdaten.learning') }] : []),
   ];
 
-  const searchPlaceholder =
-    lang === 'de'
-      ? 'Tabelle, Feld, Maske, Programm…'
-      : 'Table, field, mask, program…';
+  const searchPlaceholder = t('stammdaten.searchPlaceholder');
 
   // ── Empty state messages ───────────────────────────────────────
   const emptyMessages: Record<Tab, string> = {
-    variablen: lang === 'de' ? 'Keine Datenbanken geladen' : 'No databases loaded',
-    infosysteme: lang === 'de' ? 'Keine Infosysteme geladen' : 'No infosystems loaded',
-    fop: lang === 'de' ? 'Keine FOP.txt geladen' : 'No FOP.txt loaded',
-    is: lang === 'de' ? 'Keine IS-Anbindungen geladen' : 'No IS bindings loaded',
+    variablen: t('stammdaten.noDatabases'),
+    infosysteme: t('stammdaten.noInfosystems'),
+    fop: t('stammdaten.noFop'),
+    is: t('stammdaten.noIsBindings'),
     wissensdatenbank: '',
+    learning: '',
   };
 
   const noSelectionMessages: Record<Tab, string> = {
-    variablen: lang === 'de' ? 'Datenbank auswählen' : 'Select a database',
-    infosysteme: lang === 'de' ? 'Infosystem auswählen' : 'Select an infosystem',
-    fop: lang === 'de' ? 'Maske auswählen' : 'Select a mask',
-    is: lang === 'de' ? 'Infosystem auswählen' : 'Select an infosystem',
+    variablen: t('stammdaten.selectDatabase'),
+    infosysteme: t('stammdaten.selectInfosystem'),
+    fop: t('stammdaten.selectMask'),
+    is: t('stammdaten.selectInfosystem'),
     wissensdatenbank: '',
+    learning: '',
   };
 
   function handleTabChange(tab: Tab) {
@@ -419,6 +443,11 @@ export function StammdatenView({
     setSelectedFopMask(null);
     setSelectedIsWord(null);
   }
+
+  useEffect(() => {
+    if (!initialTab) return;
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   // ── Left list content by tab ───────────────────────────────────
   function renderLeftList() {
@@ -432,7 +461,6 @@ export function StammdatenView({
           table={t}
           isSelected={selectedTableRef === t.tableRef}
           searchQuery={searchQuery}
-          lang={lang}
           onClick={() => setSelectedTableRef(t.tableRef)}
         />
       ));
@@ -448,7 +476,6 @@ export function StammdatenView({
           table={t}
           isSelected={selectedTableRef === t.tableRef}
           searchQuery={searchQuery}
-          lang={lang}
           onClick={() => setSelectedTableRef(t.tableRef)}
         />
       ));
@@ -461,8 +488,8 @@ export function StammdatenView({
       return fopMasks.map(([mask, count]) => {
         const maskLabel =
           mask === '*'
-            ? (lang === 'de' ? 'Alle Masken (*)' : 'All Masks (*)')
-            : `${lang === 'de' ? 'Maske' : 'Mask'} ${mask}`;
+            ? t('stammdaten.allMasksWithStar')
+            : `${t('stammdaten.mask')} ${mask}`;
         const isSelected = selectedFopMask === mask;
         return (
           <button
@@ -521,7 +548,7 @@ export function StammdatenView({
       if (!selectedTable) {
         return <p className={styles.noSelectionHint}>{noSelectionMessages[activeTab]}</p>;
       }
-      return <FieldsDetail table={selectedTable} lang={lang} onToggleAssumeExists={handleToggleAssumeExists} />;
+      return <FieldsDetail table={selectedTable} onToggleAssumeExists={handleToggleAssumeExists} />;
     }
 
     if (activeTab === 'fop') {
@@ -582,16 +609,18 @@ export function StammdatenView({
         ))}
       </div>
 
-      {/* Search */}
-      <div className={styles.searchRow}>
-        <input
-          type="search"
-          className={styles.searchInput}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder={searchPlaceholder}
-        />
-      </div>
+      {/* Search - only for variablen and infosysteme tabs */}
+      {(activeTab === 'variablen' || activeTab === 'infosysteme') && (
+        <div className={styles.searchRow}>
+          <input
+            type="search"
+            className={styles.searchInput}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={searchPlaceholder}
+          />
+        </div>
+      )}
 
       {/* Wissensdatenbank tab has its own layout */}
       {activeTab === 'wissensdatenbank' ? (
@@ -600,6 +629,14 @@ export function StammdatenView({
           onDocumentsChange={onKBDocumentsChange}
           lang={lang}
           tableDefs={tableDefs}
+        />
+      ) : activeTab === 'learning' ? (
+        <LearningTab
+          rootHandle={rootHandle}
+          lang={lang}
+          onLearningsChanged={onLearningsChanged}
+          agentApiId={learningAgentApiId}
+          model={learningModel}
         />
       ) : (
       /* Split pane with resizable divider */

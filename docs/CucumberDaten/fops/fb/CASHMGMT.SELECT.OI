@@ -1,0 +1,115 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : CASHMGMT.SELECT.OI
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Selektion und Ausgabe Offener Posten im Rahmen der Liquiditaetsplanung
+.. Functionality  : process already posted outstanding items
+.. include fb/CASHMGMT.SELECT.WRITE
+.. include fb/CASHMGMT.DUEDATE.WRKDAY
+.. include fb/CASHMGMT.ZTERM
+.. include fb/CASHMGMT.CHECK.ACCOUNT.EXCLUDED
+.. include fb/CASHMGMT.SELECT.VARS.RESET
+.. include fb/CASHMGMT.SELECT.OI.CATDIST
+..*****************************************************************************
+..
+.set trans -
+..
+.input "fb/CASHMGMT.SELECT.VARS.RESET"
+..
+.continue END ? _F|empty(U|xpdocument) & U|xpdocument^dnr<>100
+..
+.. Maximale Ueberfaelligkeit eines Postens bis zu der dieser noch gezaehlt wird
+.type integer ximaxuefaell ? _F|defined(U|ximaxuefaell)
+..
+.formula   U|xttype = "(OutstandingItems)"
+..
+.formula   U|xtselect = "$,@gruppe=2;gruppe=2;@ablageart=(1)"
+.formula   U|xtselect = U|xtselect + ";id=" + U|xpdocument^id ? _F|empty(U|xpdocument) & U|xpdocument^gruppe = 2
+.formula   U|xtselect = U|xtselect + ";op=" + U|xpdocument^id ? _F|empty(U|xpdocument) & U|xpdocument^gruppe = 1
+.load 0 outstandingitems nolock 'U|xtselect'
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+.continue END  ? _G|mehr
+.continue NEXT ?  0|rebetr=0
+.continue NEXT ?  F|condexpr(0|konto^dnr=5, _F|equals(0|konto^kart, "(MoneyTransitAccount)"), G|FALSE)
+.continue NEXT ?  F|condexpr(0|mstufe = 0, G|FALSE, 0|mstufe > U|xpszenario^maxopmstufe & U|xpszenario^maxopmstufe > 0 & _U|xbshowall)
+.continue NEXT ?  0|opzasperre & _U|xbshowall
+.formula U|xcategory = ""
+.copy U|xbintercompany = 0|inkkreis
+.continue NEXT ?  U|xeintercompany = "(OnlyIntercompanyProcesses)" & _U|xbintercompany
+.continue NEXT ?  U|xeintercompany = "(NoIntercompanyProcesses)"   &  U|xbintercompany
+.load 1 add 0|konto
+.input "fb/CASHMGMT.CHECK.ACCOUNT.EXCLUDED"
+.continue NEXT ? _U|xbok
+..
+.copy U|xddate    = 0|vdat
+.copy U|xbmterm   = 0|mterm ; 0|konto^dnr=5
+.copy U|xddate    = 0|tterm ? U|xbmterm
+.copy U|xdvaldate = 0|vdat
+.copy U|xddocdate = 0|budat
+.formula   U|xepurchsales = F|condexpr(1|dnr=0, "(Sales)", "(Purchasing)") ? 1|dnr <> 5
+.formula   U|xepurchsales = F|condexpr(F|equals(0|opz1^zbush, "(Debit)"), "(Sales)", "(Purchasing)") ? 1|dnr=5
+.continue SALES ? U|xepurchsales = "(Sales)"
+.formula   U|ximaxuefaell = U|xpszenario^ekmaxueberfaell
+.formula   U|xeinout = "(IncomingPayment)" ? (F|equals(0|sh, "(Debit)")  & 0|rebetr >= 0) ; (F|equals(0|sh, "(Credit)") & 0|rebetr < 0)
+.formula   U|xeinout = "(OutgoingPayment)" ? (F|equals(0|sh, "(Credit)") & 0|rebetr >= 0) ; (F|equals(0|sh, "(Debit)") & 0|rebetr < 0)
+.continue PAYTERM
+..
+..*****************************************************************************
+!SALES
+..*****************************************************************************
+.formula   U|ximaxuefaell = U|xpszenario^vkmaxueberfaell
+.formula   U|xeinout = "(IncomingPayment)" ? (F|equals(0|sh, "(Credit)") & 0|rebetr >= 0) ; (F|equals(0|sh, "(Debit)")  & 0|rebetr < 0)
+.formula   U|xeinout = "(OutgoingPayment)" ? (F|equals(0|sh, "(Debit)") & 0|rebetr >= 0) ; (F|equals(0|sh, "(Credit)") & 0|rebetr < 0)
+.continue PAYTERM
+..
+..*****************************************************************************
+!PAYTERM
+..*****************************************************************************
+.copy U|xpzbed = 0|zbed
+.copy U|xpzbedschl = 0|zbedschl
+.input "fb/CASHMGMT.ZTERM"
+.. Berechnetes xdzterm in xddate umkopieren
+.copy U|xddate = U|xdzterm
+.input "fb/CASHMGMT.DUEDATE.WRKDAY"
+.continue SHOW ? U|xbshowall
+.continue SHOW ? U|ximaxuefaell = 0
+.continue NEXT ? (G|datum - U|xddate) > U|ximaxuefaell
+..*****************************************************************************
+!SHOW
+..*****************************************************************************
+.. Waehrung umrechnen
+.copy U|xrvalue = 0|rebetr
+.copy U|xrvalue = U|xrvalue * 0|kkurs ? 0|land^id <> G|inland^id
+.copy U|xrvalue = F|fxamount(U|xpoutcurr,U|xrvalue,U|xddate,G|inland) ? G|inland^id <> U|xpoutcurr^id
+.copy U|xrvalue = -U|xrvalue ? U|xepurchsales = "(Sales)" & F|equals(0|sh, "(Debit)")
+.copy U|xrvalue = -U|xrvalue ? U|xepurchsales = "(Purchasing)" & F|equals(0|sh, "(Credit)")
+.copy U|xrdiscount = (U|xrvalue * U|xrdiscrate / 100)
+.copy U|xrvalue = U|xrvalue - U|xrdiscount
+.. evaluate categories only for outstanding items derived from invoices
+.continue CATDIST ? U|xbevalcategories
+.input "fb/CASHMGMT.SELECT.WRITE"
+.continue NEXT
+..
+..*****************************************************************************
+!CATDIST
+..*****************************************************************************
+.. distribute values between payment categories used in invoice
+.input "fb/CASHMGMT.SELECT.OI.CATDIST"
+.continue NEXT
+..
+..*****************************************************************************
+!NEXT
+..*****************************************************************************
+.load 0 continue
+.continue LOOP
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.load 0
+.continue
+

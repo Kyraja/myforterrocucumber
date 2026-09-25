@@ -1,0 +1,117 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PREISAUSKUNFT.ZEILE2
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Informationen zu Staffelpreis, Rahmenauftrag und Staffelrabatt
+..                  typ aus Preisauskunft: AS211
+.. Functionality  : allows table price informations for    
+..                  three types of sources 
+..                  ScalePrice/BlanketOrder/ScaledDiscount
+..
+..*****************************************************************************
+.set trans -
+.type integer   xzn          ? _F|defined(U|xzn)
+.type integer   xnextzn      ? _F|defined(U|xnextzn)
+.type text      xsel         ? _F|defined(U|xsel)
+.type ARTR51101 xmgrenze     ? _F|defined(U|xmgrenze)
+.type GD2       xgltbis      ? _F|defined(U|xgltbis)
+.type P1:1      xtlief       ? _F|defined(U|xtlief)
+.type text      xsel         ? _F|defined(U|xsel)
+.type bool      xbinpreisopt ? _F|defined(U|xbinpreisopt)
+..
+.continue CLOSE ? M|preisauskunft = M|iconnopreisz & G|evtvar = "preisauskunft"
+.continue CLOSE ? M|tpreisopt = M|iconoptz & G|evtvar = "tpreisopt"
+.continue END   ? H|tzeilen = 0
+.assign P|maskkontextfop = "Auskunft"
+.formula P|maskkontextfop = P|maskkontextfop + " " + "notkbsid" ?  F|empty(M|kbsid)
+.formula P|maskkontextfop = P|maskkontextfop + " " + "kbsid"    ? _F|empty(M|hinweis) & _F|empty(M|kbsid)
+.formula P|maskkontextfop = P|maskkontextfop + " " + "notkbsid" ?  F|empty(M|hinweis) & _F|empty(M|kbsid)
+.formula M|preisauskunft = M|iconnopreisz ? G|evtvar = "preisauskunft"
+.formula M|tpreisopt = M|iconoptz ? G|evtvar = "tpreisopt"
+.formula U|xzn = 1
+.formula U|xgltbis = M|tgueltbis
+.formula U|xtlief = M|tlief
+.formula U|xbinpreisopt = G|FALSE
+.formula U|xbinpreisopt = G|TRUE ? M|tpreisopt = M|iconoptz
+.formula M|gltbis = ""
+..
+!LINE
+.select line 'U|xzn'
+.continue END   ? _G|mehr
+.make screen line +O
+.copy M|binpreisopt = U|xbinpreisopt
+.assign M|herkunft = H|herkunft
+.assign M|tlief = U|xtlief
+.formula M|typ = H|typ
+.formula M|mgrenze = H|mgrenze
+.formula M|mgrenze = H|mgrenze + 1 ? _M|herkunft^mgeab & F|equals(H|typ, "(ScaledDiscount)")
+.formula M|mpreis = H|mpreis
+.formula M|buherkunft = M|iconherkunftz
+.copy M|mpe = H|mpe
+.formula M|mproz = H|mproz
+.protection brueck 'M|aktzeile'
+.protection -reset brueck  'M|aktzeile' ? U|xbinpreisopt
+.protection brueck 'M|aktzeile'         ? G|avtkommd = G|kaktname12
+.continue MATERIALS          ? F|equals(H|typ, "(MaterialSurcharge)")
+.copy M|mwaehr = H|mwaehr
+.continue RAHMEN             ? F|equals(M|typ, "(BlanketOrder)")
+.continue SCALE
+..
+!RAHMEN
+.formula M|fzahlgeliefert = H|herkunft^fzahlgeliefert
+.formula M|fzahlabgerufen = H|herkunft^fzahlabgerufen
+.formula M|fzahlabrufoffen = H|herkunft^fzahlabrufoffen
+.formula M|maxabrufmge = H|herkunft^maxabrufmge
+.formula U|xverfuegbar = 0
+.formula U|xverfuegbar = M|maxabrufmge - M|fzahlabgerufen
+.colour -background -1 -1 -1 maxabrufmge 'M|aktzeile'
+.colour -background 'M|rot' maxabrufmge 'M|aktzeile' ? M|mge > U|xverfuegbar & U|xverfuegbar <> 0
+.formula M|zgltvon = H|herkunft^zgltvon
+.formula M|zgltbis = H|herkunft^zgltbis
+.colour -background -1 -1 -1 zgltvon 'M|aktzeile'
+.colour -background -1 -1 -1 zgltbis 'M|aktzeile'
+.colour -background 'M|rot' zgltvon 'M|aktzeile' ? (_F|empty(M|zgltvon) & 'M|konddat:8' < 'M|zgltvon:8') ; (_F|empty(M|zgltbis) &  'M|konddat:8' > 'M|zgltbis:8')
+.colour -background 'M|rot' zgltbis 'M|aktzeile' ? (_F|empty(M|zgltvon) & 'M|konddat:8' < 'M|zgltvon:8') ; (_F|empty(M|zgltbis) &  'M|konddat:8' > 'M|zgltbis:8')
+.continue SCALE 
+..
+!MATERIALS
+.formula M|buherkunft = ""
+.formula M|mproz = H|matzu
+.continue END
+..
+!SCALE: more than one scaled discount possible
+.formula U|xzn = U|xzn + 1   
+.continue LINE ? U|xzn <= H|tzeilen
+.continue END
+..
+!CLOSE
+.formula M|preisauskunft = M|iconpreisauskunftz ? G|evtvar = "preisauskunft"
+.formula M|tpreisopt = M|iconoptauskunftz ? G|evtvar = "tpreisopt"
+.formula P|maskkontextfop = "notkbsid" ?  F|empty(M|kbsid)
+.formula P|maskkontextfop = "kbsid"    ? _F|empty(M|hinweis) & _F|empty(M|kbsid)
+.formula P|maskkontextfop = "notkbsid" ?  F|empty(M|hinweis) & _F|empty(M|kbsid)
+..
+!NEXT
+.formula U|xnextzn = M|zn + 1
+..
+!SELECT
+.select screen line 'U|xnextzn'
+.continue END   ?  F|Empty(M|tlief)
+.continue END ? M|preisauskunft = M|iconpreisauskunftz ; M|preisauskunft = M|iconnopreisz
+.make screen line -O
+.continue NEXT ? M|zn <> U|xnextzn & U|xnextzn <= M|zeilen
+.continue END  ? M|zn <> U|xnextzn & U|xnextzn > M|zeilen
+.continue SELECT
+..
+..*****************************************************************************
+!END: komplett beenden
+.continue ? M|tzeilen = M|kmerkzeilen
+..
+.assign P|maskkontextfop = "Auskunft"
+.formula P|maskkontextfop = P|maskkontextfop + " " + "notkbsid" ?  F|empty(M|kbsid)
+.formula P|maskkontextfop = P|maskkontextfop + " " + "kbsid"    ? _F|empty(M|hinweis) & _F|empty(M|kbsid)
+.formula P|maskkontextfop = P|maskkontextfop + " " + "notkbsid" ?  F|empty(M|hinweis) & _F|empty(M|kbsid)
+.continue 
+

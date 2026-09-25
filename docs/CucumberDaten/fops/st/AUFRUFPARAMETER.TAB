@@ -1,0 +1,235 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : AUFRUFPARAMETER.TAB
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      : lei
+.. Funktion       : Erzeugt eine Tabellenzeile.
+.. Functionality  : Creates a table row.
+.. Buffer H -> 87:30
+.. Buffer 0 -> 87:9
+..*****************************************************************************
+.set trans -
+..
+.. Initializations
+.copy U|xreusewindow = U|xdefreuse
+.copy U|xvisible = G|FALSE
+.assign U|xendeaktion = "(Done)"
+.copy U|xallowed = G|TRUE
+.copy U|xerrmessage = ""
+.copy U|xerpcommand = ""
+.copy U|xparams = ""
+.assign U|xaufrref = ""
+..
+!ROWTYPE: Handle menu row type
+.continue ASCREEN ? _F|empty(M|aufruf)
+.continue END     ?  F|equals(H|zeilentyp, "(EmptyEntry)")
+.continue EMPTY   ?  F|equals(H|zeilentyp, "(BlankLine)")
+.continue EMPTY   ?  F|equals(H|zeilentyp, "(SeparatorLine)")
+.continue MENU    ?  F|equals(H|zeilentyp, "(SubMenu)")
+.continue MENU    ?  F|equals(H|zeilentyp, "(Inline)")
+..
+.. Handle certain callparameter
+.copy U|xvisible = M|testmode
+.continue TESTING ? M|testmode
+..
+!ASCREEN: Set parent buffer
+.set ascreen +
+..
+.. Ignore callparameters with not allowed workspace
+.continue CALLER ? F|diraccessible(0|arb)
+.copy U|xvisible = G|FALSE
+.copy U|xallowed = G|FALSE
+.copy U|xerrmessage = F|formatstr(U|xlog2, 0|arb)
+.continue NEXT
+..
+!CALLER: check visibility by condition for sending call
+.continue RECEIVE ? F|empty(0|aufrbed)
+.input "st/CALLPARAM.CHECK.AUFRBED"
+.continue NEXT ? _U|xvisible
+..
+!RECEIVE: check visibility by availability of receiver
+.add 0|zielobj
+.continue FATAL ? _G|mehr
+.input "st/CALLPARAM.CHECK.ZIELOBJ"
+.copy U|xallowed = U|xvisible
+.continue NEXT ? _U|xvisible
+..
+!SENDER: check visibility by availability of sender
+.continue REUSE ? 0|zielinfosys ; F|empty(0|aufrziel)
+.input "st/CALLPARAM.CHECK.AUFRKTXT"
+.continue NEXT ? _U|xvisible
+..
+!REUSE
+.copy U|xreusewindow = F|equals(0|dialogart, "(Modifying)")
+.continue DIATYPE ? _U|xreusewindow
+.copy U|xfodialogtype = U|xmodifying
+.copy U|xmaskid = F|trim(D|nummer)
+.continue GETCOMD
+..
+!DIATYPE: Get type of dialog execution
+.copy U|xfodialogtype = U|xmodal
+.copy U|xfodialogtype = U|xnomodal ? F|equals(0|dialogart, "(NotBlocking)")
+..
+!GETCOMD: Get erp command string for callparameter in item "U|xerpcommand"
+.input "st/CALLPARAM.GET.COMMAND"
+.add
+.continue NEXT    ? F|empty(U|xerpcommand)
+.continue VISIBLE ? 0|tzeilen <= 0
+..
+!NEXTROW: load row
+.load 0 line
+.continue VISIBLE ? _G|mehr
+..
+.. callparameter transports data from the row of table
+.copy U|xparams = U|xparams + U|XPARAMSEP ? _F|empty(U|xparams)
+.copy U|xtupel = ""
+..
+.. check visibility of row data and if visible, get parameter tupel therefore
+.input "st/CALLPARAM.GET.PARAMDUPEL"
+.continue NEXT ? _U|xvisible
+.continue ERROR01 ? (F|length(U|xparams) + F|length(U|xtupel)) >= 3000
+.copy U|xparams = U|xparams + U|xtupel
+.continue NEXTROW
+..
+!VISIBLE
+.continue NEXT ? _0|unsichtbar
+.copy U|xparams = U|xparams + U|XPARAMSEP + U|xinvisible
+.continue NEXT
+..
+!IGNORE
+.set ascreen -
+.continue END
+..
+!NEXT
+.set ascreen -
+.continue END ? M|nurerlaubte & _U|xallowed
+.continue TESTING ? F|empty(M|aufruf)
+..
+.. Considering a single callparameter given in item M|aufruf and loaded in buffer 0
+.make screen line +
+.assign M|tbaumstat = ""
+.copy M|tbaumstufe = 1
+.copy M|tbaumicon = 0|icon
+.formula M|tbauminfo = "<{1}>"
+.formula M|tbauminfo = F|formatstr(M|tbauminfo, G|kdatname65)      ?  0|zielinfosys
+.formula M|tbauminfo = F|formatstr(M|tbauminfo, 0|zielobj^vdntxtk) ? _0|zielinfosys
+.formula M|tbauminfo = M|tbauminfo + " {1} <{2}>"
+.formula M|tbauminfo = F|formatstr(M|tbauminfo, F|trim(0|zielobj^nummer), 0|zielmodus)
+.assign M|taufrufparameter = 0|id
+.copy M|tkontexttyp = 0|kontexttyp
+.copy M|tobjspezifisch = F|equals(0|kontexttyp, "(SingleInfosystem)") ; F|equals(0|kontexttyp, "(SingleTableOfVariables)")
+.assign M|tzeilentyp = "(MenuItem)"
+.copy M|taktiv = G|true
+.copy U|xerrmessage = U|xlog1
+.copy M|tdialogart = 0|dialogart
+.copy M|tbaumtext = 0|namebspr
+.copy M|tmenuemoeglich = F|empty(0|ablagen) & U|xvisible
+.copy M|tbaumicon = M|kiconnichtausfuehr ? _M|tmenuemoeglich
+.assign M|tkommando = U|xerpcommand
+.assign M|tparams = U|xparams
+.copy M|tsichtbar = _0|unsichtbar
+.copy M|tmenueendeaktion = U|xendeaktion
+.copy M|treusewindow = U|xreusewindow
+.assign M|tmaskid = U|xmaskid
+.assign M|tkomneu = M|erpprintconf + ("#AX"*"-#X") + U|xerpcommand
+.assign M|tnachricht = F|formatstr(U|xlog0, U|xerrmessage) ? _M|tmenuemoeglich
+.assign M|tbauminfo = F|formatstr(U|xlog0, U|xerrmessage)  ? _M|tmenuemoeglich
+.copy U|xerrmessage = ""
+.load 0
+.continue END
+..
+!TESTING
+.make screen line +
+.copy M|tbaumstat = H|tbaumstat
+.copy M|tbaumstufe = H|tbaumstufe
+.copy M|tbaumicon = H|tbaumicon
+.formula M|tbauminfo = "<{1}>"
+.formula M|tbauminfo = F|formatstr(M|tbauminfo, G|kdatname65)      ?  0|zielinfosys
+.formula M|tbauminfo = F|formatstr(M|tbauminfo, 0|zielobj^vdntxtk) ? _0|zielinfosys
+.formula M|tbauminfo = M|tbauminfo + " {1} <{2}>"
+.formula M|tbauminfo = F|formatstr(M|tbauminfo, F|trim(0|zielobj^nummer), 0|zielmodus)
+.assign M|taufrufparameter = 0|id
+.copy M|tkontexttyp = 0|kontexttyp
+.copy M|tobjspezifisch = F|equals(0|kontexttyp, "(SingleInfosystem)") ; F|equals(0|kontexttyp, "(SingleTableOfVariables)")
+.copy M|tzeilentyp = H|zeilentyp
+.copy M|taktiv = H|aktiv
+.copy U|xerrmessage = U|xlog1 ? _M|taktiv
+.copy M|tdialogart = 0|dialogart
+.copy M|tbaumtext = H|tbaumtext
+.copy M|tmenuemoeglich = M|taktiv & F|empty(0|ablagen) & U|xvisible
+.copy M|tbaumicon = M|kiconnichtausfuehr ? _M|tmenuemoeglich
+.assign M|tkommando = U|xerpcommand
+.assign M|tparams = U|xparams
+.copy M|tsichtbar = _0|unsichtbar
+.copy M|tmenueendeaktion = U|xendeaktion
+.copy M|treusewindow = U|xreusewindow
+.assign M|tmaskid = U|xmaskid
+.assign M|tkomneu = M|erpprintconf + ("#AX"*"-#X") + U|xerpcommand
+.assign M|tnachricht = F|formatstr(U|xlog0, U|xerrmessage) ? _M|tmenuemoeglich
+.assign M|tbauminfo = F|formatstr(U|xlog0, U|xerrmessage)  ? _M|tmenuemoeglich
+.copy U|xerrmessage = ""
+.load 0
+.continue END
+..
+!EMPTY: Handle blank or separator row
+.make screen line +
+.copy M|tbaumstufe = H|tbaumstufe
+.formula M|tbauminfo = 'H|zeilentyp'
+.copy M|tkontexttyp = H|kopf^kontexttyp
+.copy M|tobjspezifisch = F|equals(M|tkontexttyp, "(SingleInfosystem)") ; F|equals(M|tkontexttyp, "(SingleTableOfVariables)")
+.copy M|tzeilentyp = H|zeilentyp
+.copy M|taktiv = H|aktiv
+.continue SEPARAT ? F|equals(H|zeilentyp, "(SeparatorLine)")
+..
+.. Handle blank row
+.copy M|tbaumicon = M|kiconleer
+.continue END
+..
+!SEPARAT: handle separator row
+.formula M|tbaumtext = "---"
+.copy M|tbaumicon = M|kiconseparator
+.continue END
+..
+!MENU: Handle inline and submenu
+.add H|aufruf
+.continue END ? _G|mehr
+..
+.make screen line +
+.copy M|tbaumstufe = H|tbaumstufe
+.copy M|tbaumicon = H|tbaumicon
+.formula M|tbauminfo = F|formatstr("<{1}>{2}<{3}>", G|kdatname87, F|trim(D|nummer), G|kaktname12)
+.assign M|taufrufparameter = D|id
+.copy M|tkontexttyp = D|kontexttyp
+.copy M|tobjspezifisch = F|equals(D|kontexttyp, "(SingleInfosystem)") ; F|equals(D|kontexttyp, "(SingleTableOfVariables)")
+.copy M|tzeilentyp = H|zeilentyp
+.copy M|taktiv = H|aktiv
+.assign M|tdialogart = "(NotBlocking)"
+.copy M|tbaumtext = H|tbaumtext
+.assign M|tkommando = F|formatstr("<(DataExport)>{1}<(View)>", D|nummer)
+.assign M|tmaskid = D|nummer
+.assign M|tkomneu = M|erpprintconf + ("#AX"*"-#X") + M|tkommando
+.assign M|tnachricht = 'D|grbez'
+.copy M|tmenueendeaktion = U|xendeaktion
+.continue END ? F|equals(H|zeilentyp, "(Inline)")
+.continue END ? F|empty(D|pos)
+..
+.. Handle submenu
+.assign M|tbaumstat = "+" ? _F|empty(G|evtzeile)
+.assign M|tbaumstat = F|condexpr(M|tbaumstufe < M|anzstufen, "-", "+") ? F|empty(G|evtzeile)
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+!FATAL
+.error -number 1111
+.end 1
+..*****************************************************************************
+..
+!ERROR01: Command reaches maximum size!
+.box '0|sucherw'
+Der Aufrufparameter '0|nummer' ist nicht ausfhrbar!
+Er erzeugt durch folgenden Parameter ein zu langes GUI-Kommando:
+'U|xtupel'
+.copy U|xvisible = G|FALSE
+.continue NEXT

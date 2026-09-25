@@ -1,0 +1,230 @@
+..!interpreter english declaration noabbrev
+.. at 2016-01-06, 10:32
+.set TRANS -
+..========================================================================
+..==  Name              : FOP.PRJM.UP.TPVERRECHANF.BUCHEN
+..==  Pfad              : allpstd
+..==  Funktion          : Teilprojektverrechnung buchen (aus IS und Datensatz)
+..==  Erstellungsdatum  : 27.03.2015
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2015 alltrotec GmbH
+..==  Besonderheiten    : erwartet die Teilprojektverrechnung im Puffer 9
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"  ? _F|defined(U|xydbprojekt)
+.input "allpstart/TRANS.KONFIG.INI" ? _F|defined(U|xydbtrans)
+.input "allpstart/FOP.PRJM.UP.DEF"  ? _F|defined(U|xtupstornorecht)
+..====================================================
+.type text    xtsys         ? _F|defined(U|xtsys)
+.type text    xtsel         ? _F|defined(U|xtsel)
+.type text    xtcmd         ? _F|defined(U|xtcmd)
+.type text    xtsuch        ? _F|defined(U|xtsuch)
+.type text    xtname        ? _F|defined(U|xtname)
+.type text    xtkenn        ? _F|defined(U|xtkenn)
+.type text    xtpt          ? _F|defined(U|xtpt)
+.type text    xtwp          ? _F|defined(U|xtwp)
+.type text    xttransini    ? _F|defined(U|xttransini)
+.type text    xttransdat    ? _F|defined(U|xttransdat)
+.type text    xttransprot   ? _F|defined(U|xttransprot)
+.type text    xttransleer   ? _F|defined(U|xttransleer)
+.type text    xtedpdat      ? _F|defined(U|xtedpdat)
+.type text    xtedpout      ? _F|defined(U|xtedpout)
+.type text    xtedperr      ? _F|defined(U|xtedperr)
+.type text    xtedpmsg      ? _F|defined(U|xtedpmsg)
+.type real    xrbetrag      ? _F|defined(U|xrbetrag)
+.type integer xprocsp      ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- offener_Wert -----
+.select lock group 'U|xydbgrprojekt' 'H|yteilprojekt^id'
+.continue EL001 ? _(G|mehr)
+.formula U|xrbetrag = 0
+.formula U|xtsel = "$,,yteilprojekt==" + H|id + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrtpverrechanf' 'U|xtsel'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.formula U|xrbetrag = U|xrbetrag + 0|ybetrag
+.load 0 continue
+.continue LOOP001
+!ELOP001: ==============================
+.formula H|ytpoffwert = H|ytpwert - U|xrbetrag
+.rewrite
+.continue FI001
+!EL001
+.set TRANS +
+.box Fehler
+Das Teilprojekt 'H|yteilprojekt' kann nicht bearbeitet werden.
+Der offene Wert kann nicht aktualisiert werden.
+.set TRANS -
+!FI001
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Transaktion_erstellen -----
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"   ? F|defined(5|yprjmerlverrjkz)
+.continue EL002 ? _(((F|cmdpermitted(U|xydbtrans, 12)) & (F|cmdpermitted(U|xydbtrans, 13)) & (F|cmdpermitted(U|xydbtrans, 14)) & (F|cmdpermitted(U|xydbtransdat, 12)) & (F|cmdpermitted(U|xydbtransdat, 13)) & (F|cmdpermitted(U|xydbtransdat, 14))) ; ((_(F|empty(F|sysinfo(10)^ykonfigprjm^ybatchuser))) & (F|sysinfo(10)^ykonfigprjm^ybatchuser^fremdok)))
+.select lock add 9|id
+.continue EL003 ? _(G|mehr)
+.continue EL004 ? _(G|gesperrt)
+.continue EL005 ? _(F|empty(H|ytransaktion))
+.formula U|xttransini  = F|foppath("TRANSACTION.PRJMTPVERRECHNUNG.INI")
+.formula U|xttransdat  = "rmtmp/X.PRJMTPVERRECHNUNG." + G|sekundenz + "." + G|pid + ".DAT.TMP"
+.formula U|xttransprot = "rmtmp/X.PRJMTPVERRECHNUNG." + G|sekundenz + "." + G|pid + ".PROT.TMP"
+.formula U|xttransleer = "rmtmp/X.PRJMTPVERRECHNUNG." + G|sekundenz + "." + G|pid + ".LEER.TMP"
+.output NEW 'U|xttransdat'
+.input DATEI.F
+.formula U|xtsuch = "TP" + 'G|datum:8'<<-2
+.formula U|xtname = 5|yprjmerlverrtext + ", " + 'H|erfass' + ", " + G|bzeichen
+.formula U|xtkenn = "ST"
+.formula U|xtkenn = "ST"                ?  F|empty(5|yprjmerlverrjkz)
+.formula U|xtkenn = 5|yprjmerlverrjkz   ? _F|empty(5|yprjmerlverrjkz)
+.formula U|xtpt   = ""
+.formula U|xtpt   = 9|ypvorgang^nummer  ? _F|empty(9|ypvorgang)
+.formula U|xtwp   = ""
+.formula U|xtwp   = 9|yarbpaket^nummer  ? _F|empty(9|yarbpaket)
+1 # 'U|xtsuch' # 'U|xtname' # 'U|xtkenn' # '5|yprjmhperlverrkto^nummer' # '9|ybetrag' # # '9|yhauptprojekt^yktr^nummer' # '9|ydatum' # '9|yhauptprojekt^nummer' # 'U|xtpt' # 'U|xtwp' #
+1 # 'U|xtsuch' # 'U|xtname' # 'U|xtkenn' # '5|yprjmtperlverrkto^nummer' # # '9|ybetrag' # '9|yteilprojekt^yktr^nummer' # '9|ydatum' # '9|yteilprojekt^nummer' # # #
+.output NEW WERF.WEG
+.formula U|xtcmd = "TRANSACTION.NEW"
+.formula U|xtcmd = U|xtcmd + " " + U|xttransini
+.formula U|xtcmd = U|xtcmd + " " + U|xttransdat
+.formula U|xtcmd = U|xtcmd + " " + U|xttransprot
+.formula U|xtcmd = U|xtcmd + " " + U|xttransleer
+.formula U|xtcmd = U|xtcmd + " " + 9|id
+.formula U|xtcmd = U|xtcmd + " " + 9|nummer
+.rewrite
+.select -
+.assign G|neuespassw = 5|ybatchuser     ? _F|empty(5|ybatchuser) & 5|ybatchuser^fremdok
+.file -TEMPNAME U|xtedpout
+.file -TEMPNAME U|xtedperr
+.formula U|xtsys = "EKSPASSWORT=" + G|einmalpw + " export EKSPASSWORT ;batchlg.sh " + G|dblquote + U|xtcmd + G|dblquote + " >" + U|xtedpout + " 2>" + U|xtedperr
+.system 'U|xtsys' BACKGROUND
+.continue EL006 ? _(G|mehr)
+.continue EL007 ? _(F|filenotempty(U|xtedperr))
+.set TRANS +
+.box Fehler
+Die Teilprojektverrechnung konnte nicht freigegeben werden.
+.set TRANS -
+.edit 'U|xtedperr'
+!EL007
+.continue FI006
+!EL006
+.set TRANS +
+.box Fehler
+Die Teilprojektverrechnung konnte nicht freigegeben werden.
+.set TRANS -
+!FI006
+.select lock add 9|id
+.continue EL008 ? _(G|mehr)
+.continue EL009 ? _(_(F|empty(H|ytransaktion)))
+.continue EL010 ? _(G|gesperrt)
+.formula H|yfreidat   = G|datum
+.formula H|yfreidurch = G|bzeichen
+.rewrite
+.continue FI010
+!EL010
+.set TRANS +
+.box Fehler
+Die Teilprojektverrechnung kann nicht bearbeitet werden.
+Freigabedaten kînnen nicht eingetragen werden.
+.set TRANS -
+!FI010
+.continue FI009
+!EL009
+.set TRANS +
+.box Fehler
+Die Teilprojektverrechnung konnte nicht freigegeben werden.
+Bitte prÅfen.
+.set TRANS -
+!FI009
+.continue FI008
+!EL008
+.set TRANS +
+.box Fehler
+Die Teilprojektverrechnung kann nicht bearbeitet werden.
+Freigabedaten kînnen nicht eingetragen werden.
+.set TRANS -
+!FI008
+.continue FI005
+!EL005
+.set TRANS +
+.box Fehler
+Diese Teilprojektverrechnung ist bereits freigegeben.
+Freigabe nicht mîglich.
+.set TRANS -
+!FI005
+.continue FI004
+!EL004
+.set TRANS +
+.box Hinweis
+Die Teilprojektverrechnung wird gerade bearbeitet!
+Freigabe nicht mîglich.
+.set TRANS -
+!FI004
+.continue FI003
+!EL003
+.set TRANS +
+.box Hinweis
+Die Teilprojektverrechnung konnte nicht geladen werden!
+.set TRANS -
+!FI003
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.continue FI002
+!EL002
+.set TRANS +
+.box Fehler
+Sie haben keine Berechtigung fÅr Buchungstransaktionen.
+Die Freigabe ist nicht mîglich.
+.set TRANS -
+!FI002
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "buttonvor")
+.continue BRK002 ? _(G|evtvar = "ybubuchen")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC002
+!RET002
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK002
+.continue BRK003 ? _(G|evtvar = "ybubuchenedp")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC002
+!RET003
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK003
+.continue BRK004 ? _(G|evtvar = "ybufreigeben")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC002
+!RET004
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK004
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK001
+.continue BRK005 ? _(G|evtart = "buttonnach")
+.continue BRK006 ? _(G|evtvar = "ybufreigeben")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC002
+!RET005
+.formula xprocsp = xprocsp - 1
+.continue ESAC003
+!BRK006
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC001
+!BRK005
+!ESAC001: =====   ENDCASE   =====
+.continue

@@ -1,0 +1,55 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICEPROCESS.RERLSRE
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  : EK-Rechnung aus EK-Lieferschein fÅr alle Artikel ohne zu prÅfen
+..*****************************************************************************
+.set trans -
+.type text    xtcmd     ? _F|defined(U|xtcmd)
+..
+.type M7.4 xbilledquantity ? _F|defined(U|xbilledquantity)
+..
+.select screen header
+.formula M|IssueDateTime = "." ? F|empty(M|IssueDateTime)
+..
+#!database=(Purchasing)
+#!action=invoice
+#!flddelimiter=;
+#!charset=eks
+#!dontchange=~
+?num4;ebeleg;vom;tterm;ident;*ftext;leidat;bem\ ?  M|bewlei & F|empty(M|zbed)
+?num4;ebeleg;vom;tterm;ident;*ftext;bem\        ? _M|bewlei & F|empty(M|zbed)
+?num4;ebeleg;vom;zbed;ident;*ftext;leidat;bem\  ?  M|bewlei & _F|empty(M|zbed)
+?num4;ebeleg;vom;zbed;ident;*ftext;bem\         ? _M|bewlei & _F|empty(M|zbed)
+zn;ljtext1;artikel;mge;pwert
+?'M|vorgang^id';'M|ExchangedDocumentID';'M|IssueDateTime';'M|tterm';'M|edifact^nummer';'M|notizen';'M|DeliveryDateTime';'M|bem'\ ?  M|bewlei & F|empty(M|zbed)
+?'M|vorgang^id';'M|ExchangedDocumentID';'M|IssueDateTime';'M|tterm';'M|edifact^nummer';'M|notizen';'M|bem'\                      ? _M|bewlei & F|empty(M|zbed)
+?'M|vorgang^id';'M|ExchangedDocumentID';'M|IssueDateTime';'M|zbed';'M|edifact^nummer';'M|notizen';'M|DeliveryDateTime';'M|bem'\  ?  M|bewlei & _F|empty(M|zbed)
+?'M|vorgang^id';'M|ExchangedDocumentID';'M|IssueDateTime';'M|zbed';'M|edifact^nummer';'M|notizen';'M|bem'\                       ? _M|bewlei & _F|empty(M|zbed)
+..
+!SELLINE
+.select screen line
+.continue OUTPUT    ? _G|mehr
+.continue SELLINE   ? M|zeilentyp <> 0
+.formula U|xbilledquantity = M|BilledQuantity * (-1)
+'M|zn';'M|ljtext1';~;'U|xbilledquantity';~\
+.continue SELLINE
+..
+!OUTPUT
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR ? _G|mehr
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR
+.formula U|xtcmd = "sed " + 'G|apostroph' + "s/^.*): //" + 'G|apostroph' + " " +'U|xterr' +" >" + 'U|xterr2'
+.system 'U|xtcmd' background
+.input 'U|xterr2'
+.error -message Rechnung erstellen gescheitert!
+.end 1
+

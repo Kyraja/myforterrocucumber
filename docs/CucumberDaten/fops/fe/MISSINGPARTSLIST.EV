@@ -1,0 +1,160 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : MISSINGPARTSLIST.EV
+..  Autor          : cl
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..  Funktion       : Infosystem, Fehlteile
+..                   Eventbehandlung / Kopfteil
+..*****************************************************************************
+.type text  xkomm:100 ? _F|defined(U|xkomm)
+.type date  xdleer    ? _F|defined(U|xdleer)
+.type text  xselect   ? _F|defined(U|xselect)
+.type text  xbanum    ? _F|defined(U|xbanum)
+..
+.set trans -
+.. Tabellenfelder
+.continue VERFUEG   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "verfueg"
+..
+.input "is/TABLEEREN"
+.. Kopffelder
+.continue BA        ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kba"
+.continue BV        ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bstart"
+.continue FAV       ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "vom"
+.continue FAV2      ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "vom2"
+.continue LEER      ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bis"
+.continue LEER      ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "klgruppe"
+.continue BBA       ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bba"
+.continue BFV       ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bfv"
+.continue ARTIKEL   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kart"
+.continue BASIS     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "basisartikel"
+.continue LEER      ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "betreuer"
+.continue DETAIL    ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "detail"
+.continue FEHL      ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "nurfehlmge"
+.continue NURFEHL   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "wterm"
+.continue LEER      ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kprojekt"
+.continue
+..
+!FEHL
+.copy M|detail = G|TRUE ? M|nurfehlmge
+.continue LEER
+..
+!DETAIL
+.copy M|nurfehlmge = G|FALSE ? _M|detail
+.continue LEER
+..
+!NURFEHL
+.copy M|detail = G|TRUE ? M|nurfehlmge
+.continue LEER
+..
+!VERFUEG
+.select add M|vorgang^id
+.continue BOX      ? _G|mehr
+..
+.formula U|xkomm = "(AvailabilityCheck)?matbedarfobj="+H|id+"|verfuegterm="+'M|wunsch'+"|verfuegpruef=1"
+.command -parallel 'U|xkomm'
+.continue NOVERFUEG ? _G|mehr
+.select -
+.continue
+..
+!BA
+.continue                     ?  F|empty(M|kba)
+.. Betriebsauftrag
+.formula M|kba = M|kba^id     ?  F|empty(M|kba^snba)
+.. Arbeitsschein
+.formula M|kba = M|kba^snba   ? _F|empty(M|kba^snba)
+.copy M|bfv = G|FALSE
+.continue LEER   
+..
+!SPERRE: Sperre freigeben und Maske îffnen
+.select -
+.command -parallel 'U|xkomm'
+.continue
+..
+!BV
+.continue F02              ? 'M|bis' <> "" & M|bis < M|vom
+.formula M|bba = G|TRUE ?  M|selart = 1
+.formula M|bfv = G|TRUE ?  M|selart = 2
+..
+.formula M|select = "$,,;"
+.formula M|select = M|select + "projekt="+ M|kprojekt + ";"  ? _F|empty(kprojekt)
+.formula M|select = M|select + "tsterm=" + 'M|vom' + "!" + 'M|bis' + ";"
+.formula M|select = M|select + "tterm=" + 'M|vom2' + "!" + 'M|bis2' + ";"
+.formula M|select = M|select + "betreuer=" + 'M|betreuer^id' + ";"     ? _F|empty(M|betreuer)
+.formula M|select = M|select + "ba=" + 'M|kba' + ";"                   ? _F|empty(M|kba^id)
+.add M|kart
+.continue BV1                ? _G|mehr
+.formula M|select = M|select + "art=" + D|id + ";"
+.add
+..
+!BV1
+.add M|klgruppe
+.continue BV2                ? _G|mehr
+.formula M|select = M|select + "lgruppe=" + D|id + ";"
+.add
+..
+!BV2
+.formula M|select = M|select + "ba<>`;"       ? M|bba
+.formula M|select = M|select + "ba=`;"        ? M|bfv
+.formula M|select = M|select + "@gruppe=5;@ablageart=(Active);einplan=1;mateinplan=1;@ordnung=sterm,verw"
+.continue LEER   
+..
+!FAV
+.formula M|bis  = M|vom
+.formula M|bis2 = U|xdleer
+.formula M|vom2 = U|xdleer
+.continue LEER    
+..
+!FAV2
+.formula M|bis2 = M|vom2
+.formula M|bis  = U|xdleer
+.formula M|vom  = U|xdleer
+.continue LEER   
+..
+!BBA
+.formula M|selart = 0
+.formula M|selart = 1 ? M|bba
+.copy M|bfv       = G|FALSE
+.continue LEER     
+..
+!BFV
+.formula M|selart = 0
+.formula M|selart = 2  ? M|bfv
+.formula M|kba    = "" ? M|bfv & _F|empty(M|kba)
+.copy M|bba       = G|FALSE
+.continue LEER    
+..
+!BFVFREI
+.formula M|selart = 0
+.copy M|bba       = G|FALSE
+.copy M|bfv       = G|FALSE
+.continue LEER    
+..
+!BASIS
+.formula M|kart = "" ? _F|empty(M|basisartikel)
+.continue LEER
+!ARTIKEL
+.assign M|basisartikel = M|kart^basisartikel ? _F|empty(M|kart)
+.continue LEER
+!LEER
+.continue
+..
+!F02
+.error Der von-Termin ist grî·er als der bis-Termin.
+.end 1
+..
+!ERROR
+.error UnzulÑssige Angabe.
+.end 1
+..
+!ERROR1
+.error Nur fÅr Betriebsauftragszeilen mîglich.
+.end 1
+..
+!HINWEIS
+.note Keine gebuchten RÅckmeldungen vorhanden.
+.continue
+..
+!BOX
+.note Kein Fertigungsvorschlag vorhanden.
+.continue

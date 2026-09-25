@@ -1,0 +1,206 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : PIPELINE.TAB
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Erzeugt Tabellenzeile im Infosystem. Dabei gibt es ff.
+..                  Filterregeln:
+..                  * bei Bedarf keine positionslosen Belege
+..                  * bei Vorgabe auch alternative Positionen
+..                  * bei Produktvorgabe keine anderen Produkte
+..                  * bei Projektvorgabe keine anderen Projekte
+..                  * Sichtbare Positionsarten:
+..                    - Artikel
+..                    - Mindestbestellung
+..                    - Zusatz
+..                    - Prozentzu- oder -abschlag
+..                    - Materialzuschlag
+.. Functionality  : Creates row in the table of the infosystem.
+..*****************************************************************************
+.set trans -
+..
+.. Filter rules: Only documents and their positions allowed
+.assign M|beleg = 0|id
+.continue END ? _G|mehr
+.continue HASPOS ? F|empty(M|projekt) ; F|empty(0|kprojekt)
+.. ignore sales documents for which all items are linked to a different project
+.continue END ? 0|kprojekt^id <> M|projekt^id
+..
+!HASPOS
+.copy M|keinepositionen = G|FALSE
+.continue NOPOS ? F|empty(0|pos)
+.assign M|belegposition = H|id
+.continue END ? _G|mehr
+.continue POSFILT
+..
+!NOPOS: Document has no positions
+.copy M|keinepositionen = G|TRUE
+.continue END ? M|nurpositionen
+.continue END ? _F|empty(M|projekt)
+.continue END ? _F|empty(M|produkt)
+.continue MAKEROW
+..
+!POSFILT: Filter rules: Only positions with certain attributes allowed
+.. Never irrelevant types of item
+.continue END ? _(H|typ = G|ARPOS ; H|typ = G|ZUPOS)
+.. Never allocated supplementary items
+.continue END ? H|typ = G|ZUPOS & H|nwert = 0.0 & H|pwert <> 0.0
+.. No alternative item if not provided
+.continue END ? _M|mitalternativpos & H|alternativpos
+.continue PROJECT ? F|empty(M|produkt)
+.continue END ? H|artex^id <> M|produkt^id
+..
+!PROJECT: Only items with certain project
+.continue PRICE ? F|empty(M|projekt)
+.continue END ? H|projekt^id <> M|projekt^id
+..
+!PRICE: Get values of item
+.input "vk/PIPELINE.CALC.EVPOS"
+..
+!MAKEROW
+.continue ROW ? F|empty(M|basisartikel)
+.continue END ? _F|defined(H|artex)
+.continue END ?  'M|basisartikel^id' <> 'H|artex^basisartikel^id'
+..
+!ROW
+.make screen line +O
+.. Details document header
+.copy M|tkotyp = M|kotyp
+.continue ACTIVE ? F|empty(H|ablagen)
+.protection -protected bfolge 'M|aktzeile'
+.protection -protected bildbfolge 'M|aktzeile'
+.protection -protected bildbablegen 'M|aktzeile'
+..
+!ACTIVE
+.continue NOEDP ? _G|edp
+.. EDP does not support .command -wait
+.protection -protected bildbfolge 'M|aktzeile'
+..
+!NOEDP
+.copy M|tbeleg = M|beleg
+.copy M|twvorlage = 0|wvorlage
+.copy M|ttterm = 0|tterm
+.copy M|tvom = 0|vom
+.copy M|taudatum = 0|audatum
+.copy M|tgltvon = 0|gltvon
+.copy M|tgltbis = 0|gltbis
+.copy M|tvertret = 0|vertret
+.copy M|tbetreuer = 0|betreuer
+.copy M|twahrsch = 0|wahrsch
+.formula M|tzeich = 0|zeich
+.copy M|tablehngrund = 0|ablehngrund
+.copy M|tland = 0|land
+.copy M|tpartner = 0|kl
+..
+.. Setting attributes
+.add 0|kl
+.continue ICONS ? _G|mehr
+.type integer xi ? _F|defined(U|xi)
+.assign U|xi = 1
+..
+!FOR
+.continue ICONS ? U|xi > 6
+.copy M|tnamebspr.U|xi = M|namebspr.U|xi
+.copy M|tmerkmal.U|xi = D|merkmal.U|xi
+.formula U|xi = U|xi + 1
+.continue FOR
+..
+!ICONS: Handle icons
+.assign M|bildbzeigen = M|iconaktiv 
+.assign M|bildbablegen = M|iconaktiv   ? _F|protected(M|bildbablegen, M|aktzeile) & F|cmdpermitted(  3, 13,,1)
+.assign M|bildbfolge = M|iconaktiv     ? _F|protected(M|bildbfolge, M|aktzeile)   & F|cmdpermitted(  3,  3,,1)
+.assign M|bildbnotiz = M|iconaktiv     ? _F|protected(M|bildbnotiz, M|aktzeile)   & F|cmdpermitted(134, 14,,1)
+.assign M|bildbaufgabe = M|iconaktiv   ? _F|protected(M|bildbaufgabe, M|aktzeile) & F|cmdpermitted( 86, 14,,6)
+.continue END ? M|keinepositionen
+..
+!DETPOS: Details document table row
+.copy M|tbelegposition = M|belegposition
+.formula M|tpnum = H|pnum
+.copy M|alternativpos = H|alternativpos
+.copy M|tprodukt = H|artex
+.assign M|tbasisartikel = H|artex^basisartikel
+.copy M|the = H|he
+.formula M|tmge = H|mge
+.formula M|tpwert = U|xrpwert ? F|defined(U|xrpwert)
+.formula M|tnwert = U|xrnwert ? F|defined(U|xrnwert)
+.copy M|tauswaehr = M|auswaehr
+.copy M|tprojekt = H|projekt
+.continue TOTALS ? H|artex^gruppe <> 4
+.assign M|bildbnotiz = ""
+.assign M|bildbaufgabe = ""
+.protection -protected bildbnotiz 'M|aktzeile'
+.protection -protected bildbaufgabe 'M|aktzeile'
+..
+!TOTALS: Totals
+.continue ALTPOS ? M|alternativpos
+.formula M|chsumme = M|chsumme + M|tnwert ? M|tkotypas = "(Opportunity)"
+.formula M|ansumme = M|ansumme + M|tnwert ? M|tkotypas = "(Quotation)"
+.continue DIVIDE
+..
+!ALTPOS: Total alternative items
+.formula M|chsummealtpos = M|chsummealtpos + M|tnwert ? M|tkotypas = "(Opportunity)"
+.formula M|ansummealtpos = M|ansummealtpos + M|tnwert ? M|tkotypas = "(Quotation)"
+.continue END
+..
+!DIVIDE: Divide in probablities
+.continue PRCNT10 ? M|twahrsch <= 10.0
+.continue PRCNT20 ? M|twahrsch <= 20.0
+.continue PRCNT30 ? M|twahrsch <= 30.0
+.continue PRCNT40 ? M|twahrsch <= 40.0
+.continue PRCNT50 ? M|twahrsch <= 50.0
+.continue PRCNT60 ? M|twahrsch <= 60.0
+.continue PRCNT70 ? M|twahrsch <= 70.0
+.continue PRCNT80 ? M|twahrsch <= 80.0
+.continue PRCNT90 ? M|twahrsch <= 90.0
+.formula M|chbis100 = M|chbis100 + M|tnwert ? M|tkotypas = "(Opportunity)"
+.formula M|anbis100 = M|anbis100 + M|tnwert ? M|tkotypas = "(Quotation)"
+.continue END
+..
+!PRCNT10: Propability smaller or equal 10 Percent
+.formula M|chbis10 = M|chbis10 + M|tnwert ? M|tkotypas = "(Opportunity)"
+.formula M|anbis10 = M|anbis10 + M|tnwert ? M|tkotypas = "(Quotation)"
+.continue END
+..
+!PRCNT20: Propability smaller or equal 20 Percent
+.formula M|chbis20 = M|chbis20 + M|tnwert ? M|tkotypas = "(Opportunity)"
+.formula M|anbis20 = M|anbis20 + M|tnwert ? M|tkotypas = "(Quotation)"
+.continue END
+..
+!PRCNT30: Propability smaller or equal 30 Percent
+.formula M|chbis30 = M|chbis30 + M|tnwert ? M|tkotypas = "(Opportunity)"
+.formula M|anbis30 = M|anbis30 + M|tnwert ? M|tkotypas = "(Quotation)"
+.continue END
+..
+!PRCNT40: Propability smaller or equal 40 Percent
+.formula M|chbis40 = M|chbis40 + M|tnwert ? M|tkotypas = "(Opportunity)"
+.formula M|anbis40 = M|anbis40 + M|tnwert ? M|tkotypas = "(Quotation)"
+.continue END
+..
+!PRCNT50: Propability smaller or equal 50 Percent
+.formula M|chbis50 = M|chbis50 + M|tnwert ? M|tkotypas = "(Opportunity)"
+.formula M|anbis50 = M|anbis50 + M|tnwert ? M|tkotypas = "(Quotation)"
+.continue END
+..
+!PRCNT60: Propability smaller or equal 60 Percent
+.formula M|chbis60 = M|chbis60 + M|tnwert ? M|tkotypas = "(Opportunity)"
+.formula M|anbis60 = M|anbis60 + M|tnwert ? M|tkotypas = "(Quotation)"
+.continue END
+..
+!PRCNT70: Propability smaller or equal 70 Percent
+.formula M|chbis70 = M|chbis70 + M|tnwert ? M|tkotypas = "(Opportunity)"
+.formula M|anbis70 = M|anbis70 + M|tnwert ? M|tkotypas = "(Quotation)"
+.continue END
+..
+!PRCNT80: Propability smaller or equal 80 Percent
+.formula M|chbis80 = M|chbis80 + M|tnwert ? M|tkotypas = "(Opportunity)"
+.formula M|anbis80 = M|anbis80 + M|tnwert ? M|tkotypas = "(Quotation)"
+.continue END
+..
+!PRCNT90: Propability smaller or equal 90 Percent
+.formula M|chbis90 = M|chbis90 + M|tnwert ? M|tkotypas = "(Opportunity)"
+.formula M|anbis90 = M|anbis90 + M|tnwert ? M|tkotypas = "(Quotation)"
+..
+..*****************************************************************************
+!END
+.continue

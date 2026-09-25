@@ -1,0 +1,268 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EKLAB.BSTART.BV
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Start-Button: Sammelt aktuellen Stand der EK-VorgÑnge zu
+..                  zu EKLAB-aktivierten Lieferanten, deren Rahmen, Bestellungen
+..                  Lieferscheinen und Abrufen
+.. Functionality  : Start button: collect current situation of purchase db
+..                  objects for EKLAB-activated supplieres, their blanket orders,
+..                  orders, deliveries and forecasts.
+..
+..                  IMPORTANT:  A lot of buffers are used, and should not be
+..                              "re-used" carelessly, as their data is possibly
+..                              used at a later time in one of the EKLAB.TAB.*
+..                              efops.
+..
+..                              The central data object is the pair
+..                              supplier+product, which is represented by the
+..                              blanket order row, and thus fetched with
+..                              buffer H.
+..
+..                      All buffers in order of reading:
+..
+..                      buffer  object
+..                      ------- -----------------------
+..                      9       supplier
+..                      8       blanket order header
+..                      H       blanket order row
+..                      1       purchase order suggestions ("rows")
+..                      7       delivery note header
+..                      3       delivery note row
+..                      6       forecast/order header
+..                      2       forecast/order row
+..
+...Includes
+..  include     ek/EKLAB.TAB
+..  include     ek/EKLAB.TAB.RAH
+..  include     ek/EKLAB.TAB.BV
+..  include     ek/EKLAB.TAB.LS
+..  include     ek/EKLAB.TAB.LAB
+..  include     ek/EKLAB.GET.KONDDAT.FO
+..*****************************************************************************
+..<META M|='ek/EKLAB'>
+.set trans -
+..
+.input "is/ABASFARBEN.DEF"    ? _F|defined(U|xtsel)
+..
+.type text   xt1                 ? _F|defined(U|xt1)
+.type text   xt2                 ? _F|defined(U|xt2)
+..
+.type text   xtsel               ? _F|defined(U|xtsel)
+.type text   xtselLIEF           ? _F|defined(U|xtselLIEF)
+.type text   xtselBV             ? _F|defined(U|xtselBV)
+.type text   xtselLAB            ? _F|defined(U|xtselLAB)
+.type text   xtselLS             ? _F|defined(U|xtselLS)
+..
+.. each combination of supplier + product must not be covered by more than one
+.. blanket order
+.type text   xtproduct           ? _F|defined(U|xtproduct)
+.type text   xtsupplier          ? _F|defined(U|xtsupplier)
+..
+.. start with empty table
+.make screen line -- ? M|tzeilen > 0
+..
+.. start with blanket order date range check "ok" 
+.copy M|kzgltstatus = M|kstatusgruen 
+.copy M|kmaxmengestatus = M|kstatusgruen
+..
+..
+..
+..  EKLAB-relevante Lieferanten
+..
+.formula U|xtselLIEF = "$,,;@gruppe=4;@zeile=(1);vorgang=EKLAB;erlaubt=yes;ablagef=no;@ablageart=(1)"
+.formula U|xtselLIEF = U|xtselLIEF + ";klnum=" + M|klieferant^id   ? _F|empty(M|klieferant)
+..
+.load 9 supplier 'U|xtselLIEF'
+.continue END     ? _G|mehr
+..
+!LIEF
+.continue NLIEF   ?  9|selzeile = 0
+.load 9 line '9|selzeile'
+.input "EKLAB.TAB"
+..
+..  Lieferant ist jetzt nicht "aktiv", es sollen nur "aktive" ausgewertet werden
+..  -> weiter mit nÑchstem Lieferanten
+.continue NLIEF   ? _M|tbaktiv  &  M|kbaktiv
+.continue NLIEF   ?  M|kbliefzeigen
+..
+..
+..
+..  RahmenauftrÑge zum Lieferanten
+..
+..  1. Kîpfe mit EK_Vorgang_aktiv (evktyp;eklief;evvom) einsammeln
+..  2. Anschlie·end Positionen mit Artikel-Lieferant (evkopf;evartikel;evkotyp;eklief;evkovom) auswerten
+..
+.formula U|xtsel = "$,,;ktyp=(BlanketOrder);gruppe=1!1;@gruppe=1;ablagef=no;@ablageart=(1);@zeilen=(0)"
+.formula U|xtsel = U|xtsel + ";lief="  + M|tlief^id
+.formula U|xtsel = U|xtsel + ";id=" + M|krahmen^id ? _F|empty(M|krahmen)
+..
+.load 8 purchasing 'U|xtsel'
+.continue NLIEF   ? _G|mehr
+..
+!RAHMEN
+..
+..  Rahmenpositionen
+..
+.formula U|xtsel = "$,,;kotyp=(BlanketOrder);typ=(SOPOItemPOS);gruppe=2!2;@gruppe=2;ablagef=no;status=`;@ablageart=(1);@zeilen=(0)"
+.formula U|xtsel = U|xtsel + ";kopf="  + 8|id
+.formula U|xtsel = U|xtsel + ";artikel=" + M|kartikel^id       ? _F|empty(M|kartikel)
+.formula U|xtsel = U|xtsel + ";lief="  + M|tlief^id
+.formula U|xtsel = U|xtsel + ";id="    + M|krahmenpos^id     ? _F|empty(M|krahmenpos)
+..
+.select purchasing 'U|xtsel'
+.continue NRAHMEN ? _G|mehr
+..
+!RAHPOS
+.input "EKLAB.TAB.RAH"
+..
+..
+.continue NEXTPOS ?  M|kbrahmenzeigen
+..
+..
+..
+..  -------------------------------
+..  H-Puffer muss erhalten bleiben!
+..  -------------------------------
+..
+..
+..  BestellvorschlÑge zu Lieferant+Artikel wie in Rahmenposition
+..  Mit SchlÅssel Plankarte (artikel,lgruppe,bsres=B)
+..
+.formula U|xtselBV = "$,,;gruppe=2!2;bsres=B;kopf=`;@gruppe=2;ablagef=no;@ablageart=(1);einplan=yes;@ordnung=tterm.(0)"
+.formula U|xtselBV = U|xtselBV + ";artikel="   + H|artikel^id
+.formula U|xtselBV = U|xtselBV + ";lief="    + H|kopf^lief^id
+.formula U|xtselBV = U|xtselBV + ";lgruppe=" + H|lgruppe^id
+.formula U|xtselBV = U|xtselBV + ";zrahmenpos=" + H|id
+..
+.load 1 purchasing 'U|xtselBV'
+.continue ENDBV   ? _G|mehr
+..
+!NEXTBV
+.input "EKLAB.TAB.BV"
+.load 1 purchasing
+.continue NEXTBV  ?  G|mehr
+!ENDBV
+.load 1
+..
+..
+..
+..  Offene Lieferscheine zu Lieferant+Artikel wie in Rahmenposition
+..
+..  1. Kîpfe mit öbername (evuebertr;evktyp;evuebertr) einsammeln
+..  2. Anschlie·end Positionen mit Artikel-Lieferant (evkopf;evartikel;evkotyp;eklief;evkovom) auswerten
+..
+.formula U|xtselLS = "$,,;ktyp=(PackingSlip);gruppe=1!1;@gruppe=1;uebertr=yes;ablagef=no;@ablageart=(1)"
+.formula U|xtselLS = U|xtselLS + ";lief="  + H|kopf^lief^id
+..
+.load 7 purchasing 'U|xtselLS'
+.continue ENDLS   ? _G|mehr
+..
+!LIEFER
+..
+..  Lieferscheinpositionen
+..
+.formula U|xtselLS = "$,,;kotyp=(PackingSlip);gruppe=2!2;@gruppe=2;ablagef=no;@ablageart=(1);@zeilen=(0)"
+.formula U|xtselLS = U|xtselLS + ";kopf="  + 7|id
+.formula U|xtselLS = U|xtselLS + ";artikel=" + H|artikel^id
+.formula U|xtselLS = U|xtselLS + ";lief="  + H|kopf^lief^id
+.formula U|xtselLS = U|xtselLS + ";zrahmenpos=" + H|id
+..
+.load 3 purchasing 'U|xtselLS'
+.continue ELSPOS  ? _G|mehr
+..
+!NEXTLS
+.input "EKLAB.TAB.LS"
+.load 3 purchasing
+.continue NEXTLS  ?  G|mehr
+!ELSPOS
+.load 3
+..
+..  NÑchster Lieferschein zum selben Lieferant+Artikel
+..
+.load 7 purchasing
+.continue LIEFER  ?  G|mehr
+!ENDLS
+.load 7
+..
+..
+..
+..  Aktive Lieferabrufe  zu Lieferant+Artikel wie in Rahmenposition
+..
+..  1. Kîpfe mit EK_Vorgang_aktiv (evktyp;eklief;evvom) einsammeln
+..  2. Anschlie·end Positionen mit Artikel-Lieferant (evkopf;evartikel;evkotyp;eklief;evkovom) auswerten
+..
+.formula U|xtselLAB = "$,,;ktyp=(3);gruppe=1!1;@gruppe=1;ablagef=no;@ablageart=(1);@zeilen=(0)"
+.formula U|xtselLAB = U|xtselLAB + ";lief=" + H|kopf^lief^id
+.formula U|xtselLAB = U|xtselLAB + ";vorgart=" + M|kvorart^id
+..
+.load 6 purchasing 'U|xtselLAB'
+.continue ENDLAB  ? _G|mehr
+..
+!ABRUF
+..
+..  Abrufpositionen
+..
+.formula U|xtselLAB = "$,,;kotyp=(3);@gruppe=22;ablagef=no;@ablageart=(1)"
+.formula U|xtselLAB = U|xtselLAB + ";id="    + 6|id
+.formula U|xtselLAB = U|xtselLAB + ";artikel=" + H|artikel^id
+.formula U|xtselLAB = U|xtselLAB + ";lief="  + H|kopf^lief^id
+.formula U|xtselLAB = U|xtselLAB + ";zrahmenpos=" + H|id
+.formula U|xtselLAB = U|xtselLAB + ";@zeilen=ja"
+..
+.load 2 purchasing 'U|xtselLAB'
+.continue ENDLABP ? _G|mehr
+.load 2 line  '2|selzeile'
+.continue ENDLABP ? _G|mehr
+..
+!NEXTLAB
+.continue N2LAB   ?  _F|empty(2|status) & 2|mge <> 0.0
+.input "EKLAB.TAB.LAB"
+!N2LAB
+.load 2 purchasing
+.continue ENDLABP ? _G|mehr
+.load 2 line  '2|selzeile'
+.continue NEXTLAB ?  G|mehr
+!ENDLABP
+.load 2
+..
+..  NÑchster Lieferabruf zum selben Lieferant+Artikel
+..
+.load 6 purchasing
+.continue ABRUF   ?  G|mehr
+!ENDLAB
+.load 6
+..
+..
+..
+..  NÑchste Position im gleichen Rahmen
+..
+!NEXTPOS
+.select purchasing
+.continue RAHPOS ?  G|mehr
+..
+..
+..  NÑchster Rahmen zum selben Lieferanten!
+..
+!NRAHMEN
+.load 8 purchasing
+.continue RAHMEN  ?  G|mehr
+.load 8
+..
+..
+..  NÑchster Lieferant!
+..
+!NLIEF
+.. last supplier is not concerned with required product
+.. i.e. current line still shows supplier, nothing else was found -> remove
+.make screen line -O    ? _F|empty(M|kartikel)  &  M|ttyp = M|ktyplieferant
+.. next supplier
+.load 9 supplier
+.continue LIEF    ?  G|mehr
+..
+..
+..*****************************************************************************
+!END
+.continue

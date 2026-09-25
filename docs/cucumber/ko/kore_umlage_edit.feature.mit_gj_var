@@ -1,0 +1,579 @@
+# *****************************************************************************
+#  Name           : kore_umlage_edit.feature.mit_gj_var
+#  Autor          : Silvia Warth
+#  Verantwortlich : sih
+#  Kontrolle      : uo
+#  Funktion       : Test von Plausipruefungen in den Umlageobjekten der Kostenrechnung
+#                   (Kostenstellenumlage, Kostenträgermonatsumlage, Kostenträgerjahresumlage)
+#                   
+#
+# *****************************************************************************
+@persistent
+Feature: Plausitest Umlageobjekte der Kore
+Background:
+# Vorgaengertest arbeitet mit aktuellem Datum (15.08.`date +%y`)
+# Platzhalter LFDGJ wird im Testbett durch das aktuelle Jahr ersetzt!
+# LFDGJ
+Given I set the fake date to "15.08.LFDGJ"
+
+Scenario: 01 Aenderung GJ in Kostenstellenumlage - Nachfragen entsprechend beantworten
+# Nachfrage bez. Umlagezeilen kopieren mit ja beantworten
+Given I open an editor "ksum1" from table "(Assessment):(CostCenterAssessment)" with command "UPDATE" for record "1310"
+And I respond with answer "ja" to the dialog with id "Umlagezeilen kopieren"
+And I set field "gjahr" to "+1"
+And I save the current editor
+
+# Nachfrage bez. Umlagezeilen kopieren einschließlich Kopie der Verkehrszahlen der Umlagezeilen und Bezugsgröße kopieren mit ja beantworten
+Given I open an editor "ksum2" from table "(Assessment):(CostCenterAssessment)" with command "UPDATE" for record "1440"
+And I set field "vkzkopie" to "ja"
+# And I respond with answer "ja" to the dialog with id "6603"
+And I respond with answer "ja" to the dialog with id "Umlagezeilen kopieren"
+And I set field "gjahr" to "+1"
+And I save the current editor
+
+Scenario: 02 Pruefung auf bereits vorhandene Umlage im Zeitraum
+# Kostenstellenumlage - "Umlage für diese Kostenstelle bereits vorhanden"
+Given I open an editor "ksum3" from table "(Assessment):(CostCenterAssessment)" with command "COPY" for record "1121"
+Then setting field "ksab" to "1121" throws the exception "4616"
+And I close the current editor
+
+# Kostenträgermonatsumlage - "Monatsumlage für diese Kostenstelle bereits vorhanden"
+Given I open an editor "ktmo1" from table "(Assessment):(CostObjectMonthlyAssessment)" with command "COPY" for record "10"
+Then setting field "gmonat" to "4" throws the exception "5869"
+And I close the current editor
+
+# Kostenträgerjahresumlage - "Jahresumlage für diese Kostenstelle bereits vorhanden"
+Given I open an editor "ktjaum1" from table "(Assessment):(CostObjectAnnualAssessment)" with command "COPY" for record "1510"
+Then saving the current editor throws the exception "5872"
+
+Scenario: 03 Eintrag Monat in Monatsumlage - pruefen, ob eingetragener Monat groesser als Anzahl bebuchbare Monate des GJ ist
+# zunächst Starttermin Ist-ILV und Plan-ILV auf 2/20 in Firma TERM anpassen
+Given I'm logged in with password "annette"
+Given I enable the flag 71
+Given I open an editor "termine" from table "(Company):(FinancialDates)" with command "UPDATE" for record "term"
+And I set field "ilviststartgj" to "." 
+And I set field "ilviststartgm" to "2"
+And I set field "ilvplanstartgm" to "2"
+And I save the current editor
+Given I disable the flag 71
+Given I'm logged in with password "sy"
+
+# Eintrag Monat 13 - "Angegebener Zeitraum ungültig!"
+Given I open an editor "ktmo2" from table "(Assessment):(CostObjectMonthlyAssessment)" with command "COPY" for record "11"
+And I set field "nummer" to "14"
+And I set field "ksab" to "1510"
+Then setting field "gmon" to "13" throws the exception "3003"
+And I close the current editor
+
+# Eintrag Monat vor dem Startdatum Ist- oder Plan-ILV - "Zeitraum ist älter als das Startdatum der ILV."
+Given I open an editor "ktmo3" from table "(Assessment):(CostObjectMonthlyAssessment)" with command "COPY" for record "11"
+And I set field "nummer" to "15"
+And I set field "ksab" to "1510"
+Then setting field "gmon" to "1" throws the exception "1250"
+And I close the current editor
+
+Scenario: 04 Nachbewerten
+And I run Revaluation
+
+Scenario: 05 alle Kst verdichten zu einer einzigen und zwar vor Ausführen der ILV, damit Plan-Werte dort ankommen 
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "NEW" for record ""
+And I set field "nummer" to "12345"
+And I set field "such" to "KSPLAN"
+And I set field "namebspr" to "Kostenstelle Planverdichtung"
+And I set field "bebuchbar" to "nein"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "100"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "101"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1111"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1121"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1131"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1210"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1211"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1301"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1310"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1311"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1320"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1410"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1420"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1430"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1440"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1510"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1520"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Given I open an editor "ks" from table "(Account):(CostCenter)" with command "UPDATE" for record "1530"
+And I set field "verd" to "ksplan"
+And I save the current editor
+
+Scenario: 06
+# Kst 100 erhält Differenzen durch Buchungen aus Testvorgänger und muss daher bei der ILV berücksichtigt werden.
+# Daher werden Primärkosten, Bezugsgröße und eine Kostenstellenumlage für Kst 100 für die ersten 3 Monate für Ist- und Plandaten angelegt.
+# Monat 1
+Given I open an editor "Buchung_1" from table "(Entry):(Entry)" with command "NEW" for record ""
+And I set field "budat" to "10.01."
+And I set field "beleg" to "bu1"
+And I set field "beldat" to "10.01."
+And I set field "such" to "bu1"
+And I create a new row at the end of the table
+And I set field "konto" to "50000" in row 1
+And I set field "ewsbetr" to "1" in row 1
+And I set field "kstelle" to "100" in row 1
+And  I create a new row at the end of the table
+And I set field "konto" to "11400" in row 2
+And I respond with answer "ja" to the dialog with id "583"
+And I save the current editor
+And I close the current editor
+
+# Monat 2
+Given I open an editor "Buchung_1" from table "(Entry):(Entry)" with command "NEW" for record ""
+And I set field "budat" to "10.02."
+And I set field "beleg" to "bu2"
+And I set field "beldat" to "10.02."
+And I set field "such" to "bu1"
+And I create a new row at the end of the table
+And I set field "konto" to "50000" in row 1
+And I set field "ewsbetr" to "1" in row 1
+And I set field "kstelle" to "100" in row 1
+And  I create a new row at the end of the table
+And I set field "konto" to "11400" in row 2
+And I respond with answer "ja" to the dialog with id "583"
+And I save the current editor
+And I close the current editor
+
+# Monat 3
+Given I open an editor "Buchung_1" from table "(Entry):(Entry)" with command "NEW" for record ""
+And I set field "budat" to "10.03."
+And I set field "beleg" to "bu3"
+And I set field "beldat" to "10.03."
+And I set field "such" to "bu1"
+And I create a new row at the end of the table
+And I set field "konto" to "50000" in row 1
+And I set field "ewsbetr" to "1" in row 1
+And I set field "kstelle" to "100" in row 1
+And  I create a new row at the end of the table
+And I set field "konto" to "11400" in row 2
+And I respond with answer "ja" to the dialog with id "583"
+And I save the current editor
+And I close the current editor
+
+# Abschlüsse durchfuehren, zum späteren Test, dass abgeschlossener Monat nicht mehr in Kostenträgermonatsumlage verwendet werden darf
+Scenario: 05 Abschluss Fibu bis Monat 3
+Given I open an editor "Abschl" from table "(FiscalYearManagement):(Closings)" with command "NEW" for record ""
+And I set field "such" to "X1"
+And I press button "fbbbu" in row 4
+And I press button "fbbbu" in row 5
+And I press button "fbbbu" in row 6
+And I respond with answer "Ja" to the dialog with id "7626"
+And I save the current editor
+
+# Kore-Stammdaten für ILV
+Given I open an editor "koart" from table "(CostType):(CostType)" with command "COPY" for record "95010"
+And I set field "num60" to "95055"
+And I set field "namebspr" to "Entlastung Rest-Kst"
+And I save the current editor
+
+Given I open an editor "kto" from table "(Account):(Account)" with command "COPY" for record "95010"
+And I set field "num5" to "95055"
+And I set field "namebspr" to "Entlastung Rest-Kst"
+And I set field "zkoart" to "95055" in row 1
+And I save the current editor
+
+Given I open an editor "koart" from table "(CostType):(CostType)" with command "COPY" for record "95030"
+And I set field "num60" to "95066"
+And I set field "namebspr" to "Belastung Rest-Kst"
+And I save the current editor
+
+Given I open an editor "kto" from table "(Account):(Account)" with command "COPY" for record "95030"
+And I set field "num5" to "95066"
+And I set field "namebspr" to "Belastung Rest-Kst"
+And I set field "zkoart" to "95066" in row 1
+And I save the current editor
+
+Given I open an editor "kst" from table "(Account):(CostCenter)" with command "UPDATE" for record "100"
+And I set field "umlzu" to "95055"
+And I set field "umlab" to "95066"
+And I set field "bezug" to "600"
+And I save the current editor
+
+Given I open an editor "ksum100" from table "(Assessment):(CostCenterAssessment)" with command "COPY" for record "1211"
+And I set field "num67" to "100"
+And I set field "ksab" to "100"
+And I create a new row at the end of the table
+And I set field "kszu" to "1210" in row 1
+And I save the current editor
+
+Given I open an editor "ksum100" from table "(Assessment):(CostCenterAssessment)" with command "UPDATE" for record "100"
+And I set field "gjahr" to "LFDGJ"
+And I press button "kszuist" to open a subeditor for "Ist-VKZ" in row 1 with dialog "2011" and answer "Ja"
+And I set field "s2" to "40"
+And I set field "s3" to "41"
+And I respond with answer "Ja" to the dialog with id "2012"
+And I save the current editor
+And I switch the current editor to editor "ksum100"
+And I press button "kszupprop" to open a subeditor for "propPlan-VKZ" in row 1 with dialog "2011" and answer "Ja"
+And I set field "s2" to "45"
+And I set field "s3" to "45"
+And I respond with answer "Ja" to the dialog with id "2012"
+And I save the current editor
+And I switch the current editor to editor "ksum100"
+And I close the current editor
+
+Given I open an editor "bab-110" from table "(EDS):(EDS)" with command "UPDATE" for record "110"
+And I set field "koobj" to "100"
+And I press button "planprop" to open a subeditor for "Plan-VKZ" in row 1 with dialog "2011" and answer "Ja"
+And I set field "s2" to "10"
+And I set field "s3" to "10"
+And I respond with answer "Ja" to the dialog with id "2012"
+And I save the current editor
+And I switch the current editor to editor "bab-110"
+And I close the current editor
+
+Scenario: 07 Abschluss Kore in Monat 1
+Given I open an editor "Abschl" from table "(FiscalYearManagement):(Closings)" with command "NEW" for record ""
+And I set field "such" to "X1"
+And I press button "kobbu" in row 4
+And I respond with answer "Ja" to the dialog with id "7626"
+And I save the current editor
+
+Scenario: 08 ILV buchen (Ist und Plan) fuer Monat 2
+Given I open an editor "ilv" for tip command "ilv" and arguments ""
+And I set field "monat" to "2"
+And I set field "vorschau" to "false"
+And I set field "datart" to "Plan"
+And I press button "bstart"
+And I save the current editor
+
+Given I open an editor "ilv" for tip command "ilv" and arguments ""
+And I set field "monat" to "2"
+And I set field "vorschau" to "false"
+And I set field "datart" to "Ist"
+And I press button "bstart"
+And I save the current editor
+
+Scenario: 09 Abschluss Kore in Monat 2
+Given I open an editor "Abschl" from table "(FiscalYearManagement):(Closings)" with command "NEW" for record ""
+And I set field "such" to "X2"
+And I press button "kobbu" in row 5
+And I respond with answer "Ja" to the dialog with id "7626"
+And I save the current editor
+
+Scenario: 10 ILV buchen (Ist und Plan) fuer Monat 3
+Given I open an editor "ilv" for tip command "ilv" and arguments ""
+And I set field "monat" to "3"
+And I set field "vorschau" to "false"
+And I set field "datart" to "Plan"
+And I press button "bstart"
+And I save the current editor
+
+Given I open an editor "ilv" for tip command "ilv" and arguments ""
+And I set field "monat" to "3"
+And I set field "vorschau" to "false"
+And I set field "datart" to "Ist"
+And I press button "bstart"
+And I save the current editor
+
+Scenario: 11 Abschluss Kore in Monat 3
+Given I open an editor "Abschl" from table "(FiscalYearManagement):(Closings)" with command "NEW" for record ""
+And I set field "such" to "X3"
+And I press button "kobbu" in row 6
+And I respond with answer "Ja" to the dialog with id "7626"
+And I save the current editor
+
+#Scenario: 05 Pseudo Abschluss durch Editieren der GJ-Verwaltung - ist nicht möglich, da GJ bereits bebucht ist
+# (bleibt auskommentiert in der Datei als moegliche Vorlage fuer zukuenftige Tests)
+#Given I'm logged in with password "annette"
+#Given I enable the flag 71
+#
+#Given I open an editor "termine" from table "(Company):(FinancialDates)" with command "UPDATE" for record "term"
+#And I press button "bsperremand"
+#And I press button "gjasedit" to open a subeditor for "gjtab" in row 2
+#
+#And I set field "ekest" to "abgeschlossen" in row 1
+#And I set field "vkest" to "abgeschlossen" in row 1
+#And I set field "mbest" to "abgeschlossen" in row 1
+#And I set field "fbest" to "abgeschlossen" in row 1
+#And I set field "ilvist" to "abgeschlossen" in row 1
+#And I set field "koest" to "abgeschlossen" in row 1
+#And I set field "ilvplan" to "abgeschlossen" in row 1
+#And I set field "kpest" to "abgeschlossen" in row 1
+#
+#And I set field "ekest" to "abgeschlossen" in row 2
+#And I set field "vkest" to "abgeschlossen" in row 2
+#And I set field "mbest" to "abgeschlossen" in row 2
+#And I set field "fbest" to "abgeschlossen" in row 2
+#And I set field "ilvist" to "abgeschlossen" in row 2
+#And I set field "koest" to "abgeschlossen" in row 2
+#And I set field "ilvplan" to "abgeschlossen" in row 2
+#And I set field "kpest" to "abgeschlossen" in row 2
+#
+#And I set field "ekest" to "abgeschlossen" in row 3
+#And I set field "vkest" to "abgeschlossen" in row 3
+#And I set field "mbest" to "abgeschlossen" in row 3
+#And I set field "fbest" to "abgeschlossen" in row 3
+#And I set field "ilvist" to "abgeschlossen" in row 3
+#And I set field "koest" to "abgeschlossen" in row 3
+#And I set field "ilvplan" to "abgeschlossen" in row 3
+#And I set field "kpest" to "abgeschlossen" in row 3
+#And I save the current editor
+#And I switch the current editor to editor "termine"
+#
+#And I save the current editor
+#
+#Given I disable the flag 71
+#Given I'm logged in with password "sy"
+
+# Scenario: 12 Eintrag abgeschlossener Monat 3 aus Sicht der ILV - "Zeitraum ist schon abgeschossen"
+Given I open an editor "ktmo4" from table "(Assessment):(CostObjectMonthlyAssessment)" with command "COPY" for record "11"
+And I set field "nummer" to "16"
+And I set field "ksab" to "1510"
+Then setting field "gmon" to "3" throws the exception "50"
+And I close the current editor
+
+# Scenario: 13 Prüfen Ist- und Plankosten in Kostenträgermonatsumlage 
+Given I open an editor "ktmo5" from table "(Assessment):(CostObjectMonthlyAssessment)" with command "COPY" for record "10"
+And I set field "nummer" to "17"
+And I set field "ksab" to "1410"
+And I set field "gmon" to "5" 
+Then field "istkost" has value "28712.17"
+Then field "plankost" has value "1500.00"
+Then saving the current editor throws the exception "7334"
+And I close the current editor
+
+# Scenario: 14 Erstellen einer Rechenregel über *alle* Kostenarten der Plan-ILV-Buchungen und 
+#           Prüfen der Differenzen auf Kst nach Ausführen der ILV Plan (da kann nicht das IS LSS verwendet werden)
+#           Dazu alle Kostenarten in Kombination mit der Verdichtungs-Kst (die in allen bebuchbaren Kst enthalten sein muß) darstellen.
+Given I open an editor "rere" from table "(CostType):(ComputationRule)" with command "NEW" for record ""
+And I set field "such" to "plandiff"
+And I set field "optyp" to "summierung"
+And I set field "name" to "Rechenregel zur Darstellung der Differenzen von Kst aus Plan-ILV"
+And I append rows
+| koart   |
+| 400     |
+| 480     |
+| 481     |
+| 482     |
+| 483     |
+| 500     |
+| 590     |
+| 600     |
+| 620     |
+| 630     |
+| 640     |
+| 645     |
+| 650     |
+| 670     |
+| 700     |
+| 730     |
+| 44000   |
+| 50000   |
+| 51000   |
+| 54000   |
+| 60100   |
+| 60200   |
+| 91000   |
+| 91001   |
+| 91010   |
+| 91111   |
+| 91112   |
+| 91121   |
+| 91122   |
+| 91131   |
+| 91132   |
+| 91211   |
+| 91212   |
+| 91311   |
+| 91312   |
+| 91440   |
+| 91441   |
+| 94131   |
+| 94132   |
+| 95010   |
+| 95020   |
+| 95030   |
+| 95040   |
+| 95050   |
+| 95060   |
+| 95055   |
+| 95066   |
+| 95131   |
+| 95132   |
+| 88888888|
+| 99999999|
+And I save the current editor
+And I close the current editor
+
+# Test der Differenzausbuchung bei Hilfs- und Haupt-Kst bei der Plan-ILV mit der Kore-Konfig-Einstellung 
+# "Buchungserzeugung mit gerundeten Verrechnungssätzen: nein".
+# Die Rechenregel 2 beinhaltet alle Kostenarten des Systems. AUf Kostenstelle 12345 (KSPLAN) sind alle Kostenstellen verdichtet.
+# Betrachtet man also den Wert der Rechenregel 2 kombiniert mit Kst 12345, müssten bei den kumulierten Istkosten sowie bei der Summe aus kumulierten fixen
+# und kumulierten proportionalen Plankosten die Werte 0 erscheinen, wenn alle Kst bei der ILV entlastet wurden und die Differenzen der Kst
+# ausgebucht wurden, was in der Kostenrechnungskonfiguration so eingestellt ist.
+
+
+# Scenario: 15 BAB-Formular mit V-Kst KSPLAN für Monat 2 (bei ILV mit ungerundeten Verrechnungssätzen)
+
+Given I open an editor "babx" from table "(EDS):(EDS)" with command "NEW" for record ""
+And I set field "such" to "babksplan"
+And I set field "sganmon" to "2"
+And I set field "sgendmon" to "2"
+And I set field "skoobj" to "12345"
+And I create a new row at the end of the table
+And I set field "koart" to "2" in row 1
+Then field "ikum" has value "0.02" in row 1
+Then field "pfixkum" has value "-5.90" in row 1
+Then field "ppropkum" has value "5.90" in row 1
+And I save the current editor
+And I close the current editor
+
+# Normalerweise müssen die Istkosten im BAB-Formular babksplan auf null sein, da alle Differenzen ausgebucht sind.
+# Wegen des Faktors -1 bei der Kostenart 483 tut das nicht, daher wird hier der Faktor auf 1 gesetzt.
+Given I open an editor "koart1" from table "(CostType):(CostType)" with command "UPDATE" for record "483"
+And I set field "faktor" to "1"
+And I save the current editor
+And I close the current editor
+
+Given I open an editor "babx" from table "(EDS):(EDS)" with command "VIEW" for record "babksplan"
+Then field "ikum" has value "0.00" in row 1
+Then field "pfixkum" has value "-5.90" in row 1
+Then field "ppropkum" has value "5.90" in row 1
+And I save the current editor
+And I close the current editor
+
+
+# ILV-Buchung zur Differenzausbuchung auf Haupt-Kst in Monat 2: Planwerte prüfen
+Given I open an editor "bu" from table "(Entry):(StatisticalEntry)" with command "VIEW" for search criteria "$,,vkzart=plan;monat=2;ursache=Leistungsverrechnung Haupt-Kostenstelle;@richtung=rueckwaerts;@maxtreffer=1"
+Then field "kstelle" has value "1410" in row 1
+Then field "psfixbetr" has value "0.01" in row 1
+Then field "kstelle" has value "1510" in row 2
+Then field "phfixbetr" has value "0.01" in row 2
+And I close the current editor
+
+# Für Nachfolgertest Faktor in Kostenart 483 wieder auf ursprünglichen Zustand setzen
+Given I open an editor "koart" from table "(CostType):(CostType)" with command "UPDATE" for record "483"
+And I set field "faktor" to "-1"
+And I save the current editor
+And I close the current editor
+
+Scenario: 16  Anlage KTR-Jahresumlage mit prozentualer Verteilung mit Kommawerten
+Given I open an editor "ktjaum2" from table "(Assessment):(CostObjectAnnualAssessment)" with command "NEW" for record ""
+And I set field "such" to "ktrjum"
+And I set field "ksab" to "1410"
+#
+And I create a new row at the end of the table
+And I set field "kszu" to "201100" in row 1
+And I set field "istmoproz" to "15" in row 1
+And I set field "planmoproz" to "55.5" in row 1
+Then field "istrest" has value "85" in row 0
+Then field "planrest" has value "44.5" in row 0
+#
+And I create a new row at the end of the table
+And I set field "kszu" to "201200" in row 2
+And I set field "istmoproz" to "2.5" in row 2
+Then field "istrest" has value "82.5" in row 0
+#
+And I create a new row at the end of the table
+And I set field "kszu" to "201300" in row 3
+And I set field "istmoproz" to "3.5" in row 3
+Then field "istrest" has value "79" in row 0
+#
+And I create a new row at the end of the table
+And I set field "kszu" to "201400" in row 4
+And I set field "istmoproz" to "65" in row 4
+Then field "istrest" has value "14" in row 0
+#
+And I create a new row at the end of the table
+And I set field "kszu" to "201500" in row 5
+And I set field "istmoproz" to "14" in row 5
+And I set field "planmoproz" to "44.5" in row 5
+Then field "istrest" has value "0" in row 0
+Then field "planrest" has value "0" in row 0
+And I save the current editor
+And I close the current editor
+
+Scenario: 17  direkte Anlage eines Kostenstellenumlageelements, einmal mit speichern und einmal mit Abbruch
+Given I open an editor "kstumlage-zeile" from table "(Assessment):(CostCenterAssessmentElement)" with command "NEW" for record ""
+And I set field "such" to "umz1211"
+And I set field "zlnr" to "1211"
+And I set field "kszu" to "1310"
+And I save the current editor
+And I close the current editor
+
+Given I open an editor "kstumlage-zeile" from table "(Assessment):(CostCenterAssessmentElement)" with command "NEW" for record ""
+And I set field "such" to "umz1211"
+And I set field "zlnr" to "1211"
+And I set field "kszu" to "1320"
+# Abbruch, also nicht speichern
+And I close the current editor
+
+Given I open an editor "kstumlage" from table "(Assessment):(CostCenterAssessment)" with command "VIEW" for record "1211"
+Then the table has 2 rows
+And I close the current editor
+
+Scenario: 18 Erfassungsversuch einer Zeile in der Kostenstellenumlage mit Verkehrszahlen ohne Kostenobjekt
+Given I open an editor "ksum1211" from table "(Assessment):(CostCenterAssessment)" with command "UPDATE" for record "1211"
+And I create a new row at the end of the table
+#
+Then pressing button "kszuist" in row 3 to open a subeditor throws the exception "1415"
+And I set field "kszu" to "100000" in row 3
+#
+And I press button "kszuist" to open a subeditor for "Ist-VKZ" in row 3 with dialog "2011" and answer "Ja"
+And I set field "s4" to "99"
+And I set field "s5" to "99"
+And I respond with answer "Ja" to the dialog with id "2012"
+And I save the current editor
+And I switch the current editor to editor "ksum1211"
+#
+And I save the current editor
+And I close the current editor
+
+

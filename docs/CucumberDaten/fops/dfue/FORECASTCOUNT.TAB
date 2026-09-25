@@ -1,0 +1,80 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : FORECASTCOUNT.TAB
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : carue
+.. Functionality  : Row efop: create one single row in info system
+..*****************************************************************************
+.set trans -
+..
+.. Local fields
+.type bool xberror ? _F|defined(U|xberror)
+.type bool xbearlywarning ? _F|defined(U|xbearlywarning)
+.type bool xbimmediaterequirement ? _F|defined(U|xbimmediaterequirement)
+.type bool xbbacklog ? _F|defined(U|xbbacklog)
+..
+.. Initialize: no problems
+.copy U|xberror = G|false
+.copy U|xbearlywarning = G|false
+.copy U|xbbacklog = G|false
+.copy U|xbimmediaterequirement = G|false
+..
+..
+.. Error while processing message?
+.copy U|xberror = G|true ? _F|empty(H|fcode)
+..
+.. Early warning system was triggered?
+.type real xrdiff  ? _F|defined(U|xrdiff)
+.load 2 edifact 'F|formatstr("$,,;@gruppe=0;id={1};text1=000;text24<>`", H|id)'
+.continue EEARLY  ? _G|mehr
+.load 2 line '2|selzeile'
+.continue EEARLY  ? _G|mehr
+.continue EEARLY  ?  F|empty(2|text24)
+.assign U|xrdiff = 2|text24 >> "DI:"
+.copy U|xbearlywarning = G|true ? _F|empty(U|xrdiff)
+!EEARLY
+.load 2
+..
+.. Customer claims backlog / outstanding deliveries?
+.load 2 edifact 'F|formatstr("$,,;@gruppe=0;id={1};abdattyp=(Backlog)", H|id)'
+.copy U|xbbacklog = G|true ? G|mehr
+.load 2
+..
+.. Customer has imediate demand?
+.load 2 edifact 'F|formatstr("$,,;@gruppe=0;id={1};abdattyp=(ImmediateRequirement)", H|id)'
+.copy U|xbimmediaterequirement = G|true ? G|mehr
+.load 2
+..
+..
+.. Count issues
+.formula M|kanzfehler = M|kanzfehler +1  ?  U|xberror
+.formula M|kanzfruehwarnung = M|kanzfruehwarnung +1  ?  U|xbearlywarning
+.formula M|kanzrueckstand = M|kanzrueckstand +1  ?  U|xbbacklog
+.formula M|kanzsofortbedarf = M|kanzsofortbedarf +1  ?  U|xbimmediaterequirement
+..
+..
+.. Show row asap, if checking single issue
+.continue EROW  ?  M|kbzaehlen
+.continue SHOWROW  ?  M|kbrueckstand & U|xbbacklog
+.continue SHOWROW  ?  M|kbsofortbedarf & U|xbimmediaterequirement
+.continue SHOWROW  ?  M|kbfehler & U|xberror
+.continue SHOWROW  ?  M|kbfruehwarnung & U|xbearlywarning
+.continue EROW
+!SHOWROW
+.make screen line +O
+.formula M|tedi = H|id
+.formula M|tdatum = H|erfass
+.assign  M|tkunde = H|idkundeab
+.formula M|tkundebez = M|tkunde^sucherw  ?  G|mehr
+.assign M|tartikel = H|ideksart
+.formula M|tartikelbez = M|tartikel^sucherw  ?  G|mehr
+.copy M|tbfehler = U|xberror
+.copy M|tbfruehwarnung = U|xbearlywarning
+.copy M|tbrueckstand = U|xbbacklog
+.copy M|tbsofortbedarf = U|xbimmediaterequirement
+!EROW
+..
+..*****************************************************************************
+!END
+.continue

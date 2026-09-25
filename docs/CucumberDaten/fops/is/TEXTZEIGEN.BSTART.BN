@@ -1,0 +1,104 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : TEXTZEIGEN.BSTART.BN
+.. Autor          : lei
+.. Verantwortlich : fwester
+.. Kontrolle      : lei
+.. Funktion       : Fuehrt das im Parameter "fopname" hinterlegte FOP aus.
+.. Functionality  : Executes the FOP named in the parameter "fopname".
+..*****************************************************************************
+.set trans -
+..
+.. Das ist fuer den FOP "ARB"!
+.. siehe dort
+..
+.type integer baseframe
+.assign U|baseframe = G|framecount + 1
+..
+.continue VALIDATE ? M|eingabe
+.continue ERROR2   ? F|empty(M|kommando)
+..
+.. Activate input parameters for debugging and logging in buffer P
+.copy P|fopdebug = M|fopdebug
+.copy P|loglevel = M|loglevel
+..
+.continue LOGGING ? M|testmode
+.continue INHERIT ? F|tcmdpermitted(43)
+.continue GUICOMD
+..
+!INHERIT: Inherit configurations in buffer P
+.type text xprintconf ? _F|defined(U|xprintconf)
+.formula U|xprintconf = "(PrinterSettings) ? fopdebug=" + 'P|fopdebug'
+.formula U|xprintconf = U|xprintconf + " | loglevel=" + 'P|loglevel'
+.formula U|xprintconf = U|xprintconf + " | [invisible]=1"
+.formula U|xprintconf = U|xprintconf + ("#AX"*"-#X")
+..
+!GUICOMD
+.command -wait 'F|formatstr("{1}<(Text)>{2}<(View)>", U|xprintconf, M|kommando)'
+.continue RESTORE
+..
+!LOGGING: In this case output the command for test purposes
+.input "DATEI.F"
+.output terminal
+.println 'F|expr("<(Text)>" + M|kommando + "<(View)>")'
+.continue RESTORE
+..
+!VALIDATE: Validate name of FOP
+.continue EINGABE ? F|empty(M|kommando)
+..
+.. Get program name only
+.formula M|jfopname = M|kommando << " "
+.continue JEING ? F|isfopname(M|jfopname, TRUE)
+..
+.. Now we have a fop name
+.assign M|fopname = M|jfopname
+.continue ERROR1 ? _G|mehr
+.continue ERROR3 ? (M|kommando >> " ") <> ""
+..
+!EINGABE
+.continue ERROR2 ? F|empty(M|fopname)
+..
+.. Activate input parameters for debugging and logging in buffer P
+.copy P|fopdebug = M|fopdebug
+.copy P|loglevel = M|loglevel
+..
+.set debug + ? P|fopdebug
+.input 'M|fopname'
+.set debug - ? P|fopdebug
+.continue RESTORE
+..
+!JEING
+.input "DATEI.F"
+.type text xcall
+.file -tempname U|xcall
+.output new 'U|xcall'
+.println ..!interpreter english noabbrev
+.println .input 'M|kommando'
+.output terminal
+.. Activate input parameters for debugging and logging in buffer P
+.copy P|fopdebug = M|fopdebug
+.copy P|loglevel = M|loglevel
+.set debug + ? P|fopdebug
+.input 'U|xcall'
+.set debug - ? P|fopdebug
+.continue RESTORE
+..
+!RESTORE
+.copy P|fopdebug = G|FALSE
+.copy P|loglevel = 0
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1: Illegal entry
+.error -line 0 -field M|kommando -message Ein FOP mit dem Namen 'M|kommando' existiert nicht!
+.end 1
+..
+!ERROR2: No program mentioned
+.error -line 0 -field M|kommando -message Bitte zuerst einen Programmnamen oder Kommandoparameter angeben!
+.end 1
+..
+!ERROR3: Parameters not supported
+.error -line 0 -field M|kommando -message Die Angabe von Parametern ist bei Unterprogrammen nicht m”glich!
+.end 1

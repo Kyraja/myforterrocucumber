@@ -1,0 +1,255 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PACKLIST.BN
+.. Autor/Author   : lei
+.. Verantwortlich : lei
+.. Funktion       : Infosystem Packliste, traversiert das Datenmodell,
+.. fÅhrt die dortigen Selektionen durch
+.. lÑdt die Ergebnisse in die Tabelle in Baumform.
+..*****************************************************************************
+..
+.set trans +
+.type text xfolgemarke xkrit xpunkt xselkrit xfeldname xdummy
+.type P87:10 paket
+.type P92:2  xozo
+.type P92:5  xfzo
+.type text xmodellmarke xobjektmarke xlistemarke
+.type text tmp1 tmp2
+.file -tempname U|tmp1
+.file -tempname U|tmp2
+.assign U|xfolgemarke = "ENDELADEN"
+.assign U|xpunkt = "."
+.continue BSTART   ? G|evtartengl="BUTTON_AFTER"      & G|evtvar="bstart"
+.continue BAUMAUF  ? G|evtartengl="BUTTON_AFTER"      & G|evtvar="tbaumaufzu"
+.continue 'U|xfolgemarke'
+
+
+Die "lade" Puffer
+  1: das Modell
+  2: die Zuordnung
+  3: die Feldliste
+  4: die Objekte
+  5: die Objekte nachgeladen mit Zeilen
+
+Prozedur zum Laden eines Objektes / Zeile und seiner Feldwerte
+
+!FLISTE
+..
+.assign U|xozo = M|ozo
+.assign U|xfzo = M|fzo
+.. Objekt nachladen
+.load 5 add M|referenz
+.continue FEHOBJ ? _G|mehr
+.load 5 line 'M|refzeile'
+.continue FEHOBJZ ? _G|mehr
+.. Feldliste einblenden
+..
+?       Felder dazu: ? M|testflagge
+.load 3 add M|fzo
+!OFLISTE
+.load 3 line
+.continue UFLISTE ? _G|mehr
+.assign U|xfeldname = 3|srcfield
+?       Pass: '3|ediptag' Feld: '3|srcfield' Wert: '5|.xfeldname' Verweis: 'F|defined(5|.xfeldname^id)' ? M|testflagge
+.continue OFLISTE ? M|verweisliste & _F|defined(5|.xfeldname^id)
+.continue OFLISTE ? M|passres <> "" & M|passres <> 3|ediptag
+.make screen line +O
+.assign M|ozo = U|xozo
+.assign M|fzo = U|xfzo
+.assign M|tbaumstufe = 4
+.assign M|tbaumicon = "icon:text"
+.assign M|referenz = 5|id
+.assign M|tbaumstat = ""
+.assign M|refzeile = 5|selzeile
+.assign M|elementpaket = 5|.xfeldname^paket ? F|defined(5|.xfeldname^paket)
+.assign M|feldpass = 3|ediptag
+.assign M|feldname = 3|srcfield
+.assign M|feldwert = '5|.xfeldname'
+.assign M|feldref = 5|.xfeldname ? F|defined(5|.xfeldname^id)
+.assign M|tbaumtext = 'M|feldname' + ": " + 'M|feldwert'
+.continue OFLISTE
+!UFLISTE
+.continue 'U|xlistemarke'
+
+
+
+Prozedur zum Laden einer Feldzuordnung und der Felder
+
+!FZOLISTE
+.. Lade FZO
+.assign U|xozo = M|ozo
+.assign U|xfzo = M|fzo
+.load 3 add M|fzo
+.continue FEHFZO ? _G|mehr
+.continue KEINFZO ? '3|srcgrliste' = ""
+.set separator=
+.output new 'U|tmp2'
+.input "DATEI.F"
+'xpunkt'.!interpreter german noabbrev
+@datenbank='3|srcgrliste'; '3|conditions'
+..
+.output new 'U|tmp1'
+.select add M|hauptpaket
+.continue FEHMODELL ? _G|mehr
+.input 'U|tmp2'
+.output terminal
+.select from 'U|tmp2' U|xdummy
+.select from 'U|tmp1' U|xkrit ^
+.assign U|xselkrit = "$,," + 'U|xkrit'
+.assign U|xselkrit = U|xselkrit + ";@zeilen=ja;zn=;@ordnung=nummer,zn" ? _3|srcheader
+?       Krit: 'U|xkrit' Selkrit: 'U|xselkrit' ? M|testflagge
+.load 4 object 'U|xselkrit'
+!OOBJEKT
+.continue UOBJEKT ? _G|mehr
+.load 4 line '4|selzeile' ? _3|srcheader
+.continue UOBJEKT ? _G|mehr
+?       Trefferobjekt: '4|id' Zeile '4|selzeile' ? M|testflagge
+.make screen line +O
+.assign M|ozo = U|xozo
+.assign M|fzo = U|xfzo
+.assign M|tbaumstufe = 3
+.assign M|tbaumicon = "icon:screen_empty"
+.assign M|referenz = 4|id
+.assign M|tbaumtext = 'M|referenz^nummer' + " " + 'M|referenz^such' ? 4|selzeile = 0
+.assign M|tbaumtext = 'M|referenz^nummer' + " " + 'M|referenz^such' + " (Zeile " + '4|selzeile' + ")" ? 4|selzeile > 0
+.assign M|tbaumstat = "+"
+.assign M|refzeile = 4|selzeile
+..zuweisen M|elementpaket = 4|paket
+.continue SFZO ? _M|feldliste
+.assign M|tbaumstat = "-"
+..
+.assign U|xlistemarke = "SFZO"
+.continue FLISTE
+
+!SFZO
+.load 4 continue
+.continue OOBJEKT
+
+!KEINFZO
+.assign M|tbaumstat = ""
+.continue UOBJEKT
+
+!UOBJEKT
+.continue 'U|xobjektmarke'
+
+Prozedur zum Modell Laden
+
+!FMODELL
+.assign U|xozo = M|ozo
+.load 2 add M|ozo
+.continue FEHOZO ? _G|mehr
+?       Objektzuordnung: '2|nummer' '2|such' ? M|testflagge
+!OOZO
+.load 2 line
+.continue UOZO ? _G|mehr
+?       Objektzuordnung Zeile: '2|nummer' '2|such' '2|zn' ? M|testflagge
+.make screen line +O
+.assign M|tbaumstufe = 2
+.assign M|tbaumicon = "icon:screen_copy"
+.assign M|ozo = U|xozo
+.assign M|fzo = 2|fzo
+.continue FEHFZO ? _G|mehr
+.assign M|tbaumtext = M|fzo^name + ": " + 'M|fzo^srcdn' + ":" + 'M|fzo^srcgrliste'
+.assign M|tbaumstat = "+"
+?       Feldzuordnung: 'M|fzo^nummer' 'M|fzo^such' ? M|testflagge
+?       Selektiere: Datei: 'M|fzo^srcdn' Gruppe: 'M|fzo^srcgrliste' Quellkopfteil: 'M|fzo^srcheader' ? M|testflagge
+?       Kriterium: 'M|fzo^conditions' ? M|testflagge
+.continue UOBJL ? _M|objektliste
+.assign U|xobjektmarke = "UOBJL"
+.continue FZOLISTE
+..
+..
+!UOBJL
+.continue OOZO
+!UOZO
+.continue 'U|xmodellmarke'
+
+!BSTART
+.make screen line -- ? M|tzeilen > 0
+.. Plausi
+.continue ERROR1 ? F|empty(M|hauptpaket)
+..
+.assign M|openknot = "st/PACKLIST.BN"
+.assign M|closeknot = "is/CLOSE.EVENTNODE"
+..
+.make screen line -- ? M|tzeilen > 0
+?       Lade Model: 'M|modell' ? M|testflagge
+.load 1 add M|modell
+.continue FEHMODELL ? _G|mehr
+.assign U|paket = M|hauptpaket
+.continue FEHMODELL ? _G|mehr
+!OMODELLZ
+.load 1 line
+.continue UMODELLZ ? _G|mehr
+.make screen line +O
+.assign M|tbaumstufe = 1
+.assign M|tbaumicon = "icon:package"
+.assign M|ozo = 1|ozo
+.assign U|xozo = 1|ozo
+.assign M|tbaumtext = "Objekttyp: " + 1|ozo^name
+.assign M|tbaumstat = "+"
+..
+.. die ersten zwei Stufen sofort laden
+.assign M|tbaumstat = "-"
+.assign U|xmodellmarke = "UFMODELL"
+.continue FMODELL
+..
+!UFMODELL
+.continue OMODELLZ
+!UMODELLZ
+.continue 'U|xfolgemarke'
+
+
+!BAUMAUF
+.continue LADEFLI ? M|tbaumstufe = 3
+.continue LADEFZO ? M|tbaumstufe = 2
+.continue LADEMOD ? M|tbaumstufe = 1
+
+Baumauf in Zeile 'M|zn' Stufe 'M|tbaumstufe'
+Abhaengig von der Stufe muss nun die Selektion wiederholt werden.
+Dazu: jeweils oben auch alles aus der Zeile holen nicht aus 1 2 3
+
+.continue ENDELADEN
+
+!LADEMOD
+.assign U|xmodellmarke = "ENDELADEN"
+.continue FMODELL
+
+!LADEFZO
+.assign U|xobjektmarke = "ENDELADEN"
+.continue FZOLISTE
+
+!LADEFLI
+.assign U|xlistemarke = "ENDELADEN"
+.continue FLISTE
+!ENDELADEN
+.continue
+..
+!ERROR1
+.cursor hauptpaket 'M|aktzeile'
+.error Es fehlt die Angabe des Pakets!
+.end 1
+..
+!FEHMODELL
+.error Modell 'M|modell' kann nicht geladen werden
+.end 1
+
+!FEHOZO
+.error Objektzuordnung '1|ozo' kann nicht geladen werden
+.end 1
+
+!FEHFZO
+.error Objektzuordnung '2|fzo' kann nicht geladen werden
+.end 1
+
+!FEHFZO1
+.error Feldzuordnung '3|nummer' Datei fehlt '3|srcdn':'3|srcgrliste':
+.end 1
+
+!FEHOBJ
+.error Objekt 'M|referenz' kann nicht geladen werden
+.end 1
+
+!FEHOBJZ
+.error Objekt 'M|referenz' Zeile 'M|refzeile' kann nicht geladen werden
+.end 1

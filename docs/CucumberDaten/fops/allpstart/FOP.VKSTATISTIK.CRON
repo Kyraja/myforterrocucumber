@@ -1,0 +1,483 @@
+..!interpreter english declaration noabbrev
+.. at 2016-07-12, 11:01
+.set trans -
+..========================================================================
+..==  Name              : FOP.VKSTATISTIK.CRON
+..==  Pfad              : allpstart
+..==  Funktion          : Erstellung der VK/EK Statistik DatensÑtze
+..==  Erstellungsdatum  : 01.03.2011
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2016 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+..====================================================
+.type text    xtsys xtsel xtcmd xtdatei xtid xtmerkid xtpos xtdbgr
+.type integer xidatei ximonat xijahr
+.type realx   xxmge xxlehe xxpehe  xxkorrmge xxkorrbudget
+.type GD      xdbezugsdatum xdbeginnmonat xdvormonat xdatum xdsela xdsele xderfass
+.type GD19    xdzeitpunkt xdpmllaufvkstat xd19 xdlastrun
+.type ZAE1    xversionn
+.type A7      xekvk
+.type bool    xbok xbmehr
+.type TAZ1    xle xpe xhe
+.type text    xtprojekt         ? _F|defined(U|xtprojekt)
+.type integer   xprocsp         ? _F|defined(U|xprocsp)
+.set DEMAND -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- LS_Korrektur -----
+.formula U|xxkorrmge = 0
+.formula U|xdsela = 'U|xijahr' + ("0" + 'U|ximonat')>>2 + "01"
+.formula U|xdsele =  U|xdsela + 31
+.formula U|xdsele = 'U|xdsele:8'<<6 + "01"
+.formula U|xdsele =  U|xdsele - 1
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";kotyp==(" + 'G|LIKO' + ");orig==" + U|xtmerkid
+.formula U|xtsel = U|xtsel + ";kovom<="       + 'U|xdsele:8'    ? _F|sysinfo(18)^bewlei
+.formula U|xtsel = U|xtsel + ";kopf^leidat<=" + 'U|xdsele:8'    ?  F|sysinfo(18)^bewlei
+.formula U|xtsel = U|xtsel + ";kopf^erfass>"  + 'U|xdsele:8'
+.formula U|xtsel = U|xtsel + ";kopf^uebertr=0"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Both)"
+.load 0 group 'U|xtdbgr' 'U|xtsel'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.formula U|xxkorrmge = U|xxkorrmge + (0|mge * 0|lehe)
+.load 0 continue
+.continue LOOP001
+!ELOP001: ==============================
+.copy U|xbok = G|TRUE
+.formula U|xtsel = "$,,yaupos==" + U|xtmerkid + ";ybezugsdatum=" + 'U|xdsele' + ";@filingmode=(Active)"
+.load 9 group 'U|xydbgrvkstat' 'U|xtsel'
+.continue EL001 ? _(G|mehr)
+.select lock group 'U|xydbgrvkstat' '9|id'
+.continue EL002 ? _(_(G|mehr))
+.set trans +
+FEHLER: Statistiksatz '9|numer' zu Position '0|id' kann nicht bearbeitet werden.
+        Die Position wird Åbersprungen.
+.set trans -
+.copy U|xbok = G|FALSE
+.continue FI002
+!EL002
+.formula H|ykorrlimge = U|xxkorrmge             ? H|ylehe =  0
+.formula H|ykorrlimge = U|xxkorrmge / H|ylehe   ? H|ylehe <> 0
+.rewrite
+!FI002
+!EL001
+.formula U|xtmerkid = U|xtid
+.formula U|ximonat  = F|month(U|xdatum)
+.formula U|xijahr   = F|year(U|xdatum)
+.continue 'xprocst.xprocsp'
+!PROC002: ----- RE_Korrektur -----
+.formula U|xdsela = 'U|xijahr' + ("0" + 'U|ximonat')>>2 + "01"
+.formula U|xdsele =  U|xdsela + 31
+.formula U|xdsele = 'U|xdsele:8'<<6 + "01"
+.formula U|xdsele =  U|xdsele - 1
+!REPT001: ==============================
+.formula U|xxkorrmge    = 0
+.formula U|xxkorrbudget = 0
+.formula U|xtsel = "$,,yaupos==" + U|xtmerkid + ";ybezugsdatum=" + 'U|xdsele' + ";@filingmode=(Active)"
+.load 9 group 'U|xydbgrvkstat' 'U|xtsel'
+.continue EL003 ? _(G|mehr)
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";orig==" + U|xtmerkid
+.formula U|xtsel = U|xtsel + ";kopf^uebertr=0"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Both)"
+.load 0 group 'U|xtdbgr' 'U|xtsel'
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.continue EL004 ? _(0|kotyp = G|REKO)
+.formula U|xderfass = 0|kopf^erfass
+.continue EL005 ? _((0|kopf^budat <= U|xdsele) & (U|xderfass > U|xdsele))
+.formula U|xxkorrmge = U|xxkorrmge + (0|mge * 0|lehe)
+.continue EL006 ? _(0|dnr = 3)
+.continue EL007 ? _((9|yprjmpermabgerstdk = "D") ; ((F|empty(9|yprjmpermabgerstdk)) & ((9|yprojekt^yermabgerstdk = "D") ; ((F|empty(9|yprojekt^yermabgerstdk)) & (F|sysinfo(10)^ykonfigprjm^ypmermabgerstdk = "D")))))
+.formula U|xxkorrbudget = 0|nwert
+.formula U|xxkorrbudget = 0|nwert - 0|stwert                                    ? 0|kopf^brutto
+.formula U|xxkorrbudget = F|fxamount(G|inland,U|xxkorrbudget,,0|pland,G|TRUE)   ? 0|pland <> G|inland
+!EL007
+!EL006
+!EL005
+.continue FI004
+!EL004
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";kotyp==(" + 'G|REKO' + ");orig==" + 0|id
+.formula U|xtsel = U|xtsel + ";kopf^budat<="  + 'U|xdsele:8'
+.formula U|xtsel = U|xtsel + ";kopf^erfass>"  + 'U|xdsele:8'
+.formula U|xtsel = U|xtsel + ";kopf^uebertr=0"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Both)"
+.load 1 group 'U|xtdbgr' 'U|xtsel'
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.formula U|xxkorrmge = U|xxkorrmge + (1|mge * 1|lehe)
+.load 1 continue
+.continue LOOP003
+!ELOP003: ==============================
+!FI004
+.load 0 continue
+.continue LOOP002
+!ELOP002: ==============================
+.copy U|xbok = G|TRUE
+.select lock group 'U|xydbgrvkstat' '9|id'
+.continue EL008 ? _(_(G|mehr))
+.set trans +
+FEHLER: Statistiksatz '9|numer' zu Position '0|id' kann nicht bearbeitet werden.
+        Die Position wird Åbersprungen.
+.set trans -
+.copy U|xbok = G|FALSE
+.continue FI008
+!EL008
+.formula H|ykorrremge  = U|xxkorrmge            ? H|ylehe =  0
+.formula H|ykorrremge  = U|xxkorrmge / H|ylehe  ? H|ylehe <> 0
+.formula H|ykorrbudget = U|xxkorrbudget
+.rewrite
+!FI008
+!EL003
+.formula U|xdsele =  U|xdsele + 32
+.formula U|xdsele = 'U|xdsele:8'<<6 + "01"
+.formula U|xdsele =  U|xdsele - 1
+.continue REPT001 ? _(U|xdsele >= U|xdbezugsdatum)
+.formula U|xtmerkid = U|xtid
+.formula U|ximonat  = F|month(U|xdatum)
+.formula U|xijahr   = F|year(U|xdatum)
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Statistik_Datensatz -----
+.copy U|xbok = G|TRUE
+.formula U|xtsel = "$,,yaupos==" + 0|id + ";ybezugsdatum=" + U|xdbezugsdatum:8 + ";@filingmode=(Active)"
+.load 9 group 'U|xydbgrvkstat' 'U|xtsel'
+.continue EL009 ? _(G|mehr)
+.select lock add 9|id
+.continue EL010 ? _(_(G|mehr))
+.set trans +
+FEHLER: Statistiksatz '9|numer' zu Position '0|id' kann nicht bearbeitet werden.
+        Die Position wird Åbersprungen.
+.set trans -
+.copy U|xbok = G|FALSE
+!EL010
+.continue FI009
+!EL009
+.formula U|xtcmd "make " + G|hdatname.xydbvkstat + " group" + 'U|xygrvkstat'
+.'U|xtcmd'
+!FI009
+.continue EL011 ? _(U|xbok)
+.formula H|such         = "S" + U|xdbezugsdatum:8
+.formula H|name         = "Auftrag: "    + 0|kopf + ", Position: " + 0|pnum + ", Datum: " + 'G|DATUM'   ? 'U|xekvk(L=":")' = "(Sales)"
+.formula H|name         = "Bestellung: " + 0|kopf + ", Position: " + 0|pnum + ", Datum: " + 'G|DATUM'   ? 'U|xekvk(L=":")' = "(Purchasing)"
+.formula H|ybezugsdatum = U|xdbezugsdatum
+.formula H|yekvk        = U|xekvk
+.formula H|ykuli       = 0|kunde^id                 ? F|defined(0|kunde)
+.formula H|ykuli       = 0|lief^id                  ? F|defined(0|lief)
+.formula H|yauftrag    = 0|kopf^id
+.formula H|yaupos      = 0|id
+.copy    H|ykstelle    = 0|kstelle
+.copy    H|ykonto      = 0|konto
+.copy    H|yprojekt    = 0|projekt
+.copy    H|yabrechtypk = 0|yprjmpabrechtypk         ? F|defined(0|yprjmpabrechtypk)
+.formula H|yevpnum        = 0|pnum
+.copy    H|yalternativpos = 0|alternativpos
+.formula H|yalternativgrp = 0|alternativgrp
+.formula H|yevptext       = 0|ptext
+.formula H|yevkovom       = 0|kovom
+.formula H|yevtyp         ='0|typ(L="0")'
+.formula H|ymge           = 0|mge
+.formula H|ypreis         = 0|preis
+.formula H|yproz          = 0|proz
+.formula H|ypwert         = 0|pwert
+.formula H|yeigenanteil   = 0|yprjmpeigenleist      ? F|defined(0|yprjmpeigenleist)
+.formula H|yfremdanteil   = 0|yprjmpfremdleist      ? F|defined(0|yprjmpfremdleist)
+.formula H|ysonstkost     = 0|yprjmpsonstkost       ? F|defined(0|yprjmpsonstkost)
+.formula H|yfertleist     = 0|yprjmpfertleist       ? F|defined(0|yprjmpfertleist)
+.formula H|ynwert         = 0|nwert
+.formula H|ynpwert        = 0|npwert
+.formula H|ystsatz        = 0|stsatz
+.formula H|ystwert        = 0|stwert
+.formula H|ybudgetwert    = 0|yprjmpbudgetwert
+.copy    H|ypland         = 0|pland
+.formula H|yewkurs        = 0|kopf^ewkurs
+.copy    H|ykursfix       = 0|kopf^kursfix
+.copy    H|ybrutto        = 0|kobrutto
+.copy    H|yhe            = 0|he
+.copy    H|ype            = 0|pe
+.formula H|ylehe          = 0|lehe
+.formula H|ypehe          = 0|pehe
+.copy    H|yartex         = 0|artex
+.formula H|yartname       = 0|tename
+.assign  H|yzptyp         = 0|artex^zptyp           ?  F|defined(0|artex^zptyp)
+.assign  H|yablagen       = 0|ablagen
+.copy    H|yprjmparbpaket     = 0|yprjmparbpaket        ? F|defined(0|yprjmparbpaket)
+.copy    H|yprjmppvorgang     = 0|yprjmppvorgang        ? F|defined(0|yprjmppvorgang)
+.formula H|yprjmpbabger       = 0|yprjmpbabger          ? F|defined(0|yprjmpbabger)
+.copy    H|yprjmpnabrechrelev = 0|yprjmpnabrechrelev    ? F|defined(0|yprjmpnabrechrelev)
+.copy    H|yprjmpnullrechnung = 0|yprjmpnullrechnung    ? F|defined(0|yprjmpnullrechnung)
+.copy    H|yprjmpermabgerstdk = 0|yprjmpermabgerstdk    ? F|defined(0|yprjmpermabgerstdk)
+.copy    H|yprjmpbedarfstraeg = 0|yprjmpbedarfstraeg    ? F|defined(0|yprjmpbedarfstraeg)
+.formula H|yprjmpfcwert       = 0|yprjmpfcwert          ? F|defined(0|yprjmpfcwert)
+.formula H|yprjmpsolldatanf   = 0|yprjmpsolldatanf      ? F|defined(0|yprjmpsolldatanf)
+.formula H|yprjmpsolldatang   = 0|yprjmpsolldatang      ? F|defined(0|yprjmpsolldatang)
+.formula H|yprjmpsolldatbest  = 0|yprjmpsolldatbest     ? F|defined(0|yprjmpsolldatbest)
+.formula H|yprjmpsolldatlief  = 0|yprjmpsolldatlief     ? F|defined(0|yprjmpsolldatlief)
+.formula H|yprjmpbem          = 0|yprjmpbem             ? F|defined(0|yprjmpbem)
+.formula H|yprjmpekposid      = 0|yprjmpekposid         ? F|defined(0|yprjmpekposid)
+.formula H|yprjmpekbeposid    = 0|yprjmpekbeposid       ? F|defined(0|yprjmpekbeposid)
+.formula H|yprjmpprojek       = 0|yprjmpprojek          ? F|defined(0|yprjmpprojek)
+.formula H|ylimge       = 0|limge
+.formula H|yremge       = 0|remge
+.formula U|xtsel = "$,,orig==" + 0|id + ";kotyp==(PackingSlip);@ablageart=(Both)"
+.load 8 group 'U|xtdbgr' 'U|xtsel'
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.formula H|yremge   = H|yremge + 8|remge    ? _8|kopf^uebertr
+.load 8 continue
+.continue LOOP004
+!ELOP004: ==============================
+.formula H|yoffenwert = 0
+.continue EL012 ? _(0|mge = 0)
+.continue EL013 ? _(0|pwert = 0)
+.formula H|yoffenwert = H|yremge
+.continue FI013
+!EL013
+.formula H|yoffenwert = 0|nwert / 0|pwert * H|yremge
+!FI013
+.continue FI012
+!EL012
+.formula H|yoffenwert = 0|nwert / 0|mge * H|yremge
+!FI012
+.rewrite
+!EL011
+.continue 'xprocst.xprocsp'
+!PROC004: ----- Vorgaenge -----
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";projekt=="  +  U|xtprojekt    ? _F|empty(U|xtprojekt)
+.formula U|xtsel = U|xtsel + ";kotyp==(" + 'G|ABKO' + ");@filingmode=(Active)"
+.load 0 group 'U|xtdbgr' 'U|xtsel'
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.continue EL014 ? _((0|typ <> G|SUPOS) & (0|typ <> G|STPOS) & (0|typ <> G|SIPOS) & (0|typ <> G|TRPOS) & (0|typ <> G|ESPOS) & (0|typ <> G|ZSPOS))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC003
+!RET001
+.formula xprocsp = xprocsp - 1
+!EL014
+.load 0 continue
+.continue LOOP005
+!ELOP005: ==============================
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";projekt=="  +  U|xtprojekt    ? _F|empty(U|xtprojekt)
+.formula U|xtsel = U|xtsel + ";kotyp==(" + 'G|ABKO' + ");ablagen=" + 'U|xdpmllaufvkstat:14' + "!;@filingmode=(Filed)"
+.load 0 group 'U|xtdbgr' 'U|xtsel'
+!LOOP006: ==============================
+.continue ELOP006 ? _(G|mehr)
+.continue EL015 ? _((0|typ <> G|SUPOS) & (0|typ <> G|STPOS) & (0|typ <> G|SIPOS) & (0|typ <> G|TRPOS) & (0|typ <> G|ESPOS) & (0|typ <> G|ZSPOS))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC003
+!RET002
+.formula xprocsp = xprocsp - 1
+!EL015
+.load 0 continue
+.continue LOOP006
+!ELOP006: ==============================
+.formula U|xtsel = "$,,ybezugsdatum==" + U|xdbezugsdatum:8
+.formula U|xtsel = U|xtsel + ";versionn=!"  + 'U|xversionn'
+.formula U|xtsel = U|xtsel + ";yprojekt=="  +  U|xtprojekt              ? _F|empty(U|xtprojekt)
+.formula U|xtsel = U|xtsel + ";yablagen==`" + ";@filingmode=(Active)"
+.load 9 group 'U|xydbgrvkstat' 'U|xtsel'
+!LOOP007: ==============================
+.continue ELOP007 ? _(G|mehr)
+.load 0 group 'U|xtdbgr' '9|yaupos'
+.continue EL016 ? _(_(G|mehr))
+.select lock add 9|id
+.continue EL017 ? _(_(G|mehr))
+.set trans +
+FEHLER: Statistiksatz '9|numer' zu Position '0|id' kann nicht bearbeitet werden.
+        Die Position wird Åbersprungen.
+.set trans -
+.copy U|xbok = G|FALSE
+!EL017
+.continue EL018 ? _(U|xbok)
+.assign  H|yablagen   = U|xversionn
+.formula H|yoffenwert = 0
+.rewrite
+!EL018
+!EL016
+.load 9 continue
+.continue LOOP007
+!ELOP007: ==============================
+.output NEW 'U|xtdatei'
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";projekt==" +  U|xtprojekt                        ? _F|empty(U|xtprojekt)
+.formula U|xtsel = U|xtsel + ";kotyp==(" + 'G|REKO' + ");orig<>`;versionn>=" + 'U|xdbeginnmonat:8'
+.formula U|xtsel = U|xtsel + ";kopf^budat<"  + 'U|xdbeginnmonat:8'
+.formula U|xtsel = U|xtsel + ";kopf^uebertr=0"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Both)"
+.load 0 group 'U|xtdbgr' 'U|xtsel'
+!LOOP008: ==============================
+.continue ELOP008 ? _(G|mehr)
+.continue EL019 ? _((0|typ <> G|SUPOS) & (0|typ <> G|STPOS) & (0|typ <> G|SIPOS) & (0|typ <> G|TRPOS) & (0|typ <> G|ESPOS) & (0|typ <> G|ZSPOS))
+.add 0|orig
+.assign U|xbmehr = G|mehr
+!LOOP009: ==============================
+.continue ELOP009 ? _(U|xbmehr)
+.continue EL020 ? _(D|kotyp = G|ABKO)
+.formula U|xdatum = 0|kopf^budat        ? _F|sysinfo(18)^bewlei
+.formula U|xdatum = 0|kopf^leidat       ?  F|sysinfo(18)^bewlei
+'D|id' # '0|id' # 'U|xdatum:8' #
+.assign U|xbmehr = G|FALSE
+.continue FI020
+!EL020
+.add D|orig
+.assign U|xbmehr = G|mehr
+!FI020
+.continue LOOP009
+!ELOP009: ==============================
+!EL019
+.load 0 continue
+.continue LOOP008
+!ELOP008: ==============================
+.output NEW WERF.WEG
+.continue EL021 ? _(F|filenotempty(U|xtdatei))
+.system 'F|expr("sort -k 1,1 -k 3,3 -t# -o " + U|xtdatei + " " + U|xtdatei)' BACKGROUND
+.formula U|xtmerkid  = ""
+.formula U|ximonat   = 0
+.formula U|xijahr    = 0
+.file -OPEN U|xidatei 'U|xtdatei'
+.file -READ U|xidatei U|xtid # U|xtpos # U|xdatum #
+!LOOP010: ==============================
+.continue ELOP010 ? _(G|mehr)
+.formula U|xtmerkid = U|xtid            ? F|empty(U|xtmerkid)
+.formula U|ximonat  = F|month(U|xdatum) ? U|ximonat = 0
+.formula U|xijahr   = F|year(U|xdatum)  ? U|xijahr  = 0
+.continue EL022 ? _((_(U|xtmerkid = U|xtid)) ; (_(U|ximonat  = F|month(U|xdatum))) ; (_(U|xijahr   = F|year(U|xdatum))))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC002
+!RET003
+.formula xprocsp = xprocsp - 1
+!EL022
+.file -READ U|xidatei U|xtid # U|xtpos # U|xdatum #
+.continue LOOP010
+!ELOP010: ==============================
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC002
+!RET004
+.formula xprocsp = xprocsp - 1
+.file -CLOSE U|xidatei
+!EL021
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.formula U|xdzeitpunkt = G|zeitpunkt
+.formula U|xversionn  = G|versionneu
+.formula U|xd19          = ">M"
+.formula U|xdbezugsdatum = U|xd19
+.formula U|xd19          = "<M"
+.formula U|xdbeginnmonat = U|xd19
+.formula U|xd19          = "<M-1"
+.formula U|xdvormonat    = U|xd19
+.file -TEMPNAME U|xtdatei
+.input DATEI.F
+.continue EL023 ? _(F|empty(U|xtprojekt))
+===============================================================================
+.set trans +
+Bestell- und Auftragsstatistik 'G|txname'
+Start:        'U|xdzeitpunkt'
+Bezugsdatum:  'U|xdbezugsdatum'
+Beginn Monat: 'U|xdbeginnmonat'
+Vormonat:     'U|xdvormonat'
+.set trans -
+
+.select lock add F|sysinfo(10)^ykonfigprjm
+.continue EL024 ? _(G|mehr)
+.assign U|xdpmllaufvkstat = H|ypmllaufvkstat
+.assign U|xdlastrun       = H|ypmllaufvkstat
+.set trans +
+letzter Lauf: 'U|xdlastrun'
+.set trans -
+.continue EL025 ? _(F|sysinfo(18)^allpstd)
+.formula U|xekvk  = "(Sales)"
+.formula U|xtdbgr = "3:2"
+
+Start 'U|xekvk' 'U|xekvk(L=":")'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC004
+!RET005
+.formula xprocsp = xprocsp - 1
+!EL025
+.formula U|xekvk  = "(Purchasing)"
+.formula U|xtdbgr = "4:2"
+.output TERMINAL
+
+Start 'U|xekvk' 'U|xekvk(L=":")'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC004
+!RET006
+.formula xprocsp = xprocsp - 1
+.select lock add F|sysinfo(10)^ykonfigprjm
+.continue EL026 ? _(G|mehr)
+.formula U|xdpmllaufvkstat = H|ypmllaufvkstat
+.formula H|ypmllaufvkstat  = U|xdzeitpunkt
+.formula H|yvnllaufvkstat  = U|xversionn
+.rewrite
+.output TERMINAL
+.set trans +
+Ende:         'G|zeitpunkt'
+.set trans -
+===============================================================================
+.continue FI026
+!EL026
+.set trans +
+FEHLER: ProjectSuite Konfiguration kann nicht geîffnet werden.
+        Eintrag letzter Statistiklauf ist nicht mîglich
+.set trans -
+!FI026
+.continue FI024
+!EL024
+.set trans +
+FEHLER: ProjectSuite Konfiguration kann nicht geîffnet werden.
+PROGRAMMABBRUCH
+.set trans -
+.continue
+!FI024
+.continue FI023
+!EL023
+.load 9 group 'U|xydbgrprojekt' 'U|xtprojekt'
+.continue EL027 ? _(G|mehr)
+.continue EL028 ? _(F|sysinfo(18)^allpstd)
+.formula U|xekvk  = "(Sales)"
+.formula U|xtdbgr = "3:2"
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC004
+!RET007
+.formula xprocsp = xprocsp - 1
+!EL028
+.formula U|xekvk  = "(Purchasing)"
+.formula U|xtdbgr = "4:2"
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC004
+!RET008
+.formula xprocsp = xprocsp - 1
+!EL027
+!FI023
+.select -
+.load 0
+.load 1
+.load 9
+.continue

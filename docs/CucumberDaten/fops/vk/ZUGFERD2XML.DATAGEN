@@ -1,0 +1,89 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : ZUGFERD2XML.DATAGEN
+..  Autor          : saac
+..  Verantwortlich : teamreport
+..  Kontrolle      : cl
+..  Funktion       : XML-Datengenerator des Infosystems ev/EVVORGANG zur Erzeugung
+..                   der Rechnungsdaten im ZUGFERD2-Format
+..  Functionality  : XML data generator for the Infosystem ev/EVVORGANG to build
+..                   invoice date for ZUGFERD2
+..*****************************************************************************
+.type text xfullsubs                            ? _F|defined(U|xfullsubs)
+.type text xpoorsubs                            ? _F|defined(U|xpoorsubs)
+.type bool xTestMode                            ? _F|defined(U|xTestMode)
+.type text xFormat                              ? _F|defined(U|xFormat)
+.type text xcurrencyID                          ? _F|defined(U|xcurrencyID)
+.type text xDateFormat                          ? _F|defined(U|xDateFormat)
+.type text xBuyerReference                      ? _F|defined(U|xBuyerReference)
+.type text xBuyerOrderReferencedDocument        ? _F|defined(U|xBuyerOrderReferencedDocument)
+.type text xerrormessage                        ? _F|defined(U|xerrormessage)
+..
+.set trans -
+.continue ERRCONFIG ? _F|sysinfo(18)^zugferd
+..
+.. Basic settings for all sections
+.copy U|xTestMode = _M|vorgang^uebertr
+.copy U|xFormat = "urn:cen.eu:en16931:2017"
+.copy U|xcurrencyID = M|land
+.copy U|xDateFormat = "102"
+..
+.copy U|xBuyerReference = M|frzeich
+.copy U|xBuyerOrderReferencedDocument = M|navom
+..
+.formula U|xpoorsubs="+LX,&,&amp;, ,<,&lt;, ,>,&gt;,"
+.set substitution 'U|xpoorsubs'
+.tablerecord unformatted
+.set decpoint .
+.set thoussep ""
+.output new 'U|xxmldata' -encoding "UTF-8"
+..*****************************************************************************
+!OUTPUT
+..*****************************************************************************
+<?xml version="1.0" encoding="UTF-8"?>
+..*****************************************************************************
+<rsm:CrossIndustryInvoice xmlns:a="urn:un:unece:uncefact:data:standard:QualifiedDataType:100" xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100" xmlns:qdt="urn:un:unece:uncefact:data:standard:QualifiedDataType:10" xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100">
+    <rsm:ExchangedDocumentContext>
+.continue FORMAT ? _U|xTestMode
+        <ram:TestIndicator>
+            <udt:Indicator>true</udt:Indicator>
+        </ram:TestIndicator>
+!FORMAT
+        <ram:GuidelineSpecifiedDocumentContextParameter>
+            <ram:ID>'U|xFormat'</ram:ID>
+        </ram:GuidelineSpecifiedDocumentContextParameter>
+    </rsm:ExchangedDocumentContext>
+.input "ZUGFERD2XML.EXCHANGEDDOCUMENT"
+        <rsm:SupplyChainTradeTransaction>
+.input "ZUGFERD2XML.INCLUDEDSUPPLYCHAINTRADELINEITEM"
+            <ram:ApplicableHeaderTradeAgreement>
+?               <ram:BuyerReference>'U|xBuyerReference'</ram:BuyerReference>? _F|empty(U|xBuyerReference)
+.input "ZUGFERD2XML.SELLERTRADEPARTY"
+.input "ZUGFERD2XML.BUYERTRADEPARTY"
+.input "ZUGFERD2XML.APPLICABLETRADEDELIVERYTERMS"
+.continue ENDSUPPLYCHAIN ? F|empty(U|xBuyerOrderReferencedDocument)
+            <ram:BuyerOrderReferencedDocument>
+                <ram:IssuerAssignedID>'U|xBuyerOrderReferencedDocument'</ram:IssuerAssignedID>
+            </ram:BuyerOrderReferencedDocument>
+!ENDSUPPLYCHAIN
+            </ram:ApplicableHeaderTradeAgreement>
+
+.input "ZUGFERD2XML.APPLICABLEHEADERTRADEDELIVERY"
+.input "ZUGFERD2XML.APPLICABLEHEADERTRADESETTLEMENT"
+        </rsm:SupplyChainTradeTransaction>
+    </rsm:CrossIndustryInvoice>
+..*****************************************************************************
+.output terminal
+.set substitution
+.tablerecord
+.set languagesettings "T"
+.continue END
+..*****************************************************************************
+!ERRCONFIG
+.set trans +
+.formula U|xerrormessage = "In der Konfiguration ist die Erweiterung ZUGFERD2 nicht aktiviert."
+.set trans -
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

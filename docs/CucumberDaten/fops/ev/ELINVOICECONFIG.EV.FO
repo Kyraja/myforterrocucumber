@@ -1,0 +1,210 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICECONFIG.EV.FO
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+..
+..<META M|='ev/ELINVOICECONFIG'>
+.. Je nach Art das Feld unterscheiden
+.continue VEN01 ? P|maskkontextfop = "Einkauf"
+.continue CUS01 ? P|maskkontextfop = "Verkauf"
+..
+!VEN01
+..<META 9|='P1:4'>
+.continue CVEND01
+!CUS01
+..<META 9|='P0:4'>
+.continue CVEND01
+!CVEND01
+..
+.. Event evaluation
+.. ----------- ----- Events -------- -------------------------------------------
+.continue MITZF       ?  G|evtartengl = "FIELD_EXIT"     &  G|evtvar = "kmitzugferdkonfig"
+.continue OHNEZF      ?  G|evtartengl = "FIELD_EXIT"     &  G|evtvar = "kohnezugferdkonfig"
+.continue TABINIT     ?  G|evtartengl = "FIELD_EXIT"     &  G|evtvar = "kvon"
+.continue TABINIT     ?  G|evtartengl = "FIELD_EXIT"     &  G|evtvar = "kbis"
+.continue TABINIT     ?  G|evtartengl = "FIELD_EXIT"     &  G|evtvar = "ksuchwort"
+.continue ABM         ?  G|evtartengl = "FIELD_EXIT"     &  G|evtvar = "kabm"
+.continue ABMVER      ?  G|evtartengl = "FIELD_EXIT"     &  G|evtvar = "kabmverarb"
+.continue OBJSUCH     ?  G|evtartengl = "FIELD_EXIT"     &  G|evtvar = "kobjsuche"  
+.continue MARK        ?  G|evtartengl = "BUTTON_AFTER"   &  G|evtvar = "sellall"
+.continue DEMARK      ?  G|evtartengl = "BUTTON_AFTER"   &  G|evtvar = "desellall"
+.continue BSEL        ?  G|evtartengl = "BUTTON_AFTER"   &  G|evtvar = "kbuselektion"
+.continue TLIEF       ?  G|evtartengl = "FIELD_EXIT"     &  G|evtvar = "tlief"
+.continue TKUNDE      ?  G|evtartengl = "FIELD_EXIT"     &  G|evtvar = "tkunde"
+.continue VERKAUF     ?  G|evtartengl = "FIELD_EXIT"     &  G|evtvar = "verkauf"
+.continue EINKAUF     ?  G|evtartengl = "FIELD_EXIT"     &  G|evtvar = "einkauf"
+.. ----------- ----- Events -------- -------------------------------------------
+.continue END
+..
+!MARK
+.assign M|mark = "(SelectAll)"
+.input 'M|tabmark' ? _F|empty(M|tabmark)
+.continue END
+..
+!DEMARK
+.assign M|mark = "(DeselectAll)"
+.input 'M|tabmark' ? _F|empty(M|tabmark)
+.continue END
+..
+!MITZF
+.copy M|kohnezugferdkonfig=G|false ? M|kmitzugferdkonfig
+.continue TABINIT
+..
+!OHNEZF
+.copy M|kmitzugferdkonfig=G|false ? M|kohnezugferdkonfig
+.continue TABINIT
+..
+!BSEL: selection menu overrides header fields
+.formula M|select = "!"
+.formula M|kbselektion=G|false
+.formula M|kvon= ""
+.formula M|kbis= ""
+.formula M|ksuchwort =""
+.formula M|kmitzugferdkonfig = G|false
+.formula M|kohnezugferdkonfig = G|false
+.formula G|evtfeldneu = "%"
+.input "is/AUSWAHL"
+.formula M|kbselektion=G|true ? 'M|select:1' <> "!"
+.continue TABINIT
+..
+!TABINIT
+.input "is/TABLEEREN"
+.continue END
+..
+!ABM
+.continue END ? F|equals(M|kabm, "")
+.continue WRONGAB ? M|kabm^edinachraz <> M|kedinachrzugferdaz
+.. Je nach Art das Feld unterscheiden
+.continue VEN04 ? P|maskkontextfop = "Einkauf"
+.continue CUS04 ? P|maskkontextfop = "Verkauf"
+..
+!VEN04
+.continue WRONGAB ? _F|equals(M|kabm^imex, "(Import)")
+.continue CVEND04
+!CUS04
+.continue WRONGAB ? _F|equals(M|kabm^imex, "(Export)")
+.continue CVEND04
+!CVEND04
+.continue END
+..
+!ABMVER
+..Nach Im- und Export wird nicht unterschieden
+.continue END ? F|equals(M|kabmverarb, "")
+.continue WRONGVER ? _F|equals(M|kabmverarb^imex, "(Processing)")
+.continue WRONGVER ? M|kabmverarb^edinachraz <> M|kedinachrzugferdaz
+.continue END
+..
+!OBJSUCH
+.continue END ? F|equals(M|kobjsuche, "")
+.continue WRONGOS ? M|kobjsuche^edinachraz <> M|kedinachrzugferdaz
+.continue END
+..
+!TLIEF: manuelle Eingaben eines Lieferant
+.continue KEINZF ? F|empty(M|tlief)
+.continue KEINZF ? F|empty(M|tlief^edinfosnr)
+.load 9 supplier 'F|formatstr("$,,;@gruppe=4;@zeile=(1);klnum=={1};edinachr=={2}", M|tlief^id, M|kedinachrzugferd^id)'
+.continue KEINZF ? _G|mehr
+.load 9 line '9|selzeile'
+.continue KEINZF ? _G|mehr
+..Tabelle schreiben
+.formula M|tediinfolief = 9|id
+.formula M|tabm = 9|ieabmodell
+.formula M|tabmverab = 9|abmodell
+.formula M|tobjsuche = 9|suchkonfig
+.formula M|taktiv = 9|erlaubt
+.load 9
+.continue END
+..
+!TKUNDE: manuelle Eingaben eines Kunden
+.continue KEINZF ? F|empty(M|tkunde)
+.continue KEINZF ? F|empty(M|tkunde^edinfosnr)
+.load 9 customer 'F|formatstr("$,,;@gruppe=4;@zeile=(1);klnum=={1};edinachr=={2}", M|tkunde^id, M|kedinachrzugferd^id)'
+.continue KEINZF ? _G|mehr
+.load 9 line '9|selzeile'
+.continue KEINZF ? _G|mehr
+..Tabelle schreiben
+.formula M|tediinfokunde = 9|id
+.formula M|tabm = 9|ieabmodell
+.formula M|tabmverab = 9|abmodell
+.formula M|tobjsuche = 9|suchkonfig
+.formula M|taktiv = 9|erlaubt
+.load 9
+.continue END
+..
+!KEINZF: supplier was removed in row or has no ZF data
+.formula M|tediinfolief = ""
+.formula M|tediinfokunde = ""
+.formula M|tabm = ""
+.formula M|tabmverab = ""
+.formula M|tobjsuche = ""
+.formula M|taktiv = G|false
+..Je nach Art das Feld unterscheiden
+.continue VEN03 ? P|maskkontextfop = "Einkauf"
+.continue CUS03 ? P|maskkontextfop = "Verkauf"
+!VEN03
+.. keep marking, except when supplier field is empty
+.formula M|tmark = G|false ? F|empty(M|tlief)
+.continue CVEND03
+!CUS03
+.. keep marking, except when customer field is empty
+.formula M|tmark = G|false ? F|empty(M|tkunde)
+.continue CVEND03
+!CVEND03
+.continue END
+..
+..Unterscheidung zwischen Ein- und Verkauf
+..Felder leeren und globale Variable setzen
+!VERKAUF
+.copy M|einkauf = G|false ? M|verkauf
+.copy M|verkauf = G|true ? _M|einkauf & _M|verkauf
+.protection kabmverarb 0
+.protection kobjsuche 0
+.continue MASK
+..
+!EINKAUF
+.copy M|verkauf = G|false ? M|einkauf
+.copy M|einkauf = G|true ? _M|einkauf & _M|verkauf
+.protection -reset kabmverarb 0
+.protection -reset kobjsuche 0
+.continue MASK
+..
+!MASK
+.assign P|maskkontextfop = "Einkauf" ? M|einkauf
+.assign P|maskkontextfop = "Verkauf" ? M|verkauf 
+.continue KOPFLEEREN
+..
+!KOPFLEEREN: schreibbare Felder leeren
+.formula M|kvon = ""
+.formula M|kbis = ""
+.formula M|ksuchwort = ""
+.formula M|kmitzugferdkonfig = G|false
+.formula M|kohnezugferdkonfig = G|false
+.formula M|kabm = ""
+.formula M|kabmverarb = ""
+.formula M|kobjsuche = ""
+.formula M|kaktiv = G|false
+.formula M|kbselektion = ""
+.continue TABINIT
+..*****************************************************************************
+!END
+.continue
+..
+!WRONGAB
+.formula M|kabm = ""
+.error Dieses Abbildungsmodell ist nicht fÅr 'M|kedinachrzugferdaz'.
+.end 1
+..
+!WRONGVER
+.formula M|kabmverarb = ""
+.error Dieses Abbildungsmodell fÅr Verarbeitung ist nicht fÅr 'M|kedinachrzugferdaz'.
+.end 1
+..
+!WRONGOS
+.formula M|kobjsuche = ""
+.error Diese Objektsuche ist nicht fÅr 'M|kedinachrzugferdaz'.
+.end 1

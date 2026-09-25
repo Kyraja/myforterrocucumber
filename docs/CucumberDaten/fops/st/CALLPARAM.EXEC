@@ -1,0 +1,244 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : CALLPARAM.EXEC
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      : xg
+.. Funktion       : Realisiert die Anbindung eines Infosystems dialoglos durch
+.. genau einen Aufrufparameter in U|xcallparam. Dieses Feld kann auch durch den
+.. den Namensparameter "callparamname" oder einen Positionsparameter gesetzt
+.. werden. Beispiele: Siehe Felder "tbusstl*" im Infosystem demo/MYLART.
+.. Ablauf         : Unterprogramm
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : ja
+..   verwendet Namensparameter (xpname=wert)   : ja
+..
+.. Der Bezeichner des Namensparameters lautet callparamname.
+.. Die Stelle des Array-Parameters ist 1.
+.. Der Wert des Parameters muss kompatibel zur Art ID87:9 sein.
+..
+.. ACHTUNG: In seltenen und besser zu vermeidenden Faellen von Subeditor-
+.. Buttons kann die Kompatibilitaet statt des Subeditorverhaltens das
+.. veraltete Kommandoverhalten erzwingen. Nur dafuer gibt es ein optionales
+.. Argument als Namensparameter "forcecmmd" bzw. 2. Positionsparameter. Ist
+.. sein Wert "1" (bool), wird bei Subeditorbuttons statt .end 0 <Kommando>
+.. wie frueher .command ... <Kommando> durchgefuehrt.
+..
+.. Functionality  : Executes without a dialog a connection to an infosystem using
+.. a certain callparameter given in U|xcallparam. This parameter can also be set
+.. by the named parameter "callparamname" or by an array parameter. For examples
+.. see items "tbusstl*" in the infosystem demo/MYLART.
+.. Program flow   : Subroutine
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : yes
+..   uses name argument  (xpname=value)    : yes
+..
+.. The identifier of the named argument is callparamname.
+.. The position of the array argument is 1.
+.. The value of the parameter has to be compatible to the type ID87:9.
+..
+.. ATTENTION: There is an optional named parameter "forcecmmd" or rather 2nd
+.. array parameter forcing compatibility to the deprecated command instead to
+.. the current subeditor behaviour. Setting its value to "1" (boolean), this will
+.. effect in a dialog using .command ... <command> instead .end 0 <command>.
+..*****************************************************************************
+.set trans -
+..
+.continue HASARGS ? _F|defined(U|xcallparam) & F|defined(U|callparamname)
+.continue VARARGS ? _F|defined(U|xcallparam) & F|defined(U|callvarname)
+.continue POSARGS ? _F|defined(U|xcallparam) & G|argc > 1
+..
+!DECLARE: Declarations
+.type VP13 xsource  ? _F|defined(U|xsource)
+.type bool xsubedit ? _F|defined(U|xsubedit)
+.type bool xforcecmmd ? _F|defined(U|xforcecmmd)
+.continue SOURCE
+..
+!HASARGS: Set argument from named parameter to "xcallparam"
+.type ID87:9 xcallparam
+.assign U|xcallparam = U|callparamname
+.continue ERROR01 ? _G|mehr
+.type bool xforcecmmd
+.assign U|xforcecmmd = U|forcecmmd ? F|defined(U|forcecmmd)
+.continue ERROR07  ? _G|mehr
+.continue DECLARE
+..
+!VARARGS
+.type ID87:9 xcallparam
+.continue ERROR04 ? U|callvarname = ""
+.continue ERROR05 ? _F|defined(M|.callvarname)
+.assign U|xcallparam = M|.callvarname
+.continue ERROR06 ? _G|mehr
+.type bool xforcecmmd
+.assign U|xforcecmmd = M|.forcecmmd ? F|defined(M|.forcecmmd)
+.continue ERROR08  ? _G|mehr
+.continue DECLARE
+..
+!POSARGS: Set argument from array parameter to "xcallparam"
+.type ID87:9 xcallparam
+.assign U|xcallparam = G|arg1
+.continue ERROR02 ? _G|mehr
+.type bool xforcecmmd
+.assign U|xforcecmmd = G|arg2 ? F|defined(G|arg2)
+.continue ERROR09  ? _G|mehr
+.continue DECLARE
+..
+!SOURCE: Get calling context as reference
+.. Aufrufparameter: 'U|xcallparam'
+.continue ERRMASK ? G|evtartengl = "NO_EVENT"
+.continue ERRMASK ? G|evtmaske < 0
+.copy U|xsubedit = F|condexpr((G|evtartengl = "BUTTON_BEFORE" ; G|evtartengl = "BUTTON_KERNEL"), (F|typeof(M|.G|evtvar) = "BU8" ; F|typeof(M|.G|evtvar) = "BU10" ; F|typeof(M|.G|evtvar) = "BU12" ; F|typeof(M|.G|evtvar) = "BU14"), G|false)
+.input "st/CALLPARAM.GET.AUFRKTXT"
+.continue ERRDEFL ? F|empty(U|xsource)
+..
+.. Further declarations and definitions
+.input "is/FOP.BUINFOSYS.INIT"
+..
+.. Check running conditions
+.continue USAGE ? _F|defined(U|xcallparam)
+.continue USAGE ? F|empty(U|xcallparam)
+..
+!LOAD: Load callparameter in buffer 0
+.load 0 dataexport 'U|xcallparam'
+.continue ERROR03 ? _G|mehr
+..
+.. Check calling context
+.type A276 xsinglevartab ? _F|defined(U|xsinglevartab)
+.type A276 xsingleinfosys ? _F|defined(U|xsingleinfosys)
+.assign U|xsinglevartab = "(SingleTableOfVariables)"
+.assign U|xsingleinfosys = "(SingleInfosystem)"
+.continue ERRDEFL ? 0|aufrktxt^id <> U|xsource^id & (0|kontexttyp=U|xsinglevartab) ; (0|kontexttyp=U|xsingleinfosys)
+..
+.. Ignore callparameters with an invalid workspace
+.continue ERRDEFL ? _F|diraccessible('0|arb')
+..
+.. Check condition of call
+.input "st/CALLPARAM.CHECK.AUFRBED"
+.continue ERRDEFL ? _U|xvisible
+..
+.continue RECEIVE ? 0|zielobj^dnr = U|XINFOSYS
+.input "st/CALLPARAM.CHECK.AUFRKTXT"
+.continue ERRDEFL ? _U|xvisible
+..
+!RECEIVE: Check visibility of target
+.add 0|zielobj
+.input "st/CALLPARAM.CHECK.ZIELOBJ"
+.continue ERRDEFL ? _U|xvisible
+.assign U|xmaskid = F|trim(0|zielobj^nummer)
+..
+.. Get command to use the target
+.input "st/CALLPARAM.GET.COMMAND"
+.add
+.continue ERRDEFL ? _U|xvisible
+.continue ERRDEFL ? F|empty(U|xerpcommand)
+.assign U|xerpcommandneu = U|xerpcommand
+..
+!NEXTROW: load row
+.load 0 line
+.continue ENDROW ? _G|mehr
+.formula U|xparams = U|xparams + U|XPARAMSEP ? _F|empty(U|xparams)
+.assign U|xtupel = ""
+..
+.. Get parameter tupel and check visibility defined by them
+.input "st/CALLPARAM.GET.PARAMDUPEL"
+.continue ERRDEFL ? _U|xvisible
+.copy U|xstringoverflow = (F|length(U|xparams) + F|length(U|xtupel)) > U|XMAXLEN
+.continue OVERFLW ? U|xstringoverflow
+.formula U|xparams = U|xparams + U|xtupel
+.continue NEXTROW
+..
+!ENDROW: Finish and execute command
+.continue EXECUTE ? _0|unsichtbar
+.copy U|xstringoverflow = (F|length(U|XPARAMSEP) + F|length(U|xparams) + F|length(U|xinvisible)) > U|XMAXLEN
+.continue OVERFLW ? U|xstringoverflow
+.formula U|xparams = U|xparams + U|XPARAMSEP + U|xinvisible
+..
+!EXECUTE: Execute command
+.formula U|xerpcommand = U|xerpcommandneu + U|XPARAMINIT + U|xparams
+.continue SUBEDIT ? U|xsubedit & _U|xforcecmmd
+.continue BATCH ? G|batchmode
+.continue REUSE ? F|equals(0|dialogart, "(Modifying)")
+.continue BLOCK ? F|equals(0|dialogart, "(Blocking)")
+.command -parallel 'U|xerpcommand'
+.continue END
+..
+!REUSE: Reuse window
+.command -window 'U|xmaskid' -new "'U|xerpcommandneu'" 'U|xparams'
+.continue END
+..
+!BLOCK: Wait for dialog
+.command -wait 'U|xerpcommand'
+.continue END
+..
+!SUBEDIT: Open as sub editor
+.end 0 'U|xerpcommand'
+..
+!BATCH: Output command
+.note -immediately 'U|xerpcommand'
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+.set trans +
+..
+!OVERFLW: gui command string is to long
+.error -message Der Aufrufparameter 'F|trim(0|nummer)' erzeugt ein zu langes GUI-Kommando.
+.end 1
+..
+!USAGE: Parameter is empty!
+.error -message Es fehlt die Angabe eines Aufrufparameters!
+.end 1
+..
+!ERROR01: Value represents no callparameter!
+.error -message Der Wert 'U|callparamname' des Namensparameters callparamname ist kein Aufrufparameter!
+.end 1
+..
+!ERROR02: Value represents no callparameter!
+.error -message Der Wert 'G|arg1' des Arrayparameters ist kein Aufrufparameter!
+.end 1
+..
+!ERROR03: Callparameter is missing!
+.error -message Der angegebene Aufrufparameter 'U|xcallparam' wurde nicht gefunden!
+.end 1
+..
+!ERROR04: callvarname is empty
+.error -message Der angegebene Parameter callvarname ist leer!
+.end 1
+..
+!ERROR05: callvarname is empty
+.error -message Der angegebene Parameter M|'U|callvarname' ist nicht definiert!
+.end 1
+..
+!ERROR06: .callvarname is no callparameter!
+.error -message Das Feld 'U|callvarname' 'U|.callvarname' enthÑlt keinen Aufrufparameter!
+.end 1
+..
+!ERROR07: Value represents not a bool!
+.error -message Der Wert 'U|forcecmmd' des Namensparameters forcecmmd ist kein Bool!
+.end 1
+..
+!ERROR08: .forcecmmd is no bool!
+.error -message Das Feld 'U|forcecmmd' 'U|.forcecmmd' enthÑlt keinen Boolwert!
+.end 1
+..
+!ERROR09: Value represents no bool!
+.error -message Der Wert 'G|arg2' des Arrayparameters ist kein Bool!
+.end 1
+..
+!ERRDEFL: Callparameter is not visible!
+.continue STDERR ? _F|defined(U|xerrmessage)
+.continue STDERR ? F|empty(U|xerrmessage)
+.error -line 'G|evtzeile' -field 'G|evtvar' -message Die Funktion ist nicht mîglich, weil: 'U|xerrmessage'
+.continue BREAK
+..
+!STDERR: Standard error message!
+.error -line 'G|evtzeile' -field 'G|evtvar' -message Die Funktion ist nicht mîglich. Der Aufrufparameter 'U|xcallparam^nummer' ist nicht durchfÅhrbar!
+.continue BREAK
+..
+!ERRMASK: Illegal mask number!
+.error -message Der aufrufende Dialog mit der Maskennummer 'G|evtmaske' ist in Aufrufparametern nicht verwendbar!
+..
+!BREAK
+.end 1

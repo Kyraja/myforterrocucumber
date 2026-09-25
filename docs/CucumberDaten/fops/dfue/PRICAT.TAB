@@ -1,0 +1,121 @@
+..!interpreter english translate noabbrev
+..!meta M|=dfue/PRICAT
+..*****************************************************************************
+.. Name           : PRICAT.TAB
+.. Author         : mh/ok
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : validate prices for each customer and product
+...Includes       :
+..  include dfue/PRICAT.TAB.PREVIEW
+..*****************************************************************************
+.set trans -
+..
+.make screen line +O
+.assign M|art = H|id
+.copy M|namebspr = H|sucherw
+.copy M|gtin = H|gtin
+.copy M|vpr = H|vpr
+.copy M|land = H|vland^symbol
+.copy M|vpe = H|vpe
+.copy M|vrab = H|vprg
+.copy M|vbez = H|vbez
+.copy M|tbpackmit = H|packmit
+..
+.formula M|artikelnummer = H|nummer   ? _F|sysinfo(18)^swziffern
+.formula M|artikelnummer = H|such     ?  F|sysinfo(18)^swziffern
+.. 
+.. @todo: which field of the material group has the "identifier"?
+.formula M|pgrnr = H|wgruppe
+..
+.. Get customer product number from  customer product properties
+.load 1 parts 'F|formatstr("$,,;@gruppe=6;art={1};kl={2}", H|id, M|kunde^id)'
+.load 1 parts 'F|formatstr("$,,;@gruppe=6;art={1};kl={2}", H|id, "`")'             ? _G|mehr
+.copy M|kuartnr = 1|kuartnr ? G|mehr
+.load 1 ? F|defined(1|id)
+.. 
+..
+.. Sometimes prices are stored in one of the many price fields in the product
+.. Use command (PriceInformation)
+.input "is/PREISAUSKUNFT"     ? _F|defined(T|xpakl)
+.assign U|xpakl = M|kunde^id
+.assign U|xpaklprg = M|kunderab
+.assign U|xpaartikel = H|id
+.assign U|xpaartprg = H|vprg
+.assign U|xpaartrab = H|vrab
+.assign U|xpamge = 1.0        
+.assign U|xpakonddat = G|datum
+.copy U|xpaland = H|vland
+.assign T|xpaignrahmen = G|FALSE
+.input "is/PREISAUSKUNFT"
+.assign M|vpr = U|xpapreis
+.copy M|land = U|xpaland^symbol
+.load 1 ? F|defined(1|id)
+..
+..
+.. Get price object with increasing generalized search until a price is found
+.. * Preisfindung zu Kundenpreisgruppe und Artikelpreisgruppe suchen
+.. * Preisfindung zu Kundenpreisgruppe und Artikelpreisgruppe=leer suchen
+.. * Preisfindung zu Kundenpreisgruppe=leer und Artikelpreisgruppe suchen
+.. * Preisfindung zu Kundenpreisgruppe=leer und Artikelpreisgruppe=leer suchen
+..
+.. IMPORTANT: if (te)vprg or (te)vrab are empty, their value must not be used to query
+.. 
+..
+..!meta 1|=P82:1
+.continue EPRICE ? F|empty(H|vprg)
+.load 1 pricing 'F|formatstr("$,,;@gruppe=1;typ=(SalesPriceList);saktion=(No);klpg=={1};artpg=={2}", M|kunderab, H|vprg)' 
+.load 1 pricing 'F|formatstr("$,,;@gruppe=1;typ=(SalesPriceList);saktion=(No);klpg=={1};artpg={2}", M|kunderab, "`")'     ? _G|mehr
+.load 1 pricing 'F|formatstr("$,,;@gruppe=1;typ=(SalesPriceList);saktion=(No);klpg={1};artpg=={2}", "`",        H|vprg)'  ? _G|mehr
+.load 1 pricing 'F|formatstr("$,,;@gruppe=1;typ=(SalesPriceList);saktion=(No);klpg={1};artpg={2}", "`",        "`")'      ? _G|mehr
+.continue EPRICE ? _G|mehr
+.assign M|tpreise = '1|id'
+.load 1 
+!EPRICE
+..
+..!meta 1|=P82:1
+.continue EPRICE2 ? _F|empty(H|vprg)
+.load 1 pricing 'F|formatstr("$,,;@gruppe=1;typ=(SalesPriceList);saktion=(No);klpg=={1};artpg={2}", M|kunderab, "`")'
+.load 1 pricing 'F|formatstr("$,,;@gruppe=1;typ=(SalesPriceList);saktion=(No);klpg={1};artpg={2}", "`",        "`")'       ? _G|mehr
+.continue EPRICE2 ? _G|mehr
+.assign M|tpreise = '1|id'
+.load 1 
+!EPRICE2
+.. 
+..!meta 2|=P82:1
+.continue EDISC ? F|empty(H|vrab)
+.load 2 pricing 'F|formatstr("$,,;@gruppe=1;typ=(SalesDiscounts);saktion=(No);klpg=={1};artpg=={2}", M|kunderab, H|vrab)'
+.load 2 pricing 'F|formatstr("$,,;@gruppe=1;typ=(SalesDiscounts);saktion=(No);klpg=={1};artpg={2}", M|kunderab, "`")'      ? _G|mehr
+.load 2 pricing 'F|formatstr("$,,;@gruppe=1;typ=(SalesDiscounts);saktion=(No);klpg={1};artpg=={2}", "`",        H|vrab)'   ? _G|mehr
+.load 2 pricing 'F|formatstr("$,,;@gruppe=1;typ=(SalesDiscounts);saktion=(No);klpg={1};artpg={2}", "`",        "`")'       ? _G|mehr
+.continue EDISC ? _G|mehr
+.assign M|trabatte = '2|id'
+.load 2 
+!EDISC
+..
+..!meta 2|=P82:1
+.continue EDISC2 ? _F|empty(H|vrab)
+.load 2 pricing 'F|formatstr("$,,;@gruppe=1;typ=(SalesDiscounts);saktion=(No);klpg=={1};artpg={2}", M|kunderab, "`")'
+.load 2 pricing 'F|formatstr("$,,;@gruppe=1;typ=(SalesDiscounts);saktion=(No);klpg={1};artpg={2}", "`",        "`")'       ? _G|mehr
+.continue EDISC2 ? _G|mehr
+.assign M|trabatte = '2|id'
+.load 2 
+!EDISC2
+..
+.. Highlight rows with missing prices
+.colour -foreground 'M|colorwhite'  -background 'M|colorred'  vpr  'M|aktzeile' ?  F|empty(M|vpr)
+.colour -foreground -1 -1 -1  -background -1 -1 -1  vpr  'M|aktzeile'           ? _F|empty(M|vpr)
+..
+.. Highlight rows with interresting prices
+.colour -foreground 'M|colorblack'  -background 'M|coloryellow'  vpr  'M|aktzeile' ? _F|empty(M|vpr) & 'M|vpr'<>'H|vpr'
+..
+.. Highlight packaging materials
+.colour -foreground -1 -1 -1  -background 'M|colorpackmit'  'M|aktzeile'        ?  M|tbpackmit
+.colour -foreground -1 -1 -1  -background -1 -1 -1  'M|aktzeile'                ? _M|tbpackmit
+..
+.. Preparation to evalute difference with previous message
+.input "PRICAT.TAB.PREVIEW"
+.. 
+..*****************************************************************************
+!END
+.continue

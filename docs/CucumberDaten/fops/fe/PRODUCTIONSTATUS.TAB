@@ -1,0 +1,178 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PRODUCTIONSTATUS.TAB
+.. Author         : tiwe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  : Berechnung der offenen und gesamten Durchlaufzeit fÅr einen FV
+..
+.. Program flow   :
+...Includes       :
+..
+..*****************************************************************************
+.set trans -
+.type text        xtsel          ? _F|defined(U|xtsel)
+.type ARTR51000   xroffensumme   ? _F|defined(U|xroffensumme)
+.type ARTR51000   xrgessumme     ? _F|defined(U|xrgessumme)
+.type ARTR51000   xrprodmge      ? _F|defined(U|xrprodmge)
+.type ARTR51000   xristzeitsumme ? _F|defined(U|xristzeitsumme)
+.type ARTR51000   xrdlzsumme     ? _F|defined(U|xrdlzsumme)
+.type integer     xizeilefv      ? _F|defined(U|xizeilefv)
+.type integer     xiaktzeile     ? _F|defined(U|xiaktzeile)
+.type M5.7        xrteinh        ? _F|defined(U|xrteinh)
+.type M5.7        xrtrinh        ? _F|defined(U|xrtrinh)
+..
+.. Puffer
+.. H| Fertigungsvorschlag
+.. 1| Auftragsfertigungsliste
+..
+.. Daten aus dem Arbeitsschein Åber die Maskenvariable M|tba^
+.. es machen nur FVs Sinn, die einen BA haben, sonst kann man den Fortschritt nicht ermitteln
+.continue END        ? H|ba = ""
+..
+!FVLOOP: Schreiben der Zeile
+.continue END ? _F|empty(M|basisartikel) & 'M|basisartikel^id' <> 'H|artikel^basisartikel^id'
+.make screen line +O
+.colour -background -1 -1 -1  'M|aktzeile'
+.colour -background 'M|farbe1' 'M|aktzeile'
+.formula M|typ       = "FV"
+.formula M|typicon   = M|typ1z
+.formula M|telem     = H|artikel^id
+.assign M|tbasisartikel = M|telem^basisartikel
+.formula M|fertmge   = H|netmge
+.formula M|bzeitfortschritt  = true ? M|fertmge = 1
+.formula M|bmgefortschritt   = true ? M|fertmge > 1
+.formula M|netlimge  = H|netlimge
+.formula M|le        = H|artikel^le
+.formula M|tba       = H|ba
+.formula M|anfterm   = H|wtsterm
+.formula M|endterm   = H|wtterm
+.formula M|fvid      = H|id
+.formula M|aflid     = H|eres^id
+.formula U|xizeilefv = M|aktzeile
+.formula M|tbetreuer = H|betreuer
+..
+.. Durchlaufen der ArbeitsgÑnge in der AFL
+.continue ERR02      ? M|aflid = ""
+.formula U|xroffensumme   = 0
+.formula U|xrgessumme     = 0
+.formula U|xrprodmge      = 0 
+.formula U|xristzeitsumme = 0
+.formula U|xrdlzsumme     = 0
+.load 1 object 'M|aflid^id'
+..
+!AFLLOOP
+.continue NOAG ?  1|elart <> 3
+.continue NOAG ? _1|relevant 
+.continue NOAG ? _1|aschein 
+..
+.make screen line +O
+.colour -background -1 -1 -1  'M|aktzeile'
+.colour -background 'M|farbe2' 'M|aktzeile'
+.formula M|typ      = "AG"
+.formula M|typicon   = M|typ2z
+.formula M|telem    =  1|elem^id
+.formula M|tba      =  1|as
+.. Werte fÅr die Sollzeiten
+.formula M|tr        = 1|lge
+.formula M|treinheit = 1|lme
+.formula M|te        = 1|breite
+.formula M|teeinheit = 1|bme
+.formula M|nutzen    = 1|nutzen
+.formula M|nutzen    = 1           ? M|nutzen = 0    
+.formula M|elanzahl  = 1|elanzahl 
+
+.. Gesamtmenge, Offene Menge, produzierte Menge
+.formula M|egutmge     =  1|as^egutmge
+.formula M|rgutmge     =  1|as^rgutmge
+.formula M|everlustmge =  1|as^everlustmge
+..ein erwarteter Ausschuss wird nicht produziert und muss deswegen abgezogen werden
+.formula M|netmge      =  1|mge - M|everlustmge
+.formula M|netlimge    = M|egutmge  - M|rgutmge 
+.. Sonderbehandlung netlimge und prodmge bei Produktion Åber die geplante Gutmenge hinaus
+.formula M|netlimge    = 0       ?  M|netlimge < 0
+.formula M|ausmge      = 1|mge 
+.. prduzierte Menge ist die rÅckgemeldete Menge aus Arbeitsschein
+.formula M|prodmge   = M|rgutmge 
+.formula M|prodmge   = M|netmge  ? M|rgutmge > M|netmge
+.. Summe Mengen bilden
+.formula U|xroffensumme  = U|xroffensumme  + M|netlimge
+.formula U|xrgessumme    = U|xrgessumme    + M|netmge
+.formula U|xrprodmge     = U|xrprodmge     + M|prodmge
+.. Summe Durchlaufzeiten errechnen
+.formula U|xrtrinh  =  1|lge
+.formula U|xrtrinh  = U|xrtrinh / 60     ? 1|lme = "min"
+.formula U|xrtrinh  = U|xrtrinh / 3600   ? 1|lme = "s"
+.formula U|xrteinh  =  1|breite
+.formula U|xrteinh  = U|xrteinh / 60     ? 1|bme = "min"
+.formula U|xrteinh  = U|xrteinh / 3600   ? 1|bme = "s"
+.. Durchlaufzeit muss errechnet werden, da die Standard-Felder im Arbeitsschein und AFL nach RÅckmeldungen genullt werden
+.formula M|ausmge   = M|ausmge * M|elanzahl / M|nutzen
+.formula M|ausmge   = F|mround(M|ausmge, 1,  1)
+.formula M|gesdlz   = U|xrteinh * M|ausmge
+.formula M|gesdlz   = M|gesdlz + U|xrtrinh
+..box
+..AS: 'M|tba'
+..tr: 'U|xrtrinh'
+..te: 'U|xrteinh'
+..Mge: 'M|netmge'
+..
+.protection neuemge 'M|aktzeile'
+.protection neuezeit 'M|aktzeile'
+..
+.. Ist-Zeiten aus gebuchten RÅckmeldebelegen
+.. Ist-Zeiten aus RÅckmeldung
+.formula U|xtsel = "$,,nummer="+'1|as'+";bzeit=;bzeit2=;bzeit3=;bzeit4=;bzeit5=;1:ag<>`;1:mge=;1:te=;1:ze=;@sort=RÅckmeldung;@gruppe=2;@.ablage=(Filed);"
+.load 2 workorder 'U|xtsel'
+.continue NORM ? _G|mehr
+..
+!RMLOOP
+.formula M|istzeit = M|istzeit + 2|bzeit + 2|bzeit2 + 2|bzeit3 + 2|bzeit4 + 2|bzeit5
+.load 2 workorder
+.continue RMLOOP ? G|mehr
+..
+!NORM: Die Ist-Zeit darf fÅr die Fortschrittsberechnung nicht grî·er sein als die geplante DLZ
+.formula M|istzeit = M|gesdlz  ? M|istzeit > M|gesdlz
+.. Summe Zeit bilden
+.formula U|xrdlzsumme     = U|xrdlzsumme      + M|gesdlz
+.formula U|xristzeitsumme = U|xristzeitsumme  + M|istzeit
+..
+..
+!NOAG
+.load 1 line
+.continue AFLLOOP ? G|mehr
+.continue ERR03   ? U|xrgessumme = 0
+..
+.. den Fortschritt nun in die FV Zeile schreiben
+.formula U|xiaktzeile = M|aktzeile
+.select screen line 'U|xizeilefv' 
+.. Zeile des FV
+.formula M|prodmge        = U|xrprodmge
+.formula M|netmge         = U|xrgessumme
+.formula M|netlimge       = U|xroffensumme
+.formula M|mgefortschritt = (U|xrgessumme - U|xroffensumme) / U|xrgessumme 
+.formula M|mgefortschritt = M|mgefortschritt * 100
+..
+..
+.formula M|gesdlz          = U|xrdlzsumme  
+.formula M|istzeit         = U|xristzeitsumme 
+.formula M|zeitfortschritt = (M|istzeit / M|gesdlz) * 100   ? M|gesdlz <> 0
+.formula M|zeitfortschritt = 100                          ? M|gesdlz = 0
+.. letzte Zeile der Tabelle
+.select screen line 'U|xiaktzeile' 
+.continue END
+..
+!ERR02: Die AFL ist leer
+.set trans +
+.formula M|bem = "Keine EintrÑge in der Auftragsfertigungsliste."
+.set trans -
+.continue END
+..
+!ERR03: Divsion durch null
+.set trans +
+.formula M|bem = "Die summierte Nettomenge ist 0." 
+.set trans -
+.continue END
+..
+!END
+.continue

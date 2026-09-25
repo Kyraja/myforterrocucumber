@@ -1,0 +1,196 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           :     REMINDER.CREATE.WEEKLY
+.. Date           :     13/11/2014
+.. Version        :     1.0
+.. Author         :     rasc
+.. Copyright      :
+.. Functionality  :     Create ReminderPrecess, weekly
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xtdat     ? _F|defined(U|xtdat)
+.type text U|xterrdat  ? _F|defined(U|xterrdat)
+.type text U|xtcom     ? _F|defined(U|xtcom)
+....
+.type text U|xtcmd      ? _F|defined(U|xtcmd)
+.type text U|xtout      ? _F|defined(U|xtout)
+.type text U|xterr      ? _F|defined(U|xterr)
+.type text U|xtref      ? _F|defined(U|xtref)
+.type text U|xttxt      ? _F|defined(U|xttxt)
+.type integer U|xiref   ? _F|defined(U|xiref)
+.type GD2  U|xdate      ? _F|defined(U|xdate)
+..
+.formula U|xdate        = 'M|qflagdate:8'           ?  F|defined(M|qflagdate)
+.formula U|xdate        = 'G|datum:8'               ? _F|defined(M|qflagdate)
+.....formula U|xdate        = "06.02.15"
+.file -TEMPNAME U|xtout
+..
+!STEP1: create head
+.formula U|xtdat = "tmp/REMIND.WEEK."+'G|versionneu'
+.formula U|xterrdat = 'U|xtdat'+".ERR"
+.output NEW 'U|xtdat'
+.input DATEI.F
+#!database=104
+#!group=2
+#!action=NEW
+#!report=REF
+.input "owinstall/HEAD.EDP"
+mahndat;
+'U|xdate:8';
+.output
+.input "owinstall/EDP.EXECUTE.OUT"
+..
+.continue ERR1          ? F|filesize(U|xterrdat) > 0
+..
+.select from
+!REF
+.select from 'U|xtout' U|xtref^
+.continue ERR1          ? F|empty(U|xtref) ; 'U|xtref' = "(0,0,0)"
+..
+!STEP2: create lines
+.formula U|xtdat = "tmp/REMIND.WEEK2."+'G|versionneu'
+.formula U|xterrdat = 'U|xtdat'+".ERR"
+.output NEW 'U|xtdat'
+.input DATEI.F
+#!database=104
+#!group=2
+#!action=UPDATE
+.input "owinstall/HEAD.EDP"
+id;mahnneus;debladen;
+'U|xtref';true;;
+.output
+.input "owinstall/EDP.EXECUTE"
+..
+.continue ERR2          ? F|filesize(U|xterrdat) > 0
+..
+!STEP3: export lines
+.formula U|xtdat = "tmp/REMIND.WEEK3."+'G|versionneu'
+.formula U|xterrdat = 'U|xtdat'+".ERR"
+.output NEW 'U|xtdat'
+.input DATEI.F
+#!database=104
+#!group=2
+#!action=UPDATE
+#!recordidfld=id
+#!firsttabfld=zn
+.input "owinstall/HEAD.EDP"
+id;zn;>bearb;gedruckt;<
+..
+.load 0 nolock object 'U|xtref'
+.continue ERR3          ? _G|mehr
+..wenn keine Mahnungen da sind, dann ist nichts zu mahnen und der Vorgang kann gel”scht werden
+.continue DELETE        ? 0|ozeilen = 0
+..
+..: RASC, 06.02.2015, Zeilen vorhanden, aber keine Mahnungen
+.formula U|xiref        = 0
+..:
+!LINES
+.load 0 line
+.continue STEP4         ? _G|mehr
+..
+.continue LINES         ? 0|mahnbetr = 0
+..: RASC, 06.02.2015, Zeilen vorhanden, aber keine Mahnungen
+.continue LINES         ? F|empty(0|mahnung)
+..:
+..
+.formula U|xiref        = U|xiref + 1
+..
+.output ADDEDTO 'U|xtdat'
+'0|id';'0|zn';;true;
+.continue LINES
+..
+!STEP4: print & close
+....continue ERR4          ? U|xiref = 0
+.continue DELETE        ? U|xiref = 0
+..
+.output TERMINAL
+.input "owinstall/EDP.EXECUTE"
+..
+.continue ERR4          ? F|filesize(U|xterrdat) > 0
+..
+!STEP5: Mahnvorgang abschlieáen
+.formula U|xtdat = "tmp/REMIND.WEEK4."+'G|versionneu'
+.formula U|xterrdat = 'U|xtdat'+".ERR"
+.output NEW 'U|xtdat'
+.input DATEI.F
+#!database=104
+#!group=2
+#!action=UPDATE
+.input "owinstall/HEAD.EDP"
+id;abschlusss;
+'U|xtref';true;
+.output
+.input "owinstall/EDP.EXECUTE"
+..
+.continue ERR5          ? F|filesize(U|xterrdat) > 0
+..
+.continue END
+..
+!ERR1
+.continue END           ? G|edp
+.formula U|xttxt = "Mahnvorgang konnte nicht erzeugt werden!"
+...error 'U|xttxt'
+...edi -READONLY 'U|xterr'
+.continue END
+..
+!ERR2
+.continue END           ? G|edp
+.formula U|xttxt = "Mahnungen konnten nicht erzeugt werden!"
+...error 'U|xttxt'
+...edi -READONLY 'U|xterr'
+.continue END
+..
+!ERR3
+.continue END           ? G|edp
+.formula U|xttxt = "Mahnvorgang konnte nicht geladen werden!"
+..error 'U|xttxt'
+...edi -READONLY 'U|xterr'
+.continue END
+..
+!ERR4
+.continue END           ? G|edp
+.formula U|xttxt = "Mahnungen konnten nicht als gedruckt markiert werden!"
+..error 'U|xttxt'
+...edi -READONLY 'U|xterr'
+.continue END
+..
+!ERR5
+.continue END           ? G|edp
+.formula U|xttxt = "Mahnvorgang konnte nicht abgeschlossen werden!"
+..error 'U|xttxt'
+..edi -READONLY 'U|xterr'
+.continue END
+..
+!DELETE
+....formula U|xtcmd        = "<(Reminders)>" + 'U|xtref' + "<(Delete)>,(ReminderProcess) [invisible]=1"
+....command -PARALLEL 'U|xtcmd'
+.formula U|xtdat = "tmp/REMIND.WEEK4."+'G|versionneu'
+.formula U|xterrdat = 'U|xtdat'+".ERR"
+.output NEW 'U|xtdat'
+.input DATEI.F
+#!database=104
+#!group=2
+#!action=DELETE
+.input "owinstall/HEAD.EDP"
+id
+'U|xtref';
+.output
+.input "owinstall/EDP.EXECUTE"
+..
+.continue END
+..
+!END
+.continue
+
+

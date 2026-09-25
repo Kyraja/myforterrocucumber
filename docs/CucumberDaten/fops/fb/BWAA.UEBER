@@ -1,0 +1,442 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BWAA.UEBER
+.. Datum          : 30.04.07
+.. Version        :
+.. Autor          : uo
+.. Verantwortlich : gk
+.. Kontrolle      :
+.. Funktion       : öbernahme der Datei BWAA.TAB in ein Kontenbereichsformular
+..
+.. Programm       : Minimalbedienung
+..                  1. EDP-Generierung mit Vorbelegungen starten
+..                  2. Import starten mit ...
+..                  3. Fertig
+..
+..                  Standard-Identnummernvorgaben (diese kînnen geÑndert werden):
+..                  - ab 10000 fÅr die Kontenbereiche
+..                  - ab 11000 fÅr das Kontenbereichsformular
+..
+..                  Das Programm legt fÅr alle E/V-Kontenbereiche eigene Konten-
+..                  bereiche an mit:
+..
+..                      such68   = BWA-[Nummer]
+..                      fausart  = GuV
+..                      autokbpf = ja, falls Konten definiert sind
+..                      evleer   = ja,
+..                      ek       = ja fÅr E
+..                      vk       = ja fÅr V
+..                      anteil   = +1 fÅr E
+..                      anteil   = -1 fÅr V (jedoch auch +1 in gemischten Summen)
+..                      konum    = Kontenliste aus BWAA.TAB
+..
+..                  Die Hierarchie wird wie folgt abgebildet:
+..                  -----------------------------------------
+..                  Alle ss- bzw. s-Zeilen werden als Kontenbereich auf
+..                  oberster Ebene in ein neues Kontenberreichsformular
+..                  aufgenommen. Es wird in Gruppe 68:4, mit Auswertungstyp GuV
+..                  erstellt.
+..                  s-Zeilen berechnen die Summe vom Anfang oder zwischen
+..                  s-Zeilen bzw. ss-Zeilen mit Berechnungsart Soll-Haben.
+..                  ss-Zeilen berechnen die Summe vom Anfang oder zwischen
+..                  ss-Zeilen. Dabei werden enthaltene s-Zeilen als Unterkonten-
+..                  bereiche angelegt. Die Berechnungsart Summe der ss-Kontenbereiche
+..                  verhindert standardmÑssig das Aufklappen im Infosystem KBFORM.
+..                  V/E-Kontenbereiche werden jeweils Unterkontenbereiche der
+..                  darauffolgenden s- oder ss-Zeile.
+..
+..                  VN/EN-Zeilen werden nicht bearbeitet.
+..                  interne Grafik zur Vorzeichenbildung unter: std/test/BWAA.UEBER.JPG
+..
+..*****************************************************************************
+..
+.type text xtsys:300 xtedp:300 xtbwatab:300 xtencode:30 xarb:300 xtmp1:300 xtmp2:300
+.type text xtmp3:300 xtmp4:300 xtmp5:300 xtmp6:300 xtmp0a:300 xtmp0b:300
+.type text xtdum:10 xtekvk:5 xtkober:600 xtname:300 xtek:10 xtvk:10 xtapf:10
+.type text xtkopf:300 xtido:12 xtssido:12 xtlido:12 xtlss:12 xtsart:4 xtsarta:4
+.type bool xbedp xbintab xbsys xbss
+.type integer xikober xiformn xiln xidz xiant xizeilen xizeiVE
+..
+.. xtsart:  hierin wird die Summenart gespeichert. Diese bestimmt sich nach der
+..          Art der Zeilen innerhalb einer Summe. Diese kînnen E oder V sein.
+..          EN/VN wird ignoriert. Gemischte Summen erhalten ein X
+.. xtsarta: dito, nur zur Ausgabe in datei
+..
+.input "ARB"
+.set trans -
+.formula xtbwatab = xarb + "BWAA.TAB"
+.formula xtedp    = xarb + "BWA.EDP"
+..
+..Vorverarbeitung zur Bestimmung der Summenarten, um daraus die Anteile in Kîpfen und
+..Zeilen abzuleiten
+.formula xtmp0a  = "rmtmp/BWAV1TMP." + 't|pid'
+.formula xtmp0b  = "rmtmp/BWAV2TMP." + 't|pid'
+..
+..Normalverarbeitung beginnt ab diesen Dateien
+.formula xtmp1    = "rmtmp/BWA1TMP." + 't|pid'
+.formula xtmp2    = "rmtmp/BWA2TMP." + 't|pid'
+.formula xtmp3    = "rmtmp/BWA3TMP." + 't|pid'
+.formula xtmp4    = "rmtmp/BWA4TMP." + 't|pid'
+.formula xtmp5    = "rmtmp/BWA5TMP." + 't|pid'
+.formula xtmp6    = "rmtmp/BWA6TMP." + 't|pid'
+.formula xtencode = "EKS"
+..fo xtencode = "ISO8859-1"
+.formula xikober = 10000
+.formula xiformn = 11000
+..
+..===========================================================================
+!MEN
+..===========================================================================
+..
+.formula xtsys = "test -s " + xtedp
+.system 'xtsys' background
+.formula xbedp = mehr
+..
+.set trans +
+.menu AuswÑhlen
+EDP-Generierung mit Vorbelegungen starten     :               >>  .continue STEDP
+Identnummer fÅr CC-Kontenbereichsformular     : 'xiformn    ' >>  .continue NUMAUS
+?Import starten mit                           : 'xtedp      ' >>  .continue RUNIMPORT ? xbedp
+BWATAB-Datei                                  : 'xtbwatab   ' >>  .continue BWATAB
+BWATAB-Datei ist im Zeichensatz               : 'xtencode   ' >>  .continue ENCODE
+Anfang NummernzÑhler fÅr Kontenbereiche       : 'xikober    ' >>  .continue NUMKB
+?Importdatei lîschen                          : 'xtedp      ' >>  .continue DELIMPORT ? xbedp
+Beenden                                                       >>  .continue END
+.set trans -
+..
+.continue END ?  F|empty(G|menue)
+..
+!BWATAB
+.read "BWATAB-Datei " xtbwatab
+.continue MEN
+..
+!ENCODE
+.read "Zeichensatz " xtencode
+.continue MEN
+..
+!NUMKB
+.read "Startnummer " xikober
+.continue MEN
+..
+!NUMAUS
+.read "Identnummer fÅr Auswertung" xiformn
+.continue MEN
+..
+..===========================================================================
+!STEDP: Start der edp-Dateigenerierung
+..===========================================================================
+.. Vorverarbeitung: Bestimmung der Summenarten
+.input "DATEI.F"
+.. Datei neu leeren
+.output new 'xtmp0a'
+.formula xtsart = ""
+..-----------------------------------------
+!NEXT0A
+..-----------------------------------------
+.. le   # V  # 40000!46099,46900!47999   # "  1.1. Umsatzerlîse  "
+.select from 't|xtbwatab' xtdum # xtekvk # xtkober # xtname^
+.continue STEPV1 ? _mehr
+..
+.formula xtsart = xtekvk  ? (xtekvk="V" ; xtekvk="E") & xtsart=""
+.formula xtsart = "X"     ? (xtekvk="V" ; xtekvk="E") & xtsart<>"" & xtekvk<>xtsart
+.formula xtsarta = ""
+.. summenart nur fuer s- und ss-zeilen ausgeben
+.formula xtsarta = xtsart ?  xtekvk="s" ; xtekvk="ss"
+.. folgt eine ss-zeile unmittelbar einer s-zeile, darf die summenart nur in der
+.. s-zeile stehen, nur sonst in der ss-zeile
+.formula xtsart = ""      ?  xtekvk="s" ; xtekvk="ss"
+'xtsarta'#'xtekvk'#'xtkober'#'xtname'
+.continue NEXT0A
+..
+!STEPV1
+.. Zwischendatei auf den Kopf stellen
+.formula xtsys = "awk '{a[i++]=$0;} END {for (j=i-1; j>=0;) print a[j--]; }' " + 'xtmp0a' + " > " + 'xtmp0b'
+.system 'xtsys' background
+.continue SYSERR ? _t|mehr
+..
+.. Datei neu leeren
+.output new 'xtmp0a'
+.formula xtsarta = ""
+..-----------------------------------------
+!NEXT1
+..-----------------------------------------
+.. le   # V  # 40000!46099,46900!47999   # "  1.1. Umsatzerlîse  "
+.select from 't|xtmp0b' xtsart # xtekvk # xtkober # xtname^
+.continue STEPV2 ? _mehr
+..
+.. summenart merken
+.formula xtsarta = xtsart  ? (xtekvk="s" ; xtekvk="ss")
+.formula xtsart  = xtsarta ? (xtekvk="V" ; xtekvk="E")
+.. summenart nur fuer E-/V-/s- und ss-zeilen ausgeben
+'xtsart'#'xtekvk'#'xtkober'#'xtname'
+.continue NEXT1
+..
+!STEPV2
+.. Zwischendatei auf den Kopf stellen
+.formula xtsys = "awk '{a[i++]=$0;} END {for (j=i-1; j>=0;) print a[j--]; }' " + 'xtmp0a' + " > " + 'xtmp0b'
+.system 'xtsys' background
+.continue SYSERR ? _t|mehr
+..
+..
+.. ===========================================================================
+!STEP1: eigentliche EDP-Generierung
+.. ===========================================================================
+.formula xidz = xikober
+.input "DATEI.F"
+.. Datei neu leeren
+.output new 'xtmp1'
+.output new 'xtedp'
+.set trans +
+# EV-Zeilen aus 't|xtbwatab'
+.set trans -
+#!database=68
+#!group=1
+#!action=new
+num68#such68#namebspr#fausart#autokbpf#evleer#ek#vk#anteil#konum
+..
+.formula xtsart = ""
+..-----------------------------------------
+!NEXTEV
+..-----------------------------------------
+.. le   # V  # 40000!46099,46900!47999   # "  1.1. Umsatzerlîse  "
+.select from 't|xtmp0b' xtsart # xtekvk # xtkober # xtname^
+.continue STEP2 ? _mehr
+..
+..-----------------------------------------
+!IDFREI1: gibt es den kontenbereich schon?
+..-----------------------------------------
+.select accrange 'xidz'
+.formula xidz = xidz + 1  ? mehr
+.continue IDFREI1      ? mehr
+.. freie Identnummer gefunden => in Datei schreiben
+..
+.. Anfuehrungszeichen und Leerzeichen trimmen
+.formula xtname = xtname >> dblquote
+.formula xtname = xtname <$ dblquote
+.formula xtname = (xtname<<"")>>""
+..
+.. Zwischendatei fuer Strukturaufbau mitschreiben
+.output addedto 'xtmp1'
+'xtsart'#'xtekvk'#'xidz'#'xtname'
+..
+.continue EVEND ? xtekvk<>"V" & xtekvk<>"E"
+..
+.. edp-Daten wegschreiben
+.output addedto 'xtedp'
+.formula xtek = "false"
+.formula xtek = "true" ? xtekvk="E"
+.formula xtvk = "false"
+.formula xtvk = "true" ? xtekvk="V"
+.formula xiant =  1
+.formula xiant = -1    ? xtekvk="V" & xtsart="V"
+.. Automatische Pflege nur mit Konten moeglich
+.formula xtapf = "false"
+.formula xtapf = "true"  ?  xtkober <> ""
+.. num68#such68#namebspr#fausart#autokbpf#evleer#ek#vk#anteil#konum
+..                         (2)=GuV
+'xidz'#BWA-'xidz'#'xtname'#(2)#'xtapf'#true#'xtek'#'xtvk'#'xiant'#'xtkober'
+..
+..-----------------------------------------
+!EVEND
+..-----------------------------------------
+.formula xidz = xidz + 1
+.continue NEXTEV
+..
+..===========================================================================
+!STEP2 Kontenbereiche fuer S-Zeilen anlegen
+..===========================================================================
+.. Zwischendatei auf den Kopf stellen
+.formula xtsys = "awk '{a[i++]=$0;} END {for (j=i-1; j>=0;) print a[j--]; }' " + 'xtmp1' + " > " + 'xtmp2'
+.system 'xtsys' background
+.continue SYSERR ? _t|mehr
+..
+.. und jetzt noch die Hierarchien reinschreiben
+.output new 'xtmp3'
+.formula xtido = ""
+!NEXTA
+.select from 't|xtmp2' xtsart # xtekvk # xidz # xtname^
+.continue ADDSS ? _mehr
+.formula xtido = xidz  ? xtekvk = "s"
+.formula xtido = ""    ? xtekvk = "ss"
+'xtido'#'xtsart'#'xtekvk'#'xidz'#'xtname'
+.continue NEXTA
+..
+!ADDSS
+.output new 'xtmp4'
+.formula xtssido = ""
+!NEXTB
+.select from 't|xtmp3' xtido # xtsart # xtekvk # xidz # xtname^
+.continue SZEI ? _mehr
+.formula xtssido = xidz  ? xtekvk = "ss"
+'xtssido'#'xtido'#'xtsart'#'xtekvk'#'xidz'#'xtname'
+.continue NEXTB
+..
+!SZEI
+.. Zwischendatei wieder auf den Kopf stellen
+.formula xtsys = "awk '{a[i++]=$0;} END {for (j=i-1; j>=0;) print a[j--]; }' " + 'xtmp4' + " > " + 'xtmp5'
+.system 'xtsys' background
+.continue SYSERR ? _t|mehr
+..
+.. Feldliste fuer die s-Zeilen
+.output addedto 'xtedp'
+.set trans +
+# S-Zeilen aus 't|xtbwatab'
+.set trans -
+#!database=68
+#!group=1
+#!action=new
+num68#such68#namebspr#fausart\
+kbereich
+..
+.. Schleichenwiederholkommanods
+.formula xizeilen = 0
+.output new 't|xtmp6'
+..-----------------------------------------
+!NEXTS Schleife Åber S-Zeilen
+..-----------------------------------------
+.select from 't|xtmp5' xtssido # xtido # xtsart # xtekvk # xidz # xtname^
+.continue STEP3 ? _mehr
+.output addedto 't|xtmp6'
+?'xidz'\                    ? (xtekvk = "V" ; xtekvk = "E") & xtido<>""
+.formula xizeilen = xizeilen + 1 ? (xtekvk = "V" ; xtekvk = "E") & xtido<>""
+.continue NEXTS               ? xtekvk <> "s"
+.formula xbsys = true
+.continue SE                  ? _xizeilen > 0
+.output addedto 'xtedp'
+..kopfdaten             2=GuV
+?'xidz'#BWA-'xidz'#'xtname'#(2)\
+.. zeilendaten anfuegen
+.formula xtsys = "cat " + 't|xtmp6' + "|sed '${s/\\$//;}' >> " + 'xtedp'
+.system 'xtsys'
+.continue SYSERR ? _t|mehr
+..
+!SE Schleichenwiederholkommanods
+.formula xizeilen = 0
+.output new 't|xtmp6'
+.continue NEXTS
+..
+..===========================================================================
+!STEP3: Kontenbereich fuer SS-Zeilen anlegen
+..===========================================================================
+.output addedto 'xtedp'
+.set trans +
+# SS-Zeilen aus 't|xtbwatab'
+.set trans -
+#!database=68
+#!group=1
+#!action=new
+num68#such68#namebspr#fausart#reregeln\
+kbereich#zanteil
+..
+.. Schleifenwiederholkommanods
+.output new 'xtmp2'
+.. letzte SS-Zeile
+.formula xtlss    = ""
+.output new 't|xtmp6'
+..-----------------------------------------
+!NEXTSS Schleife Åber SS-Zeilen
+..-----------------------------------------
+.select from 't|xtmp5' xtssido # xtido # xtsart # xtekvk # xidz # xtname^
+.continue FORM ? _mehr
+.output addedto 't|xtmp6'
+.. VE-Zeilen sammeln
+?'xidz'#1\           ? (xtekvk = "V"               ) & xtido = ""
+?'xidz'#-1\          ? (xtekvk = "E" ; xtsart = "X") & xtido = ""
+..
+.. s-Zeilen als KBs innerhalb des ss-KBs sammeln
+.continue SS1 ? _(xtekvk = "s" & xtido <> "")
+?'xtido'#1\          ?  xtsart = "V"
+?'xtido'#-1\         ?  xtsart = "E" ; xtsart = "X"
+.. s-KBe fuer Formular gleich hier mitschreiben
+.output addedto 'xtmp2'
+'xtido'\
+!SS1
+..
+.continue NEXTSS              ?  xtekvk <> "ss"
+.formula xbsys = true
+.output addedto 'xtedp'
+..kopfdaten                        2=GuV 8=Summe
+?'xtssido'#BWA-'xtssido'#'xtname'#(2)#(8)\
+.. zeilendaten anfuegen
+.. zuerst die letzte SS-Zeile, die ist der 1. Summand und geht mit Zeilenanteil
+.. #1 ein!
+.formula xtlss = "echo " + xtlss + "#1\\ >> " + 'xtedp' +";" ? xtlss <>""
+.formula xtsys = 'xtlss' + " cat " + 't|xtmp6' + "|sed '${s/\\$//;}' >> " + 'xtedp'
+.system 'xtsys'
+.continue SYSERR ? _t|mehr
+..
+.. ss-KBe fuer Formular gleich hier mitschreiben
+.output addedto 'xtmp2'
+'xtssido'\
+.. wenn xtmp6 nicht geloescht wuerde, berechnete jede ss-Zeile das Schema
+.. von Anfang an. Waere aber zu unuebersichtlich!
+.output new 't|xtmp6'
+.formula xtlss    = xtssido
+.continue NEXTSS
+..
+..===========================================================================
+!FORM: Kontenbereichsformular erstellen
+..===========================================================================
+!IDFREI2: gibt es den kontenbereich schon?
+..-----------------------------------------
+.select accrange 'xiformn'
+.formula xiformn = xiformn + 1  ? mehr
+.continue IDFREI2            ? mehr
+.. freie Identnummer gefunden => damit weiter
+.output addedto 'xtedp'
+.set trans +
+# Kontenbereichsformular fÅr 't|xtbwatab'
+.set trans -
+#!database=68
+#!group=4
+#!action=new
+num68#such68#namebspr#fausart\
+kbereich
+'xiformn'#BWA#Betriebswirtschaftliche Auswertung#(2)\
+..Formular-Zeilen
+.formula xtsys = "cat " + 't|xtmp2' + "|sed '${s/\\$//;}' >> " + 'xtedp'
+.system 'xtsys'
+.continue SYSERR ? _t|mehr
+.continue LOESCH
+..
+!LOESCH: Loeschen der temporaeren Dateien
+..--------------------------------------
+.formula xtsys = "rm -f " + 't|xtmp1' + " " + 't|xtmp2' + " " + 't|xtmp3' + " " + 't|xtmp4' + " " + 't|xtmp6'
+.system 'xtsys'
+.continue SYSERR ? _t|mehr
+.continue MEN
+..
+..===========================================================================
+!DELIMPORT
+..===========================================================================
+.formula xtsys = "rm -f " + 'xtedp'
+.system 'xtsys'
+.continue SYSERR ? _t|mehr
+.continue MEN
+..
+..===========================================================================
+!RUNIMPORT: EDP-Datenimport starten
+..===========================================================================
+.formula T|xtsys = "edpimport.sh -P -I "+'t|xtedp'+" -t# -c "+'t|xtencode'
+.system 'T|xtsys' password
+.continue SYSERR ? _t|mehr
+.. Erfolgsmeldung:
+.output terminal
+.set trans +
+Import von Datei 't|xtedp' erfolgreich beendet.
+.set trans -
+.continue END
+..
+..===========================================================================
+!SYSERR: Fehler bei Systemkommando xtsys
+..===========================================================================
+.output terminal
+.set trans +
+?Fehler bei Kommando: 'xtsys'
+.set trans -
+.continue END
+..
+..===========================================================================
+!END
+..===========================================================================
+.end

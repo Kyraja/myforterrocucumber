@@ -1,0 +1,209 @@
+..!interpreter english declaration noabbrev
+.. at 2017-03-20, 15:59
+.set trans -
+..========================================================================
+..==  Name              : FOP.PRJM.PVAA.YSTATUS
+..==  Pfad              : allpstart
+..==  Funktion          : Status im Projektvorgang und Arbeitsaufgabe setzen
+..==  Erstellungsdatum  : 23.09.2011
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==  Anbindung         : Maske Projektvorgang, Arbeitsaufgabe. Aufruf aus jeweiligen EV FOP
+..==
+..========================================================================
+..====================================================
+.type text      xttmpdat        ? _F|defined(U|xttmpdat)
+.type bool      xbok            ? _F|defined(U|xbok)
+.type integer   xprocsp         ? _F|defined(U|xprocsp)
+..====================================================
+.formula U|xprocsp = 0
+.set demand -
+.continue EPROCDEF
+!PROC001: ----- FE_LM_erfasst -----
+.load 9 group 'U|xydbgrlnachweis' 'F|expr("$,,yaufgabe==" + 0|id)'
+.continue EL001 ? _(G|mehr)
+.set trans +
+.box Fehler
+Es existieren bereits Leistungsmeldungen.
+Das éndern des Status auf "'M|ystatus'" ist nicht mehr erlaubt.
+.set trans -
+.copy M|ystatusk = F|oldvalue(M|ystatusk)
+.load 9
+!EL001
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "feldaus")
+.continue BRK002 ? _(G|evtvar = "ystatus")
+.file -TEMPNAME U|xttmpdat
+.continue EL002 ? _(_(M|ystatus = F|oldvalue(M|ystatus)))
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"   ? _F|defined(5|ypmerlabschlpvaa)
+.continue EL003 ? _((M|ystatusk = "07") ; (M|ystatusk = "08"))
+.continue EL004 ? _((_(F|empty(5|ypmerlabschlpvaa))) & (F|sysinfo(18)^allppro))
+.input "allppro/FOP.PRJM.UP.GETPERMISSIONS"
+.copy U|xbok = F|defined(F|map(U|xypermissions, '5|ypmerlabschlpvaa^id'))
+.continue EL005 ? _(_(U|xbok))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderlichen Rechte den Status "'M|ystatus'" zu setzen.
+.set TRANS -
+.assign M|ystatusk = F|oldvalue(M|ystatusk)
+.error
+.end 1
+!EL005
+!EL004
+!EL003
+.continue EL006 ? _((F|empty(M|yadatum)) ; (F|empty(M|yedatum)))
+.set TRANS +
+.box
+Bitte geben Sie erst das gewÅnschte Start-
+und Endedatum an bevor Sie den Status Ñndern.
+.set TRANS -
+.formula G|evtfeldneu = M|ystatus
+.continue FI006
+!EL006
+.continue EL007 ? _(G|evtkommd <> G|kaktname14)
+.load 0
+.continue EL008 ? _((M|dnr    = U|xydbaufgabe) & (M|gruppe = U|xygraufgabe))
+.load 0 add M|id
+!EL008
+.continue EL009 ? _((M|dnr    = U|xydbpvorgang) & (M|gruppe = U|xygrpvorgang))
+.continue EL010 ? _((M|ystatusk = "07") ; (M|ystatusk = "08"))
+.formula U|xtsel = "$,,ygehoertzu==" + M|id + ";@ablageart=(1)"
+.load 8 group 'U|xydbgrpvorgang' 'U|xtsel'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL011 ? _(_(8|yablage))
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+.box Fehler
+Vorgang '8|nummer'/'8|such' zum Projektvorgang ist noch nicht abgeschlossen.
+.set TRANS -
+.copy M|ystatus = F|oldvalue(M|ystatus)
+.continue
+!EL011
+.load 8 continue
+.continue LOOP001
+!ELOP001: ==============================
+!EL010
+.continue EL012 ? _(_(F|empty(M|yrefid)))
+.load 0 object 'M|yrefid'
+.continue EL013 ? _(G|mehr)
+.continue EL014 ? _((0|dnr    <> U|xydbaufgabe) ; (0|gruppe <> U|xygraufgabe))
+.load 0
+!EL014
+!EL013
+!EL012
+!EL009
+.continue EL015 ? _(G|evtkommd = G|kaktname2)
+.continue EL016 ? _(_(F|empty(M|ypvorgang)))
+.continue EL017 ? _((M|ystatusk = "07") ; (M|ystatusk = "08"))
+.formula U|xtsel = "$,,ygehoertzu==" + M|ypvorgang^id + ";@ablageart=(1)"
+.load 8 group 'U|xydbgrpvorgang' 'U|xtsel'
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.continue EL018 ? _(_(8|yablage))
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+.box Fehler
+Vorgang '8|nummer'/'8|such' zum Projektvorgang ist noch nicht abgeschlossen.
+.set TRANS -
+.copy M|ystatus = F|oldvalue(M|ystatus)
+.continue
+!EL018
+.load 8 continue
+.continue LOOP002
+!ELOP002: ==============================
+!EL017
+.continue EL019 ? _(_(F|empty(M|yaufgabe)))
+.load 0 add M|yaufgabe
+!EL019
+!EL016
+!EL015
+.continue EL020 ? _(F|defined(0|id))
+.continue BRK003 ? _('M|ystatusk' = "01")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.continue ESAC003
+!BRK003
+.continue BRK004 ? _('M|ystatusk' = "02")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+.continue ESAC003
+!BRK004
+!ESAC003: =====   ENDCASE   =====
+!EL020
+!EL007
+!FI006
+!EL002
+.continue EL021 ? _(G|evtkommd <> G|kaktname14)
+.continue EL022 ? _((M|ystatusk = "07") ; (M|ystatusk = "08"))
+.formula xtsel = "$,,"
+.formula xtsel = U|xtsel + ";yaufgabe=="  + M|id                ? M|dnr = U|xydbaufgabe  & M|gruppe = U|xygraufgabe
+.formula xtsel = U|xtsel + ";ypvorgang==" + M|id                ? M|dnr = U|xydbpvorgang & M|gruppe = U|xygrpvorgang
+.formula xtsel = U|xtsel + ";ypvorgang==" + M|ypvorgang^id      ? G|evtkommd = G|kaktname2
+.formula xtsel = U|xtsel + ";@ablageart=(1)"
+.load 0 group 'U|xydbgrlnachweis' 'U|xtsel'
+.formula U|xbmehr = G|mehr
+!LOOP003: ==============================
+.continue ELOP003 ? _(U|xbmehr)
+.load 5 add F|sysinfo(10)^ykonfigprjm   ? _F|defined(5|ypmpvaastolm)
+.continue EL023 ? _((5|ypmpvaastolm) & (M|ystatusk = "08"))
+.set TRANS +
+.box Hinweis
+Es existieren bereits Leistungsmeldungen.
+Storno ist nicht mehr mîglich.
+.set TRANS -
+.assign M|ystatusk = F|oldvalue(M|ystatusk)
+.error
+.end 1
+!EL023
+.continue EL024 ? _(G|TRUE)
+.continue FI024
+!EL024
+.continue EL025 ? _((F|empty(0|ylsnum)) & (F|empty(0|yrenum)) & (0|ylsrelev))
+.set TRANS +
+.box
+Leistungsmeldung '0|nummer' ist noch nicht geliefert/berechnet.
+.set TRANS -
+!EL025
+!FI024
+.load 0 continue
+.formula U|xbmehr = G|mehr
+.continue LOOP003
+!ELOP003: ==============================
+!EL022
+!EL021
+.continue EL026 ? _((M|dnr    = U|xydbaufgabe) & (M|gruppe = U|xygraufgabe))
+.continue EL027 ? _((F|empty(M|ystatusk)) ; (M|ystatusk  = "01"))
+.protection -RESET ypvorgang 0  ?  G|evtkommd = G|kaktname14
+.protection -RESET ykunde    0  ?  F|empty(M|ypvorgang)
+.continue FI027
+!EL027
+.protection ypvorgang 0
+.protection ykunde    0
+!FI027
+!EL026
+.continue EL028 ? _(M|ystatusk  = "08")
+.continue EL029 ? _(F|sysinfo(10)^ykonfigprjm^ypmpvaastdnull)
+.formula M|ypvsollstd = 0       ? F|defined(M|ypvsollstd)
+.formula M|ypvplanstd = 0       ? F|defined(M|ypvplanstd)
+.formula M|ysollstd   = 0       ? F|defined(M|ysollstd)
+.formula M|yplanstd   = 0       ? F|defined(M|yplanstd)
+!EL029
+!EL028
+.continue
+.continue ESAC002
+!BRK002
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK001
+!ESAC001: =====   ENDCASE   =====
+.continue

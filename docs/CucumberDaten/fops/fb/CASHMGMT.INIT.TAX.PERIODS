@@ -1,0 +1,90 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : CASHMGMT.SET.TAX.PERIODS
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Ermittlung der Steuerperioden und Faelligkeitstermine der Umsatzsteuer
+.. Functionality  :
+..*****************************************************************************
+..
+.set trans -
+..
+.. Start und Ende aller relevanten Steuerperioden berechnen
+.. Dann die dazugehoerigen Faelligkeiten fuer die Zahlungen (aus Szenariokonfiguration).
+.. Faelligkeit in die Perioden einsortieren und wenn sie in eine Auswertungsperiode
+.. faellt, dann die Werte ueber das Formular ermitteln und ausgeben.
+..
+.. TODO: Evtl. kann man das nun auch auf den Kalenderzyklus umstellen
+..
+.type integer ximaxtaxperiod
+.type GD  xdmaxvatdate
+.type integer xipastvatdays
+..
+.formula U|xipastvatdays = ((U|xpszenario^ustzahlmon + 1) * 31 + U|xpszenario^ustzahltag)
+..
+.formula U|ximaxtaxperiod = 0
+..
+.type integer xi       ? _F|defined(U|xi)
+..
+.copy U|xdmaxvatdate = U|xpend.U|ximaxperiod
+..
+.formula U|xi = 0
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+.formula U|xi = U|xi + 1
+.type GD xdvatstart.xi
+.type GD xdvatend.xi
+.type GD xdvatterm.xi
+.. use past date because the due calculation date has to start in the past
+.copy U|xdvatstart.U|xi = U|xdstartdate - U|xipastvatdays ? U|xi = 1
+.copy U|xdvatstart.U|xi = U|xdvatend.U|ximaxtaxperiod + 1 ? U|xi > 1
+.continue M ? U|xustvazeitraum = "(Monthly)" ; F|empty(U|xustvazeitraum)
+.continue Q ? U|xustvazeitraum = "(Quarterly)"
+.continue Y ? U|xustvazeitraum = "(Annually)"
+.continue END
+..*****************************************************************************
+!M
+..*****************************************************************************
+.. set start date to first day of month
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdvatstart.U|xi, "GD8")' method=set field=DAY_OF_MONTH amount=1 return=xdvatstart.xi
+.. set end date to last day of month
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdvatstart.U|xi, "GD8")' method=setActualMaximum field=DAY_OF_MONTH return=xdvatend.xi
+.continue NEXT
+..*****************************************************************************
+!Q
+..*****************************************************************************
+.. set start date to first day of month
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdvatstart.U|xi, "GD8")' method=set field=DAY_OF_MONTH amount=1 return=xdvatstart.xi
+.. set start month to start of quarter
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdvatstart.U|xi, "GD8")' method=set field=MONTH amount='F|round(F|expr(F|ceiling(F|month(U|xdvatstart.U|xi)/3)*3-2),0)' return=xdvatstart.xi
+.. set end month to end of quarter
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdvatstart.U|xi, "GD8")' method=add field=MONTH amount=2 return=xdvatend.xi
+.. set end date to last day of month
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdvatend.U|xi, "GD8")' method=setActualMaximum field=DAY_OF_MONTH return=xdvatend.xi
+.continue NEXT
+..*****************************************************************************
+!Y
+..*****************************************************************************
+.. set start date to first day of year
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdvatstart.U|xi, "GD8")' method=set field=DAY_OF_YEAR amount=1 return=xdvatstart.xi
+.. set end date to last day of year
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdvatstart.U|xi, "GD8")' method=setActualMaximum field=DAY_OF_YEAR return=xdvatend.xi
+.continue NEXT
+..*****************************************************************************
+!NEXT
+..*****************************************************************************
+.. set month of due date
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdvatend.U|xi, "GD8")' method=add amount='F|condexpr(U|xustvazeitraum = "(Monthly)", U|xpszenario^ustzahlmon, F|condexpr(U|xpszenario^ustzahlmon=0, 1, U|xpszenario^ustzahlmon))' field=MONTH return=xdvatterm.xi
+.. set day of due date
+.input "java:de.abas.jfop.utils.DateCalc" date='F|value(U|xdvatterm.U|xi, "GD8")' method=set amount='F|condexpr(U|xpszenario^ustzahltag > 0, U|xpszenario^ustzahltag, 1)' field=DAY_OF_MONTH return=xdvatterm.xi
+.continue END ? U|xdvatterm.U|xi > U|xdmaxvatdate
+.copy U|ximaxtaxperiod = U|xi
+.continue LOOP
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue
+

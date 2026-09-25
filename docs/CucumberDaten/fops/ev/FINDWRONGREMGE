@@ -1,0 +1,216 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : FINDWRONGREMGE
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : FOP zum Auffinden falscher Rechnungsmengen nach Rcklieferungen
+..
+.. Ablauf         : Durch„uft die origs von gebuchten Rckliefrungen
+..*****************************************************************************
+.set trans -
+.type text   xselect       ? _F|defined(U|xselect)
+.type text   xtekdat       ? _F|defined(U|xtekdat)
+.type text   xtvkdat       ? _F|defined(U|xtvkdat)
+.type text   xtdat         ? _F|defined(U|xtdat)
+.type ID4    xektreffer    ? _F|defined(U|xektreffer)
+.type ID3    xvktreffer    ? _F|defined(U|xvktreffer)
+.type text   xtsys         ? _F|defined(U|xtsys)
+..
+.formula U|xtdat = "rmtmp/KTREFFER."+'G|versionneu'+".TMP"
+.formula U|xtekdat = "rmtmp/XEKTREFFER."+'G|versionneu'+".TMP"
+.formula U|xtvkdat = "rmtmp/XVKTREFFER."+'G|versionneu'+".TMP"
+..
+.output new 'U|xtdat'
+.set trans +
+.input "DATEI.F"
+Listen von Vorg„ngen mit falschen Rechnungsmengen nach Rcklieferungen:
+
+Einkauf: Vorgangsnummer # Vorgangssuchwort # Positions-ID # Artikelnummer      # Artikelsuchwort  # Typ       # Typ           # Ursprungs-RLS
+_______________________________________________________________________________________________________________________________________________
+.set trans -
+.output
+.output new 'U|xtekdat'
+.input "DATEI.F"
+.output
+.output new 'U|xtvkdat'
+.input "DATEI.F"
+.output
+..
+!PURCHASING: Einkauf
+.formula U|xselect = "$,,"
+.formula U|xselect = U|xselect + ";kotyp=(PackingSlip)"
+.formula U|xselect = U|xselect + ";tlsart=(ReturnPackingSlip)"
+.formula U|xselect = U|xselect + ";kopf^uebertr=FALSE"
+.formula U|xselect = U|xselect + ";artikel^gruppe=1"
+.formula U|xselect = U|xselect + ";@gruppe=2"
+.formula U|xselect = U|xselect + ";@ablageart=(Both)"
+..
+.load 4 purchasing 'U|xselect'
+.continue SALES ? _G|mehr
+.continue OUT4
+..
+!LOAD4
+.load 4 purchasing
+.continue SORT4 ? _G|mehr
+.continue OUT4
+..
+!OUT4: diverse F„lle: orig ist ein LS oder orig ist eine RE
+.continue LS4  ? 4|okotyp = 4
+.continue RE4  ? 4|okotyp = 5
+.continue LOAD4
+..
+!LS4: Vorg„nger ist Lieferschein
+.continue BE4 ? _F|empty(4|orig^orig)
+.. keine abgelegten LS ausgeben
+.continue LOAD4 ? 4|okopf^ablagef
+.. keine LS mit Rechnungsmenge = 0
+.continue LOAD4 ? 4|orig^remge = 0
+.load 6 purchasing '4|orig^id'
+.continue LOAD4 ? _G|mehr
+.continue A4DDEDTO
+..
+!BE4: Es gibt Bestellungen
+.. keine abgelegten Bestellungen ausgeben
+.continue LOAD4     ? 4|orig^okopf^ablagef
+.. keine Bestellungen mit Rechnungsmenge = 0
+.continue LOAD4     ? 4|orig^orig^remge = 0
+.load 6 purchasing '4|orig^orig^id'
+.continue LOAD4 ? _G|mehr
+.continue A4DDEDTO
+..
+!RE4: Vorg„nger ist Rechnung
+.. keine RE mit Rechnungsmenge = 0
+.continue LOAD4     ?  4|orig^remge = 0
+.. keine abgelegten Rechnungen ausgeben, wenn dessen Vorg„nger leer ist
+.continue LOAD4     ?  4|okopf^ablagef & F|empty(4|orig^orig)
+.continue A4DDEDTO  ? _4|okopf^ablagef & F|empty(4|orig^orig)
+.. orig^okotyp ist LS oder BE oder leer
+.formula U|xektreffer = 4|orig^orig^id ? 4|orig^okotyp = 3 ; F|empty(4|orig^orig)
+.continue REBE4                        ? 4|orig^okotyp = 3 ; F|empty(4|orig^orig)
+.. hier sind alle mit 4|orig^okotyp = LS
+.. Treffer, wenn kein Vorg„nger (BE) mehr da ist und der LS nicht in der Ablage ist
+.continue LOAD4                        ? 4|orig^okopf^ablagef
+.formula U|xektreffer = 4|orig^orig^id ? F|empty(4|orig^orig^orig)
+.continue TREFFER                      ? F|empty(4|orig^orig^orig)
+..
+!REBE4: raus, wenn BE abgelegt ist
+.continue LOAD4                        ? 4|orig^orig^okopf^ablagef
+.continue TREFFER
+..
+!TREFFER: wenn Vorg„nger = Auftrag oder Rechnung mit Lagerbewgung und kein Vorg„nger
+.load 6 purchasing 'U|xektreffer'
+.continue LOAD4 ? _G|mehr
+.continue A4DDEDTO
+..
+!A4DDEDTO
+.output addedto 'U|xtekdat'
+'6|kopf^nummer         '# '6|kopf^such    '# '6|id       '# '6|artikel^nummer '# '6|artikel^such '# '6|kotyp '# '6|kotypa    '# '4|kopf^nummer'
+.output
+.continue LOAD4
+..
+!SORT4: Sortieren von U|xtekdat und an xtdat h„ngen
+.continue SALES ? F|empty(U|xtekdat)
+.formula xtsys="sort -t# +5n +0n " + U|xtekdat + " >>" + U|xtdat
+.system 'xtsys' background
+.continue ERROR1 ? _G|mehr
+.continue SALES
+..
+!SALES: Verkauf
+.output addedto 'U|xtdat'
+.set trans +
+
+
+Verkauf: Vorgangsnummer # Vorgangssuchwort # Positions-ID # Artikelnummer      # Artikelsuchwort  # Typ       # Typ           # Ursprungs-RLS
+_______________________________________________________________________________________________________________________________________________
+.set trans -
+.output
+..
+.formula U|xselect = "$,,"
+.formula U|xselect = U|xselect + ";kotyp=(PackingSlip)"
+.formula U|xselect = U|xselect + ";tlsart=(ReturnPackingSlip)"
+.formula U|xselect = U|xselect + ";kopf^uebertr=FALSE"
+.formula U|xselect = U|xselect + ";artikel^gruppe=1"
+.formula U|xselect = U|xselect + ";@gruppe=2"
+.formula U|xselect = U|xselect + ";@ablageart=(Both)"
+..
+.load 5 sales 'U|xselect'
+.continue END ? _G|mehr
+.continue OUT5
+..
+!LOAD5
+.load 5 sales
+.continue SORT5  ? _G|mehr
+.continue OUT5
+..
+!OUT5: Diverse F„lle: orig ist ein LS, orig ist eine RE
+.continue LS5  ? 5|okotyp = 4
+.continue RE5  ? 5|okotyp = 5
+.continue LOAD5
+..
+!LS5: Vorg„nger ist Lieferschein
+.continue AU5 ? _F|empty(5|orig^orig)
+.. keine abgelegten LS ausgeben
+.continue LOAD5 ? 5|okopf^ablagef
+.. keine LS mit Rechnungsmenge = 0
+.continue LOAD5 ? 5|orig^remge = 0
+.load 7 sales '5|orig^id'
+.continue LOAD5 ? _G|mehr
+.continue A5DDEDTO
+..
+!AU5: Es gibt Auftrag
+.. keine abgelegten Auftr„ge ausgeben
+.continue LOAD5     ? 5|orig^okopf^ablagef
+.. keine Auftr„ge mit Rechnungsmenge = 0
+.continue LOAD5     ? 5|orig^orig^remge = 0
+.load 7 sales '5|orig^orig^id'
+.continue LOAD5 ? _G|mehr
+.continue A5DDEDTO
+..
+!RE5: Vorg„nger ist Rechnung
+.. keine RE mit Rechnungsmenge = 0
+.continue LOAD5     ?  5|orig^remge = 0
+.. keine abgelegten Rechnungen ausgeben, wenn dessen Vorg„nger leer ist
+.continue LOAD5     ?  5|okopf^ablagef & F|empty(5|orig^orig)
+.continue A5DDEDTO  ? _5|okopf^ablagef & F|empty(5|orig^orig)
+.. orig^okotyp ist LS oder AU oder leer
+.formula U|xvktreffer = 5|orig^orig^id ? 5|orig^okotyp = 3 ; F|empty(5|orig^orig)
+.continue REAU5                        ? 5|orig^okotyp = 3 ; F|empty(5|orig^orig)
+.. hier sind alle mit 5|orig^okotyp = LS
+.. Treffer, wenn kein Vorg„nger (AU) mehr da ist und der LS nicht in der Ablage ist
+.continue LOAD5                        ? 5|orig^okopf^ablagef
+.formula U|xvktreffer = 5|orig^orig^id ? F|empty(5|orig^orig^orig)
+.continue T5REFFER                     ? F|empty(5|orig^orig^orig)
+.. AU ist abgelegt
+.continue LOAD5                        ? 5|orig^orig^okopf^ablagef
+.formula U|xvktreffer = 5|orig^orig^orig^id
+.continue T5REFFER
+..
+!REAU5: raus, wenn AU abgelegt ist
+.continue LOAD5                        ? 5|orig^orig^okopf^ablagef
+.continue T5REFFER
+..
+!T5REFFER: wenn Vorg„nger = Auftrag oder Rechnung mit Lagerbewgung und kein Vorg„nger
+.load 7 sales 'U|xvktreffer'
+.continue LOAD5 ? _G|mehr
+.continue A5DDEDTO
+..
+!A5DDEDTO
+.output addedto 'U|xtvkdat'
+'7|kopf^nummer         '# '7|kopf^such    '# '7|id       '# '7|artikel^nummer '# '7|artikel^such '# '7|kotyp '# '7|kotypa    '# '5|kopf^nummer'
+.output
+.continue LOAD5
+..
+!SORT5: U|xtvkdat sortieren und an U|xtdat h„ngen
+.continue END ? F|empty(U|xtvkdat)
+.formula xtsys="sort -t# +0n +5n " + U|xtvkdat + " >>" + U|xtdat
+.system 'xtsys' background
+.continue ERROR1 ? _G|mehr
+.continue END
+!END
+.input 'U|xtdat'
+.continue
+..
+!ERROR1
+.error Das Sortieren der Vorg„nge ist gescheitert!
+.end 1
+

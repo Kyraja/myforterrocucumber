@@ -1,0 +1,88 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LABDIFF.KLAB.FA
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Feldaustritts Event zum Abruf (EDI-Id) bzw Abrufnummer
+..                  Ermittelt Rahmenauftrag und Artikel zum Abruf, und fÅhrt
+..                  Anschlie·end das FOP LABDIFF.KRAHMEN.FA aus, um die beiden
+..                  neusten Lieferabrufe zu Rahmenauftrag zu finden.
+.. Functionality  : Field exit event for forecast (edi-id) or forecast number
+..                  Finds blanket order and product from forecast, and runs
+..                  efop LABDIFF.KRAHMEN.FA, to find the two most recent
+..                  delivery forecast schedules for the blanket order
+..*****************************************************************************
+.set trans -
+..
+.type text xtselEDI
+.type P109:2 xedinachr
+..
+..
+.. event evaluation
+.. ----------- ---------- ---------- -------------------------------------------
+.continue EDI     ? G|evtartengl = "FIELD_EXIT"     & G|evtvar = "klab"
+.continue EDI     ? G|evtartengl = "BUTTON_AFTER"   & G|evtvar = "tbudiffliste"
+.continue NUMMER  ? G|evtartengl = "FIELD_EXIT"     & G|evtvar = "klabnummer"
+.continue TYP     ? G|evtartengl = "FIELD_EXIT"     & G|evtvar / "klabedinachr*"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+..
+!TYP
+.continue INITLAB  ?  F|empty(M|klabedinachr)  ;  F|empty(M|klab)
+.continue INITLAB  ?  M|klabedinachr<>M|klab^edinachr
+.continue ENDHOL
+!INITLAB: forecast type was changed
+.formula M|klab = ""
+.formula M|klabnummer = ""
+.formula M|klab1 = ""
+.formula M|klab2 = ""
+.continue ENDHOL
+..
+!EDI
+.continue EKLAB  ?  M|klab^nachrtyp="EKLAB"
+.formula M|klabnummer = M|klab^labruf
+.assign M|krahmen = M|klab^ideksrah
+.formula M|klabhisvon = M|klab^erfass - 90
+.formula M|klabhisbis = M|klab^erfass
+.assign M|klabedinachraz = M|klab^edinachr^id
+.continue ERRENUM  ? _G|mehr
+.continue ENDHOL
+..
+!NUMMER
+.formula U|xtselEDI = "$,,;@gruppe=0;vorart=3;imex=IM;edinachr=2101!2104"   ?   F|empty(M|klabedinachr)
+.formula U|xtselEDI = F|formatstr("$,,;@gruppe=0;vorart=3;imex=IM;edinachr={1}", M|klabedinachr)
+.formula U|xtselEDI = U|xtselEDI + ";@ordnung=nummer.(Backwards)"
+.formula U|xtselEDI = U|xtselEDI + ";erfass="    + 'M|klabhisvon:8' + "!" + 'M|klabhisbis:8'
+.formula U|xtselEDI = U|xtselEDI + ";labruf=="   + M|klabnummer
+.formula U|xtselEDI = U|xtselEDI + ";@ablageart=(3)"                 ?  M|kbablage
+..
+.select edifact 'U|xtselEDI'
+.continue ENDHOL  ? _G|mehr
+.formula M|klab = H|id
+.assign M|krahmen =  M|klab^ideksrah
+.copy M|klabedinachr = M|klab^edinachr
+..
+!ENDHOL
+.select -
+..
+.. IMPORTANT: product must match
+.assign M|kartikel = M|klab^ideksart ? _F|empty(M|klab)
+.formula M|kkuartnr = M|klab^kuartnr ? _F|empty(M|klab)
+..
+.. Find previous forecasts with blanket-order FA efop
+.input "dfue/LABDIFF.KRAHMEN.FA"
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERRENUM
+.error Der EDI-Datensatz 'M|edi^nummer' ist keine Abrufnachricht.
+.end 1
+..
+!EKLAB
+.error Lieferabrufe Einkauf werden mit diesem Infosystem nicht ausgewertet.
+.end 1
+

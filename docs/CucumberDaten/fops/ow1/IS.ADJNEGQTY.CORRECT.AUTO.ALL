@@ -1,0 +1,94 @@
+..!interpreter german translate noabbrev
+..*****************************************************************************
+.. Name           : ow1/IS.ADJNEGQTY.CORRECT.AUTO.ALL
+.. Date           : 20.01.14
+.. Version        : 2012r4n05
+.. Author         : chbo/abas AG
+.. Copyright      : (c) 2014 abas AG
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   : Repopulate IS table by running is/TABLEEREN and
+..                  ow1/IS.ADJNEGQTY.START.  Loop through table elements to 
+..                  create an EDP file to import as inventory corrections
+...Includes       : None
+..*****************************************************************************
+..
+.art text xtfile                  ? F|defined( U|xtfile )      = G|False
+.art text xtcommand               ? F|defined( U|xtcommand )   = G|False
+.art text xtdelete                ? F|defined( U|xtdelete )    = G|False
+.art int  xicount                 ? F|defined( U|xicount )     = G|False
+..
+.. Abort if there is no date defined for the corrections
+.weiter NODATE ? F|empty(M|korrdat) = G|True
+..
+.formel U|xtfile = "ow1/BKORR.EDP"
+.formel U|xtcommand = "edpimport.sh -a do -b '(SInventory)' -p " + 'G|einmalpw' + " -I " + 'U|xtfile'
+.formel U|xtdelete = "rm " + 'U|xtfile'
+.formel U|xicount = 0
+..
+.. Make certain that table is populated
+.eingabe is/TABLEEREN
+.eingabe ow1/IS.ADJNEGQTY.START
+..
+.weiter NOLINES ? M|tzeilen = 0
+..
+.. Create EDP file
+.eingabe DATEI.F
+.ausgabe auf 'U|xtfile'
+.. Set headers of the file
+#!EDP_TESTFLAG2=1
+#!EDP_DATE='M|korrdat'
+param;artikel;beldat;beleg\
+zeile;platz;mge
+..
+!LINES
+.. Add the import lines to the file
+.formel U|xicount = U|xicount + 1
+.hole maske zeile 'U|xicount'
+;'M|qart^id';'M|korrdat';DSIMPORT\
++1;'M|qlpl^id';'M|mindest'
+.weiter LINES ? U|xicount < M|tzeilen
+..
+.. Close file
+.ausgabe auf WERF.WEG
+.eingabe BILD.F
+.ausgabe BILDSCHIRM
+..
+.. Execute edpimport.sh with the created file
+.. Delete the EDP file when import completes
+.system 'U|xtcommand' HINTER
+.weiter ERRORCMD ? G|mehr = G|False
+.system 'U|xtdelete' HINTER
+.weiter ERRORFILE ? G|mehr = G|False
+.hinweis -sofort A stock corrections for one item was successfully created.         ? U|xicount = 1
+.hinweis -sofort Stock corrections for 'U|xicount' items were successfully created. ? U|xicount > 1
+.weiter
+..
+!ERRORCMD
+.. Message if the EDP command did not complete successfully
+.hinweis -sofort An error occurred while executing EDP command.
+.system 'U|xtdelete' HINTER
+.weiter ERRORFILE ? G|mehr = G|False
+.weiter
+..
+!ERRORFILE
+.. Message if the temporary EDP file could not be deleted
+.hinweis -sofort An error occurred while deleting temporary EDP file 'U|xtfile'.
+.weiter
+..
+!NOLINES
+.. Message if there are no lines in the table (i.e. there are no negative quantities)
+.hinweis -sofort There are no items to be corrected!
+.weiter
+..
+!NODATE
+.. Message if there is no correction date defined
+.hinweis -sofort There is no correction date defined!
+.weiter

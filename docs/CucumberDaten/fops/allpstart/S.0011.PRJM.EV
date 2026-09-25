@@ -1,0 +1,762 @@
+..!interpreter english declaration noabbrev
+.. at 2017-07-05, 17:16
+.set trans -
+..========================================================================
+..==  Name              : S.0011.PRJM.EV
+..==  Pfad              : allpstart
+..==  Funktion          :
+..==  Erstellungsdatum  : 10.06.2009
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF"
+..====================================================
+.type text    xtsys xtsel xtcmd xtext xtprot xthist xttmp xtvar xtmavar xtftvar xtftextM xtftextH
+.type text    xtedpdat xtedpout xtedperr xtedpmsg xtbox xttitel xterrtext
+.type integer xianz xi01 xyvdn xyvgr
+.type real    xrklassanteil
+.type bool    xbmehr xberr xbhist xbft
+.type integer   xprocsp         ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Schutz -----
+.continue EL001 ? _(_(M|yprjmperstypk = "EM"))
+.protection -reset yprjmlief
+.continue FI001
+!EL001
+.protection yprjmlief
+!FI001
+.continue 'xprocst.xprocsp'
+!PROC002: ----- PflichtfelderFarbe -----
+.continue EL002 ? _(_(G|evtkommd = G|kaktname12))
+.colour -BACKGROUND 'U|xyfarbepflichtf' such         0
+.colour -BACKGROUND 'U|xyfarbepflichtf' yprjmperstyp 0
+.colour -BACKGROUND 'U|xyfarbepflichtf' yprjmlief    0  ?  M|yprjmperstypk = "FP" ;  M|yprjmperstypk = "VU" ;  M|yprjmperstypk = "SUB"
+.colour -BACKGROUND "-1 -1 -1"          yprjmlief    0  ? _M|yprjmperstypk = "FP" & _M|yprjmperstypk = "VU" & _M|yprjmperstypk = "SUB"
+.colour -BACKGROUND 'U|xyfarbepflichtf' kstelle      0  ?  F|sysinfo(18)^stbu
+!EL002
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Dopplungspruefung -----
+.continue EL003 ? _((M|yprjmperstypk <> "EM") & (_(F|empty(M|yprjmlief))) & (_(F|empty(M|namebspr))))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprjmlief==" + M|yprjmlief^id
+.formula U|xtsel = U|xtsel + ";name=="      + M|namebspr
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 0 group "11:1" 'U|xtsel'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.formula U|xtext = U|xtext + ";" + 0|nummerb + " - " + 0|suchb  ?  0|id <> M|id
+.formula U|xianz = U|xianz + 1                                  ?  0|id <> M|id
+.load 0 continue
+.continue LOOP001
+!ELOP001: ==============================
+.continue EL004 ? _(U|xianz  > 0)
+.set trans +
+.formula U|xttitel = "Hinweis"
+.formula U|xttmp   = F|formatstr("Es existiert bereits ein Mitarbeiter mit Namen {1} zum Lieferanten {2}.", M|namebspr, M|yprjmlief)
+.set trans -
+.box -button ok:cancel -title 'U|xttitel'
+'U|xttmp'
+'U|xtext                                                                '
+.set trans -
+.assign M|.evtvar = ""  ? _G|box = G|boxyes & G|evtart <> "maskpruef"
+.error                  ? _G|box = G|boxyes
+.end 1                  ? _G|box = G|boxyes
+!EL004
+!EL003
+.continue 'xprocst.xprocsp'
+!PROC004: ----- Summe_Anteile -----
+.formula M|yprjmsumgewant = M|yprjmgewerkant1 + M|yprjmgewerkant2 + M|yprjmgewerkant3 + M|yprjmgewerkant4 + M|yprjmgewerkant5
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskein")
+.continue EL005 ? _(_(G|evtkommd = G|kaktname12))
+.continue EL006 ? _(G|evtkommd = G|kaktname10)
+.copy U|xberr = G|false
+.file -tempname U|xtprot
+.output new 'U|xtprot'
+.input DATEI.F
+.copy U|xbmehr = G|false
+.formula U|xtsel = "$,,yprojleit==" + M|id + ";yablage=(No);@filingmode=(Active)"
+.select group 'U|xydbgrprojekt' 'U|xtsel'
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.continue EL007 ? _(_(U|xbmehr))
+.set trans +
+.formula U|xterrtext =  F|formatstr("Mitarbeiter {1} ist noch als {2} in folgenden {3} eingetragen:" , M|such, "Projektleiter", "Projekten")
+.set trans -
+.println -screen 'U|xterrtext'
+.copy U|xbmehr = G|true
+!EL007
+.println -screen 'H|nummer       ' 'H|such         ' 'H|namebspr'
+.copy U|xberr = G|true
+.select continue
+.continue LOOP002
+!ELOP002: ==============================
+.copy U|xbmehr = G|false
+.formula U|xtsel = "$,,ypersonal==" + M|id + ";yablage=(No);@filingmode=(Active)"
+.select group 'U|xydbgrpvorgang' 'U|xtsel'
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.continue EL008 ? _(_(U|xbmehr))
+.set trans +
+.formula U|xterrtext =  F|formatstr("Mitarbeiter {1} ist noch als {2} in folgenden {3} eingetragen:", M|such, "Bearbeiter", "ProjektvorgÑngen")
+.set trans -
+.println -screen 'U|xterrtext'
+.copy U|xbmehr = G|true
+!EL008
+.println -screen 'H|nummer       ' 'H|such         ' 'H|name'
+.copy U|xberr = G|true
+.select continue
+.continue LOOP003
+!ELOP003: ==============================
+.copy U|xbmehr = G|false
+.formula U|xtsel = "$,,yverantw==" + M|id + ";yablage=" + 'G|false'
+.select group 'U|xydbgrpvorgang' 'U|xtsel'
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.continue EL009 ? _(_(U|xbmehr))
+.set trans +
+.formula U|xterrtext =  F|formatstr("Mitarbeiter {1} ist noch als {2} in folgenden {3} eingetragen:", M|such, "Verantwortlicher", "ProjektvorgÑngen")
+.set trans -
+.println -screen 'U|xterrtext'
+.copy U|xbmehr = G|true
+!EL009
+.println -screen 'H|nummer       ' 'H|such         ' 'H|name'
+.copy U|xberr = G|true
+.select continue
+.continue LOOP004
+!ELOP004: ==============================
+.copy U|xbmehr = G|false
+.formula U|xtsel = "$,,ypersonal==" + M|id + ";ystatus^katego=!04;@filingmode=(Active)"
+.select group 'U|xydbgraufgabe' 'U|xtsel'
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.continue EL010 ? _(_(U|xbmehr))
+.set trans +
+.formula U|xterrtext =  F|formatstr("Mitarbeiter {1} ist noch als {2} in folgenden {3} eingetragen:", M|such, "Bearbeiter", "Arbeitsaufgaben")
+.set trans -
+.copy U|xbmehr = G|true
+!EL010
+.println -screen 'H|nummer       ' 'H|such         ' 'H|name'
+.copy U|xberr = G|true
+.select continue
+.continue LOOP005
+!ELOP005: ==============================
+.copy U|xbmehr = G|false
+.formula U|xtsel = "$,,yverantw==" + M|id + ";ystatus^katego=!04;@filingmode=(Active)"
+.select group 'U|xydbgraufgabe' 'U|xtsel'
+!LOOP006: ==============================
+.continue ELOP006 ? _(G|mehr)
+.continue EL011 ? _(_(U|xbmehr))
+.set trans +
+.formula U|xterrtext =  F|formatstr("Mitarbeiter {1} ist noch als {2} in folgenden {3} eingetragen:", M|such, "Verantwortlicher", "Arbeitsaufgaben")
+.set trans -
+.copy U|xbmehr = G|true
+!EL011
+.println -screen 'H|nummer       ' 'H|such         ' 'H|name'
+.copy U|xberr = G|true
+.select continue
+.continue LOOP006
+!ELOP006: ==============================
+.continue EL012 ? _(U|xberr)
+.output terminal
+.input -text 'U|xtprot'
+
+.set trans +
+Bitte zuerst alle offenen VorgÑnge abschlie·en!
+.set trans -
+.error
+.end 1
+!EL012
+.continue FI006
+!EL006
+.continue EL013 ? _(G|evtkommd = G|kaktname14)
+.formula M|yprjmlsname = ""
+!EL013
+.continue EL014 ? _((F|sysinfo(10)^ykonfigprjm^ypmbpershistorie) & (G|evtkommd = G|kaktname13))
+.formula U|xtsel = "$,,yhistpersonal==" + M|id + ";yhistzeitstempel>" + 'G|zeitpunkt(L="0")'
+.formula U|xtsel = U|xtsel + ";@order=yhistzeitstempel;@filingmode=(Active)"
+.load 9 group 'U|xydbgrpershistorie' 'U|xtsel'
+.continue EL015 ? _(G|mehr)
+.set trans +
+.box Hinweis
+Es existiert bereits ein Historiendatensatz fÅr den '9|yhistzeitstempel'.
+énderung ist nicht erlaubt
+.set trans -
+.error
+.end 1
+!EL015
+!EL014
+.continue EL016 ? _(_(G|edp))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.protection yprjmgueltigab 0    ? _F|sysinfo(10)^ykonfigprjm^ypmbpershistorie
+!EL016
+.continue EL017 ? _((G|evtkommd = G|kaktname13) & (_(F|empty(M|ftext))))
+.select from 'M|ftext'
+.formula M|yprjmftexthist = M|ftext
+!EL017
+!FI006
+!EL005
+.continue EL018 ? _(_(G|evtkommd = G|kaktname10))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC004
+!RET002
+.formula xprocsp = xprocsp - 1
+!EL018
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC002
+!RET003
+.formula xprocsp = xprocsp - 1
+.continue
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "maskpruef")
+.continue EL019 ? _((_(G|evtkommd = G|kaktname10)) & (_(G|evtkommd = G|kaktname12)))
+.formula U|xterrtext = ""
+.set trans +
+.formula U|xterrtext = U|xterrtext + G|trennerchar + "Personaltyp"      ?  F|empty(M|yprjmperstyp)
+.formula U|xterrtext = U|xterrtext + G|trennerchar + "Lieferant"        ?  F|empty(M|yprjmlief) & (M|yprjmperstypk = "FP" ; M|yprjmperstypk = "VU" ; M|yprjmperstypk = "SUB")
+.formula U|xterrtext = U|xterrtext + G|trennerchar + "Kostenstelle"     ?  F|empty(M|kstelle)  &  F|sysinfo(18)^stbu
+.set trans -
+.continue EL020 ? _(_(F|empty(U|xterrtext)))
+.set trans +
+.formula U|xttitel   = "Fehler"
+.formula U|xterrtext = "Vor dem Speichern bitte folgende Pflichtfelder fÅllen:;" + U|xterrtext
+.set trans -
+.formula U|xtvar     = "kstelle"        ?  F|empty(M|kstelle) &  F|sysinfo(18)^stbu
+.formula U|xtvar     = "yprjmperstyp"   ?  F|empty(M|yprjmperstyp)
+.formula U|xtvar     = "yprjmlief"      ?  F|empty(M|yprjmlief) & (M|yprjmperstypk = "FP" ; M|yprjmperstypk = "VU" ; M|yprjmperstypk = "SUB")
+.box 'U|xttitel'
+'U|xterrtext'
+.cursor 'U|xtvar' 0
+.error
+.end 1
+!EL020
+!EL019
+.copy U|xberr = G|false
+.copy U|xberr = G|true  ? F|empty(M|yprjmgewerk1) & (_F|empty(M|yprjmgewerk2) ; _F|empty(M|yprjmgewerk3) ; _F|empty(M|yprjmgewerk4) ; _F|empty(M|yprjmgewerk5))
+.continue EL021 ? _(((F|empty(M|yprjmgewerk1)) & (_(M|yprjmgewerkant1 = 0))) ; ((F|empty(M|yprjmgewerk2)) & (_(M|yprjmgewerkant2 = 0))) ; ((F|empty(M|yprjmgewerk3)) & (_(M|yprjmgewerkant3 = 0))) ; ((F|empty(M|yprjmgewerk4)) & (_(M|yprjmgewerkant4 = 0))) ; ((F|empty(M|yprjmgewerk5)) & (_(M|yprjmgewerkant5 = 0))) ; (U|xberr))
+.set trans +
+.formula U|xttitel   = "Fehler"
+.formula U|xterrtext = "Bitte Gewerk eintragen.
+.set trans -
+.box 'U|xttitel'
+'U|xterrtext'
+.cursor yprjmgewerk1 0  ? F|empty(M|yprjmgewerk1) & _M|yprjmgewerkant1 = 0
+.cursor yprjmgewerk2 0  ? F|empty(M|yprjmgewerk2) & _M|yprjmgewerkant2 = 0
+.cursor yprjmgewerk3 0  ? F|empty(M|yprjmgewerk3) & _M|yprjmgewerkant3 = 0
+.cursor yprjmgewerk4 0  ? F|empty(M|yprjmgewerk4) & _M|yprjmgewerkant4 = 0
+.cursor yprjmgewerk5 0  ? F|empty(M|yprjmgewerk5) & _M|yprjmgewerkant5 = 0
+.cursor yprjmgewerk1 0  ? U|xberr
+.error
+.end 1
+!EL021
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC003
+!RET004
+.formula xprocsp = xprocsp - 1
+.formula U|xtbox = ""
+.continue EL022 ? _((_(G|edp)) & (G|evtkommd = G|kaktname13))
+.continue EL023 ? _(_(F|empty(M|kstelle)))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ypersonal=="    + M|id
+.formula U|xtsel = U|xtsel + ";yperskstelle<>" + M|kstelle^id
+.formula U|xtsel = U|xtsel + ";yadatum>="      + G|datum:8          ?  F|empty(M|yprjmgueltigab)
+.formula U|xtsel = U|xtsel + ";yadatum>="      +'M|yprjmgueltigab:8' ? _F|empty(M|yprjmgueltigab)
+.select group 'U|xydbgrlnachweis' 'U|xtsel'
+.continue EL024 ? _(G|mehr)
+.formula U|xtbox = U|xtbox + ";"        ? _F|empty(U|xtbox)
+.set trans +
+.formula U|xtbox = U|xtbox + "Es existieren Leistungsmeldung in der Zukunft mit der alten Kostenstelle."
+.set trans -
+!EL024
+!EL023
+.continue EL025 ? _(_(F|empty(M|yprjmleiart)))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ypersonal=="    + M|id
+.formula U|xtsel = U|xtsel + ";ypersleiart<>"  + M|yprjmleiart^id
+.formula U|xtsel = U|xtsel + ";yadatum>="      + G|datum:8          ?  F|empty(M|yprjmgueltigab)
+.formula U|xtsel = U|xtsel + ";yadatum>="      +'M|yprjmgueltigab:8' ? _F|empty(M|yprjmgueltigab)
+.select group 'U|xydbgrlnachweis' 'U|xtsel'
+.continue EL026 ? _(G|mehr)
+.formula U|xtbox = U|xtbox + ";"        ? _F|empty(U|xtbox)
+.set trans +
+.formula U|xtbox = U|xtbox + "Es existieren Leistungsmeldung in der Zukunft mit der alten Leistungsart."
+.set trans -
+!EL026
+!EL025
+.continue EL027 ? _(_(F|empty(U|xtbox)))
+.set trans +
+.formula U|xttitel   = "Achtung"
+.formula U|xterrtext = "Die DatensÑtze werden beim Speichern korrigiert."
+.set trans -
+.box -button yes:no -title 'U|xttitel'
+'F|value(U|xtbox)                                                                          '
+
+'U|xterrtext'
+.continue EL028 ? _(G|box = G|boxno)
+.error
+.end 1
+!EL028
+!EL027
+!EL022
+.continue EL029 ? _(((M|yprjminaktiv) & (_(M|yprjminaktiv = F|oldvalue(M|yprjminaktiv))) & (_(G|evtkommd = G|kaktname14))) ; ((_(M|yprjmpplanrelev)) & (_(M|yprjmpplanrelev = F|oldvalue(M|yprjmpplanrelev))) & (_(G|evtkommd = G|kaktname14))))
+.formula U|xtsel = "$,,ypersonal==" + M|id + ";yablage=0;@filingmode=(Active)"
+.select group 'U|xydbgrpvorgang' 'U|xtsel'
+.continue EL030 ? _(G|mehr)
+.set trans +
+.box Achtung
+Das Personal 'M|nummer'/'M|such' ist noch ProjektvorgÑngen zugeordnet.
+.set trans -
+!EL030
+.formula U|xtsel = "$,,ypersonal==" + M|id + ";ystatusk<>07;ystatusk<>08;@filingmode=(Active)"
+.select group 'U|xydbgraufgabe' 'U|xtsel'
+.continue EL031 ? _(G|mehr)
+.set trans +
+.box Fehler
+Das Personal 'M|nummer'/'M|such' ist noch Arbeitsaufgaben zugeordnet.
+.set trans -
+!EL031
+!EL029
+.continue EL032 ? _((F|sysinfo(10)^ykonfigprjm^ypmbpershistorie) & (G|evtkommd = G|kaktname13))
+.file -tempname U|xttmp
+.file -tempname U|xtftextM
+.file -tempname U|xtftextH
+.input "is/XMLSUBSTVAR"
+.set separator
+.set substitution 'U|xfullsubs'
+.tablerecord unformatted
+.output new 'U|xttmp' -encoding "UTF-8"
+.input DATEI.F
+<'G|fragechar'xml version='G|dblquote'1.0'G|dblquote' encoding='G|dblquote'UTF-8'G|dblquote''G|fragechar'>
+<'G|fragechar'edp lang d'G|fragechar'>
+<'G|fragechar'edp updatemode strict'G|fragechar'>
+<ABASData reftype='G|dblquote'ref'G|dblquote'>
+<RecordSet>
+<Record database="'U|xydbpershistorie'" group="'U|xygrpershistorie'" action='G|dblquote'NEW'G|dblquote'>
+.select object 'M|id'
+        <Field name='G|dblquote'yhistpersonal'G|dblquote'>'H|id'</Field>
+?        <Field name='G|dblquote'yhistzeitstempel'G|dblquote'>'G|zeitpunkt(L="0")'</Field>          ?  F|empty(M|yprjmgueltigab)
+?        <Field name='G|dblquote'yhistzeitstempel'G|dblquote'>'M|yprjmgueltigab(L="0")'</Field>     ? _F|empty(M|yprjmgueltigab)
+        <Field name='G|dblquote'such'G|dblquote'>'H|such'</Field>
+.copy U|xbhist = G|true       ? M|such <> H|such
+.load 9 group "12:26" "$,,vdn==144;vgr==2"
+.load 9 line
+.output terminal
+!LOOP007: ==============================
+.continue ELOP007 ? _(G|mehr)
+.formula U|xtvar   = 9|vname<<-2    ?  F|empty(9|vnname)
+.formula U|xtvar   = 9|vnname<<-2   ? _F|empty(9|vnname)
+.formula U|xtmavar = U|xtvar
+.formula U|xtmavar = "ftext"    ? U|xtvar = "yftext"
+.formula U|xtmavar = "ftext2"   ? U|xtvar = "yftext2"
+.formula U|xtmavar = "kstelle"  ? U|xtvar = "ykstelle"
+.formula U|xtmavar = "ans"      ? U|xtvar = "yans"
+.formula U|xtmavar = "str"      ? U|xtvar = "ystr"
+.formula U|xtmavar = "lakenn"   ? U|xtvar = "ylakenn"
+.formula U|xtmavar = "plz"      ? U|xtvar = "yplz"
+.formula U|xtmavar = "nort"     ? U|xtvar = "ynort"
+.formula U|xtmavar = "region"   ? U|xtvar = "yregion"
+.formula U|xtmavar = "bstaat"   ? U|xtvar = "ystaat"
+.formula U|xtmavar = "tele"     ? U|xtvar = "ytele"
+.formula U|xtmavar = "mtele"    ? U|xtvar = "ymtele"
+.formula U|xtmavar = "fax"      ? U|xtvar = "yfax"
+.formula U|xtmavar = "email"    ? U|xtvar = "yemail"
+.formula U|xtmavar = "urlt"     ? U|xtvar = "yurlt"
+.formula U|xtmavar = "abtlg"    ? U|xtvar = "yabteilung"
+.formula U|xtmavar = "as"       ? U|xtvar = "yas"
+.formula U|xtmavar = "kontakt"  ? U|xtvar = "ykontakt"
+.formula U|xtmavar = "splan"    ? U|xtvar = "ysplan"
+.formula U|xtmavar = "url"      ? U|xtvar = "yurlaub"
+.formula U|xtmavar = "eintr"    ? U|xtvar = "yeintr"
+.formula U|xtmavar = "austr"    ? U|xtvar = "yaustr"
+.continue EL033 ? _((_(9|vkt)) & (_(9|vskip)) & (9|vitf<<2 <> "BU"))
+.continue EL034 ? _(U|xtvar<<1 = "y")
+.continue EL035 ? _(F|defined(M|.U|xtmavar))
+.continue EL036 ? _(9|vitf<<2 = "TN")
+.continue EL037 ? _(_(F|empty(M|.xtmavar)))
+.copy U|xbft = G|false
+.select from 'M|.U|xtmavar' U|xtext^
+!LOOP008: ==============================
+.continue ELOP008 ? _(G|mehr)
+.continue EL038 ? _(U|xbft)
+'U|xtext'
+.continue FI038
+!EL038
+.copy U|xbft = G|true
+        <Field name="'U|xtvar'" abasType="'9|vitf'">'U|xtext'
+!FI038
+.select from 'M|.U|xtmavar' U|xtext^
+.continue LOOP008
+!ELOP008: ==============================
+?       </Field>        ? U|xbft
+!EL037
+.continue FI036
+!EL036
+.copy U|xbhist = G|true               ? M|.U|xtmavar <> H|.U|xtmavar
+?       <Field name="'U|xtvar'">'H|.U|xtmavar'</Field>      ? 9|vitf<<1 <> "P" & 9|vitf<<2 <> "VP" & 9|vitf<<2 <> "AZ"
+?       <Field name="'U|xtvar'">'H|.U|xtmavar^id'</Field>   ? 9|vitf<<1 =  "P" ; 9|vitf<<2 =  "VP" ; 9|vitf<<2 =  "AZ"
+!FI036
+!EL035
+.continue FI034
+!EL034
+.continue EL039 ? _(U|xtvar<<4="name")
+.copy U|xbhist = G|true               ? M|.xtvar <> H|.xtvar
+.output addedto 'U|xttmp' -encoding "UTF-8"
+        <Field name="'U|xtvar'">'H|.xtvar'</Field>
+!EL039
+!FI034
+!EL033
+.load 9 line
+.continue LOOP007
+!ELOP007: ==============================
+.output addedto 'U|xttmp' -encoding "UTF-8"
+    </Record>
+  </RecordSet>
+</ABASData>
+.continue EL040 ? _(U|xbhist)
+.formula M|yprjmshistdatei = "rmtmp/X." + M|nummer + "." + G|pid + "." + G|sekundenz
+.system 'F|expr("cp " + U|xttmp + " " + M|yprjmshistdatei)' BACKGROUND
+.continue EL041 ? _(_(G|mehr))
+.set trans +
+.box Hinweis
+Personal Historie kann nicht angelegt werden - kopieren der EDP Datei gescheitert.
+.set trans -
+.error
+.end 1
+!EL041
+.continue FI040
+!EL040
+.formula M|yprjmshistdatei = ""
+!FI040
+!EL032
+.continue EL042 ? _((G|evtkommd = G|kaktname10) ; (G|evtkommd = G|kaktname13))
+.continue EL043 ? _((_(F|empty(M|id))) & ((_(M|splan   = F|oldvalue(M|splan))) ; (_(M|kstelle = F|oldvalue(M|kstelle))) ; (_(M|eintr   = F|oldvalue(M|eintr))) ; (_(M|austr   = F|oldvalue(M|austr))) ; (_(M|yprjmstandort   = F|oldvalue(M|yprjmstandort))) ; (_(M|yprjminaktiv    = F|oldvalue(M|yprjminaktiv))) ; (_(M|yprjmpplanrelev = F|oldvalue(M|yprjmpplanrelev))) ; (_(M|yprjmkapazitaet = F|oldvalue(M|yprjmkapazitaet))) ; (G|evtkommd = G|kaktname10)))
+.input java:de.alltrotec.ps.tools.StaffAttributeCacheControl@ALLPS -c 'M|id'                            ? _F|sysinfo(10)^ykonfigprjm^ypmbpershistorie
+.input java:de.alltrotec.ps.tools.StaffAttributeCacheControl@ALLPS -c 'M|id' 'M|yprjmgueltigab:8' ++    ?  F|sysinfo(10)^ykonfigprjm^ypmbpershistorie & _F|empty(M|yprjmgueltigab)
+.input java:de.alltrotec.ps.tools.StaffAttributeCacheControl@ALLPS -c 'M|id' 'G|datum:8' ++             ?  F|sysinfo(10)^ykonfigprjm^ypmbpershistorie &  F|empty(M|yprjmgueltigab)
+!EL043
+!EL042
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtart = "maskaus")
+.continue EL044 ? _(G|evtkommd = G|kaktname13)
+.file -tempname U|xtedpdat
+.file -tempname U|xtedpout
+.file -tempname U|xtedpmsg
+.file -tempname U|xtedperr
+.output new 'U|xtedpdat'
+.input DATEI.F
+.continue EL045 ? _(_(F|empty(M|kstelle)))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ypersonal=="    + M|id
+.formula U|xtsel = U|xtsel + ";yperskstelle<>" + M|kstelle^id
+.formula U|xtsel = U|xtsel + ";ypersleiart=="  + M|yprjmleiart^id
+.formula U|xtsel = U|xtsel + ";yadatum>="      + G|datum:8          ?  F|empty(M|yprjmgueltigab)
+.formula U|xtsel = U|xtsel + ";yadatum>="      +'M|yprjmgueltigab:8' ? _F|empty(M|yprjmgueltigab)
+.select group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP009: ==============================
+.continue ELOP009 ? _(G|mehr)
+.continue EL046 ? _(F|empty(H|ytransaktion))
+#!DATABASE='U|xydblnachweis'
+#!group='U|xygrlnachweis'
+#!ACTION=VIEW
+id;ybukorefeldneuedp;
+'H|id';;
+.continue FI046
+!EL046
+#!DATABASE='U|xydblnachweis'
+#!group='U|xygrlnachweis'
+#!ACTION=VIEW
+id;ybukobustorno;
+'H|id';;
+
+#!DATABASE='U|xydblnachweis'
+#!group='U|xygrlnachweis'
+#!ACTION=VIEW
+id;ybukorefeldneuedp;
+'H|id';;
+
+#!DATABASE='U|xydblnachweis'
+#!group='U|xygrlnachweis'
+#!ACTION=VIEW
+id;ybubuchen;
+'H|id';;
+!FI046
+.select continue
+.continue LOOP009
+!ELOP009: ==============================
+!EL045
+.continue EL047 ? _(_(F|empty(M|yprjmleiart)))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ypersonal=="    + M|id
+.formula U|xtsel = U|xtsel + ";ypersleiart<>"  + M|yprjmleiart^id
+.formula U|xtsel = U|xtsel + ";yadatum>="      + G|datum:8          ?  F|empty(M|yprjmgueltigab)
+.formula U|xtsel = U|xtsel + ";yadatum>="      +'M|yprjmgueltigab:8' ? _F|empty(M|yprjmgueltigab)
+.select group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP010: ==============================
+.continue ELOP010 ? _(G|mehr)
+.continue EL048 ? _(F|empty(H|ytransaktion))
+#!DATABASE='U|xydblnachweis'
+#!group='U|xygrlnachweis'
+#!ACTION=VIEW
+#!EDP_LANGCODE='G|bsprache'
+id;ybukorefeldneuedp;
+'H|id';;
+.continue FI048
+!EL048
+#!DATABASE='U|xydblnachweis'
+#!group='U|xygrlnachweis'
+#!ACTION=VIEW
+#!EDP_LANGCODE='G|bsprache'
+id;ybukobustorno;
+'H|id';;
+
+#!DATABASE='U|xydblnachweis'
+#!group='U|xygrlnachweis'
+#!ACTION=VIEW
+#!EDP_LANGCODE='G|bsprache'
+id;ybukorefeldneuedp;
+'H|id';;
+
+#!DATABASE='U|xydblnachweis'
+#!group='U|xygrlnachweis'
+#!ACTION=VIEW
+#!EDP_LANGCODE='G|bsprache'
+id;ybubuchen;
+'H|id';;
+!FI048
+.select continue
+.continue LOOP010
+!ELOP010: ==============================
+!EL047
+.output new WERF.WEG
+.continue EL049 ? _(F|filenotempty(U|xtedpdat))
+.formula U|xtsys = "edpimport.sh"
+.formula U|xtsys =  U|xtsys + " -p " + G|einmalpw
+.formula U|xtsys =  U|xtsys + " -o UPDATEMODE=STRICT"
+.formula U|xtsys =  U|xtsys + " -r REF"
+.formula U|xtsys =  U|xtsys + " -H " + U|xtedpmsg + " -I " + U|xtedpdat + " >" + U|xtedpout + " 2>" + U|xtedperr
+.input "allpstart/FOP.ALL.EDP.CHECK"
+!EL049
+!EL044
+.continue EL050 ? _((F|sysinfo(10)^ykonfigprjm^ypmbpershistorie) & (_(F|empty(M|yprjmshistdatei))) & (G|evtkommd = G|kaktname13))
+.formula U|xtedpdat = M|yprjmshistdatei
+.formula U|xtedperr = M|yprjmshistdatei + ".ERR"
+.formula U|xtedpout = M|yprjmshistdatei + ".OUT"
+.formula U|xtedpmsg = M|yprjmshistdatei + ".MSG"
+.continue EL051 ? _(F|fileexists(U|xtedpdat))
+.add F|sysinfo(10)^ykonfigprjm
+.continue EL052 ? _(G|mehr)
+.assign G|neuespassw = D|ybatchuser     ? _F|empty(D|ybatchuser) & D|ybatchuser^fremdok
+!EL052
+.formula U|xtsys = "xmlimport.sh"
+.formula U|xtsys =  U|xtsys + " -p " + G|einmalpw
+.formula U|xtsys =  U|xtsys + " -o UPDATEMODE=STRICT"
+.formula U|xtsys =  U|xtsys + " -r REF -T"
+.formula U|xtsys =  U|xtsys + " -H " + U|xtedpmsg + " -I " + U|xtedpdat + " >" + U|xtedpout + " 2>" + U|xtedperr
+.system 'U|xtsys' BACKGROUND
+.continue EL053 ? _(G|mehr)
+.continue EL054 ? _(F|empty(U|xtedpout))
+!REPT001: ==============================
+.set trans +
+.menu
+-                 -
+Bei der Erstellung der Personal Historie sind Fehler aufgetreten:
+Bitte wenden Sie sich an Ihren Systemverwalter
+
+EDP Befehl: 'U|xtsys'
+
+EDP Datei:        'U|xtedpdat'  >>.edit "'U|xtedpdat'"
+?EDP Hinweisdatei: 'U|xtedpmsg'  >>.edit "'U|xtedpmsg'" ?  F|fileexists(U|xtedpmsg)
+?EDP Fehlerdatei:  'U|xtedperr'  >>.edit "'U|xtedperr'" ?  F|fileexists(U|xtedperr)
+?EDP Ausgabedatei: 'U|xtedpout'  >>.edit "'U|xtedpout'" ?  F|fileexists(U|xtedpout)
+.set trans -
+.continue REPT001 ? _(G|menue = 0)
+!EL054
+.continue FI053
+!EL053
+!REPT002: ==============================
+.set trans +
+.menu
+-                 -
+Bei der Erstellung der Personal Historie sind Fehler aufgetreten:
+Bitte wenden Sie sich an Ihren Systemverwalter
+
+EDP Befehl: 'U|xtsys'
+
+EDP Datei:        'U|xtedpdat'  >>.edit "'U|xtedpdat'"
+?EDP Hinweisdatei: 'U|xtedpmsg'  >>.edit "'U|xtedpmsg'" ?  F|fileexists(U|xtedpmsg)
+?EDP Fehlerdatei:  'U|xtedperr'  >>.edit "'U|xtedperr'" ?  F|fileexists(U|xtedperr)
+?EDP Ausgabedatei: 'U|xtedpout'  >>.edit "'U|xtedpout'" ?  F|fileexists(U|xtedpout)
+.set trans -
+.continue REPT002 ? _(G|menue = 0)
+!FI053
+!EL051
+!EL050
+.continue ESAC001
+!BRK003
+.continue BRK004 ? _(G|evtart = "maskende")
+.end 1  ? M|yprjmbmaskezu
+.continue ESAC001
+!BRK004
+.continue BRK005 ? _(G|evtart = "feldpruef")
+.continue EL055 ? _(F|regmatch(G|evtvar, "yprjmgewerkant."))
+.continue EL056 ? _((M|.evtvar < 0) ; (M|.evtvar > 100))
+.set trans +
+.box Hinweis
+Es sind nur Werte zwischen 0 und 100 erlaubt.
+.set trans -
+.error
+.end 1
+!EL056
+!EL055
+.continue ESAC001
+!BRK005
+.continue BRK006 ? _(G|evtart = "feldaus")
+.continue BRK007 ? _(G|evtvar = "yprjmlief")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC003
+!RET005
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK007
+.continue BRK008 ? _(G|evtvar = "ykstelle")
+.continue EL057 ? _(_(M|ykstelle^bu))
+.set trans +
+.box Hinweis
+Es darf nur eine bebuchbare
+Kostenstelle eingetragen werden
+.set trans -
+.formula M|ykstelle = ""
+!EL057
+.continue ESAC002
+!BRK008
+.continue BRK009 ? _(G|evtvar = "yprjmperstyp")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC001
+!RET006
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC002
+!RET007
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK009
+.continue BRK010 ? _(G|evtvar = "yprjmgueltigab")
+.continue EL058 ? _(M|yprjmgueltigab < G|zeitpunkt)
+.set trans +
+.box Hinweis
+Es ist nur ein Datum in der Zukunft erlaubt.
+.set trans -
+.assign M|.evtvar = ""
+!EL058
+.continue ESAC002
+!BRK010
+.continue BRK011 ? _(G|evtvar = "yprjmgewerkant1")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC004
+!RET008
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK011
+.continue BRK012 ? _(G|evtvar = "yprjmgewerkant2")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC004
+!RET009
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK012
+.continue BRK013 ? _(G|evtvar = "yprjmgewerkant3")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC004
+!RET010
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK013
+.continue BRK014 ? _(G|evtvar = "yprjmgewerkant4")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC004
+!RET011
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK014
+.continue BRK015 ? _(G|evtvar = "yprjmgewerkant5")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC004
+!RET012
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK015
+.continue EL059 ? _(G|evtvar<<4 = "name")
+.formula M|yprjmlsname  = M|namebspr    ? F|empty(M|yprjmlsname)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET013" 
+.continue PROC003
+!RET013
+.formula xprocsp = xprocsp - 1
+!EL059
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK006
+.continue BRK016 ? _(G|evtart = "buttonnach")
+.continue BRK017 ? _(G|evtvar = "yprjmburesaus")
+.formula U|xtcmd = "<" + G|kdatname13 + "> FOP.PRJM.PLANER.START = xtplaner=RP xtprjid=" + M|id + " <" + G|kaktname12 + ">"
+.command -PARALLEL 'U|xtcmd'
+.continue ESAC003
+!BRK017
+.continue BRK018 ? _(G|evtvar = "yprjmbuhistorie")
+.continue EL060 ? _(_(F|empty(M|id)))
+.formula U|xtsel = "%,,.yhistpersonal==" + M|id + ";such=;yhistzeitstempel=;@autostart=(Yes);@filingmode=(Active)"
+.select group 'U|xydbgrpershistorie' 'U|xtsel'
+.formula U|xtcmd =  "<(ProjectSuiteHistory)>" + H|id + "<" + G|kaktname12 + ">" ? G|mehr
+.command -PARALLEL 'U|xtcmd'                                                    ? G|mehr
+!EL060
+.continue ESAC003
+!BRK018
+.continue BRK019 ? _(G|evtvar = "yprjmbukalender")
+.input "allpstart/FOP.PRJM.YPRJMBUKALENDER.BA"
+.continue ESAC003
+!BRK019
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC001
+!BRK016
+!ESAC001: =====   ENDCASE   =====
+.continue

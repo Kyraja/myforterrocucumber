@@ -1,0 +1,593 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SQRELOCATION.EV
+.. Author         : tiwe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Function       : Event-FOP fÅr IS SQRELOCATION
+..                 
+.. Functionality  : 
+..
+.. Includes:
+.. include la/SQRELOCATION.EDP
+.. include la/SQRELOCATION.BEHAELTER
+..*****************************************************************************
+.. Variablendefinition
+..*****************************************************************************
+.type text U|xtsel ? _F|defined(xtsel)
+.type text U|xftext ? _F|defined(xftext)
+.type TN4  U|xfreitext ? _F|defined(xfreitext)
+.type text U|arttext ? _F|defined(arttext)  
+.type text U|platzelemtext ? _F|defined(platzelemtext)  
+.type text U|xtcmd   ? _F|defined(xtcmd)
+.type P185 U|xvbehaelter  ? _F|defined(xvbehaelter)
+.type PS38 U|xvlagerplatz ? _F|defined(xvlagerplatz)
+.type bool U|xbkzug       ? _F|defined(xbkzug) 
+..*****************************************************************************
+.. Eventhandling
+..*****************************************************************************
+.continue BUAFTER    ? G|evtartengl = "BUTTON_AFTER" 
+.continue FIEEXIT    ? G|evtartengl = "FIELD_EXIT" 
+.continue ENDE
+..*****************************************************************************
+.. Button nach
+..*****************************************************************************
+!BUAFTER
+.continue BSTART  ? G|evtvar = "bstart"
+.continue HINWEIS ? G|evtvar = "thinweis"
+.continue HAKEN   ? G|evtvar = "allmark"
+.continue HAKEN   ? G|evtvar = "demark" 
+.continue UMBUCH  ? G|evtvar = "umbuch"
+.continue ENDE
+..************************************************************
+.. Start drÅcken
+..************************************************************
+!BSTART
+.copy U|xbkzug  = G|false
+.copy M|edpfehler = G|false
+.select screen header
+.make screen line --
+..**********************************
+.. Felder ÅberprÅfen
+..  - Workflow muss gefÅllt sein
+..  - bei der normalen Selektion muss ein Artikel oder Lagerplatz angegeben werden  (-> Performance)
+..  - bei der Selektion nach Verwendung ist das nicht notwendig (nicht performant)
+..  - bei der Selektion nach BA werden die Artikel der FL aufgelistet
+..**********************************
+.continue VERW   ? _F|empty(verw)
+.continue ABGANG ? _F|empty(M|ba)
+.continue ABGANG ? _F|empty(M|auftrag)
+.continue ZUGANG ? _F|empty(M|fertigung) ; _F|empty(M|kzugang)
+.continue ERR01  ? F|empty(artikel) & F|empty(lplatz) & F|empty(M|lager)
+.continue ERR03  ? F|equals(M|workflow,"(ContainerReLocation)") & F|empty(M|container)
+.continue SELECT
+!ABGANG: SonderfÑlle fÅr die AbgÑnge aus Betriebsauftrag und Verkaufsauftrag
+.continue ERR12 ? F|empty(M|freitext)
+.formula U|xfreitext = M|freitext
+!ABGNEXT
+.select from 'U|xfreitext' U|arttext
+.continue ENDE ? F|empty(U|arttext)
+!VERW: Verwendung gefÅllt
+!SELECT: Selektion auf die Platzmenge
+.formula U|xtsel = "$,,artikel="+'M|artikel^id'+";platz="+'M|lplatz^id'+";lager="+'M|lager^id'+";lgruppe="+'M|lgruppe^id'+";"
+.formula U|xtsel = "$,,artikel="+'U|arttext'+";platz=;"        ? _F|empty(M|ba) ; _F|empty(M|auftrag) 
+.load 1 group "40:3" 'U|xtsel'
+.continue LMENDE ? _G|mehr
+!LMLOOP
+..BehÑlterlagermengen aufrufen
+.input "la/SQRELOCATION.BEHAELTER"
+.load 1 squantity
+.continue LMLOOP ? G|mehr
+!LMENDE
+.continue ABGNEXT ? _F|empty(M|ba)
+.continue ABGNEXT ? _F|empty(M|auftrag)
+.continue ENDE
+!ZUGANG
+.continue ERR12 ? F|empty(M|freitext)
+.formula U|xfreitext = M|freitext
+!ZUGNEXT
+.select from 'U|xfreitext' U|platzelemtext
+.continue ENDE ? F|empty(U|platzelemtext)
+.load 1 object 'U|platzelemtext'
+.continue ERR07 ? _G|mehr
+.make screen line +o
+.assign M|tartikel = 1|artikel
+.assign M|zugang = 1|orig
+.assign M|tlplatz  = 1|platz
+.assign M|tlgruppe = 1|platz^lgruppe
+.copy M|internlgruppe = M|tlgruppe^intlager
+.formula M|gebmge = 1|gebmge
+.formula M|tle  = 1|gebeinh
+.formula M|tverw  = 1|verw
+.assign M|tcharge = 1|charge
+.assign M|tfertig = 1|lffert
+.formula M|tmge  = M|gebmge
+.formula M|thinweis = M|hinweis            ? F|equals(M|workflow,"(StockReLocation)")
+.protection -field tbehzugang 'M|aktzeile'  ? F|equals(M|workflow,"(StockReLocation)")
+.protection -line 'M|aktzeile'             ? _F|equals(M|workflow,"(StockReLocation)")
+.continue ZUGNEXT
+..************************************************************
+.. Hinweis drÅcken
+..************************************************************
+!HINWEIS
+.continue PLATZ ? M|thinweis = M|hinweis
+.continue EDP   ? M|thinweis = M|fehler
+!PLATZ
+.continue PLLEER  ? F|empty(tlplatzzu)
+.continue BEHZEIL ? _F|empty(tlplatzzu) & _F|empty(M|tbehabgang) & F|equals(M|workflow,"(ContainerReLocation)")
+.continue GLBEH   ? M|tbehzugang = M|tbehabgang  & F|equals(M|workflow,"(StockRepackage)")
+.continue ENDE
+!PLLEER
+.box
+Zugangslagerplatz eingeben.
+..
+.continue ENDE
+!BEHZEIL
+.box
+Dieser BehÑlter wird schon durch eine andere Zeile umgebucht.
+..
+.continue ENDE
+!GLBEH: Gleicher BehÑlter im Zugang und Abgang bei Bestand umpacken
+.box
+Es wird der gleiche BehÑlter beim Bestand umpacken verwendet.
+..
+.continue ENDE
+!EDP
+.editing 'M|edperrdat'
+.continue ENDE
+..************************************************************
+.. alle selektieren, alle nicht selektieren
+..************************************************************
+!HAKEN
+.continue ENDE ? M|tzeilen = 0
+.select screen header
+.select screen line
+.continue ENDE ? _G|mehr
+!LOOPLI1
+.assign M|tmark = G|true  ? G|evtvar = "allmark" & M|gebmge > 0
+.assign M|tmark = G|false ? G|evtvar = "demark" & M|gebmge > 0
+.select screen line
+.continue LOOPLI1 ? G|mehr
+.continue ENDE
+..************************************************************
+.. Umbuchen
+..************************************************************
+!UMBUCH
+.continue ERR09 ? M|edpfehler
+.continue ENDE ? M|tzeilen = 0
+.. alte Dateien zuerst wieder aufrÑumen
+.formula U|xtcmd = "rm -f rmtmp/SQRELOCATION.*"
+.system 'U|xtcmd' background
+.select screen header
+.select screen line
+.continue ENDE ? _G|mehr
+!LOOPLI2
+.continue NXTLINE ? _M|tmark
+.continue NXTLINE ? F|empty(M|tlplatzzu)
+.continue NXTLINE ? M|thinweis = M|hinweis
+..Diese Zeile kann umgebucht werden
+.input "la/SQRELOCATION.EDP"
+.. Sonderfall BehÑlter umlagern. Hier nur 1x die BehÑlterlagerbuchung ausfÅhren
+.continue BSTART ? F|equals(M|workflow,"(ContainerReLocation)")  & F|empty(M|ba)
+!NXTLINE
+.select screen line 
+.continue LOOPLI2 ? G|mehr
+.. Ansicht aktualisieren
+.copy U|xbkzug = G|TRUE
+.continue KZUG  ? _F|empty(M|kzugang)
+.continue BSTART
+..***********************************************************
+.. Feldaustritt
+..***********************************************************
+!FIEEXIT
+.continue CONTAIN ? G|evtvar = "container"
+.continue CHARGE  ? G|evtvar = "charge"
+.continue ARTIK   ? G|evtvar = "artikel"
+.continue LPLATZ  ? G|evtvar = "lplatz" 
+.continue LAGER   ? G|evtvar = "lager" 
+.continue LGRUP   ? G|evtvar = "lgruppe" 
+.continue VERWEND ? G|evtvar = "verw"
+.continue PLATZZU ? G|evtvar  = "tlplatzzu"
+.continue TMGE    ? G|evtvar  = "tmge" 
+.continue TBEHZUG ? G|evtvar  = "tbehzugang"
+.continue BA      ? G|evtvar  = "ba"
+.continue AUFTRAG ? G|evtvar  = "auftrag"
+.continue FERGUNG ? G|evtvar  = "fertigung"
+.continue KZUG    ? G|evtvar  = "kzugang"
+.continue WORKFLO ? G|evtvar  = "workflow" 
+.continue TMARK   ? G|evtvar  = "tmark"
+.continue ENDE
+..************************************************************
+.. Workflow
+..************************************************************
+!WORKFLO
+.input "is/TABLEEREN"
+.continue ENDE
+..************************************************************
+.. Artikel
+..************************************************************
+!ARTIK
+.continue COMMON
+..************************************************************
+.. Lagerplatz
+..************************************************************
+!LPLATZ
+.continue ENDE ? F|empty(M|lplatz)
+.assign M|lager   = M|lplatz^lager 
+.assign M|lgruppe = M|lplatz^lgruppe
+.continue COMMON
+..************************************************************
+.. Lager
+..************************************************************
+!LAGER
+.continue ENDE ? F|empty(M|lager)
+.formula M|lplatz = "" ? _F|equals(M|lager, M|lplatz^lager)
+.assign M|lgruppe = M|lager^lgruppe
+.continue COMMON
+..************************************************************
+.. Lagergruppe
+..************************************************************
+!LGRUP
+.continue ENDE ? F|empty(M|lgruppe)
+.formula M|lplatz = "" ? _F|equals(M|lgruppe, M|lplatz^lgruppe)
+.formula M|lager  = "" ? _F|equals(M|lgruppe, M|lager^lgruppe)  
+.continue COMMON
+..************************************************************
+.. Verwendung
+..************************************************************
+!VERWEND
+.continue COMMON
+..************************************************************
+.. BehÑlter 
+..************************************************************
+!CONTAIN
+.input "is/TABLEEREN"
+.continue ENDE  ? F|empty(M|container)
+.continue ERR10 ? M|container^behleer
+.assign M|lplatz  = M|container^platz ? _F|empty(container)
+.assign M|lgruppe =  M|lplatz^lgruppe ? _F|empty(M|lplatz)
+.continue COMMON
+..************************************************************
+.. Charge
+..************************************************************
+!CHARGE
+.continue ENDE ? F|empty(charge)
+.formula M|artikel = M|charge^artikel^id
+.continue COMMON
+..************************************************************
+.. Commen: Feld leeren fÅr die Kopffelder
+..************************************************************
+!COMMON
+.formula M|ba = ""
+.formula M|auftrag = ""
+.formula M|fertigung = ""
+.formula M|kzugang = ""
+.input "is/TABLEEREN"
+.continue ENDE ? _F|equals(M|workflow,"(ContainerReLocation)")
+..Bei der BehhÑlterumlagergerung darf nur der BehÑlter eingetragen sein
+.continue ERR13 ? _F|empty(M|artikel)
+.continue ERR13 ? _F|empty(M|lager)
+.continue ERR13 ? _F|empty(M|charge)
+.continue ERR13 ? _F|empty(M|verw)
+.continue ENDE
+..************************************************************
+.. Auswahlfeld
+..************************************************************
+!TMARK
+.continue ERR16 ? F|empty(M|tlplatzzu)
+.continue ENDE ? F|empty(M|tmark)
+.continue ENDE ? F|empty(M|tbehabgang)
+.continue ENDE ? _F|equals(M|workflow,"(ContainerClear)")
+.assign U|xvbehaelter  = M|tbehabgang
+.assign U|xvlagerplatz = M|tlplatzzu 
+.select screen header
+.select screen line
+.continue ENDE ? _G|mehr
+!AUSLOOP
+.copy M|tmark = G|true               ? M|tbehabgang = U|xvbehaelter
+.assign M|tlplatzzu = U|xvlagerplatz ? M|tbehabgang = U|xvbehaelter
+.formula M|thinweis = ""             ? M|tbehabgang = U|xvbehaelter 
+.select screen line
+.continue AUSLOOP ? G|mehr
+.continue ENDE
+..************************************************************
+.. Zugangslagerplatz
+..************************************************************
+!PLATZZU
+.formula M|thinweis = M|hinweis  ? F|empty(M|tlplatzzu)
+.continue ENDE ? F|empty(M|tlplatzzu)
+.. Bei Bestand umpacken, darf auf dem gleichen Platz umgepackt werden
+.continue GLPLATZ ? M|tlplatzzu = M|tlplatz
+.continue PLATZOK
+!GLPLATZ: gleicher Platz ist nur bei Bestand umpacken und BehÑlterentnahme erlaubt
+.continue PLATZOK ? F|equals(M|workflow,"(StockRepackage)")
+.continue PLATZOK ? F|equals(M|workflow,"(ContainerClear)")
+.continue ERR02
+!PLATZOK
+.formula M|thinweis = ""              ? _F|empty(M|tlplatzzu)
+.formula M|thinweis = M|hinweis  ? F|empty(M|tlplatzzu)
+.continue ENDE ? F|empty(M|tbehabgang)
+.continue ENDE ? _F|equals(M|workflow,"(ContainerReLocation)")
+.. BehÑlter und Lagerplatz dieser Zeile merken
+.assign U|xvbehaelter = M|tbehabgang
+.assign U|xvlagerplatz = M|tlplatzzu
+.select screen header
+.select screen line
+.continue ENDE ? _G|mehr
+!BEHLOOP
+.assign M|tlplatzzu = U|xvlagerplatz   ? U|xvbehaelter = M|tbehabgang
+.protection -field tmark 'M|aktzeile'  ? U|xvbehaelter = M|tbehabgang & _F|empty(M|thinweis)
+.select screen line
+.continue BEHLOOP ? G|mehr
+.continue ENDE
+..************************************************************
+.. Bewegte Menge
+..************************************************************
+!TMGE
+.formula M|tmge = M|gebmge ? M|tmge > M|gebmge
+.formula M|tmge = M|gebmge ? M|tmge <= 0
+.continue ENDE
+..************************************************************
+.. ZugangsbehÑlter
+..************************************************************
+!TBEHZUG
+.continue ENDE ? F|empty(M|tbehzugang)
+.assign M|tlplatzzu = M|tbehzugang^platz  ? _M|tbehzugang^behleer
+.protection -field tlplatzzu 'M|aktzeile' ? _M|tbehzugang^behleer
+.protection -reset tlplatzzu 'M|aktzeile' ? M|tbehzugang^behleer
+.formula M|tlplatzzu = ""                ? M|tbehzugang^behleer
+.formula M|thinweis = "" ? _F|empty(M|tlplatzzu)
+..Bei Bestand umpacken darf man nicht die gleichen BehÑlter angeben
+.formula M|thinweis = M|hinweis        ? M|tbehzugang = M|tbehabgang  & F|equals(M|workflow,"(StockRepackage)")
+.copy M|tmark       = G|false          ? M|tbehzugang = M|tbehabgang  & F|equals(M|workflow,"(StockRepackage)")      
+.protection -field tmark 'M|aktzeile'  ? M|tbehzugang = M|tbehabgang  & F|equals(M|workflow,"(StockRepackage)")
+.formula M|thinweis = ""               ? M|tbehzugang <> M|tbehabgang & F|equals(M|workflow,"(StockRepackage)")
+.protection -reset tmark 'M|aktzeile'  ? M|tbehzugang <> M|tbehabgang & F|equals(M|workflow,"(StockRepackage)")
+.continue ENDE
+..************************************************************
+.. Betriebsauftrag
+..************************************************************
+!BA
+.input "is/TABLEEREN"
+.formula M|freitext = ""
+.continue ENDE ? F|empty(M|ba)
+.formula M|auftrag = ""
+.formula M|fertigung = ""
+.formula M|kzugang  = ""
+.select object 'M|ba^id'
+.continue ERR04 ? _G|mehr
+.select object 'H|lres^id'
+.continue ERR04 ? _G|mehr
+.select object 'H|eres^id'
+.continue ERR04 ? _G|mehr
+..Einlesen der Artikel der AFL in die Variable M|freitext
+.file -tempname U|xftext
+.output new 'U|xftext'
+.output addedto 'U|xftext'
+.input "DATEI.F"
+!AFLLINE
+.continue FLART ? H|elart = 1
+.continue FLNEXT 
+!FLART
+'H|elex^id'
+!FLNEXT
+.select line
+.continue AFLLINE ? G|mehr
+.formula M|freitext = U|xftext
+.continue CLEAR
+..************************************************************
+.. Verkaufauftrag
+..************************************************************
+!AUFTRAG
+.input "is/TABLEEREN"
+.formula M|freitext = ""
+.continue ENDE ? F|empty(M|auftrag)
+.formula M|ba = ""
+.formula M|fertigung = ""
+.formula M|kzugang  = ""
+.select object 'M|auftrag^id'
+.continue ERR05 ? _G|mehr
+.select line
+.continue ERR05 ? _G|mehr
+..Einlesen der Artikel aus dem Verkaufsauftrag in die Variable M|freitext
+.file -tempname U|xftext
+.output new 'U|xftext'
+.output addedto 'U|xftext'
+.input "DATEI.F"
+!VKLOOP
+.continue VKNEXT ? _F|equals(H|artikel^gruppe,"1")
+.continue SETART ? F|equals(H|artikel^earta,"(UsingBOM)")
+!LISTSET
+'H|artikel^id'
+.continue VKNEXT
+!SETART
+.select object 'H|eres^id'
+.continue ERR05 ? _G|mehr
+.continue LISTSET
+!VKNEXT
+.select line
+.continue VKLOOP ? G|mehr
+.formula M|freitext = U|xftext
+.continue CLEAR
+..************************************************************
+.. Fertigungszugang: Finden eines Fertigungszugangs
+.. 1. Finden des Fertigungsvorschlages
+.. 2. Finden des Journaleintrages
+.. 3. Finden der Platzelementes
+..************************************************************
+!FERGUNG
+.input "is/TABLEEREN"
+.formula M|freitext = ""
+.continue ENDE ? F|empty(M|fertigung)
+.formula M|ba = ""
+.formula M|auftrag = ""
+.formula M|kzugang  = ""
+..Einlesen der Platzelemente in die Variable M|freitext
+.file -tempname U|xftext
+.output new 'U|xftext'
+.output addedto 'U|xftext'
+.input "DATEI.F"
+..***************************
+.. 1. Finden des Fertigungsvorschlages
+..***************************
+.formula U|xtsel = "$,,nummer=;such=;banummer="+'M|fertigung'+";gruppe=5;@ablage=(Both);"
+.select purchasing 'U|xtsel'
+.continue ERR06 ? _G|mehr
+..***************************
+.. 2. Finden des JournaleintrÑge
+..***************************
+.formula U|xtsel = "$,,nummer=;such=;artikel=;platz=;buarta=(Receipt);bsres="+'H|id'+";"
+.select journal 'U|xtsel'
+.continue ERR11 ? _G|mehr
+..****************************
+.. 3. Finden der Platzelemente
+..****************************
+!LOOP
+.formula U|xtsel = "$,,nummer=;such=;artikel="+'H|artikel'+";orig="+'H|id'+";"
+.load 1 group "40:4" 'U|xtsel' 
+.continue PLATZEL ? _G|mehr
+!LOOPQTY
+'1|id'
+!PLATZEL
+.load 1 squantity
+.continue LOOPQTY ? G|mehr
+.select journal 
+.continue LOOP ? G|mehr
+.output
+.formula M|freitext = U|xftext
+.continue CLEAR
+..************************************************************
+.. Einkaufzugang
+..************************************************************
+!KZUG
+.input "is/TABLEEREN"
+.formula M|freitext = ""
+.continue ENDE ? F|empty(M|kzugang)
+.formula M|ba = ""
+.formula M|auftrag = ""
+.formula M|fertigung = ""
+..Einlesen der Platzelemente in die Variable M|freitext
+.file -tempname U|xftext
+.output new 'U|xftext'
+.output addedto 'U|xftext'
+.input "DATEI.F"
+..prÅfen, welcher Beleg drin steht. Nur Liefscheine und Rechnungen kînnen zu ZugÑngen fÅhren
+.continue LSCHEIN ? M|kzugang^typ = 4 
+.continue RECHNUN ? M|kzugang^typ = 5 
+.continue ENDE
+!LSCHEIN
+!RECHNUN
+.continue ERR14 ? _M|kzugang^fakt
+.continue ERR15 ? M|kzugang^uebertr
+.select object 'M|kzugang^id'
+.continue ERR08 ? _G|mehr
+.select line
+.continue ERR08 ? _G|mehr
+!EKLOOP
+.continue NEXTEK ? _F|equals(H|artikel^gruppe,"1")
+..***************************
+.. 1. Finden der JournaleintrÑge
+..***************************
+.formula U|xtsel = "$,,nummer=;such=;artikel=;platz=;detursache=;vorgang="+'H|id'+";"
+.load 1 journal 'U|xtsel'
+!LJLOOP
+.continue NEXTEK ? _G|mehr
+..***************************
+.. 2. Finden der Platzelement
+..***************************
+.formula U|xtsel = "$,,nummer=;such=;artikel="+'H|artikel'+";orig="+'1|id'+";"
+.load 2 group "40:4" 'U|xtsel'
+.continue NEXTEK ? _G|mehr
+!NEXTQTY: Loop Åber Platzelemente
+'2|id'
+.load 2 squantity
+.continue NEXTQTY ? G|mehr
+.load 1 journal
+.continue LJLOOP ? G|mehr
+!NEXTEK: nÑchste Zeile im EK-Beleg laden
+.select line
+.continue ENDEEK ? _G|mehr
+.continue EKLOOP
+!ENDEEK
+.output
+.formula M|freitext = U|xftext
+.continue CLEAR
+..************************************************************
+.. weitere Kopffelder leeren
+..************************************************************
+!CLEAR
+.formula M|artikel = ""
+.formula M|lplatz = ""
+.formula M|lager = ""
+.formula M|lgruppe = ""
+.formula M|charge = ""
+.formula M|projekt = ""
+.formula M|verw = ""
+.formula M|container = ""
+.input "is/TABLEEREN"
+.continue BSTART ? U|xbkzug
+.continue ENDE
+..*****************************************************************************
+.. Ende
+..*****************************************************************************
+!ENDE
+.continue
+..*****************************************************************************
+.. Fehlerhandling
+..*****************************************************************************
+!ERR01: Weitere Selektionskriterien eingeben
+.error Bitte Artikel, Lager oder Lagerplatz eingeben!
+.end 1
+!ERR02: Abgangs- und Zugangslagerplatz sind identisch
+.error Zugangs- und Abgangslagerplatz sind identisch.
+.formula M|tlplatzzu = ""
+.end 1
+!ERR03: BehÑlter eingeben
+.error Bitte BehÑlter eingeben
+.cursor container
+.end 1
+!ERR04: Laden der AFL hat nicht funktioniert
+.error Auftragsfertigungsliste konnte nicht geladen werden!
+.end 1
+!ERR05: Verkaufsauftrag
+.error Der Verkaufsauftrag konnte nicht geladen werden!
+.end 1
+!ERR06: Fertigungsvorschlag
+.error Der Bertriebsauftrag wurde nicht gefunden!
+.end 1
+!ERR07: Platzelement
+.error Platzelement konnte nicht geladen werden!
+.end 1
+!ERR08: Einkaufsbeleg
+.error Einkaufsbeleg konnte nicht geladen werden!
+.end 1
+!ERR09: EDP mit Fehlern
+.error Bitte markierte Buchungen prÅfen und die Tabelle neu laden!
+.end 1
+!ERR10: BehÑlter ist leer
+.error Der BehÑlter ist leer!
+.formula M|lplatz = ""
+.end 1
+!ERR11: Keine ZugÑnge fÅr den BA
+.error Keine ZugÑnge fÅr den Betriebsauftrag gefunden!
+.end 1
+!ERR12: Keine Daten fÅr die Selektion Entnahme oder Zugang gefunden
+.error Keine Daten fÅr den Beleg gefunden!
+.end 1
+!ERR13: Nur BehÑlter eingeben bei BehÑlter umlagern
+.error Bei der BehÑlterumlagerung darf als Selektion nur der BehÑlter und der Lagerplatz eingegeben werden!
+.formula M|artikel = ""
+.formula M|lager = ""
+.formula M|charge = ""
+.formula M|verw = ""
+.end 1
+!ERR14: fakt ist im EK-Beleg nicht gesetzt
+.error Durch diesen EK-Beleg wurden keine LagerzugÑnge erzeugt.
+.end 1
+!ERR15: EK-Beleg nicht gebucht
+.error Dieser EK-Beleg wurde noch nicht gebucht.
+.end 1
+!ERR16: Kein Zugangslagerplatz
+.error Kein Zugangslagerplatz angegeben.
+.copy M|tmark = G|false
+.end 1

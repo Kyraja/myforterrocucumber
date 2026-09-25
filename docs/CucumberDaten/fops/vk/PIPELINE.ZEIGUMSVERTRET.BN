@@ -1,0 +1,147 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : PIPELINE.ZEIGUMSVERTRET.BN
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Zeigt Balkendiagramm "Summen nach Vertretern".
+.. Functionality  : Shows chart "Totals according to salesmen"
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type text xtitle xtitlex xtitley xtitleavge1
+.type text xtip xmytip xcom xnumber xanonymous
+.type text xlabel xprecom
+.type AS5  xdoctype
+.type integer  xtypes xi
+.type real xoppavge xquoavge xvalue
+.type bool xisopprty
+..
+.. Initialisations
+.set trans +
+.formula U|xtitle = "Summen nach Vertretern"
+.formula U|xtitley = "Betrag in {1}"
+.formula U|xtitlex = "Identnummer des Vertreters"
+.formula U|xtip = "Summe des Vertreters {1} ist {2} {3}"
+.formula U|xtitleavge1 = "Durchschnitt: {1} {2}"
+.formula U|xanonymous = "Unbekannt"
+.set trans -
+.formula U|xtypes = 0
+.formula U|xi = 0
+.assign U|xdoctype = "(Opportunity)"
+.formula U|xprecom = F|regreplace(M|preselect, ";vertret=[^;]*;",";")
+..
+.select screen header
+!GETLINE: Get appearances and their frequencies
+.select screen line
+.continue AVERAGE ? _G|mehr
+.continue GETLINE ? F|empty(M|tnwert)
+.continue GETLINE ? M|alternativpos
+.formula U|xi = 1
+.copy U|xisopprty = M|tkotypas = U|xdoctype
+..
+!NEXT1: Is appearance known?
+.continue NOTKNOWN ?  U|xi > (U|xtypes + 1)
+.continue NEXTOPP  ?  U|xisopprty
+.continue NOTKNOWN ? _F|defined(U|xquotype.U|xi)
+.continue ITERATE  ?  U|xquotype.U|xi <> M|tvertret^nummer
+.continue ADDVAL
+..
+!NEXTOPP
+.continue NOTKNOWN ? _F|defined(U|xopptype.U|xi)
+.continue ITERATE  ?  U|xopptype.U|xi <> M|tvertret^nummer
+..
+!ADDVAL: Add value of item to totals
+.formula U|xopptotal.U|xi = U|xopptotal.U|xi + M|tnwert ?  U|xisopprty
+.formula U|xquototal.U|xi = U|xquototal.U|xi + M|tnwert ? _U|xisopprty
+.continue GETLINE
+..
+!ITERATE: iterate array for known appearances
+.formula U|xi = U|xi + 1
+.continue NEXT1
+..
+!NOTKNOWN: Make appearance known and calculate
+.formula U|xtypes = U|xtypes + 1
+..
+.. Declarate new appearance and his value
+.type text U|xopptype.xtypes  ? _F|defined(U|xopptype.U|xtypes)
+.type real U|xopptotal.xtypes ? _F|defined(U|xopptotal.U|xtypes)
+.type text U|xquotype.xtypes  ? _F|defined(U|xquotype.U|xtypes)
+.type real U|xquototal.xtypes ? _F|defined(U|xquototal.U|xtypes)
+..
+.formula U|xopptotal.U|xtypes = 0
+.formula U|xopptotal.U|xtypes = M|tnwert ?  U|xisopprty
+.formula U|xopptype.U|xtypes = M|tvertret^nummer
+.formula U|xquototal.U|xtypes = 0
+.formula U|xquototal.U|xtypes = M|tnwert ? _U|xisopprty
+.formula U|xquotype.U|xtypes = M|tvertret^nummer
+.continue GETLINE
+..
+!AVERAGE: Calculate average for total
+.formula U|xoppavge = M|chsumme/U|xtypes
+.formula U|xquoavge = M|ansumme/U|xtypes
+..
+.. Init global chart parameters
+.chart -INIT
+.chart -PARAM -CHARTTYPE BAR
+.chart -PARAM -LEGEND NONE
+.chart -PARAM -MINORGRIDY
+.chart -PARAM -3D YES
+.chart -PARAM -BACKCOLOR 0
+.chart -PARAM -CLUSTERED ? M|chance & M|angebot
+.chart -PARAM -TITLECHART 'U|xtitle'
+.chart -PARAM -TITLEY 'F|formatstr(F|expr(U|xtitley), M|auswaehr)'
+.chart -PARAM -TITLEX 'U|xtitlex'
+..
+.. Opportunities
+.continue QUOTATN ? F|empty(M|chsumme)
+.chart -STARTVALUES 'F|value(U|xdoctype, "A5")' -COLOR 4
+.chart -CONSTANTY 'U|xoppavge(L="0")' -LINEWIDTH 2 -RGBCOLOR 0 0 255 -TITLE 'F|formatstr(F|tostring(U|xtitleavge1), U|xoppavge, M|auswaehr)' ? _F|empty(U|xoppavge)
+..
+.formula U|xi = 1
+..
+!NEXT2
+.continue QUOTATN ? U|xi > U|xtypes
+.formula U|xcom = ""
+.formula U|xnumber = U|xopptype.U|xi
+.formula U|xlabel = U|xnumber
+.formula U|xlabel = U|xanonymous ? F|empty(U|xnumber)
+.formula U|xnumber = "`" ? F|empty(U|xnumber)
+.chart -PARAM -MARKERX 'U|xlabel'
+.formula U|xvalue = U|xopptotal.U|xi
+.continue LABEL
+..
+!QUOTATN: Quotations
+.assign U|xdoctype = "(Quotation)"
+.continue SHOW ? F|empty(M|ansumme)
+.chart -STARTVALUES 'F|value(U|xdoctype, "A5")' -COLOR 19
+.chart -CONSTANTY 'U|xquoavge(L="0")' -LINEWIDTH 2 -RGBCOLOR 0 255 0 -TITLE 'F|formatstr(F|tostring(U|xtitleavge1), U|xquoavge, M|auswaehr)' ? _F|empty(U|xquoavge)
+..
+.formula U|xi = 1
+..
+!NEXT3
+.continue SHOW ? U|xi > U|xtypes
+.formula U|xcom = ""
+.formula U|xnumber = U|xquotype.U|xi
+.formula U|xlabel = U|xnumber
+.formula U|xlabel = U|xanonymous ? F|empty(U|xnumber)
+.formula U|xnumber = "`" ? F|empty(U|xnumber)
+.chart -PARAM -MARKERX 'U|xlabel'
+.formula U|xvalue = U|xquototal.U|xi
+..
+!LABEL: Set bar data in chart
+.formula U|xmytip = 'F|formatstr(F|tostring(U|xtip), U|xlabel, U|xvalue, M|auswaehr)'
+.formula U|xcom =  "<(Sales)>" + F|formatstr(U|xprecom, "%", M|ablageart, U|xdoctype)
+.formula U|xcom = U|xcom + ";vertret=" + U|xnumber + ";nummer=;sumnetto=;land=;@datenbank=3:1;@autostart=ja" + "<(View)>"
+.chart -VALUE 'U|xvalue(L="0")' -TIP 'U|xmytip' -DATA 'U|xcom' ? _F|empty(U|xvalue)
+.chart -VALUE NULL -TIP 'U|xmytip' -DATA 'U|xcom' ? F|empty(U|xvalue)
+.formula U|xi = U|xi + 1
+.continue NEXT2 ? U|xdoctype = "(Opportunity)"
+.continue NEXT3
+..
+!SHOW
+.chart -SHOW chart 0
+..*****************************************************************************
+!END
+.continue

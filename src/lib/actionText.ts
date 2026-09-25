@@ -21,6 +21,21 @@ export interface ActionTextResult {
 }
 
 /**
+ * Format the "record" portion of an editor-open step. Supports two variants:
+ * - Chained from a previously opened editor (`recordFromEditor` set) →
+ *   `for record from editor "<name>"`.
+ * - Direct record number / search word (`record` set, may be empty) →
+ *   `for record "<value>"`.
+ * `recordFromEditor` wins when both are set.
+ */
+function formatRecordPart(action: { record: string; recordFromEditor?: string }): string {
+  if (action.recordFromEditor && action.recordFromEditor.trim()) {
+    return `for record from editor "${action.recordFromEditor}"`;
+  }
+  return `for record "${action.record}"`;
+}
+
+/**
  * Derive the Gherkin step keyword and text for a given {@link StepAction}.
  *
  * Placeholder `'...'` is used for any field that is still empty, ensuring the
@@ -34,9 +49,10 @@ export function stepTextFromAction(action: StepAction): ActionTextResult {
     case 'editorOeffnen': {
       const editor = action.editorName || '...';
       const table = action.tableRef || '...';
+      const recordPart = formatRecordPart(action);
       return {
         keyword: 'Given',
-        text: `I open an editor "${editor}" from table "${table}" with command "${action.command}" for record "${action.record}"`,
+        text: `I open an editor "${editor}" from table "${table}" with command "${action.command}" ${recordPart}`,
       };
     }
 
@@ -53,9 +69,10 @@ export function stepTextFromAction(action: StepAction): ActionTextResult {
     case 'editorOeffnenMenue': {
       const editor = action.editorName || '...';
       const table = action.tableRef || '...';
+      const recordPart = formatRecordPart(action);
       return {
         keyword: 'Given',
-        text: `I open an editor "${editor}" from table "${table}" with command "${action.command}" for record "${action.record}" and menu choice "${action.menuChoice}"`,
+        text: `I open an editor "${editor}" from table "${table}" with command "${action.command}" ${recordPart} and menu choice "${action.menuChoice}"`,
       };
     }
 
@@ -106,6 +123,12 @@ export function stepTextFromAction(action: StepAction): ActionTextResult {
 
     case 'editorSchliessen':
       return { keyword: 'And', text: 'I close the current editor' };
+
+    case 'subeditorSchliessen':
+      return { keyword: 'And', text: 'I close the current subeditor to switch back to the parent editor' };
+
+    case 'subeditorSpeichern':
+      return { keyword: 'And', text: 'I save the current subeditor to switch back to the parent editor' };
 
     case 'editorWechseln': {
       const name = action.editorName || '...';
@@ -163,6 +186,18 @@ export function stepTextFromAction(action: StepAction): ActionTextResult {
     case 'zeilenAnfuegen':
       return { keyword: 'And', text: 'I append rows' };
 
+    case 'boxMeldung': {
+      const msg = action.messageText || '...';
+      return { keyword: 'Then', text: `message "${msg}" was displayed` };
+    }
+
+    case 'editorOeffnenTipp': {
+      const editor = action.editorName || '...';
+      const cmd = action.tipCommand || '...';
+      const args = action.arguments ?? '';
+      return { keyword: 'Given', text: `I open an editor "${editor}" for tip command "${cmd}" and arguments "${args}"` };
+    }
+
     case 'freetext':
       return { keyword: 'Given', text: '' };
   }
@@ -180,6 +215,8 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   feldAenderbar: 'Feld aenderbar',
   editorSpeichern: 'Editor speichern',
   editorSchliessen: 'Editor schliessen',
+  subeditorSchliessen: 'Subeditor schliessen',
+  subeditorSpeichern: 'Subeditor speichern',
   editorWechseln: 'Editor wechseln',
   zeileAnlegen: 'Neue Zeile',
   buttonDruecken: 'Button druecken',
@@ -190,6 +227,36 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   exceptionFeld: 'Exception (Feld)',
   dialogBeantworten: 'Dialog beantworten',
   zeilenAnfuegen: 'Zeilen anfuegen',
+  boxMeldung: 'Box-Meldung pruefen',
+  editorOeffnenTipp: 'Tippkommando ausfuehren',
+};
+
+/** Labels shown in the action type dropdown (English) */
+export const ACTION_LABELS_EN: Record<ActionType, string> = {
+  freetext: 'Free text',
+  editorOeffnen: 'Open editor',
+  editorOeffnenSuche: 'Open editor (search)',
+  editorOeffnenMenue: 'Open editor (menu)',
+  feldSetzen: 'Set field',
+  feldPruefen: 'Check field',
+  feldLeer: 'Field empty/not empty',
+  feldAenderbar: 'Field editable',
+  editorSpeichern: 'Save editor',
+  editorSchliessen: 'Close editor',
+  subeditorSchliessen: 'Close subeditor',
+  subeditorSpeichern: 'Save subeditor',
+  editorWechseln: 'Switch editor',
+  zeileAnlegen: 'New row',
+  buttonDruecken: 'Press button',
+  subeditorOeffnen: 'Open subeditor',
+  infosystemOeffnen: 'Open infosystem',
+  tabelleZeilen: 'Table row count',
+  exceptionSpeichern: 'Exception (save)',
+  exceptionFeld: 'Exception (field)',
+  dialogBeantworten: 'Answer dialog',
+  zeilenAnfuegen: 'Append rows',
+  boxMeldung: 'Check box message',
+  editorOeffnenTipp: 'Run tip command',
 };
 
 /** Help texts explaining each action type for consultants */
@@ -214,7 +281,45 @@ export const ACTION_HELP: Record<ActionType, string> = {
   exceptionFeld: 'Pruefen dass beim Setzen eines Feldwertes eine Exception auftritt',
   dialogBeantworten: 'Einen abas-Dialog mit einer bestimmten Antwort beantworten',
   zeilenAnfuegen: 'Mehrere Tabellenzeilen kompakt anfuegen (Feldnamen als Kopfzeile, Werte als Datenzeilen)',
+  boxMeldung: 'Pruefen dass eine Hinweis-/Info-Box mit dem angegebenen Meldungstext angezeigt wurde',
+  editorOeffnenTipp: 'Einen Editor ueber ein abas-Tippkommando oeffnen (z.B. Fbuchung, (Stockadjustment), (Scheduling))',
 };
+
+/** Help texts (English) */
+export const ACTION_HELP_EN: Record<ActionType, string> = {
+  freetext: 'Enter any step text freely',
+  editorOeffnen: 'Open an abas editor (screen) with database, command and optional record',
+  editorOeffnenSuche: 'Open editor and find record via search criterion',
+  editorOeffnenMenue: 'Open editor and pick a menu entry',
+  feldSetzen: 'Set a field in the current editor to a specific value',
+  feldPruefen: 'Check that a field has the expected value',
+  feldLeer: 'Check whether a field is empty or not empty',
+  feldAenderbar: 'Check whether a field is editable or locked',
+  editorSpeichern: 'Save the current editor (Ctrl+S)',
+  editorSchliessen: 'Close the current editor',
+  editorWechseln: 'Switch to another open editor',
+  zeileAnlegen: 'Create a new row at the end of the table',
+  buttonDruecken: 'Press a button in the editor (e.g. freig, buchen)',
+  subeditorOeffnen: 'Open a subeditor via a button (e.g. Positions)',
+  infosystemOeffnen: 'Open and run an abas infosystem',
+  tabelleZeilen: 'Check how many rows the table has',
+  exceptionSpeichern: 'Check that a specific exception occurs on save',
+  exceptionFeld: 'Check that an exception occurs when setting a field value',
+  dialogBeantworten: 'Answer an abas dialog with a specific answer',
+  zeilenAnfuegen: 'Append multiple table rows compactly (field names as header, values as data rows)',
+  boxMeldung: 'Check that an info/notice box with the given message text was displayed',
+  editorOeffnenTipp: 'Open an editor via an abas tip command (e.g. Fbuchung, (Stockadjustment), (Scheduling))',
+};
+
+/** Returns the localized action label for the dropdown. */
+export function getActionLabel(type: ActionType, lang: 'de' | 'en'): string {
+  return lang === 'en' ? ACTION_LABELS_EN[type] : ACTION_LABELS[type];
+}
+
+/** Returns the localized action help text for tooltips. */
+export function getActionHelp(type: ActionType, lang: 'de' | 'en'): string {
+  return lang === 'en' ? ACTION_HELP_EN[type] : ACTION_HELP[type];
+}
 
 export const EDITOR_COMMANDS = [
   'NEW', 'UPDATE', 'STORE', 'VIEW', 'DELETE', 'COPY',
@@ -237,11 +342,11 @@ export function createDefaultAction(type: ActionType): StepAction {
     case 'freetext':
       return { type: 'freetext' };
     case 'editorOeffnen':
-      return { type: 'editorOeffnen', editorName: '', tableRef: '', command: 'STORE', record: '' };
+      return { type: 'editorOeffnen', editorName: '', tableRef: '', command: 'STORE', record: '', recordFromEditor: '' };
     case 'editorOeffnenSuche':
       return { type: 'editorOeffnenSuche', editorName: '', tableRef: '', command: 'VIEW', searchCriteria: '' };
     case 'editorOeffnenMenue':
-      return { type: 'editorOeffnenMenue', editorName: '', tableRef: '', command: 'STORE', record: '', menuChoice: '' };
+      return { type: 'editorOeffnenMenue', editorName: '', tableRef: '', command: 'STORE', record: '', recordFromEditor: '', menuChoice: '' };
     case 'feldSetzen':
       return { type: 'feldSetzen', fieldName: '', value: '', row: '' };
     case 'feldPruefen':
@@ -274,5 +379,9 @@ export function createDefaultAction(type: ActionType): StepAction {
       return { type: 'dialogBeantworten', dialogId: '', answer: '' };
     case 'zeilenAnfuegen':
       return { type: 'zeilenAnfuegen' };
+    case 'boxMeldung':
+      return { type: 'boxMeldung', messageText: '' };
+    case 'editorOeffnenTipp':
+      return { type: 'editorOeffnenTipp', editorName: '', tipCommand: '', arguments: '' };
   }
 }

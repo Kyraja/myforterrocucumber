@@ -4,7 +4,7 @@
  *
  * Key responsibilities:
  * - Handles myforterro OAuth login/logout and tenant selection via the myforterroApi library.
- * - Exposes model selection for both native and OpenRouter models.
+ * - Exposes model selection for the myforterro inference models.
  * - Manages parse profiles (create, import, export, activate) and per-profile custom action patterns.
  * - Provides overrideable system prompts for Gherkin generation, table identification, rating,
  *   quick/deep tests, and FOP agent calls; shows defaults as placeholders.
@@ -14,34 +14,51 @@
  * @prop {string} model - Currently selected AI model identifier.
  * @prop {(model: string) => void} onModelChange - Callback fired when the model selection changes.
  */
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { ParseProfile, CustomActionPattern } from '../../types/gherkin';
 import {
   setModel as saveModel,
-  getCustomSystemPrompt, setCustomSystemPrompt, clearCustomSystemPrompt,
   getCustomTableIdPrompt, setCustomTableIdPrompt, clearCustomTableIdPrompt,
   getCustomRatingPrompt, setCustomRatingPrompt, clearCustomRatingPrompt,
-  getTemperature, setTemperature as saveTemperature,
-  isOpenRouterEnabled, setOpenRouterEnabled,
-  getOpenRouterKey, setOpenRouterKey,
-  getOpenRouterModel, setOpenRouterModel,
+  getCustomLearningSuggestionPrompt, setCustomLearningSuggestionPrompt, clearCustomLearningSuggestionPrompt,
+  getCustomFeatureEditPrompt, setCustomFeatureEditPrompt, clearCustomFeatureEditPrompt,
+  getAgentMaxTokens, setAgentMaxTokens,
   getExperimentalFeatures, setExperimentalFeatures,
+  isDevMode,
   getForceKiTableId, setForceKiTableId,
+  getAiRequestTimeoutSeconds, setAiRequestTimeoutSeconds,
+  getIncludeFieldCheckScenarios, setIncludeFieldCheckScenarios,
   getTestDepth, setTestDepth, type TestDepth,
   getDeepTestMaxRounds, setDeepTestMaxRounds as setDeepTestMaxRoundsSetting,
   isKnowledgeBaseEnabled, setKnowledgeBaseEnabled,
   getKBMaxChunks, setKBMaxChunks as setKBMaxChunksSetting,
   isKBChainsEnabled, setKBChainsEnabled,
-  isKBActionsEnabled, setKBActionsEnabled,
-  isKBEventsEnabled, setKBEventsEnabled,
+  isKBKeywordExtractionEnabled, setKBKeywordExtractionEnabled,
+  getKBKeywordCount, setKBKeywordCount as setKBKeywordCountSetting,
   getCustomFieldRules, setCustomFieldRules as setCustomFieldRulesSetting, clearCustomFieldRules as clearCustomFieldRulesSetting,
   getCustomQuickTestPrompt, setCustomQuickTestPrompt as setCustomQuickTestSetting, clearCustomQuickTestPrompt as clearCustomQuickTestSetting,
   getCustomDeepTestPrompt, setCustomDeepTestPrompt as setCustomDeepTestSetting, clearCustomDeepTestPrompt as clearCustomDeepTestSetting,
   getCustomFopAnalystPrompt, setCustomFopAnalystPrompt, clearCustomFopAnalystPrompt,
   getCustomFopGuidelinesPrompt, setCustomFopGuidelinesPrompt, clearCustomFopGuidelinesPrompt,
+  getUserDialogCatalogJson, setUserDialogCatalogJson, clearUserDialogCatalog,
+  exportAppSettingsJson, importAppSettingsJson,
+  getTaskModel, type AiTaskKey,
+  getStoredAgentId, setStoredAgentId, type AgentIdKey,
 } from '../../lib/settings';
-import { DEFAULT_SYSTEM_PROMPT, DEFAULT_TABLE_ID_PROMPT, DEFAULT_RATING_PROMPT, getDefaultFieldRules, getDefaultQuickTestPrompt, getDefaultDeepTestPrompt } from '../../lib/aiPrompt';
+import { DEFAULT_STANDARD_DIALOG_CATALOG } from '../../lib/abasDialogCatalog';
+import { DEFAULT_TABLE_ID_PROMPT, getRatingPromptForLang, getDefaultFieldRules, getDefaultQuickTestPrompt, getDefaultDeepTestPrompt } from '../../lib/aiPrompt';
+import { getDefaultFeatureEditPrompt } from '../../lib/featureEditPrompt';
+import { buildDefaultLearningSuggestionPrompt } from '../../lib/learningSuggestionPrompt';
+import { isMftDailyLimitHitThisSession, clearMftDailyLimitHitThisSession } from '../../lib/tokenHistory';
 import { buildFopAnalystPrompt, buildFopGuidelinesPrompt } from '../../lib/fopAgentPrompt';
+import {
+  pickDirectory,
+  verifyPermission,
+  saveSharedSettingsDirectoryHandle,
+  loadSharedSettingsDirectoryHandle,
+  clearSharedSettingsDirectoryHandle,
+} from '../../lib/fileSystemAccess';
+import { loadSharedSettingsJson, saveSharedSettingsJson } from '../../lib/learningStore';
 import {
   initiateLogin,
   logout,
@@ -59,8 +76,9 @@ import {
   setAuthorizeUrl,
   listTenants,
   getStoredClientSecret,
+  discoverMftAgents,
 } from '../../lib/myforterroApi';
-import type { MftTenant, MftModel } from '../../lib/myforterroApi';
+import type { MftTenant, MftModel, MftAgentDescriptor } from '../../lib/myforterroApi';
 import {
   DEFAULT_PARSE_PROFILE,
   loadProfiles,
@@ -71,8 +89,9 @@ import {
   parseProfileFromJson,
   createNewProfile,
 } from '../../lib/parseProfile';
-import { listOpenRouterModels, type OpenRouterModel } from '../../lib/openrouter';
 import { useTranslation, type TranslationFn } from '../../i18n';
+import { IconGear } from '../icons';
+import { getDailyTotal, getServerDailyTotal, isServerConsumptionAvailable, syncServerConsumption, getDailyLimit, isDailyLimitUnlimited } from '../../lib/tokenHistory';
 import styles from './SettingsPanel.module.css';
 
 interface SettingsPanelProps {
@@ -80,12 +99,13 @@ interface SettingsPanelProps {
   onLoginChange: (loggedIn: boolean) => void;
   model: string;
   onModelChange: (model: string) => void;
-  onSystemPromptChange?: () => void;
+  onSharedSettingsChange?: () => void;
+  onSharedSettingsRemoved?: () => void;
   /** When true, the panel is always visible without a toggle button (login screen). */
   alwaysOpen?: boolean;
 }
 
-export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, onSystemPromptChange, alwaysOpen = false }: SettingsPanelProps) {
+export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, onSharedSettingsChange, onSharedSettingsRemoved, alwaysOpen = false }: SettingsPanelProps) {
   const { t, lang } = useTranslation();
   const [open, setOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'model' | 'general' | 'prompts'>('model');
@@ -93,6 +113,22 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
   const [clientId, setClientId] = useState(() => getStoredClientId());
   const [clientSecret, setClientSecret] = useState(() => getStoredClientSecret());
   const [applicationId, setApplicationId] = useState(() => getStoredApplicationId());
+  const [cucumberAgentId, setCucumberAgentId] = useState(() => getStoredAgentId('cucumber'));
+  const [fopAnalystAgentIdInput, setFopAnalystAgentIdInput] = useState(() => getStoredAgentId('fop-analyst'));
+  const [fopGuidelinesAgentIdInput, setFopGuidelinesAgentIdInput] = useState(() => getStoredAgentId('fop-guidelines'));
+  const [excelTransformAgentId, setExcelTransformAgentId] = useState(() => getStoredAgentId('excel-transform'));
+  const [excelMappingAgentId, setExcelMappingAgentId] = useState(() => getStoredAgentId('excel-mapping'));
+  const [experimentalFeatures, setExperimentalFeaturesState] = useState(() => getExperimentalFeatures());
+
+  const handleAgentIdChange = (key: AgentIdKey, value: string, setLocal: (v: string) => void) => {
+    setLocal(value);
+    setStoredAgentId(key, value);
+  };
+
+  // Authorization is blocked until the required agent IDs are configured — agents are
+  // never auto-created, so without an ID the app would have nothing to talk to.
+  const requiredAgentIdsMissing = !cucumberAgentId.trim() || !excelTransformAgentId.trim() || !excelMappingAgentId.trim()
+    || (experimentalFeatures && (!fopAnalystAgentIdInput.trim() || !fopGuidelinesAgentIdInput.trim()));
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -103,19 +139,31 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
 
   // Model state
   const [models, setModels] = useState<MftModel[]>([]);
-  const [modelsLoading, setModelsLoading] = useState(false);
-  const [modelsError, setModelsError] = useState<string | null>(null);
+  const [discoveredAgents, setDiscoveredAgents] = useState<MftAgentDescriptor[] | null>(null);
+  const [agentsCheckLoading, setAgentsCheckLoading] = useState(false);
+  const [agentsCheckError, setAgentsCheckError] = useState<string | null>(null);
 
-  // Temperature
-  const [temperature, setTemperatureState] = useState(() => getTemperature());
+  // Agent max tokens
+  const [agentMaxTokens, setAgentMaxTokensState] = useState(() => getAgentMaxTokens());
 
-  // OpenRouter (DEV fallback)
-  const [orEnabled, setOrEnabled] = useState(() => isOpenRouterEnabled());
-  const [orKey, setOrKey] = useState(() => getOpenRouterKey() || '');
-  const [orModel, setOrModel] = useState(() => getOpenRouterModel());
-  const [orModels, setOrModels] = useState<OpenRouterModel[]>([]);
-  const [orModelsLoading, setOrModelsLoading] = useState(false);
-  const [orModelsError, setOrModelsError] = useState<string | null>(null);
+  // Token consumption (today) — replaces the old standalone "T" trigger/modal.
+  const [dailyTokenTotal, setDailyTokenTotal] = useState(() => getDailyTotal().total);
+  const [serverTokenTotal, setServerTokenTotal] = useState(() => getServerDailyTotal());
+  const [dailyLimit, setDailyLimit] = useState(() => getDailyLimit());
+  const [limitUnlimited, setLimitUnlimited] = useState(() => isDailyLimitUnlimited());
+
+  useEffect(() => {
+    if (!open) return;
+    setDailyTokenTotal(getDailyTotal().total);
+    setServerTokenTotal(getServerDailyTotal());
+    setDailyLimit(getDailyLimit());
+    setLimitUnlimited(isDailyLimitUnlimited());
+    if (isServerConsumptionAvailable()) {
+      void syncServerConsumption().then((result) => {
+        if (result) setServerTokenTotal(result);
+      });
+    }
+  }, [open]);
 
   // Advanced settings
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -123,32 +171,101 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
   const [tokenUrlInput, setTokenUrlInput] = useState('');
   const [apiBaseInput, setApiBaseInput] = useState('');
 
-  // Prompt state — Generation
-  const [promptOpen, setPromptOpen] = useState(false);
-  const [promptText, setPromptText] = useState(() => getCustomSystemPrompt() || DEFAULT_SYSTEM_PROMPT);
-  const [promptCustomized, setPromptCustomized] = useState(() => !!getCustomSystemPrompt());
-
   // Prompt state — Table identification
   const [tableIdPromptOpen, setTableIdPromptOpen] = useState(false);
-  const [tableIdPromptText, setTableIdPromptText] = useState(() => getCustomTableIdPrompt() || DEFAULT_TABLE_ID_PROMPT);
-  const [tableIdPromptCustomized, setTableIdPromptCustomized] = useState(() => !!getCustomTableIdPrompt());
+  const [tableIdPromptText, setTableIdPromptText] = useState(() => getCustomTableIdPrompt(lang as 'de' | 'en') || DEFAULT_TABLE_ID_PROMPT);
+  const [tableIdPromptCustomized, setTableIdPromptCustomized] = useState(() => !!getCustomTableIdPrompt(lang as 'de' | 'en'));
 
   // Prompt state — Rating
   const [ratingPromptOpen, setRatingPromptOpen] = useState(false);
-  const [ratingPromptText, setRatingPromptText] = useState(() => getCustomRatingPrompt() || DEFAULT_RATING_PROMPT);
-  const [ratingPromptCustomized, setRatingPromptCustomized] = useState(() => !!getCustomRatingPrompt());
+  const [ratingPromptText, setRatingPromptText] = useState(() => getCustomRatingPrompt(lang as 'de' | 'en') || getRatingPromptForLang(lang as 'de' | 'en'));
+  const [ratingPromptCustomized, setRatingPromptCustomized] = useState(() => !!getCustomRatingPrompt(lang as 'de' | 'en'));
+
+  // Prompt state — Learning suggestion helper
+  const [learningSuggestionPromptOpen, setLearningSuggestionPromptOpen] = useState(false);
+  const [learningSuggestionPromptText, setLearningSuggestionPromptText] = useState(
+    () => getCustomLearningSuggestionPrompt(lang as 'de' | 'en') || buildDefaultLearningSuggestionPrompt(lang as 'de' | 'en'),
+  );
+  const [learningSuggestionPromptCustomized, setLearningSuggestionPromptCustomized] = useState(() => !!getCustomLearningSuggestionPrompt(lang as 'de' | 'en'));
+
+  const [featureEditPromptOpen, setFeatureEditPromptOpen] = useState(false);
+  const [featureEditPromptText, setFeatureEditPromptText] = useState(
+    () => getCustomFeatureEditPrompt(lang as 'de' | 'en') || getDefaultFeatureEditPrompt(lang as 'de' | 'en'),
+  );
+  const [featureEditPromptCustomized, setFeatureEditPromptCustomized] = useState(() => !!getCustomFeatureEditPrompt(lang as 'de' | 'en'));
+
+  // Dialog catalog state — numeric abas standard message IDs
+  const dialogCatalogDefault = JSON.stringify(DEFAULT_STANDARD_DIALOG_CATALOG, null, 2);
+  const [dialogCatalogOpen, setDialogCatalogOpen] = useState(false);
+  const [dialogCatalogText, setDialogCatalogText] = useState(() => getUserDialogCatalogJson() || dialogCatalogDefault);
+  const [dialogCatalogCustomized, setDialogCatalogCustomized] = useState(() => !!getUserDialogCatalogJson());
+  const [dialogCatalogError, setDialogCatalogError] = useState<string | null>(null);
+
+  const sharedSettingsFileRef = useRef<HTMLInputElement>(null);
+  const [sharedSettingsFolderName, setSharedSettingsFolderName] = useState<string | null>(null);
+  const [sharedSettingsLoading, setSharedSettingsLoading] = useState(true);
+  const [sharedSettingsError, setSharedSettingsError] = useState<string | null>(null);
+  const sharedSettingsConfigured = !!sharedSettingsFolderName;
+
+  const persistSharedSettingsIfConfigured = useCallback(async () => {
+    if (!sharedSettingsConfigured) return;
+    try {
+      await saveSharedSettingsJson();
+    } catch (err) {
+      setSharedSettingsError(err instanceof Error ? err.message : t('settings.sharedSaveError'));
+    }
+  }, [sharedSettingsConfigured, t]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const handle = await loadSharedSettingsDirectoryHandle();
+        if (!handle) return;
+        const hasPermission = await verifyPermission(handle);
+        if (!hasPermission) return;
+        if (!cancelled) {
+          setSharedSettingsFolderName(handle.name);
+        }
+      } finally {
+        if (!cancelled) setSharedSettingsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Force KI table identification
   const [forceKiTableId, setForceKiTableIdState] = useState(() => getForceKiTableId());
+  const [aiTimeoutSeconds, setAiTimeoutSecondsState] = useState(() => getAiRequestTimeoutSeconds());
   const [testDepthState, setTestDepthState] = useState<TestDepth>(() => getTestDepth());
   const [deepTestRounds, setDeepTestRoundsState] = useState(() => getDeepTestMaxRounds());
+  const [includeFieldChecks, setIncludeFieldChecksState] = useState(() => getIncludeFieldCheckScenarios());
+
+  // MFT daily-limit flag — sessionStorage-backed, so we mirror into React state
+  // and listen to the `token-limit-reached` custom event to auto-refresh the UI
+  // when the flag is set elsewhere (e.g. by an AI call that just failed).
+  const [mftDailyLimitHit, setMftDailyLimitHitState] = useState(() => isMftDailyLimitHitThisSession());
+  useEffect(() => {
+    const sync = () => setMftDailyLimitHitState(isMftDailyLimitHitThisSession());
+    window.addEventListener('token-limit-reached', sync);
+    // Also re-check on focus (covers the case where another tab changed the flag)
+    window.addEventListener('focus', sync);
+    return () => {
+      window.removeEventListener('token-limit-reached', sync);
+      window.removeEventListener('focus', sync);
+    };
+  }, []);
+  const handleResetDailyLimit = () => {
+    clearMftDailyLimitHitThisSession();
+    setMftDailyLimitHitState(false);
+  };
 
   // Knowledge Base
   const [kbEnabled, setKbEnabledState] = useState(() => isKnowledgeBaseEnabled());
   const [kbMaxChunks, setKbMaxChunksState] = useState(() => getKBMaxChunks());
   const [kbChains, setKbChainsState] = useState(() => isKBChainsEnabled());
-  const [kbActions, setKbActionsState] = useState(() => isKBActionsEnabled());
-  const [kbEvents, setKbEventsState] = useState(() => isKBEventsEnabled());
+  const [kbKwExtract, setKbKwExtractState] = useState(() => isKBKeywordExtractionEnabled());
+  const [kbKwCount, setKbKwCountState] = useState(() => getKBKeywordCount());
 
   const currentLang = lang as 'de' | 'en';
 
@@ -166,47 +283,79 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
 
   // Reload prompt texts when language changes
   useEffect(() => {
+    setTableIdPromptText(getCustomTableIdPrompt(currentLang) || DEFAULT_TABLE_ID_PROMPT);
+    setTableIdPromptCustomized(!!getCustomTableIdPrompt(currentLang));
+    setRatingPromptText(getCustomRatingPrompt(currentLang) || getRatingPromptForLang(currentLang));
+    setRatingPromptCustomized(!!getCustomRatingPrompt(currentLang));
+    setLearningSuggestionPromptText(getCustomLearningSuggestionPrompt(currentLang) || buildDefaultLearningSuggestionPrompt(currentLang));
+    setLearningSuggestionPromptCustomized(!!getCustomLearningSuggestionPrompt(currentLang));
     setFieldRulesText(getCustomFieldRules(currentLang) || getDefaultFieldRules(currentLang));
     setFieldRulesCustomized(!!getCustomFieldRules(currentLang));
     setQuickTestText(getCustomQuickTestPrompt(currentLang) || getDefaultQuickTestPrompt(currentLang));
     setQuickTestCustomized(!!getCustomQuickTestPrompt(currentLang));
     setDeepTestText(getCustomDeepTestPrompt(currentLang) || getDefaultDeepTestPrompt(currentLang));
     setDeepTestCustomized(!!getCustomDeepTestPrompt(currentLang));
+    setFeatureEditPromptText(getCustomFeatureEditPrompt(currentLang) || getDefaultFeatureEditPrompt(currentLang));
+    setFeatureEditPromptCustomized(!!getCustomFeatureEditPrompt(currentLang));
   }, [currentLang]);
+  const handleAiTimeoutChange = (value: string) => {
+    const parsed = parseInt(value, 10);
+    if (Number.isNaN(parsed)) return;
+    const clamped = Math.max(60, Math.min(1800, parsed));
+    setAiTimeoutSecondsState(clamped);
+    setAiRequestTimeoutSeconds(clamped);
+  };
+
+  const handleAgentMaxTokensChange = (value: string) => {
+    const parsed = parseInt(value, 10);
+    if (Number.isNaN(parsed)) return;
+    const clamped = Math.max(256, Math.min(200000, parsed));
+    setAgentMaxTokensState(clamped);
+    setAgentMaxTokens(clamped);
+    void persistSharedSettingsIfConfigured();
+  };
+
   const handleForceKiToggle = () => {
     const next = !forceKiTableId;
     setForceKiTableIdState(next);
     setForceKiTableId(next);
+    void persistSharedSettingsIfConfigured();
+  };
+  const handleIncludeFieldChecksToggle = () => {
+    const next = !includeFieldChecks;
+    setIncludeFieldChecksState(next);
+    setIncludeFieldCheckScenarios(next);
+    void persistSharedSettingsIfConfigured();
   };
 
-  // Experimental features
-  const [experimentalFeatures, setExperimentalFeaturesState] = useState(() => getExperimentalFeatures());
+  // Dev mode (URL gate ?dev=true). Hides experimental routing UI.
+  const devMode = isDevMode();
 
   // FOP agent prompts (only relevant when experimentalFeatures=true)
   const [fopAnalystOpen, setFopAnalystOpen] = useState(false);
   const [fopAnalystText, setFopAnalystText] = useState(
-    () => getCustomFopAnalystPrompt() || buildFopAnalystPrompt(lang as 'de' | 'en'),
+    () => getCustomFopAnalystPrompt(lang as 'de' | 'en') || buildFopAnalystPrompt(lang as 'de' | 'en'),
   );
-  const [fopAnalystCustomized, setFopAnalystCustomized] = useState(() => !!getCustomFopAnalystPrompt());
+  const [fopAnalystCustomized, setFopAnalystCustomized] = useState(() => !!getCustomFopAnalystPrompt(lang as 'de' | 'en'));
 
   const [fopGuidelinesOpen, setFopGuidelinesOpen] = useState(false);
   const [fopGuidelinesText, setFopGuidelinesText] = useState(
-    () => getCustomFopGuidelinesPrompt() || buildFopGuidelinesPrompt(lang as 'de' | 'en'),
+    () => getCustomFopGuidelinesPrompt(lang as 'de' | 'en') || buildFopGuidelinesPrompt(lang as 'de' | 'en'),
   );
-  const [fopGuidelinesCustomized, setFopGuidelinesCustomized] = useState(() => !!getCustomFopGuidelinesPrompt());
+  const [fopGuidelinesCustomized, setFopGuidelinesCustomized] = useState(() => !!getCustomFopGuidelinesPrompt(lang as 'de' | 'en'));
 
   const handleFopAnalystSave = () => {
     const trimmed = fopAnalystText.trim();
     if (trimmed === buildFopAnalystPrompt(lang as 'de' | 'en').trim()) {
-      clearCustomFopAnalystPrompt();
+      clearCustomFopAnalystPrompt(currentLang);
       setFopAnalystCustomized(false);
     } else {
-      setCustomFopAnalystPrompt(trimmed);
+      setCustomFopAnalystPrompt(currentLang, trimmed);
       setFopAnalystCustomized(true);
     }
   };
   const handleFopAnalystReset = () => {
-    clearCustomFopAnalystPrompt();
+    clearCustomFopAnalystPrompt(currentLang);
     setFopAnalystText(buildFopAnalystPrompt(lang as 'de' | 'en'));
     setFopAnalystCustomized(false);
   };
@@ -214,15 +363,15 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
   const handleFopGuidelinesSave = () => {
     const trimmed = fopGuidelinesText.trim();
     if (trimmed === buildFopGuidelinesPrompt(lang as 'de' | 'en').trim()) {
-      clearCustomFopGuidelinesPrompt();
+      clearCustomFopGuidelinesPrompt(currentLang);
       setFopGuidelinesCustomized(false);
     } else {
-      setCustomFopGuidelinesPrompt(trimmed);
+      setCustomFopGuidelinesPrompt(currentLang, trimmed);
       setFopGuidelinesCustomized(true);
     }
   };
   const handleFopGuidelinesReset = () => {
-    clearCustomFopGuidelinesPrompt();
+    clearCustomFopGuidelinesPrompt(currentLang);
     setFopGuidelinesText(buildFopGuidelinesPrompt(lang as 'de' | 'en'));
     setFopGuidelinesCustomized(false);
   };
@@ -272,13 +421,12 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
   useEffect(() => {
     if (loggedIn && selectedTenantId) {
       loadModels();
+      loadAgentsList();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loggedIn, selectedTenantId]);
 
   async function loadModels() {
-    setModelsLoading(true);
-    setModelsError(null);
     try {
       const m = await listModels();
       setModels(m);
@@ -287,12 +435,32 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
         const firstId = m[0].id;
         saveModel(firstId);
         onModelChange(firstId);
+        void persistSharedSettingsIfConfigured();
       }
-    } catch (err) {
-      setModelsError(err instanceof Error ? err.message : t('settings.loadModelsError'));
-    } finally {
-      setModelsLoading(false);
+    } catch {
+      // Model list unavailable — task-model display falls back to the stored/default values.
     }
+  }
+
+  // Verifies that the user-provided agent IDs actually exist for this tenant.
+  async function loadAgentsList() {
+    setAgentsCheckLoading(true);
+    setAgentsCheckError(null);
+    try {
+      setDiscoveredAgents(await discoverMftAgents());
+    } catch (err) {
+      setAgentsCheckError(err instanceof Error ? err.message : String(err));
+      setDiscoveredAgents(null);
+    } finally {
+      setAgentsCheckLoading(false);
+    }
+  }
+
+  /** 'empty' | 'checking' | 'ok' | 'missing' — used to render inline status next to each Agent-ID input. */
+  function getAgentIdStatus(id: string): 'empty' | 'checking' | 'ok' | 'missing' {
+    if (!id.trim()) return 'empty';
+    if (agentsCheckLoading || discoveredAgents === null) return 'checking';
+    return discoveredAgents.some((a) => a.agentId === id.trim()) ? 'ok' : 'missing';
   }
 
   const handleLogin = async () => {
@@ -338,70 +506,189 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
     }
   };
 
-  const handleModelChange = (id: string) => {
-    saveModel(id);
-    onModelChange(id);
-    // OpenAI models only support temperature 1
-    const selected = models.find((m) => m.id === id);
-    if (selected?.owned_by === 'openai') {
-      setTemperatureState(1);
-      saveTemperature(1);
-    }
-  };
-
-  const handlePromptSave = () => {
-    const trimmed = promptText.trim();
-    if (trimmed === DEFAULT_SYSTEM_PROMPT.trim()) {
-      clearCustomSystemPrompt();
-      setPromptCustomized(false);
-    } else {
-      setCustomSystemPrompt(trimmed);
-      setPromptCustomized(true);
-    }
-    onSystemPromptChange?.();
-  };
-
-  const handlePromptReset = () => {
-    setPromptText(DEFAULT_SYSTEM_PROMPT);
-    clearCustomSystemPrompt();
-    setPromptCustomized(false);
-    onSystemPromptChange?.();
-  };
-
   // Table-identification prompt handlers
   const handleTableIdPromptSave = () => {
     const trimmed = tableIdPromptText.trim();
     if (trimmed === DEFAULT_TABLE_ID_PROMPT.trim()) {
-      clearCustomTableIdPrompt();
+      clearCustomTableIdPrompt(currentLang);
       setTableIdPromptCustomized(false);
     } else {
-      setCustomTableIdPrompt(trimmed);
+      setCustomTableIdPrompt(currentLang, trimmed);
       setTableIdPromptCustomized(true);
     }
+    void persistSharedSettingsIfConfigured();
   };
 
   const handleTableIdPromptReset = () => {
     setTableIdPromptText(DEFAULT_TABLE_ID_PROMPT);
-    clearCustomTableIdPrompt();
+    clearCustomTableIdPrompt(currentLang);
     setTableIdPromptCustomized(false);
+    void persistSharedSettingsIfConfigured();
   };
 
   // Rating prompt handlers
   const handleRatingPromptSave = () => {
     const trimmed = ratingPromptText.trim();
-    if (trimmed === DEFAULT_RATING_PROMPT.trim()) {
-      clearCustomRatingPrompt();
+    if (trimmed === getRatingPromptForLang(currentLang).trim()) {
+      clearCustomRatingPrompt(currentLang);
       setRatingPromptCustomized(false);
     } else {
-      setCustomRatingPrompt(trimmed);
+      setCustomRatingPrompt(currentLang, trimmed);
       setRatingPromptCustomized(true);
     }
+    void persistSharedSettingsIfConfigured();
   };
 
   const handleRatingPromptReset = () => {
-    setRatingPromptText(DEFAULT_RATING_PROMPT);
-    clearCustomRatingPrompt();
+    setRatingPromptText(getRatingPromptForLang(currentLang));
+    clearCustomRatingPrompt(currentLang);
     setRatingPromptCustomized(false);
+    void persistSharedSettingsIfConfigured();
+  };
+
+  const handleLearningSuggestionPromptSave = () => {
+    const defaultPrompt = buildDefaultLearningSuggestionPrompt(currentLang).trim();
+    const trimmed = learningSuggestionPromptText.trim();
+    if (trimmed === defaultPrompt) {
+      clearCustomLearningSuggestionPrompt(currentLang);
+      setLearningSuggestionPromptCustomized(false);
+    } else {
+      setCustomLearningSuggestionPrompt(currentLang, trimmed);
+      setLearningSuggestionPromptCustomized(true);
+    }
+    void persistSharedSettingsIfConfigured();
+  };
+
+  const handleLearningSuggestionPromptReset = () => {
+    const fallback = buildDefaultLearningSuggestionPrompt(currentLang);
+    setLearningSuggestionPromptText(fallback);
+    clearCustomLearningSuggestionPrompt(currentLang);
+    setLearningSuggestionPromptCustomized(false);
+    void persistSharedSettingsIfConfigured();
+  };
+
+  const handleFeatureEditPromptSave = () => {
+    const trimmed = featureEditPromptText.trim();
+    if (trimmed === getDefaultFeatureEditPrompt(currentLang).trim()) {
+      clearCustomFeatureEditPrompt(currentLang);
+      setFeatureEditPromptCustomized(false);
+    } else {
+      setCustomFeatureEditPrompt(currentLang, trimmed);
+      setFeatureEditPromptCustomized(true);
+    }
+    void persistSharedSettingsIfConfigured();
+  };
+
+  const handleFeatureEditPromptReset = () => {
+    clearCustomFeatureEditPrompt(currentLang);
+    setFeatureEditPromptText(getDefaultFeatureEditPrompt(currentLang));
+    setFeatureEditPromptCustomized(false);
+    void persistSharedSettingsIfConfigured();
+  };
+
+  // Dialog catalog handlers
+  const handleDialogCatalogSave = () => {
+    setDialogCatalogError(null);
+    const trimmed = dialogCatalogText.trim();
+    if (!trimmed || trimmed === dialogCatalogDefault.trim()) {
+      clearUserDialogCatalog();
+      setDialogCatalogText(dialogCatalogDefault);
+      setDialogCatalogCustomized(false);
+      void persistSharedSettingsIfConfigured();
+      return;
+    }
+    try {
+      setUserDialogCatalogJson(trimmed);
+      setDialogCatalogCustomized(true);
+      void persistSharedSettingsIfConfigured();
+    } catch (err) {
+      setDialogCatalogError(err instanceof Error ? err.message : 'Ungueltiges JSON');
+    }
+  };
+
+  const handleDialogCatalogReset = () => {
+    clearUserDialogCatalog();
+    setDialogCatalogText(dialogCatalogDefault);
+    setDialogCatalogCustomized(false);
+    setDialogCatalogError(null);
+    void persistSharedSettingsIfConfigured();
+  };
+
+  const handleChooseSharedSettingsFolder = async () => {
+    setSharedSettingsError(null);
+    try {
+      const handle = await pickDirectory();
+      const hasPermission = await verifyPermission(handle);
+      if (!hasPermission) return;
+      await saveSharedSettingsDirectoryHandle(handle);
+      setSharedSettingsFolderName(handle.name);
+      const existingJson = await loadSharedSettingsJson();
+      if (existingJson && existingJson.trim()) {
+        importAppSettingsJson(existingJson);
+      } else {
+        // First-time setup: seed from the recommended preset instead of ad-hoc current state.
+        try {
+          const presetRes = await fetch('/presets/recommended-settings.json', { cache: 'no-store' });
+          if (presetRes.ok) {
+            const presetJson = await presetRes.text();
+            importAppSettingsJson(presetJson);
+          }
+        } catch {
+          // If preset loading fails, keep current runtime values.
+        }
+        await saveSharedSettingsJson();
+      }
+      onSharedSettingsChange?.();
+      window.location.reload();
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setSharedSettingsError(err instanceof Error ? err.message : t('settings.sharedChooseFolderError'));
+      }
+    }
+  };
+
+  const handleClearSharedSettingsFolder = async () => {
+    await clearSharedSettingsDirectoryHandle();
+    setSharedSettingsFolderName(null);
+    setSharedSettingsError(null);
+    onSharedSettingsChange?.();
+    onSharedSettingsRemoved?.();
+  };
+
+  const handleExportSettingsJson = () => {
+    if (!sharedSettingsConfigured) {
+      setSharedSettingsError(t('settings.sharedFolderRequiredError'));
+      return;
+    }
+    const json = exportAppSettingsJson();
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'cucumbergnerator-settings.json';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportSettingsJson = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setSharedSettingsError(null);
+    if (!sharedSettingsConfigured) {
+      setSharedSettingsError(t('settings.sharedFolderRequiredError'));
+      if (sharedSettingsFileRef.current) sharedSettingsFileRef.current.value = '';
+      return;
+    }
+    try {
+      const text = await file.text();
+      importAppSettingsJson(text);
+      await saveSharedSettingsJson();
+      window.location.reload();
+    } catch (err) {
+      setSharedSettingsError(err instanceof Error ? err.message : t('settings.sharedInvalidJsonError'));
+    } finally {
+      if (sharedSettingsFileRef.current) sharedSettingsFileRef.current.value = '';
+    }
   };
 
   // ── Profile handlers ───────────────────────────────────────
@@ -484,8 +771,10 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
           className={`${styles.toggle} ${loggedIn ? styles.toggleActive : ''}`}
           onClick={() => setOpen(!open)}
           type="button"
+          title={toggleLabel}
+          aria-label={toggleLabel}
         >
-          {toggleLabel}
+          <IconGear />
         </button>
       )}
 
@@ -504,121 +793,155 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
                   {t('settings.logout')}
                 </button>
               </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {/* ── MyForterro Login (Authorization Code + PKCE) ── */}
-                <>
-                    <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      {t('settings.clientIdLabel')}
-                      <span
-                        title={t('settings.clientIdHint')}
-                        style={{ cursor: 'help', fontSize: '0.65rem', color: 'var(--color-primary)', fontWeight: 700, border: '1px solid var(--color-primary)', borderRadius: '50%', width: '14px', height: '14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                      >?</span>
+            ) : (              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {t('settings.clientIdLabel')}
+                  <span
+                    title={t('settings.clientIdHint')}
+                    style={{ cursor: 'help', fontSize: '0.65rem', color: 'var(--color-primary)', fontWeight: 700, border: '1px solid var(--color-primary)', borderRadius: '50%', width: '14px', height: '14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                  >?</span>
+                </label>
+                <input
+                  className={styles.input}
+                  type="text"
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                  placeholder={t('settings.clientIdLabel')}
+                  aria-label={t('settings.clientIdLabel')}
+                />
+                <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {t('settings.applicationId')}
+                  <span
+                    title={t('settings.applicationIdHint')}
+                    style={{ cursor: 'help', fontSize: '0.65rem', color: 'var(--color-primary)', fontWeight: 700, border: '1px solid var(--color-primary)', borderRadius: '50%', width: '14px', height: '14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                  >?</span>
+                </label>
+                <input
+                  className={styles.input}
+                  type="text"
+                  value={applicationId}
+                  onChange={(e) => setApplicationId(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+                  placeholder={t('settings.applicationIdHint')}
+                  aria-label={t('settings.applicationId')}
+                />
+
+                <button
+                  className={styles.saveBtn}
+                  onClick={handleLogin}
+                  type="button"
+                  disabled={loginLoading || !clientId.trim() || requiredAgentIdsMissing}
+                >
+                  {loginLoading ? t('settings.redirecting') : t('settings.authorize')}
+                </button>
+
+                {requiredAgentIdsMissing && (
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-danger)' }}>
+                    {lang === 'de'
+                      ? 'Bitte zuerst die Agent-IDs im Tab "Agenten" eintragen.'
+                      : 'Please enter the Agent IDs in the "Agents" tab first.'}
+                  </span>
+                )}
+
+                {loginError && (
+                  <span style={{ fontSize: '0.8rem', color: 'var(--color-danger)' }}>{loginError}</span>
+                )}
+
+                {/* Advanced settings */}
+                <button
+                  className={styles.promptToggle}
+                  onClick={() => setAdvancedOpen(!advancedOpen)}
+                  type="button"
+                  style={{ marginTop: '4px' }}
+                >
+                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                    {t('settings.advanced')}
+                  </span>
+                  <span className={styles.promptArrow}>{advancedOpen ? '\u25B2' : '\u25BC'}</span>
+                </button>
+
+                {advancedOpen && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem' }}>
+                    <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
+                      {t('settings.clientSecret')}
+                    </label>
+                    <input
+                      className={styles.input}
+                      type="password"
+                      value={clientSecret}
+                      onChange={(e) => setClientSecret(e.target.value)}
+                      placeholder={t('settings.clientSecretHint')}
+                      style={{ fontSize: '0.75rem' }}
+                    />
+                    <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                      {t('settings.authorizeUrl')}
                     </label>
                     <input
                       className={styles.input}
                       type="text"
-                      value={clientId}
-                      onChange={(e) => setClientId(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-                      placeholder={t('settings.clientIdLabel')}
-                      aria-label={t('settings.clientIdLabel')}
+                      value={authorizeUrlInput}
+                      onChange={(e) => setAuthorizeUrlInput(e.target.value)}
+                      placeholder={getAuthorizeUrl()}
+                      style={{ fontSize: '0.75rem' }}
                     />
-                    <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      {t('settings.applicationId')}
-                      <span
-                        title={t('settings.applicationIdHint')}
-                        style={{ cursor: 'help', fontSize: '0.65rem', color: 'var(--color-primary)', fontWeight: 700, border: '1px solid var(--color-primary)', borderRadius: '50%', width: '14px', height: '14px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-                      >?</span>
+                    <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                      {t('settings.tokenUrl')}
                     </label>
                     <input
                       className={styles.input}
                       type="text"
-                      value={applicationId}
-                      onChange={(e) => setApplicationId(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-                      placeholder={t('settings.applicationIdHint')}
-                      aria-label={t('settings.applicationId')}
+                      value={tokenUrlInput}
+                      onChange={(e) => setTokenUrlInput(e.target.value)}
+                      placeholder="/mft-auth/connect/token"
+                      style={{ fontSize: '0.75rem' }}
                     />
-
-                    <button
-                      className={styles.saveBtn}
-                      onClick={handleLogin}
-                      type="button"
-                      disabled={loginLoading || !clientId.trim()}
-                    >
-                      {loginLoading ? t('settings.redirecting') : t('settings.authorize')}
-                    </button>
-
-                    {loginError && (
-                      <span style={{ fontSize: '0.8rem', color: 'var(--color-danger)' }}>{loginError}</span>
-                    )}
-
-                    {/* Advanced settings */}
-                    <button
-                      className={styles.promptToggle}
-                      onClick={() => setAdvancedOpen(!advancedOpen)}
-                      type="button"
-                      style={{ marginTop: '4px' }}
-                    >
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                        {t('settings.advanced')}
-                      </span>
-                      <span className={styles.promptArrow}>{advancedOpen ? '\u25B2' : '\u25BC'}</span>
-                    </button>
-
-                    {advancedOpen && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.8rem' }}>
-                        <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
-                          {t('settings.clientSecret')}
-                        </label>
-                        <input
-                          className={styles.input}
-                          type="password"
-                          value={clientSecret}
-                          onChange={(e) => setClientSecret(e.target.value)}
-                          placeholder={t('settings.clientSecretHint')}
-                          style={{ fontSize: '0.75rem' }}
-                        />
-                        <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                          {t('settings.authorizeUrl')}
-                        </label>
-                        <input
-                          className={styles.input}
-                          type="text"
-                          value={authorizeUrlInput}
-                          onChange={(e) => setAuthorizeUrlInput(e.target.value)}
-                          placeholder={getAuthorizeUrl()}
-                          style={{ fontSize: '0.75rem' }}
-                        />
-                        <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                          {t('settings.tokenUrl')}
-                        </label>
-                        <input
-                          className={styles.input}
-                          type="text"
-                          value={tokenUrlInput}
-                          onChange={(e) => setTokenUrlInput(e.target.value)}
-                          placeholder="/mft-auth/connect/token"
-                          style={{ fontSize: '0.75rem' }}
-                        />
-                        <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
-                          {t('settings.apiBaseUrl')}
-                        </label>
-                        <input
-                          className={styles.input}
-                          type="text"
-                          value={apiBaseInput}
-                          onChange={(e) => setApiBaseInput(e.target.value)}
-                          placeholder="/mft-api"
-                          style={{ fontSize: '0.75rem' }}
-                        />
-                      </div>
-                    )}
-                  </>
+                    <label style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '4px' }}>
+                      {t('settings.apiBaseUrl')}
+                    </label>
+                    <input
+                      className={styles.input}
+                      type="text"
+                      value={apiBaseInput}
+                      onChange={(e) => setApiBaseInput(e.target.value)}
+                      placeholder="/mft-api"
+                      style={{ fontSize: '0.75rem' }}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
+
+          {/* ── Token consumption (today) — replaces the old "T" trigger ─── */}
+          {loggedIn && (() => {
+            const consumed = serverTokenTotal?.totalTokens ?? dailyTokenTotal;
+            const locale = lang === 'de' ? 'de-DE' : 'en-US';
+            const pct = limitUnlimited ? 0 : Math.min(100, (consumed / Math.max(1, dailyLimit)) * 100);
+            return (
+              <div className={styles.section}>
+                <span className={styles.sectionLabel}>
+                  {lang === 'de' ? 'Token-Verbrauch heute' : 'Token usage today'}
+                </span>
+                <span style={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>
+                  {consumed.toLocaleString(locale)}
+                  {!limitUnlimited && ` / ${dailyLimit.toLocaleString(locale)}`}
+                </span>
+                {!limitUnlimited && (
+                  <div style={{ width: '100%', height: '6px', background: 'var(--color-border)', borderRadius: '3px', overflow: 'hidden', marginTop: '4px' }}>
+                    <div
+                      style={{
+                        width: `${pct}%`,
+                        height: '100%',
+                        background: pct >= 90 ? 'var(--color-danger)' : 'var(--color-primary)',
+                        transition: 'width 0.2s ease',
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ── Settings Tabs ─────────────────────────────────── */}
           <div className={styles.settingsTabs}>
@@ -629,15 +952,65 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
                 className={`${styles.settingsTab} ${settingsTab === tab ? styles.settingsTabActive : ''}`}
                 onClick={() => setSettingsTab(tab)}
               >
-                {tab === 'model' ? (lang === 'de' ? 'Modell & Login' : 'Model & Login')
+                {tab === 'model' ? (lang === 'de' ? 'Agenten' : 'Agents')
                   : tab === 'general' ? (lang === 'de' ? 'Einstellungen' : 'Settings')
                   : (lang === 'de' ? 'Prompts' : 'Prompts')}
               </button>
             ))}
           </div>
 
-          {/* ── TAB: Model & Login ──────────────────────────────── */}
+          {/* ── TAB: Agents ──────────────────────────────────────── */}
           {settingsTab === 'model' && <>
+          {/* ── Agent IDs (user-provided, no auto-creation) ─────── */}
+          <div className={styles.section}>
+            <span className={styles.sectionLabel}>
+              {lang === 'de' ? 'Agent-IDs' : 'Agent IDs'}
+            </span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+              {lang === 'de'
+                ? 'Agents werden nicht mehr automatisch angelegt. Trage hier die ID eines global geteilten oder kundenspezifisch angelegten Agents ein.'
+                : 'Agents are no longer created automatically. Enter the ID of a globally shared or customer-specific agent here.'}
+            </span>
+            {([
+              ['cucumber', lang === 'de' ? 'Cucumber Agent' : 'Cucumber Agent', cucumberAgentId, setCucumberAgentId],
+              ['excel-transform', lang === 'de' ? 'Excel-Transform-Agent' : 'Excel transform agent', excelTransformAgentId, setExcelTransformAgentId],
+              ['excel-mapping', lang === 'de' ? 'Excel-Mapping-Agent' : 'Excel mapping agent', excelMappingAgentId, setExcelMappingAgentId],
+              ...(experimentalFeatures ? ([
+                ['fop-analyst', lang === 'de' ? 'FOP Inhaltsanalyst' : 'FOP content analyst', fopAnalystAgentIdInput, setFopAnalystAgentIdInput],
+                ['fop-guidelines', lang === 'de' ? 'FOP Richtlinienprüfer' : 'FOP guidelines checker', fopGuidelinesAgentIdInput, setFopGuidelinesAgentIdInput],
+              ] as [AgentIdKey, string, string, (v: string) => void][]) : []),
+            ] as [AgentIdKey, string, string, (v: string) => void][]).map(([key, label, value, setLocal]) => {
+              const status = getAgentIdStatus(value);
+              return (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                  <span style={{ fontSize: '0.8rem', minWidth: 160 }}>{label}</span>
+                  <input
+                    className={styles.input}
+                    style={{ flex: 1 }}
+                    type="text"
+                    value={value}
+                    onChange={(e) => handleAgentIdChange(key, e.target.value, setLocal)}
+                    placeholder={lang === 'de' ? 'Agent-ID einfügen…' : 'Paste agent ID…'}
+                  />
+                  {status === 'ok' && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-success, #2e7d32)' }} title={lang === 'de' ? 'Agent gefunden' : 'Agent found'}>✓</span>
+                  )}
+                  {status === 'missing' && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-danger)' }} title={lang === 'de' ? 'Agent nicht gefunden' : 'Agent not found'}>
+                      {lang === 'de' ? 'nicht gefunden' : 'not found'}
+                    </span>
+                  )}
+                  {status === 'checking' && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>…</span>
+                  )}
+                </div>
+              );
+            })}
+            {agentsCheckError && (
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-danger)' }}>{agentsCheckError}</span>
+            )}
+          </div>
+
           {/* ── Tenant Section ──────────────────────────────────── */}
           {loggedIn && (
             <>
@@ -690,171 +1063,94 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
           {/* ── Model Section ── */}
           {loggedIn && selectedTenantId && (
             <>
+              {/* ── Model per task (read-only display) ────── */}
               <div className={styles.divider} />
               <div className={styles.section}>
-                <span className={styles.sectionLabel}>{t('settings.model')}</span>
-                {modelsLoading ? (
-                  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                    {t('settings.loadingModels')}
-                  </span>
-                ) : modelsError ? (
-                  <span style={{ fontSize: '0.8rem', color: 'var(--color-danger)' }}>{modelsError}</span>
-                ) : models.length > 0 ? (
-                  <div className={styles.modelList}>
-                    {models.map((m) => (
-                      <label key={m.id} className={`${styles.modelOption} ${m.id === model ? styles.modelOptionActive : ''}`}>
-                        <input
-                          type="radio"
-                          name="model"
-                          value={m.id}
-                          checked={m.id === model}
-                          onChange={() => handleModelChange(m.id)}
-                          className={styles.modelRadio}
-                        />
-                        <span className={styles.modelLabel}>{m.id}</span>
-                        <span className={styles.modelDesc}>{m.owned_by}</span>
-                      </label>
-                    ))}
-                  </div>
-                ) : (
-                  <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                    {t('settings.noModels')}
-                  </span>
-                )}
-              </div>
-
-              {/* ── Temperature ─────────────────────────────── */}
-              {(() => {
-                const selectedModel = models.find((m) => m.id === model);
-                const isOpenAI = selectedModel?.owned_by === 'openai';
-                return (
-                  <div className={styles.section}>
-                    <label className={styles.sectionLabel}>
-                      Temperature: {temperature.toFixed(1)}
-                    </label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>0</span>
-                      <input
-                        type="range"
-                        min="0"
-                        max="2"
-                        step="0.1"
-                        value={temperature}
-                        disabled={isOpenAI}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value);
-                          setTemperatureState(val);
-                          saveTemperature(val);
-                        }}
-                        style={{ flex: 1, opacity: isOpenAI ? 0.5 : 1 }}
-                      />
-                      <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>2</span>
-                    </div>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
-                      {isOpenAI
-                        ? (lang === 'de' ? 'OpenAI-Modelle unterstützen nur Temperature 1' : 'OpenAI models only support temperature 1')
-                        : (lang === 'de' ? 'Niedrig = präziser, Hoch = kreativer' : 'Low = more precise, High = more creative')}
+                <span className={styles.sectionLabel}>
+                  {lang === 'de' ? 'Modell pro Aufgabe' : 'Model per task'}
+                </span>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                  {lang === 'de'
+                    ? 'Fest hinterlegt je Aufgabe \u2014 einfache Klassifikationsaufgaben nutzen ein g\u00fcnstigeres/schnelleres Modell als die Gherkin-Generierung.'
+                    : 'Fixed per task \u2014 simple classification tasks use a cheaper/faster model than Gherkin generation.'}
+                </span>
+                {([
+                  ['gherkin-generation', lang === 'de' ? 'Gherkin-Generierung' : 'Gherkin generation'],
+                  ['rating', lang === 'de' ? 'Bewertung' : 'Rating'],
+                  ['table-identification', lang === 'de' ? 'Tabellen-Identifikation' : 'Table identification'],
+                  ['kb-keywords', lang === 'de' ? 'KB-Stichpunkte' : 'KB keywords'],
+                  ['excel-transform', lang === 'de' ? 'Excel-Transform-Agent' : 'Excel transform agent'],
+                  ['excel-mapping', lang === 'de' ? 'Excel-Mapping-Agent' : 'Excel mapping agent'],
+                  ...(experimentalFeatures ? ([
+                    ['fop-analyst', lang === 'de' ? 'FOP Inhaltsanalyst' : 'FOP content analyst'],
+                    ['fop-guidelines', lang === 'de' ? 'FOP Richtlinienprüfer' : 'FOP guidelines checker'],
+                  ] as [string, string][]) : []),
+                ] as [string, string][]).map(([task, label]) => (
+                  <div key={task} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                    <span style={{ fontSize: '0.8rem', minWidth: 160 }}>{label}</span>
+                    <span style={{ fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-text-muted)' }}>
+                      {task === 'gherkin-generation' || task === 'rating' ? model : getTaskModel(task as AiTaskKey)}
                     </span>
                   </div>
-                );
-              })()}
+                ))}
+              </div>
             </>
           )}
-
-          {/* ── OpenRouter Fallback ───────────────────── */}
-          <div className={styles.section} style={{ border: '1px dashed var(--color-primary)', padding: '8px', borderRadius: '6px' }}>
-            <label className={styles.sectionLabel} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <input
-                type="checkbox"
-                checked={orEnabled}
-                onChange={(e) => {
-                  setOrEnabled(e.target.checked);
-                  setOpenRouterEnabled(e.target.checked);
-                }}
-              />
-              OpenRouter Fallback
-            </label>
-            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>
-              {lang === 'de'
-                ? 'Fallback wenn MyForterro nicht verfuegbar ist (kein Tenant, Token abgelaufen, Limit erreicht). Nutzt deinen persoenlichen API Key.'
-                : 'Fallback when MyForterro is unavailable (no tenant, token expired, limit reached). Uses your personal API key.'}
-            </span>
-            {orEnabled && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
-                <input
-                  className={styles.input}
-                  type="password"
-                  placeholder="OpenRouter API Key (sk-or-...)"
-                  value={orKey}
-                  onChange={(e) => {
-                    setOrKey(e.target.value);
-                    setOpenRouterKey(e.target.value);
-                  }}
-                />
-                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                  <select
-                    className={styles.input}
-                    value={orModel}
-                    onChange={(e) => {
-                      setOrModel(e.target.value);
-                      setOpenRouterModel(e.target.value);
-                    }}
-                    style={{ flex: 1 }}
-                  >
-                    <option value="">-- {lang === 'de' ? 'Modell waehlen' : 'Select model'} --</option>
-                    <optgroup label={lang === 'de' ? 'Empfohlen' : 'Recommended'}>
-                      <option value="anthropic/claude-sonnet-4.6">Claude Sonnet 4.6 (1M ctx)</option>
-                      <option value="anthropic/claude-opus-4.6">Claude Opus 4.6 (1M ctx)</option>
-                      <option value="google/gemini-3-flash-preview">Gemini 3 Flash Preview (1M ctx)</option>
-                      <option value="google/gemini-3.1-flash-lite-preview">Gemini 3.1 Flash Lite Preview (1M ctx)</option>
-                      <option value="moonshotai/kimi-k2.5">Kimi K2.5 (262K ctx)</option>
-                    </optgroup>
-                    {orModels.length > 0 && (
-                      <optgroup label={lang === 'de' ? 'Alle Modelle' : 'All models'}>
-                        {orModels.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name} ({m.id})
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                  </select>
-                  <button
-                    type="button"
-                    className={styles.clearBtn}
-                    disabled={!orKey || orModelsLoading}
-                    onClick={async () => {
-                      setOrModelsLoading(true);
-                      setOrModelsError(null);
-                      try {
-                        const list = await listOpenRouterModels(orKey);
-                        setOrModels(list);
-                      } catch (err) {
-                        setOrModelsError(err instanceof Error ? err.message : 'Fehler');
-                      } finally {
-                        setOrModelsLoading(false);
-                      }
-                    }}
-                  >
-                    {orModelsLoading ? '...' : (lang === 'de' ? 'Laden' : 'Load')}
-                  </button>
-                </div>
-                {orModelsError && (
-                  <span style={{ fontSize: '0.7rem', color: 'var(--color-error, red)' }}>{orModelsError}</span>
-                )}
-                {!orModel && orModels.length > 0 && (
-                  <span style={{ fontSize: '0.7rem', color: 'var(--color-warning, orange)' }}>
-                    {lang === 'de' ? 'Bitte ein Modell auswaehlen' : 'Please select a model'}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
 
           </>}
 
           {/* ── TAB: General Settings ──────────────────────────── */}
           {settingsTab === 'general' && <>
+
+          {/* ── Shared Settings Folder ────────────── */}
+          <div className={styles.section}>
+            <span className={styles.sectionLabel}>{t('settings.sharedTitle')}</span>
+            <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
+              {t('settings.sharedDesc')}
+            </p>
+            <div className={styles.sharedSettingsRow}>
+              <span className={sharedSettingsConfigured ? styles.sharedSettingsValueOk : styles.sharedSettingsValueMissing}>
+                {sharedSettingsLoading
+                  ? t('settings.loading')
+                  : sharedSettingsFolderName || t('settings.sharedFolderMissing')}
+              </span>
+              <div className={styles.sharedSettingsActions}>
+                <button className={styles.saveBtn} onClick={handleChooseSharedSettingsFolder} type="button">
+                  📁 {t('settings.sharedChooseFolder')}
+                </button>
+                <button className={styles.clearBtn} onClick={handleClearSharedSettingsFolder} type="button" disabled={!sharedSettingsConfigured}>
+                  {t('settings.clear')}
+                </button>
+                <button className={styles.saveBtn} onClick={handleExportSettingsJson} type="button" disabled={!sharedSettingsConfigured}>
+                  {t('settings.export')}
+                </button>
+                <label
+                  className={`${styles.saveBtn} ${!sharedSettingsConfigured ? styles.sharedSettingsDisabled : ''}`}
+                  style={{ display: 'inline-flex', alignItems: 'center', cursor: sharedSettingsConfigured ? 'pointer' : 'not-allowed' }}
+                >
+                  {t('settings.import')}
+                  <input
+                    ref={sharedSettingsFileRef}
+                    type="file"
+                    accept="application/json,.json"
+                    onChange={handleImportSettingsJson}
+                    style={{ display: 'none' }}
+                    disabled={!sharedSettingsConfigured}
+                  />
+                </label>
+              </div>
+            </div>
+            {!sharedSettingsConfigured && !sharedSettingsLoading && (
+              <span style={{ fontSize: '0.76rem', color: 'var(--color-danger)' }}>
+                {t('settings.sharedRequiredHint')}
+              </span>
+            )}
+            {sharedSettingsError && (
+              <span style={{ fontSize: '0.8rem', color: 'var(--color-danger)' }}>{sharedSettingsError}</span>
+            )}
+          </div>
+
+          <div className={styles.divider} />
 
           {/* ── Force KI Table Identification ────────────── */}
           <div className={styles.section}>
@@ -872,21 +1168,143 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
               <button
                 onClick={handleForceKiToggle}
                 type="button"
-                style={{
-                  padding: '2px 10px',
-                  fontSize: '0.75rem',
-                  borderRadius: 'var(--radius)',
-                  border: '1px solid var(--color-border)',
-                  background: forceKiTableId ? 'var(--color-primary)' : 'var(--color-surface)',
-                  color: forceKiTableId ? 'white' : 'var(--color-text-muted)',
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                  marginLeft: 12,
-                }}
+                className={forceKiTableId ? styles.toggleSwitchActive : styles.toggleSwitch}
               >
                 {forceKiTableId
                   ? (lang === 'de' ? 'AN' : 'ON')
                   : (lang === 'de' ? 'AUS' : 'OFF')}
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.divider} />
+
+          {/* ── Agent max output tokens ────────────── */}
+          <div className={styles.section}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+              <div>
+                <span className={styles.sectionLabel} style={{ fontSize: '0.8rem' }}>
+                  🧠 {lang === 'de' ? 'Agent Max-Output-Tokens' : 'Agent max output tokens'}
+                </span>
+                <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
+                  {lang === 'de'
+                    ? 'Wird beim Erstellen/Aktualisieren des Agents als maxTokens gesetzt. Hilft gegen abgeschnittene Antworten.'
+                    : 'Applied as maxTokens when creating/updating agents. Helps prevent truncated answers.'}
+                </p>
+              </div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, marginLeft: 12 }}>
+                <input
+                  type="number"
+                  min={256}
+                  max={200000}
+                  step={256}
+                  value={agentMaxTokens}
+                  onChange={(e) => handleAgentMaxTokensChange(e.target.value)}
+                  aria-label={lang === 'de' ? 'Agent Max-Output-Tokens' : 'Agent max output tokens'}
+                  style={{
+                    width: 110,
+                    padding: '4px 8px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius)',
+                    fontSize: '0.85rem',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.divider} />
+
+          {/* ── KI-Timeout ────────────── */}
+          <div className={styles.section}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+              <div>
+                <span className={styles.sectionLabel} style={{ fontSize: '0.8rem' }}>
+                  ⏳ {t('docx.aiTimeout')}
+                </span>
+                <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
+                  {t('docx.aiTimeoutHint')}
+                </p>
+              </div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0, marginLeft: 12 }}>
+                <input
+                  type="number"
+                  min={60}
+                  max={1800}
+                  step={30}
+                  value={aiTimeoutSeconds}
+                  onChange={(e) => handleAiTimeoutChange(e.target.value)}
+                  aria-label={t('docx.aiTimeoutAria')}
+                  style={{
+                    width: 80,
+                    padding: '4px 8px',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 'var(--radius)',
+                    fontSize: '0.85rem',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text)',
+                  }}
+                />
+                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{t('docx.aiTimeoutUnit')}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.divider} />
+
+          {/* ── Feldprüfungs-Szenarien ────────────── */}
+          <div className={styles.section}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+              <div>
+                <span className={styles.sectionLabel} style={{ fontSize: '0.8rem' }}>
+                  🔍 {lang === 'de' ? 'Feldprüfungs-Szenarien generieren' : 'Generate field-check scenarios'}
+                </span>
+                <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
+                  {lang === 'de'
+                    ? 'AUS: Keine reinen "Then field X is modifiable"-Szenarien — nur funktionale Tests. Sinnvoll wenn die Testgrundlage die Feldexistenz bereits garantiert.'
+                    : 'OFF: No pure "Then field X is modifiable" scenarios — only functional tests. Useful when the test basis already guarantees field existence.'}
+                </p>
+              </div>
+              <button
+                onClick={handleIncludeFieldChecksToggle}
+                type="button"
+                className={includeFieldChecks ? styles.toggleSwitchActive : styles.toggleSwitch}
+              >
+                {includeFieldChecks
+                  ? (lang === 'de' ? 'AN' : 'ON')
+                  : (lang === 'de' ? 'AUS' : 'OFF')}
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.divider} />
+
+          {/* ── MFT Tageslimit ────────────── */}
+          <div className={styles.section}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
+              <div>
+                <span className={styles.sectionLabel} style={{ fontSize: '0.8rem' }}>
+                  ⏱ {lang === 'de' ? 'MFT-Tageslimit' : 'MFT daily limit'}
+                </span>
+                <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
+                  {mftDailyLimitHit
+                    ? (lang === 'de'
+                      ? 'Aktuell: Tageslimit erreicht — KI-Anfragen werden blockiert. Wird bei Tageswechsel automatisch freigegeben.'
+                      : 'Currently: daily limit hit — AI requests are blocked. Auto-releases at midnight.')
+                    : (lang === 'de'
+                      ? 'Aktuell: keine Token-Sperre aktiv. Falls die Sperre fälschlich gesetzt sein sollte, kannst du sie hier manuell zurücksetzen.'
+                      : 'Currently: no token limit active. If the flag is stuck, you can manually reset it here.')}
+                </p>
+              </div>
+              <button
+                onClick={handleResetDailyLimit}
+                disabled={!mftDailyLimitHit}
+                type="button"
+                className={mftDailyLimitHit ? styles.toggleSwitchDanger : styles.toggleSwitch}
+              >
+                {lang === 'de' ? 'Zurücksetzen' : 'Reset'}
               </button>
             </div>
           </div>
@@ -898,32 +1316,18 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
             <span className={styles.sectionLabel} style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
               🧪 {lang === 'de' ? 'Testtiefe' : 'Test Depth'}
             </span>
-            <div style={{ display: 'flex', gap: 0, marginTop: 6 }}>
+            <div className={styles.segmentGroup}>
               <button
                 type="button"
-                onClick={() => { setTestDepthState('quick'); setTestDepth('quick'); }}
-                style={{
-                  flex: 1, padding: '6px 12px', fontSize: '0.75rem', cursor: 'pointer',
-                  border: '1.5px solid var(--color-border)', borderRight: 'none',
-                  borderRadius: '6px 0 0 6px',
-                  background: testDepthState === 'quick' ? 'var(--color-primary)' : 'none',
-                  color: testDepthState === 'quick' ? 'white' : 'var(--color-text-muted)',
-                  fontWeight: testDepthState === 'quick' ? 600 : 400,
-                }}
+                onClick={() => { setTestDepthState('quick'); setTestDepth('quick'); void persistSharedSettingsIfConfigured(); }}
+                className={testDepthState === 'quick' ? styles.segmentBtnActive : styles.segmentBtn}
               >
                 {lang === 'de' ? 'Schnelltest' : 'Quick Test'}
               </button>
               <button
                 type="button"
-                onClick={() => { setTestDepthState('deep'); setTestDepth('deep'); }}
-                style={{
-                  flex: 1, padding: '6px 12px', fontSize: '0.75rem', cursor: 'pointer',
-                  border: '1.5px solid var(--color-border)',
-                  borderRadius: '0 6px 6px 0',
-                  background: testDepthState === 'deep' ? 'var(--color-primary)' : 'none',
-                  color: testDepthState === 'deep' ? 'white' : 'var(--color-text-muted)',
-                  fontWeight: testDepthState === 'deep' ? 600 : 400,
-                }}
+                onClick={() => { setTestDepthState('deep'); setTestDepth('deep'); void persistSharedSettingsIfConfigured(); }}
+                className={testDepthState === 'deep' ? styles.segmentBtnActive : styles.segmentBtn}
               >
                 {lang === 'de' ? 'Tiefentest' : 'Deep Test'}
               </button>
@@ -962,22 +1366,17 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
                 📚 {lang === 'de' ? 'Wissensdatenbank' : 'Knowledge Base'}
               </span>
               <button
-                onClick={() => { const next = !kbEnabled; setKbEnabledState(next); setKnowledgeBaseEnabled(next); }}
+                onClick={() => { const next = !kbEnabled; setKbEnabledState(next); setKnowledgeBaseEnabled(next); void persistSharedSettingsIfConfigured(); }}
                 type="button"
-                style={{
-                  padding: '2px 10px', fontSize: '0.75rem',
-                  borderRadius: 'var(--radius)', border: '1px solid var(--color-border)',
-                  background: kbEnabled ? 'var(--color-primary)' : 'var(--color-surface)',
-                  color: kbEnabled ? 'white' : 'var(--color-text-muted)', cursor: 'pointer',
-                }}
+                className={kbEnabled ? styles.toggleSwitchActive : styles.toggleSwitch}
               >
                 {kbEnabled ? (lang === 'de' ? 'AN' : 'ON') : (lang === 'de' ? 'AUS' : 'OFF')}
               </button>
             </div>
             <p style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', margin: '2px 0 0' }}>
               {lang === 'de'
-                ? 'Durchsucht PDF-Dokumentation nach relevanten Abschnitten für die Testgenerierung'
-                : 'Searches PDF documentation for relevant sections during test generation'}
+                ? 'Durchsucht HTML-Dokumentation nach relevanten Abschnitten für die Testgenerierung'
+                : 'Searches HTML documentation for relevant sections during test generation'}
             </p>
 
             {kbEnabled && (
@@ -985,11 +1384,11 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
                 {/* Max Chunks */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                    {lang === 'de' ? 'Max. Chunks pro Generierung:' : 'Max chunks per generation:'}
+                    {lang === 'de' ? 'Max. Hilfe-Einträge pro Stichpunkt:' : 'Max help entries per keyword:'}
                   </span>
                   <select
                     value={kbMaxChunks}
-                    onChange={e => { const v = parseInt(e.target.value, 10); setKbMaxChunksState(v); setKBMaxChunksSetting(v); }}
+                    onChange={e => { const v = parseInt(e.target.value, 10); setKbMaxChunksState(v); setKBMaxChunksSetting(v); void persistSharedSettingsIfConfigured(); }}
                     style={{ padding: '2px 8px', fontSize: '0.75rem', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)' }}
                   >
                     {[1, 2, 3, 5, 7, 10].map(n => <option key={n} value={n}>{n}</option>)}
@@ -1002,63 +1401,59 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
                     {lang === 'de' ? 'Prozessketten berücksichtigen:' : 'Consider process chains:'}
                   </span>
                   <button
-                    onClick={() => { const next = !kbChains; setKbChainsState(next); setKBChainsEnabled(next); }}
+                    onClick={() => { const next = !kbChains; setKbChainsState(next); setKBChainsEnabled(next); void persistSharedSettingsIfConfigured(); }}
                     type="button"
-                    style={{
-                      padding: '1px 8px', fontSize: '0.7rem',
-                      borderRadius: 'var(--radius)', border: '1px solid var(--color-border)',
-                      background: kbChains ? 'var(--color-primary)' : 'var(--color-surface)',
-                      color: kbChains ? 'white' : 'var(--color-text-muted)', cursor: 'pointer',
-                    }}
+                    className={kbChains ? styles.toggleSwitchActive : styles.toggleSwitch}
                   >
                     {kbChains ? (lang === 'de' ? 'AN' : 'ON') : (lang === 'de' ? 'AUS' : 'OFF')}
                   </button>
                 </div>
 
-                {/* Action Recognition */}
+                {/* Keyword Extraction (Agent) */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                    {lang === 'de' ? 'Aktions-Erkennung (Neu/Bearbeiten/...):' : 'Action recognition (New/Edit/...):'}
+                    {lang === 'de' ? 'Stichpunkt-Extraktion durch Agent:' : 'Agent keyword extraction:'}
                   </span>
                   <button
-                    onClick={() => { const next = !kbActions; setKbActionsState(next); setKBActionsEnabled(next); }}
+                    onClick={() => { const next = !kbKwExtract; setKbKwExtractState(next); setKBKeywordExtractionEnabled(next); void persistSharedSettingsIfConfigured(); }}
                     type="button"
-                    style={{
-                      padding: '1px 8px', fontSize: '0.7rem',
-                      borderRadius: 'var(--radius)', border: '1px solid var(--color-border)',
-                      background: kbActions ? 'var(--color-primary)' : 'var(--color-surface)',
-                      color: kbActions ? 'white' : 'var(--color-text-muted)', cursor: 'pointer',
-                    }}
+                    className={kbKwExtract ? styles.toggleSwitchActive : styles.toggleSwitch}
                   >
-                    {kbActions ? (lang === 'de' ? 'AN' : 'ON') : (lang === 'de' ? 'AUS' : 'OFF')}
+                    {kbKwExtract ? (lang === 'de' ? 'AN' : 'ON') : (lang === 'de' ? 'AUS' : 'OFF')}
                   </button>
                 </div>
 
-                {/* Event Context */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                    {lang === 'de' ? 'Event-Kontext (Reverse Eng.):' : 'Event context (Reverse Eng.):'}
-                  </span>
-                  <button
-                    onClick={() => { const next = !kbEvents; setKbEventsState(next); setKBEventsEnabled(next); }}
-                    type="button"
-                    style={{
-                      padding: '1px 8px', fontSize: '0.7rem',
-                      borderRadius: 'var(--radius)', border: '1px solid var(--color-border)',
-                      background: kbEvents ? 'var(--color-primary)' : 'var(--color-surface)',
-                      color: kbEvents ? 'white' : 'var(--color-text-muted)', cursor: 'pointer',
-                    }}
-                  >
-                    {kbEvents ? (lang === 'de' ? 'AN' : 'ON') : (lang === 'de' ? 'AUS' : 'OFF')}
-                  </button>
-                </div>
+                {kbKwExtract && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                      {lang === 'de' ? 'Anzahl Stichpunkte:' : 'Number of keywords:'}
+                    </span>
+                    <select
+                      value={kbKwCount}
+                      onChange={e => { const v = parseInt(e.target.value, 10); setKbKwCountState(v); setKBKeywordCountSetting(v); void persistSharedSettingsIfConfigured(); }}
+                      style={{ padding: '2px 8px', fontSize: '0.75rem', borderRadius: 'var(--radius)', border: '1px solid var(--color-border)' }}
+                    >
+                      {[3, 5, 7, 10, 15].map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {kbKwExtract && (
+                  <p style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', margin: '0 0 0 2px' }}>
+                    {lang === 'de'
+                      ? 'Der Agent nennt thematische Fachbegriffe zum Arbeitspaket (z. B. „Chargenpflicht"), die zusätzlich zur Tabellen-Suche die KB durchsuchen. Kostet einen extra AI-Call pro Generierung.'
+                      : 'The agent names thematic terms for the work package (e.g. "batch requirement") which are additionally matched against the KB. Costs one extra AI call per generation.'}
+                  </p>
+                )}
+
               </div>
             )}
           </div>
 
-          <div className={styles.divider} />
+          {devMode && <div className={styles.divider} />}
 
-          {/* ── Experimental Features Toggle ─────────────── */}
+          {/* ── Experimental Features Toggle (dev-only, gated by ?dev=true) ─── */}
+          {devMode && (
           <div className={styles.section}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
               <span className={styles.sectionLabel} style={{ fontSize: '0.8rem' }}>
@@ -1067,15 +1462,7 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
               <button
                 onClick={handleExperimentalToggle}
                 type="button"
-                style={{
-                  padding: '2px 10px',
-                  fontSize: '0.75rem',
-                  borderRadius: 'var(--radius)',
-                  border: '1px solid var(--color-border)',
-                  background: experimentalFeatures ? 'var(--color-primary)' : 'var(--color-surface)',
-                  color: experimentalFeatures ? 'white' : 'var(--color-text-muted)',
-                  cursor: 'pointer',
-                }}
+                className={experimentalFeatures ? styles.toggleSwitchActive : styles.toggleSwitch}
               >
                 {experimentalFeatures
                   ? (lang === 'de' ? 'AN' : 'ON')
@@ -1090,46 +1477,12 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
               </p>
             )}
           </div>
+          )}
 
           </>}
 
           {/* ── TAB: Prompts ───────────────────────────────────── */}
           {settingsTab === 'prompts' && <>
-
-          {/* ── System Prompt — Cucumber Agent ───────────── */}
-          <div className={styles.section}>
-            <button
-              className={styles.promptToggle}
-              onClick={() => setPromptOpen(!promptOpen)}
-              type="button"
-            >
-              <span className={styles.sectionLabel}>
-                {promptCustomized ? t('settings.systemPromptCustomized') : t('settings.systemPrompt')}
-                {' '}— Cucumber Agent
-              </span>
-              <span className={styles.promptArrow}>{promptOpen ? '\u25B2' : '\u25BC'}</span>
-            </button>
-
-            {promptOpen && (
-              <div className={styles.promptEditor}>
-                <textarea
-                  className={styles.promptTextarea}
-                  value={promptText}
-                  onChange={(e) => setPromptText(e.target.value)}
-                  rows={16}
-                  spellCheck={false}
-                />
-                <div className={styles.promptActions}>
-                  <button className={styles.saveBtn} onClick={handlePromptSave} type="button">
-                    {t('settings.save')}
-                  </button>
-                  <button className={styles.clearBtn} onClick={handlePromptReset} type="button">
-                    {t('settings.reset')}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* ── Table-Identification Prompt — Cucumber Agent ─── */}
           <div className={styles.section}>
@@ -1197,6 +1550,86 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
                     {t('settings.reset')}
                   </button>
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Learning Suggestion Prompt — Cucumber Agent ───── */}
+          <div className={styles.section}>
+            <button
+              className={styles.promptToggle}
+              onClick={() => setLearningSuggestionPromptOpen(!learningSuggestionPromptOpen)}
+              type="button"
+            >
+              <span className={styles.sectionLabel}>
+                {learningSuggestionPromptCustomized ? 'Learning-Vorschlag Prompt ★' : 'Learning-Vorschlag Prompt'}
+                {' '}— Cucumber Agent
+              </span>
+              <span className={styles.promptArrow}>{learningSuggestionPromptOpen ? '\u25B2' : '\u25BC'}</span>
+            </button>
+
+            {learningSuggestionPromptOpen && (
+              <div className={styles.promptEditor}>
+                <textarea
+                  className={styles.promptTextarea}
+                  value={learningSuggestionPromptText}
+                  onChange={(e) => setLearningSuggestionPromptText(e.target.value)}
+                  rows={14}
+                  spellCheck={false}
+                />
+                <div className={styles.promptActions}>
+                  <button className={styles.saveBtn} onClick={handleLearningSuggestionPromptSave} type="button">
+                    {t('settings.save')}
+                  </button>
+                  <button className={styles.clearBtn} onClick={handleLearningSuggestionPromptReset} type="button">
+                    {t('settings.reset')}
+                  </button>
+                </div>
+                <p style={{ marginTop: 6, fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                  {lang === 'de'
+                    ? 'Hinweis: Verwende {{USER_TEXT}} als Platzhalter fuer die freie Eingabe aus dem Learning-Tab.'
+                    : 'Note: Use {{USER_TEXT}} as placeholder for the free-text input from the Learning tab.'}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* ── Feature Edit Prompt — Cucumber Agent ───── */}
+          <div className={styles.section}>
+            <button
+              className={styles.promptToggle}
+              onClick={() => setFeatureEditPromptOpen(!featureEditPromptOpen)}
+              type="button"
+            >
+              <span className={styles.sectionLabel}>
+                {featureEditPromptCustomized ? (lang === 'de' ? 'Feature-Edit Prompt ★' : 'Feature Edit Prompt ★') : (lang === 'de' ? 'Feature-Edit Prompt' : 'Feature Edit Prompt')}
+                {' '}— Cucumber Agent
+              </span>
+              <span className={styles.promptArrow}>{featureEditPromptOpen ? '\u25B2' : '\u25BC'}</span>
+            </button>
+
+            {featureEditPromptOpen && (
+              <div className={styles.promptEditor}>
+                <textarea
+                  className={styles.promptTextarea}
+                  value={featureEditPromptText}
+                  onChange={(e) => setFeatureEditPromptText(e.target.value)}
+                  rows={16}
+                  spellCheck={false}
+                />
+                <div className={styles.promptActions}>
+                  <button className={styles.saveBtn} onClick={handleFeatureEditPromptSave} type="button">
+                    {t('settings.save')}
+                  </button>
+                  <button className={styles.clearBtn} onClick={handleFeatureEditPromptReset} type="button">
+                    {t('settings.reset')}
+                  </button>
+                </div>
+                <p style={{ marginTop: 6, fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                  {lang === 'de'
+                    ? 'Platzhalter: {{CHANGE_REQUEST}} und {{CURRENT_FILE}} werden beim Editieren ersetzt.'
+                    : 'Placeholders: {{CHANGE_REQUEST}} and {{CURRENT_FILE}} are replaced during editing.'}
+                </p>
               </div>
             )}
           </div>
@@ -1301,8 +1734,8 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
                   onChange={e => setFieldRulesText(e.target.value)}
                 />
                 <div className={styles.promptActions}>
-                  <button className={styles.saveBtn} onClick={() => { const v = fieldRulesText.trim(); if (v === getDefaultFieldRules(currentLang).trim()) { clearCustomFieldRulesSetting(currentLang); setFieldRulesCustomized(false); } else { setCustomFieldRulesSetting(currentLang, v); setFieldRulesCustomized(true); } }} type="button">{t('settings.save')}</button>
-                  <button className={styles.clearBtn} onClick={() => { clearCustomFieldRulesSetting(currentLang); setFieldRulesText(getDefaultFieldRules(currentLang)); setFieldRulesCustomized(false); }} type="button">{t('settings.reset')}</button>
+                  <button className={styles.saveBtn} onClick={() => { const v = fieldRulesText.trim(); if (v === getDefaultFieldRules(currentLang).trim()) { clearCustomFieldRulesSetting(currentLang); setFieldRulesCustomized(false); } else { setCustomFieldRulesSetting(currentLang, v); setFieldRulesCustomized(true); } void persistSharedSettingsIfConfigured(); }} type="button">{t('settings.save')}</button>
+                  <button className={styles.clearBtn} onClick={() => { clearCustomFieldRulesSetting(currentLang); setFieldRulesText(getDefaultFieldRules(currentLang)); setFieldRulesCustomized(false); void persistSharedSettingsIfConfigured(); }} type="button">{t('settings.reset')}</button>
                 </div>
               </div>
             )}
@@ -1330,8 +1763,8 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
                   onChange={e => setQuickTestText(e.target.value)}
                 />
                 <div className={styles.promptActions}>
-                  <button className={styles.saveBtn} onClick={() => { const v = quickTestText.trim(); if (v === getDefaultQuickTestPrompt(currentLang).trim()) { clearCustomQuickTestSetting(currentLang); setQuickTestCustomized(false); } else { setCustomQuickTestSetting(currentLang, v); setQuickTestCustomized(true); } }} type="button">{t('settings.save')}</button>
-                  <button className={styles.clearBtn} onClick={() => { clearCustomQuickTestSetting(currentLang); setQuickTestText(getDefaultQuickTestPrompt(currentLang)); setQuickTestCustomized(false); }} type="button">{t('settings.reset')}</button>
+                  <button className={styles.saveBtn} onClick={() => { const v = quickTestText.trim(); if (v === getDefaultQuickTestPrompt(currentLang).trim()) { clearCustomQuickTestSetting(currentLang); setQuickTestCustomized(false); } else { setCustomQuickTestSetting(currentLang, v); setQuickTestCustomized(true); } void persistSharedSettingsIfConfigured(); }} type="button">{t('settings.save')}</button>
+                  <button className={styles.clearBtn} onClick={() => { clearCustomQuickTestSetting(currentLang); setQuickTestText(getDefaultQuickTestPrompt(currentLang)); setQuickTestCustomized(false); void persistSharedSettingsIfConfigured(); }} type="button">{t('settings.reset')}</button>
                 </div>
               </div>
             )}
@@ -1359,8 +1792,52 @@ export function SettingsPanel({ loggedIn, onLoginChange, model, onModelChange, o
                   onChange={e => setDeepTestText(e.target.value)}
                 />
                 <div className={styles.promptActions}>
-                  <button className={styles.saveBtn} onClick={() => { const v = deepTestText.trim(); if (v === getDefaultDeepTestPrompt(currentLang).trim()) { clearCustomDeepTestSetting(currentLang); setDeepTestCustomized(false); } else { setCustomDeepTestSetting(currentLang, v); setDeepTestCustomized(true); } }} type="button">{t('settings.save')}</button>
-                  <button className={styles.clearBtn} onClick={() => { clearCustomDeepTestSetting(currentLang); setDeepTestText(getDefaultDeepTestPrompt(currentLang)); setDeepTestCustomized(false); }} type="button">{t('settings.reset')}</button>
+                  <button className={styles.saveBtn} onClick={() => { const v = deepTestText.trim(); if (v === getDefaultDeepTestPrompt(currentLang).trim()) { clearCustomDeepTestSetting(currentLang); setDeepTestCustomized(false); } else { setCustomDeepTestSetting(currentLang, v); setDeepTestCustomized(true); } void persistSharedSettingsIfConfigured(); }} type="button">{t('settings.save')}</button>
+                  <button className={styles.clearBtn} onClick={() => { clearCustomDeepTestSetting(currentLang); setDeepTestText(getDefaultDeepTestPrompt(currentLang)); setDeepTestCustomized(false); void persistSharedSettingsIfConfigured(); }} type="button">{t('settings.reset')}</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Dialog-Katalog (Standard-abas-Meldungs-IDs) ───────────── */}
+          <div className={styles.section}>
+            <button
+              className={styles.promptToggle}
+              onClick={() => setDialogCatalogOpen(v => !v)}
+              type="button"
+            >
+              <span className={styles.promptTitle}>
+                {dialogCatalogCustomized ? '★ ' : ''}
+                {lang === 'de' ? 'Dialog-Katalog (Standard-IDs)' : 'Dialog Catalog (Standard IDs)'}
+              </span>
+              <span className={styles.promptArrow}>{dialogCatalogOpen ? '▴' : '▾'}</span>
+            </button>
+            {dialogCatalogOpen && (
+              <div className={styles.promptEditor}>
+                <div style={{ fontSize: '0.85em', opacity: 0.8, marginBottom: '0.5em' }}>
+                  {lang === 'de'
+                    ? 'Bekannte numerische abas-Standard-Dialog-IDs (z.B. "4841" bei Rechnungsbuchung). Werden beim Generieren in den User-Prompt injiziert — die KI kann die passende ID dann direkt verwenden. Individuelle Customizing-Dialoge (FOP-Boxen) laufen uebers Titel-Text, NICHT ueber diesen Katalog. JSON-Format: { "id": { "kontext": "...", "text": "...", "standardAntwort": "ja", "triggerCommand": "INVOICE" } }'
+                    : 'Known numeric abas standard dialog IDs (e.g. "4841" for invoice posting). Injected into the user prompt during generation — the AI can then use the right ID directly. Individual customizing dialogs (FOP boxes) are referenced by title text, NOT via this catalog. JSON format: { "id": { "kontext": "...", "text": "...", "standardAntwort": "ja", "triggerCommand": "INVOICE" } }'}
+                </div>
+                <textarea
+                  className={styles.promptTextarea}
+                  rows={12}
+                  value={dialogCatalogText}
+                  onChange={e => { setDialogCatalogText(e.target.value); setDialogCatalogError(null); }}
+                  spellCheck={false}
+                />
+                {dialogCatalogError && (
+                  <div style={{ color: 'var(--error, #c33)', fontSize: '0.85em', marginTop: '0.25em' }}>
+                    {lang === 'de' ? 'JSON-Fehler: ' : 'JSON error: '}{dialogCatalogError}
+                  </div>
+                )}
+                <div className={styles.promptActions}>
+                  <button className={styles.saveBtn} onClick={handleDialogCatalogSave} type="button">
+                    {t('settings.save')}
+                  </button>
+                  <button className={styles.clearBtn} onClick={handleDialogCatalogReset} type="button">
+                    {t('settings.reset')}
+                  </button>
                 </div>
               </div>
             )}

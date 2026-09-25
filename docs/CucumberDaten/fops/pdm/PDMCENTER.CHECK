@@ -1,0 +1,75 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PDMCENTER.CHECK
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.continue PRUEFP ? M|bfl & M|bneu & F|empty(M|artikelnr)
+..
+.. CHILD-selection
+.formula U|xtsel2       = "$,,"
+.formula U|xtsel2       = U|xtsel2 + ";vorart=94;imex=EX"  ? M|export
+.formula U|xtsel2       = U|xtsel2 + ";vorart=94;imex=IM"  ? M|import
+.formula U|xtsel2       = U|xtsel2 + ";id=" + H|id
+.formula U|xtsel2       = U|xtsel2 + ";text1=CHILD;text2="
+.load 5 edifact 'U|xtsel2'
+.. Fertigungsliste mit leerer StÅckliste -> zu END springen, keine PrÅfung
+.continue END ? _G|mehr
+..
+.load 5 line '5|selzeile'
+.continue ERROR1 ? _G|mehr
+.continue SEL    ? 5|text1<>"CHILD"
+.assign U|xpart  = 5|text2
+.copy U|xmehr    = G|mehr
+.continue SEL    ?  U|xmehr
+.continue PRUEFCHILD  ? _U|xmehr
+..
+!SEL: Artikel sind vorhanden (U|xmehr = G|TRUE)
+.load 5 line
+.continue END    ? _G|mehr
+.continue SEL    ? 5|text1<>"CHILD"
+.assign U|xpart  = 5|text2
+.copy U|xmehr    = G|mehr
+.continue SEL    ?  U|xmehr
+.continue PRUEFCHILD  ? _U|xmehr
+..
+!PRUEFCHILD: prÅfen, ob Artikel in Infosystem bereits liegt
+.formula U|xpart1 = 5|text2
+.continue PRUEFALL
+..
+!PRUEFP
+.formula U|xpart1 = 3|text2
+.continue PRUEFALL
+..
+!PRUEFALL
+.formula U|xtfreigeben = ""
+.formula U|xzn = M|zn
+.. IS durchlaufen
+.formula U|xtfreigeben = "icon:stop"
+.select screen header
+..
+!LOADSCREEN: Infosystemzeilen durchlaufen
+.select screen line
+.continue END                         ? _G|mehr
+.continue END                         ? _M|bartikel
+.continue LOADSCREEN                  ?  M|anummer <> U|xpart1
+.copy U|xtreffer = G|TRUE             ?  M|anummer =  U|xpart1
+.formula U|xtfreigeben = "icon:clock" ?  U|xtreffer
+.continue END                         ?  U|xtreffer
+.continue SEL
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR1
+.error Keine Artikelzeile fÅr Artikel '3|text2' gefunden!
+.continue
+..
+!ERROR2
+.error Artikel '5|text2' aus StÅckliste wurde noch nicht angelegt.
+.formula U|xtfreigeben = "icon:clock"
+.continue NOROW

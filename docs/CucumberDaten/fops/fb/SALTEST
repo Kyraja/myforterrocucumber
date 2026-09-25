@@ -1,0 +1,321 @@
+..!interpreter english translate
+..*****************************************************************************
+..
+..  Name      : SALTEST
+..  Datum     : 17.08.95
+..  Vers.     : 6.3
+..  Autor     : Andrzej Klusek
+..
+..  Verantwortlich : hc
+..  Kontrolle      : 
+..
+..
+..  Funktion  : SKLM-Verkehrszahlen testen
+..
+..  Ablauf    : Werkzeug zur öberprÅfung des Fibujournalverbuchers
+..
+..  Der Journalverbucher setzt die Verkehrzahlen aller Konten auf Null und
+..  bucht danach das gesamte Journal. Da wir nicht garantieren kînnen, da·
+..  die Verkehrszahlen integer sind, (sie lassen sich im Wartungsmodus
+..  manipuliern) mÅssen wir nach dem Verbuchen sagen kînnen, auf welchem
+..  Konto Differenzen zu vorher aufgetreten sind.
+..
+..  Vor und nach dem Journalbuchen werden die Verkehrszahlen, Anfangs-
+..  und Endsalden des aktuellen Jahres, fÅr die GeschÑftsmonate 1 - 12,
+..  in der aktuellen HauswÑhrung (aus Konfigurationsdatensatz),
+..  analog den LGP's LSS und VKZ in die Dateien SALTEST.DAT und SALTEST.TMP
+..  geschrieben, anschlie·end die Unterschiede der beiden Dateien
+..  (UNIX - diff) in eine weitere Datei SALTEST.DIFF ausgegeben.
+..
+..  Ist die Datei SALTEST.DAT bereits vorhanden, werden in der Datei
+..  SALTEST.DIFF, die Unterschiede zw. SALTEST.DAT und SALTEST.TMP
+..  ausgegeben. Anschlie·end wird SALTEST.TMP in SALTEST.DAT umbenannt.
+..
+..  Das bedeutet: SALTEST gibt in SALTEST.DIFF die Differenzen gegenÅber
+..  dem letzten Lauf von SALTEST aus (egal ob der Jounalverbucher bereits
+..  durchgefÅhrt wurde oder nicht).
+..
+..  SALTEST.DAT bzw. SALTEST.TMP sind w.f. aufgebaut:
+..  Verkehrszahlen, Anfangs- und Endsaldo (Soll und Haben) fÅr:
+..
+..  Konten
+..  -------- Summe Konten
+..
+..  Kunden
+..  -------- Summe Kunden
+..
+..  Lieferanten
+..  -------- Summe Lieferanten
+..  Mitarbeiter
+..  -------- Summe Mitarbeiter
+..  -------------- Summe Lieferanten und Mitarbeiter
+..
+..  In der Datei SALTEST.DIFF werden die sich entsprechenden Zeilen aus
+..  SALTEST.DAT und SALTEST.TMP die sich unterscheiden, jeweils nach-
+..  einander ausgegeben.
+..
+..*****************************************************************************
+..                           SUBROUTINE
+..                           ----------
+.input "ARB"
+..
+.. *** WAEHRUNG ***
+.input WAEHRUNG.INI
+.. *** WAEHRUNG - Ende ***
+..
+..*****************************************************************************
+.set trans +
+.type integer idatei
+.type text xoben:26 xford:8 xverb:8 xsford:8 xsverb:8
+.type real xgas xgah xges xgeh xgssum xghsum mas mes
+.type real xlgas xlgah xlges xlgeh xlgssum xlghsum
+.type real xmgas xmgah xmges xmgeh xmgssum xmghsum
+.type text xausgdat xtsaldo
+.type bool x1mehr
+..
+.formula xdat   = xarb + "SALTEST.DIFF"
+.formula xdat1  = xarb + "SALTEST.TMP"
+.formula xdat2  = xarb + "SALTEST.DAT"
+..
+!MENUE
+.formula xkom   = "test -s "+xdat2
+.system 'xkom' background
+.formula x1mehr = mehr
+..
+.output terminal
+.input BILD.F
+.occupy
+..
+                   Anfangssaldo, Verkehrszahlen und Endsaldo
+
+              fÅr Sachkonten, Kunden, Lieferanten und Mitarbeiter
+
+.menu AuswÑhlen
+Verkehrszahlen auf Datei (SALTEST.DAT) schreiben (vor JB)    >> .formula xwahl="A"
+Differenz der Verkehrszahlen zur Datei ausgeben (nach JB)    >> .formula xwahl="B"
+Alte Differenzliste (SALTEST.DIFF) nochmals ausgeben         >> .continue AUSDIFF
+Beenden                                                      >> .continue BEENDEN
+..
+.continue BEENDEN  ?  F|empty(G|menue)
+.continue TEST     ?  xwahl = "A"  ;  xwahl = "B"
+..
+!TEST
+'txname': Bitte warten
+
+..
+.continue FEHL  ?  xwahl = "B"  &  _x1mehr
+..
+.occupy "SaldoprÅfung lÑuft"
+.output new 'xdat1'
+.input "DATEI.F"
+..
+..  xdatei: FÅr welche Dateien? (K=Kund., L=Lief.,M=Mitar., S=Konten)
+.formula xdatei="SKLM"
+.formula xv="-Verkehrszahlen"
+..
+.select month     1 - 12
+..
+.select company "$,gruppe=7;@gruppe=7"
+.formula xford  = ford
+.formula xverb  = verb
+.formula xsford = sford
+.formula xsverb = sverb
+..
+!START1:
+.type bool xbu
+.formula x = xdatei<<1
+.formula xdatei= xdatei<<-1
+.continue ENDSUMME ? x=""
+..
+.formula xoben="Konten"         ? x="S"
+.formula xoben="Kunden"+xv      ? x="K"
+.formula xoben="Lieferanten"+xv ? x="L"
+.formula xoben="Mitarbeiter"+xv ? x="M"
+.formula uline="==========================="
+.formula ul=uline<<+xoben
+
+'mandant          '                  '                   xoben' 'adatum' - 'edatum'               '   datum'
+'txname     '                        '                      ul'
+
+  Nummer Name                            Anfangssaldo                   Verkehrszahlen                     Endsaldo
+                                      Soll           Haben            Soll           Haben            Soll           Haben
+ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+..
+!SKLM:
+.continue ENDSUMME ? x=""
+.formula y="!"
+.select account       'y' ?  x = "S"
+.select customer       'y' ?  x = "K"
+.select supplier   'y' ?  x = "L"
+.select employee 'y' ?  x = "M"
+.continue NO           ? _mehr
+.formula xbu = bu         ?  x = "S"
+.continue NDAT         ?  gruppe = 1  &  x = "S"  &  (xbu  ;  num = xford  ;  num = xverb  ;  num = xsford  ;  num = xsverb)
+.continue NDAT         ?  gruppe = 1
+..
+!NKON1: NÑchstes Konto
+.select account           ?  x = "S"
+.select customer           ?  x = "K"
+.select supplier       ?  x = "L"
+.select employee     ?  x = "M"
+.continue NO           ? _mehr
+.formula xbu = bu         ?  x = "S"
+.continue NDAT         ?  gruppe = 1  &  x = "S"  &  (xbu  ;  num = xford  ;  num = xverb  ;  num = xsford  ;  num = xsverb)
+.continue NDAT         ?  gruppe = 1
+..
+.continue NKON1
+..
+!NO: .......... Fehlermeldung nicht Åberschreiben
+.formula x=xdatei<<1
+.formula xdatei=xdatei<<-1
+.continue ENDSUMME ? x=""
+.continue START1
+..
+!NDAT: erster Datensatz aus nÑchster Datei
+.formula n=0
+.formula xgas=0
+.formula xgah=0
+.formula xges=0
+.formula xgeh=0
+.formula xgssum=0
+.formula xghsum=0
+.continue PRUEF
+..
+!NKON: NÑchstes Konto
+.select account        ?  x = "S"
+.select customer        ?  x = "K"
+.select supplier    ?  x = "L"
+.select employee  ?  x = "M"
+..
+!PRUEF
+.continue SUMME     ? _mehr
+.formula xbu = bu      ?  x = "S"
+.continue NKON      ?  gruppe <> 1  &  x = "S"  &  (_xbu  ;  num <> xford  ;  num <> xverb  ;  num <> xsford  ;  num <> xsverb)
+.continue NKON      ?  gruppe <> 1
+.continue NKON      ?  ssum = 0  &  hsum = 0  &  asaldo = 0
+..
+!DAUSZUG: Zeile ausgeben
+.formula n=n+1
+.formula mas=-asaldo
+.formula mes=-esaldo
+?'   num' 'nam              ' '      0asaldo'                 '        0ssum' '        0hsum' '      0esaldo'                 ? asaldo>0&esaldo>0
+?'   num' 'nam              ' '      0asaldo'                 '        0ssum' '        0hsum'                 '         0mes' ? asaldo>0&esaldo<=0
+?'   num' 'nam              '                 '         0mas' '        0ssum' '        0hsum' '      0esaldo'                 ? asaldo<=0&esaldo>0
+?'   num' 'nam              '                 '         0mas' '        0ssum' '        0hsum'                 '         0mes' ? asaldo<=0&esaldo<=0
+.formula xgas=xgas+asaldo ? asaldo>0
+.formula xgah=xgah-asaldo ? asaldo<=0
+.formula xges=xges+esaldo ? esaldo>0
+.formula xgeh=xgeh-esaldo ? esaldo<=0
+.formula xgssum=xgssum+ssum
+.formula xghsum=xghsum+hsum
+.continue NKON
+..
+!SUMME:
+.continue START1 ? n=0
+.continue STRICH ? n=1
+ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+?Summe                        '        0xgas' '        0xgah' '      0xgssum' '      0xghsum' '        0xges' '        0xgeh' ? xgas<>0;xges<>0;xgssum<>0
+.formula xas=xgas-xgah
+.formula mas=-xas
+.formula xes=xges-xgeh
+.formula mes=-xes
+.formula xtsaldo = "Saldo"
+?'xtsaldo '                   '         0xas'                                                 '         0xes'    ?   xas>0 & xes>0
+?'xtsaldo '                                   '         0mas'                                 '         0xes'    ?  xas<=0 & xes>0
+?'xtsaldo '                   '         0xas'                                                                 '         0mes'    ?xas>0&xes<=0
+?'xtsaldo '                                   '         0mas'                                                 '         0mes'    ?xas<=0&xes<=0
+..
+!STRICH:
+ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+..
+.formula xlgas = xgas     ? x="L"
+.formula xlgah = xgah     ? x="L"
+.formula xlgssum = xgssum ? x="L"
+.formula xlghsum = xghsum ? x="L"
+.formula xlges = xges     ? x="L"
+.formula xlgeh = xgeh     ? x="L"
+..
+.formula xmgas = xgas     ? x="M"
+.formula xmgah = xgah     ? x="M"
+.formula xmgssum = xgssum ? x="M"
+.formula xmghsum = xghsum ? x="M"
+.formula xmges = xges     ? x="M"
+.formula xmgeh = xgeh     ? x="M"
+..
+.continue ENDSUMME ? x = "M"
+.continue START1
+..
+!ENDSUMME
+.formula xgas = xlgas + xmgas
+.formula xgah = xlgah + xmgah
+.formula xgssum = xlgssum + xmgssum
+.formula xghsum = xlghsum + xmghsum
+.formula xges = xlges + xmges
+.formula xgeh = xlgeh + xmgeh
+..
+.continue DIFF ? xgas=0 & xgah=0 & xgssum=0 & xghsum=0 & xges=0 & xgeh=0
+..
+..
+*****************************               Lieferanten    +    Mitarbeiter    zusammen             ************************
+
+ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+?Summe                        '        0xgas' '        0xgah' '      0xgssum' '      0xghsum' '        0xges' '        0xgeh' ? xgas<>0;xges<>0;xgssum<>0
+.formula xas=xgas-xgah
+.formula mas=-xas
+.formula xes=xges-xgeh
+.formula mes=-xes
+.formula xtsaldo = "Saldo"
+?'xtsaldo '                   '         0xas'                                                 '         0xes'    ?   xas>0 & xes>0
+?'xtsaldo '                                   '         0mas'                                 '         0xes'    ?  xas<=0 & xes>0
+?'xtsaldo '                   '         0xas'                                                                 '         0mes'    ?xas>0&xes<=0
+?'xtsaldo '                                   '         0mas'                                                 '         0mes'    ?xas<=0&xes<=0
+..
+!STRICH1:
+ƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒƒ
+..
+!DIFF
+.continue ENDE  ?  xwahl = "A"
+..
+.output new 'xdat'
+.input "DATEI.F"
+                         Differenzliste              Stand: 'datum '
+                         ==============               Zeit: 'zeit  '
+
+.set background +
+.formula xkom = "diff "+xdat2+" "+xdat1+" | grep '^[<>]' >> "+xdat
+.system 'xkom'
+.formula xkom = "mv "+xdat1+" "+xdat2
+.system 'xkom'
+.set background -
+..
+!AUSDIFF
+.formula xkom = "test -s "+xdat
+.system 'xkom' background
+?                         Differenzliste nicht vorhanden  ? _mehr
+
+.output terminal ...   ? _mehr
+.continue MENUE   ? _mehr
+..
+.input DRUCKER
+.input BLANKOB.F
+.input 'xdat'
+.output terminal ...   ?  geraet = ""
+.continue MENUE
+..
+!FEHL
+.output terminal
+.input BILD.F
+                       Datei 'xdat2' nicht vorhanden
+
+                   Bitte zuerst folgenden MenÅpunkt ausfÅhren
+            Verkehrszahlen auf Datei (SALTEST.DAT) schreiben (vor JB)
+
+.output terminal ...
+.continue MENUE
+..
+!ENDE
+.formula xkom = "mv " + xdat1 + " " + xdat2
+.system 'xkom' background
+..
+!BEENDEN
+.end .

@@ -1,0 +1,84 @@
+..!interpreter english translate noabbrev
+.. ****************************************************************************
+.. FOP-Name       : OVWLAYGEN
+.. Autor          : mg
+.. Verantwortlich : mg
+.. Kontrolle      : TeamReport
+.. Funktion       : Dieses FOP ist der Ausgangspunkt fÅr das Erzeugen der
+..                  OVW-Layoutdatei eines Infosystems.
+.. ****************************************************************************
+.set trans -
+..
+.. Declarations
+.type text xisnum       ? _F|defined(U|xisnum)
+.type text xovrgenfop   ? _F|defined(U|xovrgenfop)
+.type text xmainfile    ? _F|defined(U|xmainfile)
+.type text xovrfile     ? _F|defined(U|xovrfile)
+.type text xstdoutfile  ? _F|defined(U|xstdoutfile)
+.type text xstderrfile  ? _F|defined(U|xstderrfile)
+.type text xkanalsuch   ? _F|defined(U|xkanalsuch)
+.type text xgendir      ? _F|defined(U|xgendir)
+..
+.. Load infosystem
+.formula U|xisnum = F|trim(M|nummer) ? F|empty(U|xisnum)
+.select infosystem 'U|xisnum'
+.continue ERROR01 ? _G|mehr
+..
+.. Initializations
+.formula U|xkanalsuch = "ONLINEVIEW"
+..
+.. Files
+.file -tempname U|xstdoutfile
+.file -tempname U|xstderrfile
+.formula U|xmainfile = -H|arb + -H|such
+.formula U|xovrfile = U|xmainfile + ".OVR"
+.file -tempname U|xovrgenfop
+.formula U|xgendir = "gen/ovw/layout/" + H|arb
+..
+.. Create gen directory and remove old OVR file there
+.system 'F|formatstr("mkdir -p {1}", U|xgendir)' background
+.system 'F|formatstr("rm -f {1}/{2}", U|xgendir, U|xovrfile)' background
+..
+.. Create generator fo program xovrgen
+.input "is/INFOSYS.OVRGEN"
+.output new WERF.WEG
+..
+.. Execute generator fo program to get layout file
+.input 'U|xovrgenfop'
+.output new WERF.WEG
+..
+.. Force move of layout file from tmp to gen directory
+.system 'F|formatstr("mv -f rmtmp/{1} {2}/{3}", U|xovrfile, U|xgendir, U|xovrfile)' background
+..
+.. Check result files
+.continue ERROR02 ? _F|fileexists(F|formatstr("{1}/{2}", U|xgendir, U|xovrfile))
+.continue CHCKERR
+..
+!CHCKERR: Check existance of error file
+.continue SHOWERR ? F|filenotempty(U|xstderrfile)
+.continue END
+..
+!SHOWERR: Convert error file and show error messages
+.output terminal
+.format ABAS
+.system 'F|formatstr("s3_conv 11 {1}", U|xstderrfile)' background
+..
+'U|xstderrfile'
+=================
+.input -text 'U|xstderrfile'
+.continue BREAK
+.. ****************************************************************************
+!END
+.end 0
+.. ****************************************************************************
+..
+!ERROR01: Missing infosystem!
+.error -message Das Infosystem 'U|xisnum' wurde nicht gefunden!
+.continue BREAK
+..
+!ERROR02: Error occurs while generating layout!
+.error -message Achtung! Fehler bei der Generierung des OnlineView-Layouts.
+.continue CHCKERR
+..
+!BREAK
+.end 1

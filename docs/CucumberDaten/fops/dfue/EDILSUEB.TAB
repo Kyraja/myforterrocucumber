@@ -1,0 +1,89 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDILSUEB.TAB
+.. Autor          : tg/mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Zeilen-FOP fÅr Infosystem EDILSUEB
+.. Functionality  : row efop for infosystem EDILSUEB
+..*****************************************************************************
+.set trans -
+..
+.. same color for rows of same delivery note
+.input "is/ABASFARBEN.DEF"
+.type text xtfarbe   ? _F|defined(U|xtfarbe)
+.formula U|xtfarbe = ""                  ?  U|xtfarbe = U|xabasgrouplight
+.formula U|xtfarbe = U|xabasgrouplight   ?  U|xtfarbe = U|xabasgroupdark 
+.formula U|xtfarbe = U|xabasgroupdark    ?  U|xtfarbe = ""
+..
+.make screen line +O
+.colour -foreground -1 -1 -1 -background 'U|xtfarbe' 'M|aktzeile'
+.assign M|tvorgang   = H|id
+.assign M|tlsdat     = H|vom
+.assign M|tkunde     = H|kunde
+.formula   M|twerk      = H|werk
+.formula   M|tablstelle = H|ablstelle
+..
+!NEXT
+.select line
+.continue END     ? _G|mehr
+.continue NEXT    ?  H|typ<>arpos
+.continue NEXT    ?  H|art^packmit
+.continue NEXT    ?  H|mge=0
+.. add new row if delivery note has more than one row with products
+.make screen line +O  ? _F|empty(M|tart)
+.colour -foreground -1 -1 -1 -background 'U|xtfarbe' 'M|aktzeile'
+..
+!DATA
+.assign M|tart       = H|art
+.formula M|tkuart    = H|zkuartnr
+.formula M|tapreis   = H|orig^preis   ? +H|orig<>0
+.formula M|tauftr    = H|orig^kopf
+.formula M|tapreis   = H|preis        ? +H|orig=0
+.formula M|tpreis    = H|preis
+.formula M|tland     = H|pland
+.assign M|trahmen    = H|zrahmen
+.formula M|tlsid     = H|id
+.formula M|tofmge    = H|limge - H|mge
+.formula M|tmge      = H|mge
+.copy M|the          = H|he
+.assign M|tsped      = H|kopf^sped
+.formula M|maxmge    = H|zrahmenpos^maxabrufmge
+..
+.. savings?
+.continue ESAV    ?  F|empty(H|zrahmen)
+.type text U|xtsel ? _F|defined(U|xtsel)
+.formula U|xtsel = "$,,;@gruppe=2;kopf=" + H|zrahmen^id + ";artex=" + H|artex^id + ";kotyp=(BlanketOrder);kunde=" + H|zrahmen^kunde^id
+.formula U|xtsel = U|xtsel + ";kovom=" + H|zrahmen^vom:8
+.load 1 nolock sales 'U|xtsel'
+.continue ESAV  ? _G|mehr
+.continue ESAV  ? _1|savings
+.formula M|showicon = G|icovkrit
+.formula M|showicon = G|icokrit    ?  H|kopf^prg <> H|zrahmen^nummer
+.. Find current "savings" price
+.. Note: prices are calcualted, even if flagged red!
+.input "is/PREISAUSKUNFT"     ? _F|defined(U|xpakl)
+.assign U|xpakl = H|kunde^id
+.assign U|xpaklprg = H|zrahmen^nummer
+.assign U|xpaartikel = H|artikel^id
+.assign U|xpamge = H|mge
+.assign U|xpaland = H|kopf^land^id
+.assign U|xpamge = 1.0        ? F|empty(U|xpamge)
+.assign U|xpakonddat = G|datum
+.assign U|xpaignrahmen = G|FALSE
+.input "is/PREISAUSKUNFT"
+.assign M|tpreis = U|xpapreis
+..
+!ESAV
+.load 1
+..
+.. repeat header data
+.assign M|tvorgang   = H|kopf^id
+.assign M|tlsdat     = H|kopf^vom
+.assign M|tkunde     = H|kopf^kunde
+.formula M|twerk     = H|kopf^werk
+.formula M|tablstelle = H|kopf^ablstelle
+.continue NEXT
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,130 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SERVICEKETTE.EV
+.. Autor          : cl
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Je Ereigniseintritten an bestimmten Eingabefeldern wird
+.. Funktionalitaet verteilt:
+.. Maskeneintritt          -> Maskengrundeinstellung
+.. Feldaustritt Vorgang    -> Maske leeren und Info
+.. Feldaustritt Richtgung  -> Verfolgungsrichtung fixieren
+.. Buttonnach Startbutton  -> Berichtserstellung
+.. Buttonnach Selektieren  -> Vorgang/Position selektieren und neu starten.
+..
+.. Ablauf         : Zentrales EFOP
+...Includes       :
+.. include ser/SERVICEKETTE.BSTART.BN
+..*****************************************************************************
+.type text xtext ? _F|defined(U|xtext)
+..
+.set trans -
+..---------------------------- Mask: ------------------------------------------
+.continue ENTER   ? G|evtartengl = "SCREEN_ENTER"
+..---------------------------- Header: ----------------------------------------
+.continue START   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+.continue DETAILS ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "svorgang"
+.continue DIRECT  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "richtung"
+..---------------------------- Table: -----------------------------------------
+.continue NEWDOCU ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "buneustart"
+.continue NEWITEM ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "buposstart"
+..=============================================================================
+.continue END
+..
+!ENTER: Initialize mask buffer while entering screen
+.assign M|richtung = "(1)"
+.copy M|rueckw   = G|TRUE
+.copy M|vorw     = G|FALSE
+.. TRUE: ich bin ein Serviceangebot
+.copy M|bservice = G|FALSE
+.continue CLRTAB
+..
+!DETAILS: Details of document or item
+.copy M|bservice = G|FALSE
+.continue CLRHEAD                ? F|empty(M|svorgang)
+.copy M|bservice = G|TRUE  ? M|svorgang^dnr=122
+.continue SVORGANG               ? M|bservice
+.. 1= Einkauf oder Verkauf, 2= Position
+.continue ERROR04 ? M|svorgang^gruppe <> 1 & M|svorgang^gruppe <> 2
+.formula M|vorgart = M|svorgang^typa
+.continue COMMON ? M|svorgang^gruppe = 2
+.set trans +
+.formula M|vorgart = "Rahmenauftrag" ? M|svorgang^typ = G|RAKO
+.set trans -
+.continue COMMON
+..
+!SVORGANG
+.translate -language 'G|bsprache' -dictionary tx -text "Serviceanfrage" -variable U|xtext
+.formula M|vorgart   = 'U|xtext'  
+.assign M|richtung = "(0)"
+.copy M|vorw     = G|TRUE
+.copy M|rueckw   = G|FALSE
+.continue COMMON
+..
+!COMMON
+.continue SERVICE                       ? M|bservice
+.formula M|kerfass = M|svorgang^vom
+.formula M|kerfass = M|svorgang^erfass ? F|empty(M|kerfass)
+.assign M|ksuch = M|svorgang^kl     ? F|defined(M|svorgang^kl)
+.assign M|kname = M|ksuch^sucherw
+.continue CLRTAB
+..
+!SERVICE
+.formula M|kerfass = M|svorgang^anferfd
+.assign M|ksuch = M|svorgang^kunde
+.assign M|kname = M|svorgang^kname
+.continue CLRTAB
+..
+!CLRHEAD: Clear header
+.input "is/KOPFLEEREN"
+.copy M|rueckw   = G|FALSE
+.copy M|vorw     = G|TRUE
+.assign M|richtung = "(0)"
+.copy M|bservice = G|FALSE
+.continue CLRTAB
+..
+!CLRTAB: Clear table
+.input "is/TABLEEREN"
+.continue END
+..
+!DIRECT: Change direction
+.copy M|rueckw = F|value(M|richtung,"AU50") = "(1)"
+.copy M|vorw   = F|value(M|richtung,"AU50") = "(0)"
+.continue CLRTAB
+..
+!START: Start report
+.continue ERROR01 ? F|empty(M|svorgang)
+.assign M|select = M|svorgang^id
+.input "ser/SERVICEKETTE.BSTART.BN"
+.type text xturl2
+.formula U|xturl2    = "http://" + 'E|BAPPS_HOST' + ":9280/erprest-2/aba/abas/erp/ProcessChain?process="+'M|svorgang^id'+"&abaLayout=abaMinimal&view=service"
+.formula M|bappkette = 'U|xturl2'
+.continue END
+..
+!NEWDOCU: Select document from table row
+.continue ERROR02 ? F|empty(M|tvorgang)
+.copy M|svorgang = M|tvorgang
+.copy M|bservice = G|FALSE
+.continue DETAILS
+..
+!NEWITEM: Select item from table row
+.continue ERROR02 ? F|empty(M|tvorp)
+.copy M|svorgang = M|tvorp
+.continue DETAILS
+..
+!END
+.continue
+..
+.set trans +
+!ERROR01: Missing input!
+.error -field M|svorgang -message Die Auswahl ist unvollstÑndig. Bitte ergÑnzen!
+.end 1
+..
+!ERROR02: Selection failed!
+.error Auswahl konnte nicht durchgefÅhrt werden!
+.end 1
+..
+!ERROR04: Illegal input!
+.error -field M|svorgang -message Auswahl ist nicht zulÑssig!
+.formula M|svorgang = ""
+.end 1

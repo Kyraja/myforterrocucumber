@@ -1,0 +1,62 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : CASHMGMT.SELECT.PS.PURCH
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Selektion und Ausgabe von Einkaufsvorgaengen im Rahmen der Liquiditaetsplanung
+.. Functionality  :
+.. include fb/CASHMGMT.SELECT.PS.COMMON
+.. include fb/CASHMGMT.CHECK.ACCOUNT.EXCLUDED
+.. include fb/CASHMGMT.SELECT.VARS.RESET
+..*****************************************************************************
+..
+.set trans -
+..
+.input "fb/CASHMGMT.SELECT.VARS.RESET"
+..
+.continue END ? _F|empty(U|xpdocument) & U|xpdocument^dnr<>4
+..
+.type bool xbredataktdat ? _F|defined(U|xbredataktdat)
+..
+.formula   U|xepurchsales = "(Purchasing)"
+.copy U|xbredataktdat = U|xpszenario^ekredataktdat
+..
+.formula   U|xtselect = F|formatstr("$,@gruppe=22.23.24;@ablageart=(1);vsperre={1};zasperre={1}", F|condexpr(U|xbshowall, "", G|false))
+.formula   U|xtselect = U|xtselect + ";id=" + 'U|xpdocument^id' ? _F|empty(U|xpdocument) & U|xpdocument^gruppe = 1
+.load 0 nolock purchasing 'U|xtselect'
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+.continue END  ? _G|mehr
+.continue NEXT ?  0|typ=G|LIKO & _0|fakt
+.copy U|xbintercompany = 0|inkkreis
+.continue NEXT ?  U|xeintercompany = "(OnlyIntercompanyProcesses)" & _U|xbintercompany
+.continue NEXT ?  U|xeintercompany = "(NoIntercompanyProcesses)"   &  U|xbintercompany
+.load 1
+.continue OK ? F|empty(0|lief2) ; 0|lief2^gruppe <> 1
+.load 1 add 0|lief2
+.input "fb/CASHMGMT.CHECK.ACCOUNT.EXCLUDED"
+.continue NEXT ? _U|xbok
+..
+..*****************************************************************************
+!OK
+..*****************************************************************************
+.. Karenztage ermitteln (aus Konfiguration, Kunde bzw. Lieferant)
+.formula   U|xikarenztage = F|condexpr(U|xpszenario^liignorieren ; _1|lqparamaktiv, U|xpszenario^eklsrektage, F|condexpr(1|lqparamaktiv, 1|lsrektage, U|xpszenario^eklsrektage))
+..
+.input "fb/CASHMGMT.SELECT.PS.COMMON"
+.continue NEXT
+..
+..*****************************************************************************
+!NEXT
+..*****************************************************************************
+.load 0 continue
+.continue LOOP
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.load 0
+.continue
+

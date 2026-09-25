@@ -1,0 +1,83 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : HOL.CHARGE
+.. Autor          : doe/bs
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Datenbeschaffung von Chargen durch Auswahl von Zu- und Abgangs-
+.. bewegungen einer Startcharge und sequentielles Mischen der gefundenen Journale
+.. nach dem jeweiligen Buchungsdatum. Umlagerungen werden nur 1x gezeigt. Vorhandene
+.. Kriterien in M|select werden bercksichtigt, Schlssel hingegen berschrieben.
+.. Function       : Loading data of lots. Existing query criteria in M|select
+.. will be included. Not so sort key options. They will be overwritten here.
+..*****************************************************************************
+.set trans -
+..
+.continue ERROR1 ? F|empty(M|select)
+..
+.. Declarations
+.type integer  xrecissue ? _F|defined(U|xrecissue)
+.type integer  xrecrecpt ? _F|defined(U|xrecrecpt)
+.type integer  xsortdate ? _F|defined(U|xsortdate)
+.type integer  xz        ? _F|defined(U|xz)
+.type text xi        ? _F|defined(U|xi)
+.type AS50  xdirect  ? _F|defined(U|xdirect)
+..
+.assign U|xz = 0
+.assign U|xdirect = "(Forwards)"
+.continue RPTLOT ? _F|defined(M|richtung)
+.copy U|xdirect = M|richtung
+..
+!RPTLOT: Load receipt lot in buffer 1. (Last sort key wins)
+.load 1 journal 'F|expr(M|select + ";ncharge=" + M|charge^id + ";@zeilen=ja;@gruppe=1;@ablageart=(Both);@ordnung=budat,sn")'
+!RPTCHCK
+.continue ISSLOT ? _G|mehr
+.assign U|xrecrecpt = (('1|id' >> "(") << ",")
+.continue ERROR2 ? _G|mehr
+.assign U|xsortdate = 1|budat:8
+.continue ERROR3 ? _G|mehr
+.formula U|xz = U|xsortdate + U|xrecrecpt
+.type ID10 xjournalid.xz ? _F|defined(U|xjournalid.U|xz)
+.copy U|xjournalid.U|xz = 1|id
+.load 1 journal
+.continue RPTCHCK
+..
+!ISSLOT: Load issue lot in buffer 2. (Last sort key wins)
+.load 2 journal 'F|expr(M|select + ";vcharge=" + M|charge^id + ";@zeilen=ja;@gruppe=1;@ablageart=(Both);@ordnung=budat,sn")'
+!ISSCHCK
+.continue READ ? _G|mehr
+.assign U|xrecissue = (('2|id' >> "(") << ",")
+.continue ERROR2 ? _G|mehr
+.assign U|xsortdate = 2|budat:8
+.continue ERROR3 ? _G|mehr
+.formula U|xz = U|xsortdate + U|xrecissue
+.type ID10 xjournalid.xz ? _F|defined(U|xjournalid.U|xz)
+.copy U|xjournalid.U|xz = 2|id
+.load 2 journal
+.continue ISSCHCK
+..
+!READ: Read lots
+.assign U|xi = ""
+!LOTLOOP
+.assign U|xi = F|nextelem(U|xjournalid, U|xi, U|xdirect = "(Forwards)")
+.continue END ? F|empty(U|xi)
+.select object 'U|xjournalid.U|xi'
+.continue LOTLOOP ? _G|mehr
+.input 'M|tab'
+.continue LOTLOOP
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1: Query is empty!
+.error -message Keine Selektionsparameter gesetzt.
+.end 1
+..
+!ERROR2: Record number is not parseable into integer value!
+.error -message Die Satznummer ist nicht nummerisch!
+.end 1
+..
+!ERROR3: Booking date is not parseable into integer value!
+.error -message Das Buchungsdatum kann nicht in eine Ganzzahl gewandelt werden!
+.end 1

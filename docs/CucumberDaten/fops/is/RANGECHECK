@@ -1,0 +1,123 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : RANGECHECK
+..  Datum          : 15.04.2004
+..  Version        : 1
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : tiwe
+..  Funktion       : In Infosystemen tritt das Problem auf, dass eine Bereichs-
+..                   eingabe in einem "von"- und einem "bis"-Feld auf GÅltig-
+..                   keit geprÅft werden muss. Beide Felder mÅssen entweder
+..                   mit einer Nummer oder einem Buchstaben beginnen, damit
+..                   sie gÅltige Identnummer bzw. Suchworte sind.
+..                   Beide Felder kînnen leer sein. Das Problem tritt
+..                   eigentlich nur bei rohlingsloser Selektion auf, d.h.
+..                   dass zusÑtzliche Kriterien direkt in der Abfrage an das
+..                   DBMS weitergereicht werden.
+..
+..
+..  Schnittstelle (Parameter und ihre Bedeutung)
+..    verwendet Arrayparameter (arg.i)          : nein
+..    verwendet Namensparameter (xpname=wert)   :
+..
+..    Parameter    Bedeutung
+..    ---------------------------------------------------------
+..    xpvon        Feldname im Kopfteil der Infosystem-Maske mit der unteren
+..                 Grenze der Selektion (bevon, falls nicht definiert)
+..    xpbis        Feldname im Kopfteil der Infosystem-Maske mit der oberen
+..                 Grenze der Selektion (bebis, falls nicht definiert)
+..
+..  Ablauf         :
+..
+..  Functionality  : Sometimes you need a range check in an infosystem to
+..                   check wether a range with a "from"-field and a "to"-
+..                   field is valid. Both fields contents have to start
+..                   with a number or a letter to represent a valid range
+..                   of ident numbers or serach word. Both fields can also
+..                   be empty. This problem only occurs if you wish to pass
+..                   some additional criteria to the DBMS in you selection.
+..
+..  Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    ---------------------------------------------------------
+..    xp...        ...
+..
+..  Program flow  :
+... Includes      :
+..*****************************************************************************
+.type text xpvon    ? _F|defined(U|xpvon)
+.type text xpbis    ? _F|defined(U|xpbis)
+.type text xxtfield ? _F|defined(U|xxtfield)
+..
+.type bool xxbswf   ? _F|defined(U|xxbswf)
+.type bool xxbswt   ? _F|defined(U|xxbswt)
+.type bool xxbisnum ? _F|defined(U|xxbisnum)
+..
+.type NT15 xpvonnormt ? _F|defined(U|xpvonnormt)
+.type NT15 xpbisnormt ? _F|defined(U|xpbisnormt)
+..*****************************************************************************
+..
+.set trans -
+..
+.formula U|xxbisnum = G|false
+..
+.formula U|xpvon    = "bevon" ? F|empty(U|xpvon)
+.formula U|xpbis    = "bebis" ? F|empty(U|xpbis)
+.formula U|xxtfield = "such"
+..
+.continue ? F|empty(M|.U|xpvon) & F|empty(M|.U|xpbis)
+
+.formula U|xpvonnormt = M|.U|xpvon
+.formula U|xpbisnormt = M|.U|xpbis
+..
+.formula U|xxbswf = _(U|xpvonnormt / "(0-9)*")
+.formula U|xxbswt = _(U|xpbisnormt / "(0-9)*")
+..
+.continue RANGE  ? U|xxbswf & U|xxbswt
+.continue ERROR1 ? U|xxbswf <> U|xxbswt & _F|empty(U|xpvonnormt) & _F|empty(U|xpbisnormt)
+..
+.. No search word
+.formula U|xxbswf = (U|xpvonnormt / "(0-9)*")
+.formula U|xxbswt = (U|xpbisnormt / "(0-9)*")
+..
+.formula U|xxtfield = "nummer" ? U|xxbswf ; U|xxbswt
+..
+.formula U|xxbisnum = G|true ? (U|xxbswf ; F|empty(U|xpvonnormt)) & (U|xxbswt ; F|empty(U|xpbisnormt))
+..
+.continue RANGE       ? U|xxbisnum
+.continue ERROR1      ? U|xxbswf <> U|xxbswt
+..
+..*****************************************************************************
+!RANGE: Check wether "from" is less or equal "to"
+..*****************************************************************************
+.continue ? F|empty(M|.U|xpvon) ; F|empty(M|.U|xpbis)
+.. normalize the search word or ident number to 15 characters length
+.type text xxt1 ? _F|defined(U|xxt1)
+.type text xxt2 ? _F|defined(U|xxt2)
+..
+.formula U|xxt1 = "               " +  'U|xpvonnormt' ? U|xxbisnum
+.formula U|xxt2 = "               " +  'U|xpbisnormt' ? U|xxbisnum
+.formula U|xxt1 = U|xxt1 >> 15
+.formula U|xxt2 = U|xxt2 >> 15
+..
+.continue ERROR2 ?  U|xxbisnum & (U|xxt1 > U|xxt2)
+.continue ERROR2 ? _U|xxbisnum & -(U|xpvonnormt) > -(U|xpbisnormt)
+.continue
+..
+..
+..*****************************************************************************
+!ERROR1: Types do not match
+..*****************************************************************************
+.error -line 0 -field 'U|xpvon' -message Bereich darf entweder nur Suchworte oder nur Identnummern enthalten
+.end 1
+..
+..*****************************************************************************
+!ERROR2: Range not correct
+..*****************************************************************************
+.error -line 0 -field 'U|xpvon' -message UngÅltiger Bereich
+.end 1
+

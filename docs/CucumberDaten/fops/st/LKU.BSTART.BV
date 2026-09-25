@@ -1,0 +1,106 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : LKU.BSTART.BV
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Bestimmt aus den Eingabefeldern die Datenbankanfrage.
+.. Ablauf         : Button-vor-EFOP
+..
+.. Functionality  : Gets database query from the input fields.
+.. Program flow   : Button after efop
+..*****************************************************************************
+.set trans -
+..
+.. Validate input parameters
+.continue ERROR01 ? _(M|bkunde ; M|bsach ; M|binteressent ; M|bisach) & _M|selektion
+.formula M|grliste = M|isref^grliste
+..
+!CLRTAB: Clear table
+.make screen line -- ? M|tzeilen > 0
+.continue END ? M|selektion
+..
+.. Configure list of groups
+.formula M|grliste = 'M|datnr' + ":"
+.continue CUSTOM ? M|bkunde
+..
+!NEXT1
+.continue CUSTAFF ? M|bsach
+!NEXT2
+.continue INTERST ? M|binteressent
+!NEXT3
+.continue INSTAFF ? M|bisach
+.continue AREA
+..
+!CUSTOM
+.formula M|grliste = M|grliste + "1"
+.continue NEXT1
+..
+!CUSTAFF
+.continue NEXT2 ? M|bkunde & M|zuordnen
+.formula M|grliste = M|grliste + "." ? F|strindex(M|grliste, ":") <> F|length(M|grliste)
+.formula M|grliste = M|grliste + "2"
+.continue NEXT2
+..
+!INTERST
+.formula M|grliste = M|grliste + "." ? F|strindex(M|grliste, ":") <> F|length(M|grliste)
+.formula M|grliste = M|grliste + "6"
+.continue NEXT3
+..
+!INSTAFF
+.continue AREA ? M|binteressent & M|zuordnen
+.formula M|grliste = M|grliste + "." ? F|strindex(M|grliste, ":") <> F|length(M|grliste)
+.formula M|grliste = M|grliste + "7"
+..
+!AREA: Validate area
+.continue BUILD ? F|empty(M|kkundevon) & F|empty(M|kkundebis)
+.type P0 xcheck
+.assign U|xcheck = "$,,;@gruppe=1.2.6.7;@numsuch=" + M|kkundevon + "!" + M|kkundebis + ";@lesen=" + 'G|FALSE'
+.continue ERROR02 ? _G|mehr
+..
+!BUILD: Build query
+.formula M|stufe = 0
+.formula M|select = "$,,"
+.continue REGION ? F|empty(M|staat)
+.formula M|select = M|select + ";staat=" + M|staat^id
+..
+!REGION
+.continue LOCATIN ? F|empty(M|region)
+.formula M|select = M|select + ";region=" + M|region^id
+..
+!LOCATIN
+.continue POSTCDE ? F|empty(M|knort)
+.formula M|select = M|select + ";nort=" + M|knort
+..
+!POSTCDE
+.continue NUMSUCH ? F|empty(M|kplz)
+.formula M|select = M|select + ";plz=" + M|kplz
+
+!NUMSUCH
+.continue ATTRES ? F|empty(M|kkundevon) & F|empty(M|kkundebis)
+.formula M|select = M|select + ";@numsuch=" + M|kkundevon + "!" + M|kkundebis
+..
+!ATTRES: Attributes
+.. Setting attributes
+.type integer xi ? _F|defined(U|xi)
+.assign U|xi = 1
+..
+!FOR
+.continue END ? U|xi > 6
+.formula M|select = M|select + ";merkmal" + 'U|xi' + "=" + M|merkmal.U|xi^id ? _F|empty(M|merkmal.U|xi)
+.formula U|xi = U|xi + 1
+.continue FOR
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR01: No database!
+.error -field M|bkunde -message Es fehlt die Angabe einer Kundengruppe!
+.end 1
+..
+!ERROR02: Wrong area!
+.. Standardmeldung aufheben.
+.error
+.cursor kkundevon
+.end 1

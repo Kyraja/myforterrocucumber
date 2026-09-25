@@ -1,0 +1,1081 @@
+..!interpreter german translate declaration noabbrev
+..*****************************************************************************
+.. Name           : owfo/YXMLIMPORT.BUVOR
+.. Datum/Date     : OKT. 2008           Mai 2016
+.. Version        : 2008r4              2016R4 
+.. Autor/Author   : Reinhard AndrÇ
+.. Copyright      : (c) 2008 2016
+.. Funktion       : Anhand des Regelwerkes aus der MaximalstÅckliste eine AuftragsstÅckliste erzeugen
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..    verwendet Arrayparameter (arg.i)          : nein
+..    verwendet Namensparameter (xpname=wert)   : nein
+..
+..    Parameter    Bedeutung
+..    -------------------------------------------------------------------------
+..
+.. Ablauf         : Erzeugung der XML-Datei fÅr Import in Editierbare AuftragsstÅckliste.
+..                  Durchlaufen der Struktur des Positionsartikels.
+..                  öberprÅfung der zu Åbernehmenden Positionen anhand der ausgewÑhlten Merkmale.
+..                  Merkmale sind in der ZusatzDB in der Kopfvariablen "yausgewaehlt"
+..                  Die Regeln sind din der ArtikelsFertigungsliste in 20 Verweisfeldern (Zusatzposition) und
+..                  20 Definitionsfeldern fÅr die Rechenregel hinterlegt.
+..                  Die wesentlichen Regeln sind:
+..                  Position ohne Regel kommt immer mit
+..                  Absteigen in der Struktur nur bei Dispoart V
+..                  KO-Kriterium hat Vorrang, trifft es nicht zu, bleibt die Position drin.
+..                  Der Default-Wert bei "muss mit" ist: geht nicht mit.
+..                  FÅr beide Regeln wird "und" und "oder" abgefragt.
+..
+..                  Programm kann nur im Zeigen-Modus laufen.
+..
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..****************************************************************************
+..
+.. Variablen
+..
+..
+.art text       xagw    xdatei  xtxml  xdsys  xtrow xdprotokollis xpfad
+.art int        xebene  xposnum.xebene
+.art P2:1       xvart
+.art P3:1       xvkopf
+.art P3:2       xvpos
+.art bool       xbaufloesen.xebene
+..
+..
+..
+..
+.weiter F1  ?  evtkommd <> "zeigen"
+..
+..
+.. Aus Zusatzdatei die gewÑhlten Merkmale (IDs der Zusatzpositionen) beschaffen.
+..
+.weiter F2  ?  m|ykonfigurat               = ""
+.weiter F3  ? 'm|ykonfigurat^yausgewaehlt' = ""
+..
+.fo xagw    = 'm|ykonfigurat^yausgewaehlt'
+..
+.weiter F4  ?  _m|ykonfigurat^yabgeschlossen
+..
+..
+.. Initialisierung 
+..
+.trenner
+.fo xtxml           = "SALES_XMLVKPOS.XML"
+.fo xdatei          = "tmp/X.XML." + 'aufrufernr' + ".TMP"
+.fo xdprotokollis   = "tmp/X.PROTXML.IMPORT"
+.fo xvkopf          = m|kopf
+.fo xvpos           = 'm|id'
+.fo xvart           = 'm|artex^nummer'
+.fo xebene          = 1
+.fo xtrow           = ""
+.art text  xpfad.xebene
+.fo xpfad.xebene    =  'm|artex^nummer'
+..
+..
+.art int     xposnum.xebene
+..
+..
+.ein DATEI.F
+.aus auf 'xdprotokollis'
+KOPF # 'm|id' # 'm|kunde^id' # 'm|artex^id'
+.aus auf 'xdatei'
+..
+..
+.. Abstieg in Positionsartikel
+..
+.hol dazu m|artex
+..
+..
+...........Initialisierungszeilen an XML-Datei ausgeben
+...........In ASTL springen und Zeilen lîschen (<Row number="" id="*" operation="-">)
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+<!-- <?xml-stylesheet href="selfxml.xsl" type="text/xsl" ?> -->
+<ABASData version="2.0">
+<RecordSet>
+<Record ref=" 'xvkopf^id'" number="'xvkopf^nummer'" caption="Auftrag mit Stueckliste aendern" action="update" database="" group="">
+<Head>
+</Head>
+<Row number="" id="'xvpos^id'" operation="">
+<SubBOM>
+<Row number="" id="*" operation="-">
+</Row>
+..
+..
+..
+.weiter HOLZEILE
+
+
+
+
+!HOLZEILE:  Fertigungslistenzeile
+..
+.hol zeile
+..
+.weiter FLENDE    ? _ mehr
+..
+.weiter PRUEFUNG
+
+
+.. Nach PrÅfung
+
+!FALSE:   Position wird nicht Åbernommen.
+.. wenn diese Marke erreicht ist, hat das Ausschlusskriterium "neinoder" oder "neinund" gegriffen oder die anderen
+.. Bedingungen fÅr eine Åbernahme der Position haben nicht zugetroffen jo,ju, x1-4 und y1-4.
+..
+.aus an 'xdprotokollis'
+FALSE#'elem'#'xpfad.xebene'#
+..
+.aus an 'xdatei'
+.weiter HOLZEILE
+
+
+!TRUE:    Position wird Åbernommen
+..
+.aus an 'xdprotokollis'
+TRUE#'elem'#'xpfad.xebene'#
+..
+.aus an 'xdatei'
+.weiter AUSGABE
+
+
+
+!AUSGABE: AnfÅgen an XML-Datei
+..
+......  Nach PrÅfung true/false darf bei Entnahmeart "Åber StÅckliste" die Position nicht
+......  ausgegeben werden, sondern man muss gleich in der Baugruppe absteigen. 
+.art bool xbaufloesen.xebene
+.fo xbaufloesen.xebene  = true  ?  'h|elem^earta' = "Åber StÅckliste"
+.weiter ABSTIEG                 ?   xbaufloesen.xebene
+..
+..
+..
+.fo xposnum.xebene = xposnum.xebene + 1
+.lade 0 dazu elem
+.weiter LIEFBEISTELLUNG  ? (h|elart = 1) & h|bu <> ""
+.weiter ARTIKEL          ? (h|elart = 1)
+.weiter FERTIGUNGSMITTEL ? (h|elart = 2)
+.weiter ARBEITSGANG      ? (h|elart = 3)
+.weiter LOHNFERTIGUNG    ? (h|elart = 4)
+...
+...
+!ARTIKEL
+..
+..
+..
+'xtrow'<Row number="'xposnum.xebene'" id="" operation="+">
+<Field name="postype" type="text">M</Field>
+<Field name="vpos" type="text">'vpos'</Field>
+<Field name="elex" type="text">'elem'</Field>
+<Field name="ypfad" type="text">'xpfad.xebene'</Field>
+<Field name="anzahl" type="real">'anzahl'</Field>
+<Field name="manbu" type="boolen">'manbu'</Field>
+.. Erweiterung MANBU R. AndrÇ 19.4.2016
+?<Field name="lge" type="real">'lge'</Field>           ?  0|flme <> 0
+?<Field name="breite" type="real">'breite'</Field>     ?  0|fbme <> 0
+?<Field name="yabdruck" type="boolean">'h|yabdruck'</Field>   ? defined(h|yabdruck)
+<Field name="ptext" type="text">'ptext'
+..
+.weiter EARTIKEL
+..
+!FERTIGUNGSMITTEL
+..
+'xtrow'<Row number="'xposnum.xebene'" id="" operation="+">
+<Field name="postype" type="text">A</Field>
+<Field name="vpos" type="text">'vpos'</Field>
+<Field name="elex" type="text">'elem'</Field>
+<Field name="ypfad" type="text">'xpfad.xebene'</Field>
+<Field name="anzahl" type="real">'anzahl'</Field>
+<Field name="lge" type="real">'lge'</Field>
+<Field name="breite" type="real">'breite'</Field>
+<Field name="ptext" type="text">'ptext'
+..
+.weiter EFERTIGUNGSMITTEL
+..
+!ARBEITSGANG
+..
+..
+'xtrow'<Row number="'xposnum.xebene'" id="" operation="+">
+<Field name="postype" type="text">A</Field>
+<Field name="vpos" type="text">'vpos'</Field>
+<Field name="elex" type="text">'elem'</Field>
+<Field name="anzahl" type="real">'anzahl'</Field>
+<Field name="lge" type="real">'lge'</Field>
+<Field name="breite" type="real">'breite'</Field>
+<Field name="ptext" type="text">'ptext'
+..
+.weiter EARBEITSGANG
+..
+!LOHNFERTIGUNG:
+!LIEFBEISTELLUNG:
+..
+..Lohnfertigung +  Artikel als Lieferantenbeistellung
+..
+..
+'xtrow'<Row number="'xposnum.xebene'" id="" operation="+">
+<Field name="postype" type="text">M</Field>
+<Field name="vpos" type="text">'vpos'</Field>
+<Field name="elex" type="text">'elem'</Field>
+<Field name="ypfad" type="text">'xpfad.xebene'</Field>
+<Field name="anzahl" type="real">'anzahl'</Field>
+?<Field name="lge" type="real">'lge'</Field>           ?  0|flme <> 0
+?<Field name="breite" type="real">'breite'</Field>     ?  0|fbme <> 0
+?<Field name="yabdruck" type="boolean">'h|yabdruck'</Field>   ? defined(h|yabdruck)
+<Field name="ptext" type="text">'ptext'
+..
+.weiter ELOHNFERTIGUNG
+
+
+
+!EARTIKEL:
+!EARBEITSGANG:
+!ELOHNFERTIGUNG:
+!EFERTIGUNGSMITTEL:
+..
+.weiter EZEILE  ?  'h|elem^dispoa'  <> "variantenbezogen"
+.weiter EZEILE  ?   0|tzeilen       = 0
+..
+.. Position hat eine Fertigungsliste und ist eine Variante
+.. Abstieg in Position.
+..
+.weiter ABSTIEG
+
+
+!EZEILE:
+</Field>
+'xtrow'</Row>
+.weiter HOLZEILE
+
+
+
+!ABSTIEG:   Abstieg in nÑchste Ebene
+..
+...
+................Ausgabe bei xbaufloesen.xebene = false
+?</Field>                                 ? xbaufloesen.xebene = false
+?<SubBOM>                                 ? xbaufloesen.xebene = false
+?<Row number="" id="*" operation="-">     ? xbaufloesen.xebene = false
+?'xtrow'</Row>                            ? xbaufloesen.xebene = false
+.merk lifo
+.art text xpfadtmp
+.fo xpfadtmp       =   xpfad.xebene
+.fo xebene         =   xebene + 1
+.art int    xposnum.xebene
+.art text   xpfad.xebene 
+.art bool   xbaufloesen.xebene
+.fo xposnum.xebene  =   0
+.fo xpfad.xebene    = xpfadtmp + ";" + 'h|elem^nummer'
+.hol dazu h|elem
+.weiter HOLZEILE
+
+
+!FLENDE:    ZurÅck eine Ebene hîher
+.hol lifo
+.fo xpfad  = xpfad 
+.weiter ENDE      ? _ mehr
+.fo xebene = xebene - 1
+................keine Ausgabe bei xbaufloesen.xebene = true
+?</SubBOM>                                ? xbaufloesen.xebene = false                                                                    
+?'xtrow'</Row>                            ? xbaufloesen.xebene = false
+.weiter HOLZEILE
+
+
+!ENDE:  Ausgabe Schlusszeilen, umbenennen und kopieren der Datei
+</SubBOM>
+</Row>
+</Record>
+</RecordSet>
+</ABASData>
+..
+..
+..
+.aus  
+.fo xdsys        = "crlf+ " + xdatei
+.sys 'xdsys' hinter
+.fo xdsys        = "cp " + xdatei + " win/tmp/" + xtxml
+.sys 'xdsys' hinter
+.ende .
+
+
+
+
+
+
+
+
+
+
+!PRUEFUNG:
+.weiter LOSGEHTS
+
+Jede Position der gesamten MaximalstÅckliste incl. aller Strukturen wird fÅr den Erhalt in der AuftragsstÅckliste ÅberprÅft.
+Ist eine der Wahlmîglichkeiten in einer tieferen Stufe, MöSSEN die darÅber liegenden Artikel die Dispositionsart "variante" haben
+
+
+Jede Position kann von bis zu 20 AusprÑgungen des Vertriebsregelwerkes abhÑngig sein. Jede der 20 Regeln werden mit den ausgewÑhlten AusprÑgungen in 
+der Konfiguration verglichen. (AusprÑgung = Verweis auf Zusatzposition) 
+Jede AbhÑngigkeit kann wie folgt beregelt sein:
+
+
+ja-oder   (jo)    "einfaches oder" mindestens eine der so gekennzeichneten AusprÑgung muss in den ausgewÑhlten Positionen der Konfiguration enthalten sein
+               
+ja-und    (ju)    alle AusprÑgungen, die mit dieser Regel versehen sind, mÅssen in den ausgewÑhlten Positionen der Konfiguration enthalten sein
+
+nein-oder (no)    "einfaches nein" keine der so gekennzeichneten AusprÑgung darf in den ausgewÑhlten Positionen der Konfiguration enthalten sein
+
+nein-und  (nu)    keine der AusprÑgungen, die mit dieser Regel versehen sind, dÅrfen in den ausgewÑhlten Positionen der Konfiguration enthalten sein
+
+ja oder   (X1)    "einfaches oder" mindestens eine der so gekennzeichneten AusprÑgung muss in den ausgewÑhlten Positionen der Konfiguration enthalten sein
+und
+ja oder   (X2)    "einfaches oder" mindestens eine der so gekennzeichneten AusprÑgung muss in den ausgewÑhlten Positionen der Konfiguration enthalten sein
+...
+                  die Bedingungen X1, X2, ...  sind mit "und" verknÅpft. Von allen X1-X2-... Positionen muss mindestens eine in den ausgewÑhlten 
+                  Positionen der Konfiguration enthalten sein
+
+
+ja-und    (Y1)    alle AusprÑgungen, die mit dieser Regel versehen sind, mÅssen in den ausgewÑhlten Positionen der Konfiguration enthalten sein
+oder
+ja-und    (Y1)    alle AusprÑgungen, die mit dieser Regel versehen sind, mÅssen in den ausgewÑhlten Positionen der Konfiguration enthalten sein
+...
+                  die Bedingungen Y1, Y2, ... sind mit "oder" verknÅpft. Mindestens ein der und-Bedingungen muss zutreffen
+
+                 
+Annahme: 
+Wenn in der aktuellen Vertriebskonfiguration kein Merkmal mit und/oder auf eine Stl-Position verweist, die aber Regeln besitzt, 
+wird diese Position nicht Åbernommen. 
+
+Positionen ohne Regel werden Åbernommen.
+         
+Positionen mit Ausschluss werden, falls der Ausschluss zutrifft (und/oder), nicht Åbernommen. Ansonsten werden sie wenn sie keine weiteren Bedingungen haben in die ASTL Åbernommen. 
+Das wird mit der Variablen "xbtrue" gesteuert. Diese wird auf "false" gesetzt wenn es eine ja bzw x oder y Regel gibt.
+
+
+Reihenfolge:    erst Verbote (KO-Kriterien)
+                dann alle weiteren Bedingungen
+                ein gleichzeitigen "muss" und Verbot wird in der Vertriebskonfiguration schon vermieden.
+
+!LOSGEHTS:
+.art text xausst01 xausst02 xausst03 xausst04 xausst05 xausst06 xausst07 xausst08 xausst09 xausst10 
+.art text xausst11 xausst12 xausst13 xausst14 xausst15 xausst16 xausst17 xausst18 xausst19 xausst20
+..
+.. 
+..
+.fo xausst01 = "*" + 'h|yvausst01' + "*"
+.fo xausst02 = "*" + 'h|yvausst02' + "*"
+.fo xausst03 = "*" + 'h|yvausst03' + "*"
+.fo xausst04 = "*" + 'h|yvausst04' + "*"
+.fo xausst05 = "*" + 'h|yvausst05' + "*"
+.fo xausst06 = "*" + 'h|yvausst06' + "*"
+.fo xausst07 = "*" + 'h|yvausst07' + "*"
+.fo xausst08 = "*" + 'h|yvausst08' + "*"
+.fo xausst09 = "*" + 'h|yvausst09' + "*"
+.fo xausst10 = "*" + 'h|yvausst10' + "*"
+.fo xausst11 = "*" + 'h|yvausst11' + "*"
+.fo xausst12 = "*" + 'h|yvausst12' + "*"
+.fo xausst13 = "*" + 'h|yvausst13' + "*"
+.fo xausst14 = "*" + 'h|yvausst14' + "*"
+.fo xausst15 = "*" + 'h|yvausst15' + "*"
+.fo xausst16 = "*" + 'h|yvausst16' + "*"
+.fo xausst17 = "*" + 'h|yvausst17' + "*"
+.fo xausst18 = "*" + 'h|yvausst18' + "*"
+.fo xausst19 = "*" + 'h|yvausst19' + "*"
+.fo xausst20 = "*" + 'h|yvausst20' + "*"
+..
+..
+..
+..PrÅfen, welche Operationen in dieser Position existieren
+..
+.. enthaltene Regeln
+.art bool xjaund xjaoder xneinund xneinoder x1 x2 x3 x4 y1 y2 y3 y4
+..
+.. PrÅfergebnisse
+.art bool xbregelx xbregely xbtrue
+..
+.fo xbtrue = true
+..
+.fo xjaund = true ? h|yregel01 = "ju" ; h|yregel02 = "ju" ; h|yregel03 = "ju" ; h|yregel04 = "ju" ; h|yregel05 = "ju"
+.fo xjaund = true ? h|yregel06 = "ju" ; h|yregel07 = "ju" ; h|yregel08 = "ju" ; h|yregel09 = "ju" ; h|yregel10 = "ju"
+.fo xjaund = true ? h|yregel11 = "ju" ; h|yregel12 = "ju" ; h|yregel13 = "ju" ; h|yregel14 = "ju" ; h|yregel15 = "ju"
+.fo xjaund = true ? h|yregel16 = "ju" ; h|yregel17 = "ju" ; h|yregel18 = "ju" ; h|yregel19 = "ju" ; h|yregel20 = "ju"
+..
+.fo xjaoder = true ? h|yregel01 = "jo" ; h|yregel02 = "jo" ; h|yregel03 = "jo" ; h|yregel04 = "jo" ; h|yregel05 = "jo"
+.fo xjaoder = true ? h|yregel06 = "jo" ; h|yregel07 = "jo" ; h|yregel08 = "jo" ; h|yregel09 = "jo" ; h|yregel10 = "jo"
+.fo xjaoder = true ? h|yregel11 = "jo" ; h|yregel12 = "jo" ; h|yregel13 = "jo" ; h|yregel14 = "jo" ; h|yregel15 = "jo"
+.fo xjaoder = true ? h|yregel16 = "jo" ; h|yregel17 = "jo" ; h|yregel18 = "jo" ; h|yregel19 = "jo" ; h|yregel20 = "jo"
+..
+.fo xneinund = true ? h|yregel01 = "nu" ; h|yregel02 = "nu" ; h|yregel03 = "nu" ; h|yregel04 = "nu" ; h|yregel05 = "nu"
+.fo xneinund = true ? h|yregel06 = "nu" ; h|yregel07 = "nu" ; h|yregel08 = "nu" ; h|yregel09 = "nu" ; h|yregel10 = "nu"
+.fo xneinund = true ? h|yregel11 = "nu" ; h|yregel12 = "nu" ; h|yregel13 = "nu" ; h|yregel14 = "nu" ; h|yregel15 = "nu"
+.fo xneinund = true ? h|yregel16 = "nu" ; h|yregel17 = "nu" ; h|yregel18 = "nu" ; h|yregel19 = "nu" ; h|yregel20 = "nu"
+..
+.fo xneinoder = true ? h|yregel01 = "no" ; h|yregel02 = "no" ; h|yregel03 = "no" ; h|yregel04 = "no" ; h|yregel05 = "no"
+.fo xneinoder = true ? h|yregel06 = "no" ; h|yregel07 = "no" ; h|yregel08 = "no" ; h|yregel09 = "no" ; h|yregel10 = "no"
+.fo xneinoder = true ? h|yregel11 = "no" ; h|yregel12 = "no" ; h|yregel13 = "no" ; h|yregel14 = "no" ; h|yregel15 = "no"
+.fo xneinoder = true ? h|yregel16 = "no" ; h|yregel17 = "no" ; h|yregel18 = "no" ; h|yregel19 = "no" ; h|yregel20 = "no"
+..
+.fo x1 = true ? h|yregel01 = "x1" ; h|yregel02 = "x1" ; h|yregel03 = "x1" ; h|yregel04 = "x1" ; h|yregel05 = "x1"
+.fo x1 = true ? h|yregel06 = "x1" ; h|yregel07 = "x1" ; h|yregel08 = "x1" ; h|yregel09 = "x1" ; h|yregel10 = "x1"
+.fo x1 = true ? h|yregel11 = "x1" ; h|yregel12 = "x1" ; h|yregel13 = "x1" ; h|yregel14 = "x1" ; h|yregel15 = "x1"
+.fo x1 = true ? h|yregel16 = "x1" ; h|yregel17 = "x1" ; h|yregel18 = "x1" ; h|yregel19 = "x1" ; h|yregel20 = "x1"
+..
+.fo x2 = true ? h|yregel01 = "x2" ; h|yregel02 = "x2" ; h|yregel03 = "x2" ; h|yregel04 = "x2" ; h|yregel05 = "x2"
+.fo x2 = true ? h|yregel06 = "x2" ; h|yregel07 = "x2" ; h|yregel08 = "x2" ; h|yregel09 = "x2" ; h|yregel10 = "x2"
+.fo x2 = true ? h|yregel11 = "x2" ; h|yregel12 = "x2" ; h|yregel13 = "x2" ; h|yregel14 = "x2" ; h|yregel15 = "x2"
+.fo x2 = true ? h|yregel16 = "x2" ; h|yregel17 = "x2" ; h|yregel18 = "x2" ; h|yregel19 = "x2" ; h|yregel20 = "x2"
+..
+.fo x3 = true ? h|yregel01 = "x3" ; h|yregel02 = "x3" ; h|yregel03 = "x3" ; h|yregel04 = "x3" ; h|yregel05 = "x3"
+.fo x3 = true ? h|yregel06 = "x3" ; h|yregel07 = "x3" ; h|yregel08 = "x3" ; h|yregel09 = "x3" ; h|yregel10 = "x3"
+.fo x3 = true ? h|yregel11 = "x3" ; h|yregel12 = "x3" ; h|yregel13 = "x3" ; h|yregel14 = "x3" ; h|yregel15 = "x3"
+.fo x3 = true ? h|yregel16 = "x3" ; h|yregel17 = "x3" ; h|yregel18 = "x3" ; h|yregel19 = "x3" ; h|yregel20 = "x3"
+..
+.fo x4 = true ? h|yregel01 = "x4" ; h|yregel02 = "x4" ; h|yregel03 = "x4" ; h|yregel04 = "x4" ; h|yregel05 = "x4"
+.fo x4 = true ? h|yregel06 = "x4" ; h|yregel07 = "x4" ; h|yregel08 = "x4" ; h|yregel09 = "x4" ; h|yregel10 = "x4"
+.fo x4 = true ? h|yregel11 = "x4" ; h|yregel12 = "x4" ; h|yregel13 = "x4" ; h|yregel14 = "x4" ; h|yregel15 = "x4"
+.fo x4 = true ? h|yregel16 = "x4" ; h|yregel17 = "x4" ; h|yregel18 = "x4" ; h|yregel19 = "x4" ; h|yregel20 = "x4"
+..
+.fo y1 = true ? h|yregel01 = "y1" ; h|yregel02 = "y1" ; h|yregel03 = "y1" ; h|yregel04 = "y1" ; h|yregel05 = "y1"
+.fo y1 = true ? h|yregel06 = "y1" ; h|yregel07 = "y1" ; h|yregel08 = "y1" ; h|yregel09 = "y1" ; h|yregel10 = "y1"
+.fo y1 = true ? h|yregel11 = "y1" ; h|yregel12 = "y1" ; h|yregel13 = "y1" ; h|yregel14 = "y1" ; h|yregel15 = "y1"
+.fo y1 = true ? h|yregel16 = "y1" ; h|yregel17 = "y1" ; h|yregel18 = "y1" ; h|yregel19 = "y1" ; h|yregel20 = "y1"
+..
+.fo y2 = true ? h|yregel01 = "y2" ; h|yregel02 = "y2" ; h|yregel03 = "y2" ; h|yregel04 = "y2" ; h|yregel05 = "y2"
+.fo y2 = true ? h|yregel06 = "y2" ; h|yregel07 = "y2" ; h|yregel08 = "y2" ; h|yregel09 = "y2" ; h|yregel10 = "y2"
+.fo y2 = true ? h|yregel11 = "y2" ; h|yregel12 = "y2" ; h|yregel13 = "y2" ; h|yregel14 = "y2" ; h|yregel15 = "y2"
+.fo y2 = true ? h|yregel16 = "y2" ; h|yregel17 = "y2" ; h|yregel18 = "y2" ; h|yregel19 = "y2" ; h|yregel20 = "y2"
+..
+.fo y3 = true ? h|yregel01 = "y3" ; h|yregel02 = "y3" ; h|yregel03 = "y3" ; h|yregel04 = "y3" ; h|yregel05 = "y3"
+.fo y3 = true ? h|yregel06 = "y3" ; h|yregel07 = "y3" ; h|yregel08 = "y3" ; h|yregel09 = "y3" ; h|yregel10 = "y3"
+.fo y3 = true ? h|yregel11 = "y3" ; h|yregel12 = "y3" ; h|yregel13 = "y3" ; h|yregel14 = "y3" ; h|yregel15 = "y3"
+.fo y3 = true ? h|yregel16 = "y3" ; h|yregel17 = "y3" ; h|yregel18 = "y3" ; h|yregel19 = "y3" ; h|yregel20 = "y3"
+..
+.fo y4 = true ? h|yregel01 = "y4" ; h|yregel02 = "y4" ; h|yregel03 = "y4" ; h|yregel04 = "y4" ; h|yregel05 = "y4"
+.fo y4 = true ? h|yregel06 = "y4" ; h|yregel07 = "y4" ; h|yregel08 = "y4" ; h|yregel09 = "y4" ; h|yregel10 = "y4"
+.fo y4 = true ? h|yregel11 = "y4" ; h|yregel12 = "y4" ; h|yregel13 = "y4" ; h|yregel14 = "y4" ; h|yregel15 = "y4"
+.fo y4 = true ? h|yregel16 = "y4" ; h|yregel17 = "y4" ; h|yregel18 = "y4" ; h|yregel19 = "y4" ; h|yregel20 = "y4"
+..
+..
+.fo xbtrue = false ? y4 ; y3 ; y2 ; y1 ; x1 ; x2 ; x3 ; x4 ; xjaund ; xjaoder 
+..box
+..Pos:  'elem'  'elname'
+..xjaund     'xjaund'
+..xjaoder    'xjaoder'
+..xneinund   'xneinund'
+..xneinoder  'xneinoder'
+..'x1'
+..'x2'
+..'x3'
+..'x4'
+..'y1'
+..'y2'
+..'y3'
+..'y4'
+.art text xtpruefung
+.fo xtpruefung = xtpruefung + "nu ," ? xneinund
+.fo xtpruefung = xtpruefung + "no ," ? xneinoder
+.fo xtpruefung = xtpruefung + "ju ," ? xjaund
+.fo xtpruefung = xtpruefung + "jo ," ? xjaoder
+.fo xtpruefung = xtpruefung + "x1 ," ? x1
+.fo xtpruefung = xtpruefung + "x2 ," ? x2
+.fo xtpruefung = xtpruefung + "x3 ," ? x3
+.fo xtpruefung = xtpruefung + "x4 ," ? x4
+.fo xtpruefung = xtpruefung + "y1 ," ? y1
+.fo xtpruefung = xtpruefung + "y2 ," ? y2
+.fo xtpruefung = xtpruefung + "y3 ," ? y3
+.fo xtpruefung = xtpruefung + "y4 ," ? y4
+..
+..
+.aus an 'xdprotokollis'
+..PRUEFUNG#'elem'#'elname'# ju: 'xjaund' jo: 'xjaoder' nu: 'xneinund' no: 'xneinoder' x1: 'x1' x2: 'x2' x3: 'x3' x4: 'x4' y1: 'y1' y2: 'y2' y3: 'y3' y4: 'y4' 
+PRUEFUNG#'elem'#'elname'# 'xtpruefung' 
+.aus an 'xdatei'
+..
+.. wenn bei einer Variantenposition keine Regel definiert ist, wird sie Åbernommen.
+..
+..
+.weiter ZUORDNUNG   ? xjaund
+.weiter ZUORDNUNG   ? xjaoder
+.weiter ZUORDNUNG   ? xneinund
+.weiter ZUORDNUNG   ? xneinoder
+.weiter ZUORDNUNG   ? x1
+.weiter ZUORDNUNG   ? x2
+.weiter ZUORDNUNG   ? x3
+.weiter ZUORDNUNG   ? x4
+..weiter ZUORDNUNG   ? x5
+..weiter ZUORDNUNG   ? x6
+..weiter ZUORDNUNG   ? x7
+..weiter ZUORDNUNG   ? x8
+..weiter ZUORDNUNG   ? x9
+.weiter ZUORDNUNG   ? y1
+.weiter ZUORDNUNG   ? y2
+.weiter ZUORDNUNG   ? y3
+.weiter ZUORDNUNG   ? y4
+.weiter TRUE
+
+..
+..
+..
+!ZUORDNUNG:
+..
+..
+.. Steuerung der PrÅfreihenfolge
+..
+.. Da die Regeln NEINUND, NEINODER ein KO-Kriterium sind, wird zuerst nach diesen Regeln geprÅft
+.. und erst danach die Regeln JAUND oder JAODER sowie X1-9 berÅcksichtigt. 
+..
+.. GrundsÑtzlich wird erst die "einfache" oder-Regel geprÅft und dann die komplexere und-Regel
+..
+.. PrÅfung auf NEINODER
+.weiter NEINODER ? xneinoder
+!ENEINODER:
+.. NEINODER trifft nicht zu
+.. oder hat zu keinem Ausschluss gefÅhrt
+.. PrÅfung auf NEINUND
+.weiter NEINUND  ? xneinund
+!ENEINUND:
+.. NEINUND trifft nicht zu
+.. oder hat zu keinem Ausschluss gefÅhrt
+.. PrÅfung auf JAODER
+.weiter TRUE  ? xbtrue
+.weiter JAODER   ? xjaoder
+!EJAODER:
+.. JAODER trifft nicht zu
+.. oder hat kein öbernahmekriterium gefunden
+.. PrÅfung auf JAUND
+.weiter JAUND    ? xjaund
+!EJAUND:
+.. JAUND trifft nicht zu
+.. oder hat kein öbernahmekriterium gefunden
+.. PRöFUNG auf X1 bis X4
+.. wenn ein oder mehrere x-Regeln existieren, muss fÅr jede die Oderbedingung zutreffen, es muss also mindestens eine AusprÑgung in der STL in den ausgewÑhlten
+.. AusprÑgungen der Konfiguration vorhanden sein.
+.weiter X1       ? x1
+!EX1:
+.weiter X2       ? x2
+!EX2:
+.weiter X3       ? x3
+!EX3:
+.weiter X4       ? x4
+!EX4:
+.weiter TRUE ? xbregelx 
+.. alle vorhandenen x-Regeln haben zugetroffen, damit entfÑllt eine weitere PrÅfung der y-Regeln
+!YSTART:
+.weiter Y1       ? y1
+!EY1:
+.weiter Y2       ? y2
+!EY2:
+.weiter Y3       ? y3
+!EY3:
+.weiter Y4       ? y4
+!EY4:
+.weiter FALSE
+
+!XTRUE:
+.. alle vorhandene x-Regeln haben zugetroffen, daher wird diese Position Åbernommen, es erfolgt keine weitere Y-PrÅfung.
+.weiter TRUE
+
+!XFALSE:
+.. ein der in der STL enthaltenen x-Regeln trifft nicht zu. Da die x-Regeln mit "und" verbunden sind, greift diese Regel nicht.
+.. Es folgt die PrÅfung nach der y-Regel.
+.fo xbregelx = false
+.weiter YSTART
+
+!YTRUE:
+.. eine der y-Regeln trifft zu. Da die y-Regeln mit "oder" verbunden sind, ist die y-Bedingung erfÅllt und die Position wird Åbernommen.
+.weiter TRUE
+
+!YFALSE: 
+.. es trifft keine Y-Regel zu, die Position wird daher nach der PrÅfung aller vorgelagerten Regeln nicht Åbernommen.
+.weiter FALSE
+
+!NEINODER:
+..
+.aus an 'xdprotokollis'
+NEINODER#'xausst01'  'h|yregel01'  'xagw'# 'xausst02' 'h|yregel02' 'xausst03' 'h|yregel03' 'xausst04'  'h|yregel04' 'xausst05' 'h|yregel05' 'xausst06'  'h|yregel06' 'xausst07' 'h|yregel07' 'xausst08' 'h|yregel08' 'xausst09' 'h|yregel09'
+..
+.aus an 'xdatei'
+..
+..
+.weiter FALSE  ? xagw / xausst01 & h|yregel01 = "no"    & _ xausst01 = "**"
+.weiter FALSE  ? xagw / xausst02 & h|yregel02 = "no"    & _ xausst02 = "**"
+.weiter FALSE  ? xagw / xausst03 & h|yregel03 = "no"    & _ xausst03 = "**" 
+.weiter FALSE  ? xagw / xausst04 & h|yregel04 = "no"    & _ xausst04 = "**"
+.weiter FALSE  ? xagw / xausst05 & h|yregel05 = "no"    & _ xausst05 = "**"
+.weiter FALSE  ? xagw / xausst06 & h|yregel06 = "no"    & _ xausst06 = "**"
+.weiter FALSE  ? xagw / xausst07 & h|yregel07 = "no"    & _ xausst07 = "**"
+.weiter FALSE  ? xagw / xausst08 & h|yregel08 = "no"    & _ xausst08 = "**"
+.weiter FALSE  ? xagw / xausst09 & h|yregel09 = "no"    & _ xausst09 = "**"
+.weiter FALSE  ? xagw / xausst10 & h|yregel10 = "no"    & _ xausst10 = "**"
+.weiter FALSE  ? xagw / xausst11 & h|yregel11 = "no"    & _ xausst11 = "**"
+.weiter FALSE  ? xagw / xausst12 & h|yregel12 = "no"    & _ xausst12 = "**"
+.weiter FALSE  ? xagw / xausst13 & h|yregel13 = "no"    & _ xausst13 = "**"
+.weiter FALSE  ? xagw / xausst14 & h|yregel14 = "no"    & _ xausst14 = "**"
+.weiter FALSE  ? xagw / xausst15 & h|yregel15 = "no"    & _ xausst15 = "**"
+.weiter FALSE  ? xagw / xausst16 & h|yregel16 = "no"    & _ xausst16 = "**"
+.weiter FALSE  ? xagw / xausst17 & h|yregel17 = "no"    & _ xausst17 = "**"
+.weiter FALSE  ? xagw / xausst18 & h|yregel18 = "no"    & _ xausst18 = "**"
+.weiter FALSE  ? xagw / xausst19 & h|yregel19 = "no"    & _ xausst19 = "**"
+.weiter FALSE  ? xagw / xausst20 & h|yregel20 = "no"    & _ xausst20 = "**"
+..
+.weiter ENEINODER
+
+
+!NEINUND:
+..
+.aus an 'xdprotokollis'
+NEINUND#'xausst01'  'h|yregel01'  'xagw'# 'xausst02' 'h|yregel02' 'xausst03' 'h|yregel03' 'xausst04'  'h|yregel04' 'xausst05' 'h|yregel05' 'xausst06'  'h|yregel06' 'xausst07' 'h|yregel07' 'xausst08' 'h|yregel08' 'xausst09' 'h|yregel09'
+..
+.aus an 'xdatei'
+..
+..
+.weiter ENEINUND     ? _ xagw / xausst01  & h|yregel01 = "nu"    & _ xausst01 = "**"
+.weiter ENEINUND     ? _ xagw / xausst02  & h|yregel02 = "nu"    & _ xausst02 = "**"
+.weiter ENEINUND     ? _ xagw / xausst03  & h|yregel03 = "nu"    & _ xausst03 = "**"
+.weiter ENEINUND     ? _ xagw / xausst04  & h|yregel04 = "nu"    & _ xausst04 = "**"
+.weiter ENEINUND     ? _ xagw / xausst05  & h|yregel05 = "nu"    & _ xausst05 = "**"
+.weiter ENEINUND     ? _ xagw / xausst06  & h|yregel06 = "nu"    & _ xausst06 = "**"
+.weiter ENEINUND     ? _ xagw / xausst07  & h|yregel07 = "nu"    & _ xausst07 = "**"
+.weiter ENEINUND     ? _ xagw / xausst08  & h|yregel08 = "nu"    & _ xausst08 = "**"
+.weiter ENEINUND     ? _ xagw / xausst09  & h|yregel09 = "nu"    & _ xausst09 = "**"
+.weiter ENEINUND     ? _ xagw / xausst10  & h|yregel10 = "nu"    & _ xausst10 = "**"
+.weiter ENEINUND     ? _ xagw / xausst11  & h|yregel11 = "nu"    & _ xausst11 = "**"
+.weiter ENEINUND     ? _ xagw / xausst12  & h|yregel12 = "nu"    & _ xausst12 = "**"
+.weiter ENEINUND     ? _ xagw / xausst13  & h|yregel13 = "nu"    & _ xausst13 = "**"
+.weiter ENEINUND     ? _ xagw / xausst14  & h|yregel14 = "nu"    & _ xausst14 = "**"
+.weiter ENEINUND     ? _ xagw / xausst15  & h|yregel15 = "nu"    & _ xausst15 = "**"
+.weiter ENEINUND     ? _ xagw / xausst16  & h|yregel16 = "nu"    & _ xausst16 = "**"
+.weiter ENEINUND     ? _ xagw / xausst17  & h|yregel17 = "nu"    & _ xausst17 = "**"
+.weiter ENEINUND     ? _ xagw / xausst18  & h|yregel18 = "nu"    & _ xausst18 = "**"
+.weiter ENEINUND     ? _ xagw / xausst19  & h|yregel19 = "nu"    & _ xausst19 = "**"
+.weiter ENEINUND     ? _ xagw / xausst20  & h|yregel20 = "nu"    & _ xausst20 = "**"
+..
+.weiter FALSE
+
+
+
+
+
+!JAODER:
+..
+.aus an 'xdprotokollis'
+JAODER#'xausst01'  'h|yregel01'  'xagw'# 'xausst02' 'h|yregel02' 'xausst03' 'h|yregel03' 'xausst04'  'h|yregel04' 'xausst05' 'h|yregel05' 'xausst06'  'h|yregel06' 'xausst07' 'h|yregel07' 'xausst08' 'h|yregel08' 'xausst09' 'h|yregel09'
+..
+.aus an 'xdatei'
+..
+..
+.weiter TRJAODER ? xagw / xausst01 & h|yregel01 = "jo"   & _ xausst01 = "**"
+.weiter TRJAODER ? xagw / xausst02 & h|yregel02 = "jo"   & _ xausst02 = "**"
+.weiter TRJAODER ? xagw / xausst03 & h|yregel03 = "jo"   & _ xausst03 = "**"
+.weiter TRJAODER ? xagw / xausst04 & h|yregel04 = "jo"   & _ xausst04 = "**"
+.weiter TRJAODER ? xagw / xausst05 & h|yregel05 = "jo"   & _ xausst05 = "**"
+.weiter TRJAODER ? xagw / xausst06 & h|yregel06 = "jo"   & _ xausst06 = "**"
+.weiter TRJAODER ? xagw / xausst07 & h|yregel07 = "jo"   & _ xausst07 = "**"
+.weiter TRJAODER ? xagw / xausst08 & h|yregel08 = "jo"   & _ xausst08 = "**"
+.weiter TRJAODER ? xagw / xausst09 & h|yregel09 = "jo"   & _ xausst09 = "**"
+.weiter TRJAODER ? xagw / xausst10 & h|yregel10 = "jo"   & _ xausst10 = "**"
+.weiter TRJAODER ? xagw / xausst11 & h|yregel11 = "jo"   & _ xausst11 = "**"
+.weiter TRJAODER ? xagw / xausst12 & h|yregel12 = "jo"   & _ xausst12 = "**"
+.weiter TRJAODER ? xagw / xausst13 & h|yregel13 = "jo"   & _ xausst13 = "**"
+.weiter TRJAODER ? xagw / xausst14 & h|yregel14 = "jo"   & _ xausst14 = "**"
+.weiter TRJAODER ? xagw / xausst15 & h|yregel15 = "jo"   & _ xausst15 = "**"
+.weiter TRJAODER ? xagw / xausst16 & h|yregel16 = "jo"   & _ xausst16 = "**"
+.weiter TRJAODER ? xagw / xausst17 & h|yregel17 = "jo"   & _ xausst17 = "**"
+.weiter TRJAODER ? xagw / xausst18 & h|yregel18 = "jo"   & _ xausst18 = "**"
+.weiter TRJAODER ? xagw / xausst19 & h|yregel19 = "jo"   & _ xausst19 = "**"
+.weiter TRJAODER ? xagw / xausst20 & h|yregel20 = "jo"   & _ xausst20 = "**"
+..
+.weiter EJAODER
+
+
+!TRJAODER:
+... mehr wie true gibt es nicht
+... daher wird auch nicht weiter geprÅft
+.weiter TRUE
+
+
+
+
+
+!JAUND:
+..
+.aus an 'xdprotokollis'
+JAUND#'xausst01'  'h|yregel01'  'xagw'# 'xausst02' 'h|yregel02' 'xausst03' 'h|yregel03' 'xausst04'  'h|yregel04' 'xausst05' 'h|yregel05' 'xausst06'  'h|yregel06' 'xausst07' 'h|yregel07' 'xausst08' 'h|yregel08' 'xausst09' 'h|yregel09'
+..
+.aus an 'xdatei'
+..
+..
+..
+.weiter EJAUND        ? _ xagw / xausst01  & h|yregel01 = "ju" & _ xausst01 = "**"
+.weiter EJAUND        ? _ xagw / xausst02  & h|yregel02 = "ju" & _ xausst02 = "**"
+.weiter EJAUND        ? _ xagw / xausst03  & h|yregel03 = "ju" & _ xausst03 = "**"
+.weiter EJAUND        ? _ xagw / xausst04  & h|yregel04 = "ju" & _ xausst04 = "**"
+.weiter EJAUND        ? _ xagw / xausst05  & h|yregel05 = "ju" & _ xausst05 = "**"
+.weiter EJAUND        ? _ xagw / xausst06  & h|yregel06 = "ju" & _ xausst06 = "**"
+.weiter EJAUND        ? _ xagw / xausst07  & h|yregel07 = "ju" & _ xausst07 = "**"
+.weiter EJAUND        ? _ xagw / xausst08  & h|yregel08 = "ju" & _ xausst08 = "**"
+.weiter EJAUND        ? _ xagw / xausst09  & h|yregel09 = "ju" & _ xausst09 = "**"
+.weiter EJAUND        ? _ xagw / xausst10  & h|yregel10 = "ju" & _ xausst10 = "**"
+.weiter EJAUND        ? _ xagw / xausst11  & h|yregel11 = "ju" & _ xausst11 = "**"
+.weiter EJAUND        ? _ xagw / xausst12  & h|yregel12 = "ju" & _ xausst12 = "**"
+.weiter EJAUND        ? _ xagw / xausst13  & h|yregel13 = "ju" & _ xausst13 = "**"
+.weiter EJAUND        ? _ xagw / xausst14  & h|yregel14 = "ju" & _ xausst14 = "**"
+.weiter EJAUND        ? _ xagw / xausst15  & h|yregel15 = "ju" & _ xausst15 = "**"
+.weiter EJAUND        ? _ xagw / xausst16  & h|yregel16 = "ju" & _ xausst16 = "**"
+.weiter EJAUND        ? _ xagw / xausst17  & h|yregel17 = "ju" & _ xausst17 = "**"
+.weiter EJAUND        ? _ xagw / xausst18  & h|yregel18 = "ju" & _ xausst18 = "**"
+.weiter EJAUND        ? _ xagw / xausst19  & h|yregel19 = "ju" & _ xausst19 = "**"
+.weiter EJAUND        ? _ xagw / xausst20  & h|yregel20 = "ju" & _ xausst20 = "**"
+..
+.. analog wie bei NEINUND, hat an dieser Stelle keine Regel gegriffen, so dass die
+.. Position drin bleibt.
+..
+.weiter TRUE
+
+
+
+!X1:
+..
+.aus an 'xdprotokollis'
+X1#'xausst01'  'h|yregel01'  'xagw'# 'xausst02' 'h|yregel02' 'xausst03' 'h|yregel03' 'xausst04'  'h|yregel04' 'xausst05' 'h|yregel05' 'xausst06'  'h|yregel06' 'xausst07' 'h|yregel07' 'xausst08' 'h|yregel08' 'xausst09' 'h|yregel09'
+..
+.aus an 'xdatei'
+..
+..
+.weiter TRX1? xagw / xausst01 & h|yregel01 = "x1"   & _ xausst01 = "**"
+.weiter TRX1? xagw / xausst02 & h|yregel02 = "x1"   & _ xausst02 = "**"
+.weiter TRX1? xagw / xausst03 & h|yregel03 = "x1"   & _ xausst03 = "**"
+.weiter TRX1? xagw / xausst04 & h|yregel04 = "x1"   & _ xausst04 = "**"
+.weiter TRX1? xagw / xausst05 & h|yregel05 = "x1"   & _ xausst05 = "**"
+.weiter TRX1? xagw / xausst06 & h|yregel06 = "x1"   & _ xausst06 = "**"
+.weiter TRX1? xagw / xausst07 & h|yregel07 = "x1"   & _ xausst07 = "**"
+.weiter TRX1? xagw / xausst08 & h|yregel08 = "x1"   & _ xausst08 = "**"
+.weiter TRX1? xagw / xausst09 & h|yregel09 = "x1"   & _ xausst09 = "**"
+.weiter TRX1? xagw / xausst10 & h|yregel10 = "x1"   & _ xausst10 = "**"
+.weiter TRX1? xagw / xausst11 & h|yregel11 = "x1"   & _ xausst11 = "**"
+.weiter TRX1? xagw / xausst12 & h|yregel12 = "x1"   & _ xausst12 = "**"
+.weiter TRX1? xagw / xausst13 & h|yregel13 = "x1"   & _ xausst13 = "**"
+.weiter TRX1? xagw / xausst14 & h|yregel14 = "x1"   & _ xausst14 = "**"
+.weiter TRX1? xagw / xausst15 & h|yregel15 = "x1"   & _ xausst15 = "**"
+.weiter TRX1? xagw / xausst16 & h|yregel16 = "x1"   & _ xausst16 = "**"
+.weiter TRX1? xagw / xausst17 & h|yregel17 = "x1"   & _ xausst17 = "**"
+.weiter TRX1? xagw / xausst18 & h|yregel18 = "x1"   & _ xausst18 = "**"
+.weiter TRX1? xagw / xausst19 & h|yregel19 = "x1"   & _ xausst19 = "**"
+.weiter TRX1? xagw / xausst20 & h|yregel20 = "x1"   & _ xausst20 = "**"
+..
+.weiter XFALSE
+
+
+!TRX1:
+..
+.. eine Bedingung in x1 hat zugetroffen, daher PrÅfung der weiteren x-Regeln
+.fo xbregelx = true
+.. wenn alle vorhandenen x-Regeln zugetroffen haben, darf bzw. muss auf y-Regel nicht mehr geprÅft werden.
+.weiter EX1
+
+
+
+
+!X2:
+..
+.aus an 'xdprotokollis'
+X2#'xausst01'  'h|yregel01'  'xagw'# 'xausst02' 'h|yregel02' 'xausst03' 'h|yregel03' 'xausst04'  'h|yregel04' 'xausst05' 'h|yregel05' 'xausst06'  'h|yregel06' 'xausst07' 'h|yregel07' 'xausst08' 'h|yregel08' 'xausst09' 'h|yregel09'
+..
+.aus an 'xdatei'
+..
+..
+..
+.weiter TRX2? xagw / xausst01 & h|yregel01 = "x2"   & _ xausst01 = "**"
+.weiter TRX2? xagw / xausst02 & h|yregel02 = "x2"   & _ xausst02 = "**"
+.weiter TRX2? xagw / xausst03 & h|yregel03 = "x2"   & _ xausst03 = "**"
+.weiter TRX2? xagw / xausst04 & h|yregel04 = "x2"   & _ xausst04 = "**"
+.weiter TRX2? xagw / xausst05 & h|yregel05 = "x2"   & _ xausst05 = "**"
+.weiter TRX2? xagw / xausst06 & h|yregel06 = "x2"   & _ xausst06 = "**"
+.weiter TRX2? xagw / xausst07 & h|yregel07 = "x2"   & _ xausst07 = "**"
+.weiter TRX2? xagw / xausst08 & h|yregel08 = "x2"   & _ xausst08 = "**"
+.weiter TRX2? xagw / xausst09 & h|yregel09 = "x2"   & _ xausst09 = "**"
+.weiter TRX2? xagw / xausst10 & h|yregel10 = "x2"   & _ xausst10 = "**"
+.weiter TRX2? xagw / xausst11 & h|yregel11 = "x2"   & _ xausst11 = "**"
+.weiter TRX2? xagw / xausst12 & h|yregel12 = "x2"   & _ xausst12 = "**"
+.weiter TRX2? xagw / xausst13 & h|yregel13 = "x2"   & _ xausst13 = "**"
+.weiter TRX2? xagw / xausst14 & h|yregel14 = "x2"   & _ xausst14 = "**"
+.weiter TRX2? xagw / xausst15 & h|yregel15 = "x2"   & _ xausst15 = "**"
+.weiter TRX2? xagw / xausst16 & h|yregel16 = "x2"   & _ xausst16 = "**"
+.weiter TRX2? xagw / xausst17 & h|yregel17 = "x2"   & _ xausst17 = "**"
+.weiter TRX2? xagw / xausst18 & h|yregel18 = "x2"   & _ xausst18 = "**"
+.weiter TRX2? xagw / xausst19 & h|yregel19 = "x2"   & _ xausst19 = "**"
+.weiter TRX2? xagw / xausst20 & h|yregel20 = "x2"   & _ xausst20 = "**"
+..
+.weiter XFALSE
+
+
+!TRX2:
+..
+.. eine Bedingung in x2 hat zugetroffen, daher PrÅfung der weiteren x-Regeln
+.fo xbregelx = true
+.. wenn alle vorhandenen x-Regeln zugetroffen haben, darf bzw. muss auf y-Regel nicht mehr geprÅft werden.
+.weiter EX2
+
+
+!X3:
+..
+.aus an 'xdprotokollis'
+X3#'xausst01'  'h|yregel01'  'xagw'# 'xausst02' 'h|yregel02' 'xausst03' 'h|yregel03' 'xausst04'  'h|yregel04' 'xausst05' 'h|yregel05' 'xausst06'  'h|yregel06' 'xausst07' 'h|yregel07' 'xausst08' 'h|yregel08' 'xausst09' 'h|yregel09'
+..
+.aus an 'xdatei'
+..
+..
+.weiter TRX3? xagw / xausst01 & h|yregel01 = "x3"   & _ xausst01 = "**"
+.weiter TRX3? xagw / xausst02 & h|yregel02 = "x3"   & _ xausst02 = "**"
+.weiter TRX3? xagw / xausst03 & h|yregel03 = "x3"   & _ xausst03 = "**"
+.weiter TRX3? xagw / xausst04 & h|yregel04 = "x3"   & _ xausst04 = "**"
+.weiter TRX3? xagw / xausst05 & h|yregel05 = "x3"   & _ xausst05 = "**"
+.weiter TRX3? xagw / xausst06 & h|yregel06 = "x3"   & _ xausst06 = "**"
+.weiter TRX3? xagw / xausst07 & h|yregel07 = "x3"   & _ xausst07 = "**"
+.weiter TRX3? xagw / xausst08 & h|yregel08 = "x3"   & _ xausst08 = "**"
+.weiter TRX3? xagw / xausst09 & h|yregel09 = "x3"   & _ xausst09 = "**"
+.weiter TRX3? xagw / xausst10 & h|yregel10 = "x3"   & _ xausst10 = "**"
+.weiter TRX3? xagw / xausst11 & h|yregel11 = "x3"   & _ xausst11 = "**"
+.weiter TRX3? xagw / xausst12 & h|yregel12 = "x3"   & _ xausst12 = "**"
+.weiter TRX3? xagw / xausst13 & h|yregel13 = "x3"   & _ xausst13 = "**"
+.weiter TRX3? xagw / xausst14 & h|yregel14 = "x3"   & _ xausst14 = "**"
+.weiter TRX3? xagw / xausst15 & h|yregel15 = "x3"   & _ xausst15 = "**"
+.weiter TRX3? xagw / xausst16 & h|yregel16 = "x3"   & _ xausst16 = "**"
+.weiter TRX3? xagw / xausst17 & h|yregel17 = "x3"   & _ xausst17 = "**"
+.weiter TRX3? xagw / xausst18 & h|yregel18 = "x3"   & _ xausst18 = "**"
+.weiter TRX3? xagw / xausst19 & h|yregel19 = "x3"   & _ xausst19 = "**"
+.weiter TRX3? xagw / xausst20 & h|yregel20 = "x3"   & _ xausst20 = "**"
+..
+.weiter XFALSE
+
+
+!TRX3:
+.. eine Bedingung in x1 hat zugetroffen, daher PrÅfung der weiteren x-Regeln
+.fo xbregelx = true
+.. wenn alle vorhandenen x-Regeln zugetroffen haben, darf bzw. muss auf y-Regel nicht mehr geprÅft werden.
+.weiter EX3
+
+
+!X4:
+..
+.aus an 'xdprotokollis'
+X4#'xausst01'  'h|yregel01'  'xagw'# 'xausst02' 'h|yregel02' 'xausst03' 'h|yregel03' 'xausst04'  'h|yregel04' 'xausst05' 'h|yregel05' 'xausst06'  'h|yregel06' 'xausst07' 'h|yregel07' 'xausst08' 'h|yregel08' 'xausst09' 'h|yregel09'
+..
+.aus an 'xdatei'
+..
+..
+.weiter TRX4? xagw / xausst01 & h|yregel01 = "x4"   & _ xausst01 = "**"
+.weiter TRX4? xagw / xausst02 & h|yregel02 = "x4"   & _ xausst02 = "**"
+.weiter TRX4? xagw / xausst03 & h|yregel03 = "x4"   & _ xausst03 = "**"
+.weiter TRX4? xagw / xausst04 & h|yregel04 = "x4"   & _ xausst04 = "**"
+.weiter TRX4? xagw / xausst05 & h|yregel05 = "x4"   & _ xausst05 = "**"
+.weiter TRX4? xagw / xausst06 & h|yregel06 = "x4"   & _ xausst06 = "**"
+.weiter TRX4? xagw / xausst07 & h|yregel07 = "x4"   & _ xausst07 = "**"
+.weiter TRX4? xagw / xausst08 & h|yregel08 = "x4"   & _ xausst08 = "**"
+.weiter TRX4? xagw / xausst09 & h|yregel09 = "x4"   & _ xausst09 = "**"
+.weiter TRX4? xagw / xausst10 & h|yregel10 = "x4"   & _ xausst10 = "**"
+.weiter TRX4? xagw / xausst11 & h|yregel11 = "x4"   & _ xausst11 = "**"
+.weiter TRX4? xagw / xausst12 & h|yregel12 = "x4"   & _ xausst12 = "**"
+.weiter TRX4? xagw / xausst13 & h|yregel13 = "x4"   & _ xausst13 = "**"
+.weiter TRX4? xagw / xausst14 & h|yregel14 = "x4"   & _ xausst14 = "**"
+.weiter TRX4? xagw / xausst15 & h|yregel15 = "x4"   & _ xausst15 = "**"
+.weiter TRX4? xagw / xausst16 & h|yregel16 = "x4"   & _ xausst16 = "**"
+.weiter TRX4? xagw / xausst17 & h|yregel17 = "x4"   & _ xausst17 = "**"
+.weiter TRX4? xagw / xausst18 & h|yregel18 = "x4"   & _ xausst18 = "**"
+.weiter TRX4? xagw / xausst19 & h|yregel19 = "x4"   & _ xausst19 = "**"
+.weiter TRX4? xagw / xausst20 & h|yregel20 = "x4"   & _ xausst20 = "**"
+..
+.weiter XFALSE
+
+
+!TRX4:
+.. eine Bedingung in x4 hat zugetroffen, daher PrÅfung der weiteren x-Regeln
+.. momentan nur 4 x-Regeln, daher keine weitere PrÅfung auf "y-Regel"  - mehr wie true gibt es nicht.
+.weiter XTRUE
+
+
+..................Y-Regeln
+..
+!Y1:
+..
+.aus an 'xdprotokollis'
+Y1#'xausst01'  'h|yregel01'  'xagw'# 'xausst02' 'h|yregel02' 'xausst03' 'h|yregel03' 'xausst04'  'h|yregel04' 'xausst05' 'h|yregel05' 'xausst06'  'h|yregel06' 'xausst07' 'h|yregel07' 'xausst08' 'h|yregel08' 'xausst09' 'h|yregel09'
+..
+.aus an 'xdatei'
+..
+..
+..
+.weiter Y1FALSE        ? _ xagw / xausst01  & h|yregel01 = "y1" & _ xausst01 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst02  & h|yregel02 = "y1" & _ xausst02 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst03  & h|yregel03 = "y1" & _ xausst03 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst04  & h|yregel04 = "y1" & _ xausst04 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst05  & h|yregel05 = "y1" & _ xausst05 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst06  & h|yregel06 = "y1" & _ xausst06 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst07  & h|yregel07 = "y1" & _ xausst07 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst08  & h|yregel08 = "y1" & _ xausst08 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst09  & h|yregel09 = "y1" & _ xausst09 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst10  & h|yregel10 = "y1" & _ xausst10 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst11  & h|yregel11 = "y1" & _ xausst11 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst12  & h|yregel12 = "y1" & _ xausst12 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst13  & h|yregel13 = "y1" & _ xausst13 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst14  & h|yregel14 = "y1" & _ xausst14 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst15  & h|yregel15 = "y1" & _ xausst15 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst16  & h|yregel16 = "y1" & _ xausst16 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst17  & h|yregel17 = "y1" & _ xausst17 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst18  & h|yregel18 = "y1" & _ xausst18 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst19  & h|yregel19 = "y1" & _ xausst19 = "**"
+.weiter Y1FALSE        ? _ xagw / xausst20  & h|yregel20 = "y1" & _ xausst20 = "**"
+..
+..  die und-Option der y-Regel trifft zu 
+..
+.weiter YTRUE
+
+!Y1FALSE:
+.. die Regel y1 trifft nicht zu, daher PrÅfung auf weitere y-Regeln.
+.weiter EY1
+
+
+!Y2:
+..
+.aus an 'xdprotokollis'
+Y2#'xausst01'  'h|yregel01'  'xagw'# 'xausst02' 'h|yregel02' 'xausst03' 'h|yregel03' 'xausst04'  'h|yregel04' 'xausst05' 'h|yregel05' 'xausst06'  'h|yregel06' 'xausst07' 'h|yregel07' 'xausst08' 'h|yregel08' 'xausst09' 'h|yregel09'
+..
+.aus an 'xdatei'
+..
+..
+..
+.weiter Y2FALSE        ? _ xagw / xausst01  & h|yregel01 = "y2" & _ xausst01 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst02  & h|yregel02 = "y2" & _ xausst02 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst03  & h|yregel03 = "y2" & _ xausst03 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst04  & h|yregel04 = "y2" & _ xausst04 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst05  & h|yregel05 = "y2" & _ xausst05 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst06  & h|yregel06 = "y2" & _ xausst06 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst07  & h|yregel07 = "y2" & _ xausst07 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst08  & h|yregel08 = "y2" & _ xausst08 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst09  & h|yregel09 = "y2" & _ xausst09 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst10  & h|yregel10 = "y2" & _ xausst10 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst11  & h|yregel11 = "y2" & _ xausst11 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst12  & h|yregel12 = "y2" & _ xausst12 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst13  & h|yregel13 = "y2" & _ xausst13 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst14  & h|yregel14 = "y2" & _ xausst14 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst15  & h|yregel15 = "y2" & _ xausst15 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst16  & h|yregel16 = "y2" & _ xausst16 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst17  & h|yregel17 = "y2" & _ xausst17 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst18  & h|yregel18 = "y2" & _ xausst18 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst19  & h|yregel19 = "y2" & _ xausst19 = "**"
+.weiter Y2FALSE        ? _ xagw / xausst20  & h|yregel20 = "y2" & _ xausst20 = "**"
+..
+..  die und-Option der y-Regel trifft zu 
+..
+.weiter YTRUE
+
+!Y2FALSE:
+.. die Regel y2 trifft nicht zu, daher PrÅfung auf weitere y-Regeln.
+.weiter EY2
+
+
+!Y3:
+..
+.aus an 'xdprotokollis'
+Y3#'xausst01'  'h|yregel01'  'xagw'# 'xausst02' 'h|yregel02' 'xausst03' 'h|yregel03' 'xausst04'  'h|yregel04' 'xausst05' 'h|yregel05' 'xausst06'  'h|yregel06' 'xausst07' 'h|yregel07' 'xausst08' 'h|yregel08' 'xausst09' 'h|yregel09'
+..
+.aus an 'xdatei'
+..
+..
+..
+.weiter Y3FALSE        ? _ xagw / xausst01  & h|yregel01 = "y3" & _ xausst01 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst02  & h|yregel02 = "y3" & _ xausst02 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst03  & h|yregel03 = "y3" & _ xausst03 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst04  & h|yregel04 = "y3" & _ xausst04 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst05  & h|yregel05 = "y3" & _ xausst05 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst06  & h|yregel06 = "y3" & _ xausst06 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst07  & h|yregel07 = "y3" & _ xausst07 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst08  & h|yregel08 = "y3" & _ xausst08 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst09  & h|yregel09 = "y3" & _ xausst09 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst10  & h|yregel10 = "y3" & _ xausst10 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst11  & h|yregel11 = "y3" & _ xausst11 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst12  & h|yregel12 = "y3" & _ xausst12 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst13  & h|yregel13 = "y3" & _ xausst13 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst14  & h|yregel14 = "y3" & _ xausst14 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst15  & h|yregel15 = "y3" & _ xausst15 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst16  & h|yregel16 = "y3" & _ xausst16 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst17  & h|yregel17 = "y3" & _ xausst17 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst18  & h|yregel18 = "y3" & _ xausst18 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst19  & h|yregel19 = "y3" & _ xausst19 = "**"
+.weiter Y3FALSE        ? _ xagw / xausst20  & h|yregel20 = "y3" & _ xausst20 = "**"
+..
+..  die und-Option der y-Regel trifft zu 
+..
+.weiter YTRUE
+
+!Y3FALSE:
+.. die Regel y3 trifft nicht zu, daher PrÅfung auf weitere y-Regeln.
+.weiter EY3
+
+
+!Y4:
+..
+.aus an 'xdprotokollis'
+Y4#'xausst01'  'h|yregel01'  'xagw'# 'xausst02' 'h|yregel02' 'xausst03' 'h|yregel03' 'xausst04'  'h|yregel04' 'xausst05' 'h|yregel05' 'xausst06'  'h|yregel06' 'xausst07' 'h|yregel07' 'xausst08' 'h|yregel08' 'xausst09' 'h|yregel09'
+..
+.aus an 'xdatei'
+..
+..
+..
+.weiter Y4FALSE        ? _ xagw / xausst01  & h|yregel01 = "y4" & _ xausst01 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst02  & h|yregel02 = "y4" & _ xausst02 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst03  & h|yregel03 = "y4" & _ xausst03 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst04  & h|yregel04 = "y4" & _ xausst04 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst05  & h|yregel05 = "y4" & _ xausst05 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst06  & h|yregel06 = "y4" & _ xausst06 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst07  & h|yregel07 = "y4" & _ xausst07 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst08  & h|yregel08 = "y4" & _ xausst08 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst09  & h|yregel09 = "y4" & _ xausst09 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst10  & h|yregel10 = "y4" & _ xausst10 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst11  & h|yregel11 = "y4" & _ xausst11 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst12  & h|yregel12 = "y4" & _ xausst12 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst13  & h|yregel13 = "y4" & _ xausst13 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst14  & h|yregel14 = "y4" & _ xausst14 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst15  & h|yregel15 = "y4" & _ xausst15 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst16  & h|yregel16 = "y4" & _ xausst16 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst17  & h|yregel17 = "y4" & _ xausst17 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst18  & h|yregel18 = "y4" & _ xausst18 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst19  & h|yregel19 = "y4" & _ xausst19 = "**"
+.weiter Y4FALSE        ? _ xagw / xausst20  & h|yregel20 = "y4" & _ xausst20 = "**"
+..
+..  die und-Option der y-Regel trifft zu 
+..
+.weiter YTRUE
+
+!Y4FALSE:
+.. die Regel y4 trifft nicht zu, daher PrÅfung auf weitere y-Regeln.
+.. Momentan nur 4 Y-Optionen, daher weiter zu YFALSE
+.weiter YFALSE
+
+
+!F1:
+.fehler !Nur im Zeigen-Modus ausfÅhrbar
+.ende
+
+!F2:
+.fehler !Keine Konfiguration vorhanden
+.ende
+
+!F3:
+.fehler !Es sind keine Merkmale ausgewÑlt
+.ende
+
+!F4:
+.fehler !Die Konfiguration ist noch nicht abgeschlossen
+.ende
+

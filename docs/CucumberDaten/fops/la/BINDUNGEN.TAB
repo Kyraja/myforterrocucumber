@@ -1,0 +1,142 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BINDUNGEN.TAB
+.. Autor          : fwester/tiwe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Stellt eine Materialbindung in der Tabellenzeile dar.
+.. Ablauf         : Tabellen-EFOP
+..
+.. Functionality  : Shows a bounding of material in a row of the table.
+.. Program flow   : Table efop
+..*****************************************************************************
+.set trans -
+..
+.. Create a row
+.make screen line +O
+..
+!TBUFFER : general settings from buffer T
+.assign M|tmge = G|bvmge
+.copy M|tle = M|kle
+..
+.. transform mark into a valid value for a enummeration
+.copy M|tbvkenn = G|bvkenn
+.copy M|tursache = G|ursache
+..
+.. General handles for all mover of material
+.continue HBUFFER ? F|defined(H|nummer)
+..
+.continue JOURNAL
+..
+!HBUFFER
+.assign M|tbeweger = H|id
+.formula M|tbewegerbut =  M|vorgangicon  ? _F|empty(M|tbeweger)
+.assign M|tdnr = H|dnr
+.assign M|tdbez = 'H|dbez'
+.assign M|tgruppe = H|gruppe
+.assign M|tgrbez = 'H|grbez'
+.. Specials
+.continue WORKORD ? M|tdnr = M|betrauftrag
+.continue SALEPUR ? M|tdnr = M|einkauf ; M|tdnr = M|verkauf
+.continue LAGBUCH ? M|tdnr = M|lagerbuchung
+.continue FATAL
+..
+!WORKORD: special handles for workorders
+.assign M|tvom = H|vom
+.assign M|tbewegertyp = M|tgrbez
+.select line
+.continue END ? _G|mehr
+.copy M|tcharge = H|charge
+.copy M|tkcharge = H|tkcharge
+.type P9:1 xbarm ? _F|defined(U|xbarm)
+.assign U|xbarm = H|barm
+.continue END ? _G|mehr
+.assign M|tlimge = U|xbarm^mge
+.continue JOURNAL
+..
+!SALEPUR: special handles for sales or purchase positions
+.assign M|tbewegertyp = M|tbeweger^typa
+.assign M|tlimge = H|limge
+.continue SUGGEST ? M|tdnr = M|einkauf & M|tgruppe = M|vorschlag
+.copy M|tcharge = H|charge
+.copy M|tkcharge = H|tcharge
+.continue RESERVE ? M|tdnr = M|einkauf & M|tgruppe = M|reservierung
+.continue FATAL ? M|tgruppe <> M|position
+.assign M|tvom = H|kopf^vom
+.copy M|tlehe = H|lehe
+.continue JOURNAL ? M|tlehe = 1.0 ; M|tlehe = 0.0
+.formula M|tlimge = M|tlehe * M|tlimge
+.formula M|tmge = M|tlehe * M|tmge
+.continue JOURNAL
+..
+!RESERVE
+.continue JOURNAL
+..
+!SUGGEST
+.assign M|tvom = H|vom
+.continue JOURNAL
+!LAGBUCH
+.continue JOURNAL
+..
+!JOURNAL
+.type VID19 xmover ? _F|defined(U|xmover)
+.assign U|xmover = M|tbeweger
+.formula M|tjournal = 'G|zuganglj^id'    ? M|zuab =  M|abgangicon
+.formula M|tjournal = 'G|abganglj^id'    ? M|zuab  = M|zugangicon
+.assign M|tbewegertyp = M|tjournal^detursache  ? F|empty(M|tbewegertyp)
+.formula M|tjournalbut =  M|vorgangicon  ? _F|empty(M|tjournal)
+.formula M|tzuab  = M|zugangicon   ? _F|empty(M|tjournal) & F|equals(M|tjournal^buarta, "(Receipt)")
+.formula M|tzuab  = M|abgangicon   ? _F|empty(M|tjournal) & F|equals(M|tjournal^buarta, "(Issue)")
+.copy M|tartikel  = M|tjournal^artikel
+.. Bewertung einfÅgen
+.continue NOBEW ? F|empty(M|tjournal)
+.formula U|xtsel = "$,,ppsrefid="+M|tjournal^id+";nachfolger==`;historisch="+'G|false'+";@richtung=(Backwards);@ablageart=(Active);"
+.select valuation 'U|xtsel'
+.continue NOBEW ? _G|mehr
+.formula M|tbew    = H|id
+.formula M|tbewbut =  M|vorgangicon 
+.. immer auf das Kopffeld gehen fÅr den Preis, da verschiedene Zeilen mîglich
+.formula M|tbewpreis = H|bewpr
+.select line
+..Status der ersten Zeile reinschreiben
+.formula M|tbewstatus = H|bewertet 
+!BEWLOOP
+..haben die Zeilen alle den gleichen Status
+.formula M|tbewstatus = ""     ? H|bewertet <> M|tbewstatus
+.continue NOBEW                ? F|empty(M|tbewstatus)
+.select line
+.continue BEWLOOP ? G|mehr
+!NOBEW
+..Kalkulation hinzufÅgen
+..xfv soll einen Fertigungsvorschlag aufnehmen
+..wenn xfv leer ist, nicht moeglich nach Nachkalkulation zu suchen 
+.type ID4:5 xfv ? _F|defined(U|xfv)
+..Datenbank 9, Gruppe 2 -> RÅckmeldungen
+.assign U|xfv  = M|tjournal^bsres^id  ? M|tdnr = 9  & M|tgruppe = 2
+..Datenbank 4, Gruppe 5 -> Fertigungsvorschlag
+.assign U|xfv  = M|tbeweger^id        ? M|tdnr = 4  & M|tgruppe = 5  
+.continue KALK    ? _F|empty(U|xfv)
+.continue NOKALK  ? F|empty(U|xfv)
+!KALK         
+.formula U|xtsel "$,,typ=(FinalCosting);herkunft="+U|xfv+";" 
+.formula M|grliste = "57:1"
+.select group  'M|grliste' 'U|xtsel'
+.continue NOKALK ? _G|mehr
+.formula M|tkblatt    = H|id
+.formula M|tkblattbut =  M|vorgangicon  ? _F|empty(M|tkblatt) 
+.formula M|thk        = M|tkblatt^hk
+.copy M|thkvollst    =  G|false  ?  M|tkblatt^fehler
+.copy M|thkvollst    =  G|true   ? _M|tkblatt^fehler
+!NOKALK
+..FV eintragen
+.formula M|tfv     = U|xfv          ? _F|empty(U|xfv)
+.formula M|tfvbut  = M|vorgangicon  ? _F|empty(M|tfv) 
+.formula M|taflanz = M|vorgangicon  ? _F|empty(M|tfv) 
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!FATAL
+.error -number 1111
+.end 1

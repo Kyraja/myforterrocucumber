@@ -1,0 +1,301 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICEPROCESS.EV
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text    xtmpfile    ? _F|defined(U|xtmpfile)
+.type text    xtout       ? _F|defined(U|xtout)
+.type text    xterr       ? _F|defined(U|xterr)
+.type integer xistatus    ? _F|defined(U|xistatus)
+.type text    xsel        ? _F|defined(U|xsel)
+.type text    xbankverb   ? _F|defined(U|xbankverb)
+.type text    xtsel       ? _F|defined(U|xtsel)
+.type text    xselect     ? _F|defined(U|xselect)
+..
+.input "is/ABASFARBEN.DEF"
+..<META M|='ev/ELINVOICEPROCESS'>
+..EDI-Konfig Supplier/Suppliercontact
+..<META 3|='P1:4'>
+..EDI-Konfig Customer/Customercontact
+..<META 5|='P0:4'>
+..
+.type P53:0  xedi  ? _F|defined(U|xedi) 
+.type P92:11 xsuch ? _F|defined(U|xsuch)
+..
+.formula M|gruenz = "icon:ball_green"
+.formula M|rotz = "icon:ball_red"
+.formula M|orangez = "icon:ball_orange"
+..
+.. --- EVENTS --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---  
+.continue SUCH    ?  G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "ediobjsuch"
+.continue EDI     ?  G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "edifact"
+.continue EVKETTE ?  G|evtartengl = "BUTTON_AFTER"  &  G|evtvar = "buevkette"
+.continue SELECT  ?  G|evtartengl = "BUTTON_AFTER"  &  G|evtvar = "selektion"
+.continue ARTIKEL ?  G|evtartengl = "FIELD_FILL"    &  G|evtvar = "artikel"
+.continue PROTECT ?  G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "artikel"
+.continue BESTELL ?  G|evtartengl = "BUTTON_AFTER"  &  G|evtvar = "bueigbestell"
+.continue TBESTEL ?  G|evtartengl = "BUTTON_AFTER"  &  G|evtvar = "tbueigbestell"
+.continue ZAFORM  ?  G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "zaform"
+.continue ZBED    ?  G|evtartengl = "FIELD_FILL"    &  G|evtvar = "zbed"
+.input "is/ABASFARBEN.DEF"
+.continue KOBVERB ?  G|evtartengl = "BUTTON_AFTER"  &  G|evtvar = "bukobverb"
+.continue BBIBAN  ?  G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "kobverb"
+.continue LEIDAT  ?  G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "DeliveryDateTime"
+.continue WERTE   ?  G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "bwerteausrechnung"
+.. --- EVENTS --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---  
+.continue END
+..
+!WERTE
+.continue END
+..
+!LEIDAT
+.colour -background -1 -1 -1  DeliveryDateTime
+.colour -background 'U|xabasyellow' DeliveryDateTime ? F|empty(DeliveryDateTime) & M|bewlei
+.continue END
+..
+!KOBVERB
+.protection kobverb ? _F|empty(M|PayeePartyCreditorFinancialAccountIBANID) & _F|empty(M|kobverb)
+.continue END       ? _F|empty(M|PayeePartyCreditorFinancialAccountIBANID) & _F|empty(M|kobverb)
+.protection kobverb        ?  F|empty(M|resteller)
+.protection -reset kobverb ? _F|empty(M|resteller)
+.continue END              ?  F|empty(M|resteller)
+.formula U|xbankverb = "%,,konto="+'M|lieferant^id'+";iban=;@gruppe=2;@autostart=ja"
+.load 9 bankdata 'U|xbankverb'
+.continue ERROR  ? _G|mehr
+.continue ERROR1 ?  F|empty(9|iban)
+.assign M|kobverb = 9|id 
+.protection kobverb ? _F|empty(M|kobverb) & _F|empty(M|resteller)
+..
+!BBIBAN
+.protection -reset kobverb 
+.continue ERROR1 ? F|empty(M|kobverb^iban)
+.copy M|bbiban = G|FALSE
+.copy M|bbiban = G|TRUE ? M|resteller^id = M|kobverb^konto^id
+.formula M|kobverb = "" ? _M|bbiban
+.colour -background 'U|xabasyellow' kobverb ? _M|bbiban
+.colour -background -1 -1 -1 bbiban 
+.colour -background 'U|xabasyellow' bbiban ?  F|empty(M|kobverb)
+.colour -background -1 -1 -1 kobverb ? _F|empty(M|kobverb)
+.protection kobverb ? _F|empty(M|kobverb) & M|bbiban
+.formula M|button8 = M|gruenz ? _F|empty(M|kobverb) & M|bbiban
+.continue END
+..
+!ZAFORM
+.formula M|button8 = M|rotz                 ? _F|equals(M|zaform, "(DebitNote)") & F|empty(M|kobverb)
+.protection -reset kobverb 0                ? _F|equals(M|zaform, "(DebitNote)") & F|empty(M|kobverb)
+.colour -background 'U|xabasyellow' kobverb ? _F|equals(M|zaform, "(DebitNote)") & F|empty(M|kobverb)
+.formula M|button8 = M|gruenz               ?  F|equals(M|zaform, "(DebitNote)") 
+.continue END   ? F|equals(M|zaform, "(Transfer)") & (M|SpecifiedTradePaymentMeans = 58 ; M|SpecifiedTradePaymentMeans = 30)
+.formula M|button7 = M|gruenz ? F|equals(M|zaform, "(DebitNote)") & (M|SpecifiedTradePaymentMeans = 49 ; M|SpecifiedTradePaymentMeans = 59)
+.continue END   ? F|equals(M|zaform, "(DebitNote)") & (M|SpecifiedTradePaymentMeans = 49 ; M|SpecifiedTradePaymentMeans = 59)
+.continue END   ? F|equals(M|zaform, "(Check)") & M|SpecifiedTradePaymentMeans = 20
+.continue END   ? F|equals(M|zaform, "(EmptyEntry)") & F|empty(M|SpecifiedTradePaymentMeans)
+.continue HINWEIS
+..
+!HINWEIS
+.box Hinweis
+Die Zahlungsart wurde ge„ndert und passt 
+nun nicht mehr zur externen Zahlungsart!
+.continue END
+..
+!BESTELL
+.continue END ? F|empty(M|eigbestell)
+.input "ev/ELINVOICEPROCESS.KBUOBJEKTSUCHE.BB.FO"
+.input "ev/ELINVOICEPROCESS.KBUOBJEKTSUCHE.BA.FO"
+.continue END
+..
+!TBESTEL
+.continue END ? F|empty(M|teigbestell)
+.input "ev/ELINVOICEPROCESS.KBUOBJEKTSUCHE.BB.FO"
+.continue END
+..
+!ARTIKEL 
+.colour -background -1 -1 -1 artikel 'M|aktzeile'
+.continue END
+..
+!PROTECT
+.continue EMPTY ? F|empty(M|artikel)
+.colour -background -1 -1 -1 artikel 'M|aktzeile'
+.protection bzusatz  'M|aktzeile' ? M|artikel^gruppe = 1
+.protection bzusatz  'M|aktzeile' ? M|artikel^gruppe = 4 & M|breneu
+.protection bzusatz  'M|aktzeile' ? M|artikel^gruppe = 4 & M|bausls & M|abwlieferschein =  0
+.protection bzusatz  'M|aktzeile' ? M|artikel^gruppe = 4 & M|bausbe & M|abwbestellung =  0
+.protection konto 'M|aktzeile'   ? F|protected(M|bzusatz, M|aktzeile)
+.protection kstelle 'M|aktzeile' ? F|protected(M|bzusatz, M|aktzeile)
+.copy M|wgruppe = M|artikel^wgruppe
+.copy M|wgruppe = F|sysinfo(7)^wgruppe ? F|empty(M|wgruppe)
+.copy M|befuehr = M|wgruppe^befuehr
+.continue BUTTONCHECK
+..
+!ZBED
+.continue ZBEDLEER ?  F|empty(M|zbed)
+.formula M|button7 = M|orangez ? _F|empty(M|SpecifiedTradePaymentTerms)
+.continue END
+..
+!ZBEDLEER
+.formula M|button7 = M|gruenz  ? _F|empty(M|SpecifiedTradePaymentTerms)
+.continue END
+..
+!EMPTY
+.protection -reset bzusatz 'M|aktzeile'
+.formula M|buttonartikel = M|rotz
+.colour -background 'U|xabasyellow' artikel 'M|aktzeile'
+..
+!BUTTONCHECK
+.select screen header
+.continue END ? _G|mehr
+.formula M|buttonartikel = M|gruenz
+..
+!BLINE
+.select screen line
+.continue END ? _G|mehr
+.continue BLINE ? M|zeilentyp <> 0
+.continue BLINE ? _F|empty(M|artikel) & M|zeilentyp = 0
+.formula M|buttonartikel = M|rotz
+.continue END
+..
+!SELECT
+.continue END ? _M|bmehrerelief
+.formula U|xsel = "%,,;okopf="+'M|bestellung^id'+";kopf=;vom=;lief=;artikel=;@zeilen=true;@gruppe=23;@ablageart=(Both)"
+.command -parallel 'F|formatstr("<(Purchasing)>{1}<(View)>", U|xsel)'
+.continue END
+..
+!EVKETTE: ohne Storno
+.continue LIEF ? F|empty(M|bestellung) & _F|empty(M|liefek)
+.continue REEK ? F|empty(M|bestellung) & F|empty(M|liefek) & _F|empty(M|rechnungek) 
+.command -parallel 'F|formatstr("<(Infosystem)>{1}<(Call)> ? vorgang= {2} | richtung=vorw„rts | bnostorno=true | bstart=true", 10056, M|bestellung^id)'
+.continue END
+..
+!LIEF
+.command -parallel 'F|formatstr("<(Infosystem)>{1}<(Call)> ? vorgang= {2} | richtung=vorw„rts | bnostorno=true | bstart=true", 10056, M|liefek^id)'
+.continue END
+..
+!REEK
+.command -parallel 'F|formatstr("<(Infosystem)>{1}<(Call)> ? vorgang= {2} | richtung=vorw„rts | bnostorno=true | bstart=true", 10056, M|rechnungek^id)'
+.continue END
+..
+!EDI
+.protection kobverb
+.assign U|xedi = M|edifact
+.input "is/KOPFLEEREN"
+.formula M|notizen = ""
+.input "is/KOPFFARBENZURUECKSETZEN.FO"
+.input "is/TABLEEREN"
+.assign M|edifact = U|xedi
+.continue KEINZF ? _F|equals(M|edifact^edinachraz, "(ZUGFeRDInvoice)")
+.. 
+.. Externe Belegnummer ermitteln
+.formula xtsel = "$,,;@gruppe=0;id=" + 'M|edifact^id' + ";text4=ExchangedDocumentID;@zeilen=(1)"
+.load 2 edifact 'U|xtsel'
+.continue WEITER  ? _G|mehr
+.load 2 line '2|selzeile'
+.continue WEITER  ? _G|mehr
+.formula M|extern = 2|text5
+.load 2
+..
+.continue WEITER  ? F|empty(M|extern)
+!KL
+.formula U|xselect = "$,,ebeleg=="+'M|extern'+ ";kl="+ 'M|edifact^partner^id' + ";typ=(Invoice);ident<>`;ident<>" + 'M|edifact'+";stornopartnervorg=`;pos<>`;@ablageart=(Both)"
+.load 1 purchasing 'U|xselect'
+.continue KL2 ? _G|mehr
+.copy M|bdublette = G|TRUE
+.assign M|dedi = 1|ident 
+.continue WEITER
+..
+!KL2
+.formula U|xselect = "$,,ebeleg=="+'M|extern'+ ";kl2="+ 'M|edifact^partner^id' + ";typ=(Invoice);ident<>`;ident<>" + 'M|edifact'+";stornopartnervorg=`;pos<>`;@ablageart=(Both)"
+.load 1 purchasing 'U|xselect'
+.continue WEITER  ? _G|mehr
+.copy M|bdublette = G|TRUE
+.assign M|dedi = 1|ident
+.continue WEITER
+..
+!WEITER
+.copy M|bewlei = F|sysinfo(18)^bewlei
+.assign M|edipartner = U|xedi^partner
+.assign M|ediaktiv = G|false
+.assign M|status = M|edifact^edistatusaz
+.assign U|xistatus = M|edifact^status
+.assign M|reek = M|edifact^ideksvor
+.assign M|ebeleg = M|reek^ebeleg
+.formula M|sumnettobestellung = M|bestellung^sumnetto
+.formula M|sumnettoliefer = M|liefek^sumnetto
+.formula M|neurenetto = M|reek^sumnetto
+.formula M|neurebrutto = M|reek^rebetr  
+.formula M|ExchangedDocumentTypeCode = M|edifact^datenart
+.. Status icon
+.formula M|fotoz = "icon:ball_grey" ? U|xistatus < 0
+.formula M|fotoz = G|icook        ? U|xistatus = 0
+.formula M|fotoz = G|icomessage   ? (U|xistatus=2 ; U|xistatus=3) & (M|edifact^fcode=0)
+.formula M|fotoz = G|icoerror     ? U|xistatus=2  & M|edifact^fcode<>0
+.formula M|fotoz = G|icoerror     ? U|xistatus = 4
+.formula M|fotoz = G|icowarn      ? (U|xistatus=5 ; U|xistatus=6 ; U|xistatus=7 ; U|xistatus=8 ; U|xistatus=9 ; U|xistatus=10)
+.formula M|fotoz = G|icoerror     ? U|xistatus = 11
+.assign M|ediobjsuch = M|edifact^ediobjsuch
+.formula M|gefundenefelder = ""
+.formula M|fehlendefelder = ""
+..
+.continue EKEDI ? M|edipartner^dnr=1
+.continue VKEDI ? M|edipartner^dnr=0
+.continue END
+!EKEDI
+.load 3 supplier 'F|formatstr("$,,;@gruppe=4;@zeilen=(1);edinachraz={1};klnum={2}", "(ZUGFeRDInvoice)", M|edipartner^id)'
+.continue END ? _G|mehr
+.load 3 line '3|selzeile'
+.assign M|ediaktiv = 3|erlaubt 
+.load 3
+.continue END
+!VKEDI
+.load 5 customer 'F|formatstr("$,,;@gruppe=4;@zeilen=(1);edinachraz={1};klnum={2}", "(ZUGFeRDInvoice)", M|edipartner^id)'
+.continue END ? _G|mehr
+.load 5 line '5|selzeile'
+.assign M|ediaktiv = 5|erlaubt 
+.load 5
+.continue END
+..
+!SUCH
+.assign U|xedi = M|edifact
+.assign U|xsuch = M|ediobjsuch
+.input "is/KOPFLEEREN"
+.input "is/KOPFFARBENZURUECKSETZEN.FO"
+.input "is/TABLEEREN"
+.assign M|edifact = U|xedi
+.assign M|status = M|edifact^edistatusaz
+.assign M|ediobjsuch = U|xsuch
+.assign M|reek = M|edifact^ideksvor
+.formula M|neurenetto = M|reek^sumnetto
+.formula M|neurebrutto = M|reek^rebetr
+.formula M|sumnettobestellung = M|bestellung^sumnetto
+.formula M|sumnettoliefer = M|liefek^sumnetto
+.formula M|gefundenefelder = ""
+.formula M|fehlendefelder = ""
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+!KEINZF
+.error -message Diese Nachricht ist keine E-Rechnung.
+.end 1
+..
+!ERROR
+.error -message Keine Bankverbindung zu Rechnungssteller 'M|resteller^nummer' gew„hlt.
+.copy M|bbiban = G|FALSE
+.colour -background 'U|xabasyellow' bbiban
+.formula M|button8 = M|rotz
+.end 1
+..
+!ERROR1
+.error -message 'F|formatstr("Bankverbindung {1} hat keine IBAN.", 9|nummer)'          ? G|evtartengl = "BUTTON_AFTER"
+.error -message 'F|formatstr("Bankverbindung {1} hat keine IBAN.", M|kobverb^nummer)'  ? G|evtartengl = "FIELD_EXIT"
+.formula M|kobverb = ""
+.copy M|bbiban = G|FALSE
+.colour -background 'U|xabasyellow' kobverb 
+.colour -background 'U|xabasyellow' bbiban
+.formula M|button8 = M|rotz
+.end 1

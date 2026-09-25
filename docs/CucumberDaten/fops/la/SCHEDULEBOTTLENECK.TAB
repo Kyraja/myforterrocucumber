@@ -1,0 +1,321 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SCHEDULEBOTTLENECK.TAB
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  :
+.. Includes       :
+..
+..*****************************************************************************
+.set trans -
+..
+.type ID4  xres     ? _F|defined(U|xres)
+.type ID4  xbs      ? _F|defined(U|xbs)
+.type IP6  xaupos   ? _F|defined(U|xaupos)
+.type IP6  xkrit    ? _F|defined(U|xkrit)
+.type IP6  xrueck   ? _F|defined(U|xrueck)
+.type IP6  xn       ? _F|defined(U|xn)
+.type IP6  xfv      ? _F|defined(U|xfv)
+.type IPN6 xproz    ? _F|defined(U|xproz)
+.type M9.3 xresmge  ? _F|defined(U|xresmge)
+.type text xbem     ? _F|defined(U|xbem)
+.type text xbsbem   ? _F|defined(U|xbsbem)
+.type text xfix     ? _F|defined(U|xfix)
+.type text xsel     ? _F|defined(U|xsel)
+.type GD2  xfbsterm ? _F|defined(U|xfbsterm)
+.type GD2  xfterm   ? _F|defined(U|xfterm)
+.type GD2  xwterm   ? _F|defined(U|xwterm)
+.type bool xafl     ? _F|defined(U|xafl)
+.type bool xfreig   ? _F|defined(U|xfreig)
+..
+.continue FERTIGUNG ? M|bfertigung
+..
+!VERKAUF: Lieferobligo_nach_Termin
+.formula U|xsel = "$,,"
+.formula U|xsel = U|xsel + ";id=" + 'M|posauftrag^id'  ? _F|empty(M|posauftrag)
+.formula U|xsel = U|xsel + ";tterm>=" + 'M|von'        ? _F|empty(M|von)
+.formula U|xsel = U|xsel + ";tterm<=" + 'M|bis'        ? _F|empty(M|bis)
+.formula U|xsel = U|xsel + ";kopf=" + M|auftrag^id     ? _F|empty(M|auftrag)
+.formula U|xsel = U|xsel + ";artikel=" + M|artikel^id  ? _F|empty(M|artikel)
+.formula U|xsel = U|xsel + ";aktiv=1;@gruppe=2;@ablageart=(Active)"
+.load 0 sales 'U|xsel'
+.continue START
+..
+!START
+.continue BFUSS ? _G|mehr
+.. 0: beliebige Auftragsposition
+.continue LOOP ? 0|typ<>ARPOS
+.formula U|xaupos = U|xaupos + 1
+.continue LOOP ? F|empty(0|term) ; F|empty(0|fterm) ; _0|einplan ; 0|limge <= 0.0
+.continue LOOP ? '0|fterm:8'  <= '0|term:8'
+.continue KRIT
+..
+!FERTIGUNG
+.formula U|xsel = "$,,"
+.formula U|xsel = U|xsel + ";id=" + 'M|fv^id'             ? _F|empty(M|fv)
+.formula U|xsel = U|xsel + ";tterm>=" + 'M|von'           ? _F|empty(M|von)
+.formula U|xsel = U|xsel + ";tterm<=" + 'M|bis'           ? _F|empty(M|bis)
+.formula U|xsel = U|xsel + ";ba=" + M|ba^id               ? _F|empty(M|ba)
+.formula U|xsel = U|xsel + ";artikel=" + M|artikel^id     ? _F|empty(M|artikel)
+.formula U|xsel = U|xsel + ";einplan=1;limge>0.0;aumge=0.0"
+.formula U|xsel = U|xsel + ";@gruppe=5;@ordnung=term;@ablageart=(Active)"
+.load 0 purchasing 'U|xsel'
+..
+!FSTART
+.continue BFUSS ? _G|mehr
+.. 0: beliebiger FV ohne aumge
+.formula U|xfv = U|xfv + 1
+.continue LOOP ? F|empty(0|term) ; F|empty(0|fterm)
+.continue LOOP ? '0|fterm:8' <= '0|term:8'
+.. 0: Lagerauftrag ?
+.select add 0|id
+.reserve application
+..
+!V
+.select application
+.continue LOOP ? bvkenn="R"
+.continue V    ? bvkenn<>""
+.continue KRIT
+..
+!KRIT
+.formula U|xkrit  = U|xkrit  + 1
+..*** kritische AU-Pos '0|id'  bzw. kritischer Lagerauftrag '0|id'
+.formula U|xwterm = ""
+.continue FWTERM ? M|bfertigung
+.copy U|xwterm = 0|term ? 0|fix
+.continue WEITER
+..
+!FWTERM
+.copy U|xwterm = 0|term ? 0|fix ; 0|fixterm
+..
+!WEITER
+.formula U|xbem = ""
+.continue M1 ? '0|term:8' >= 'G|datum:8'
+.set trans +
+.formula U|xbem = "Liefertermin liegt in der Vergangenheit."   ? M|bverkauf
+.formula U|xbem = "Endtermin liegt in der Vergangenheit."      ? M|bfertigung
+.set trans -
+.formula U|xrueck = U|xrueck + 1
+..
+!M1:
+.set trans +
+.formula U|xbem = "Ist noch nicht disponiert." ? F|empty(0|lres) & M|bverkauf
+.formula U|xbem = "Keine Fertigungsliste."     ? F|empty(0|lres) & M|bfertigung
+.set trans -
+.formula U|xfix = ""
+.continue FFIX              ? M|bfertigung
+.formula U|xfix = M|iconfix ? 0|fix
+.continue ANZ 
+..
+!FFIX
+.formula U|xfix = M|iconfix      ?  0|fix
+.formula U|xfix = M|icontermfix  ? _0|fix & 0|fixterm
+..
+!ANZ: U|xn: Anzahl Kalendertage zwischen Liefertermin und fruehestem Liefertermin
+.formula U|xn = 0|fterm - 0|tterm
+..
+!TAB
+.make screen line +O 
+.colour -foreground -1 -1 -1 -background -1 -1 -1  'M|aktzeile' 
+.assign M|tauftrag = 0|kopf    ? M|bverkauf
+.formula M|pnum = 0|pnum       ? M|bverkauf
+.assign M|tbanummer = 0|nummer ? M|bfertigung
+.assign M|tartikel = 0|artikel
+.assign M|tlgruppe = 0|lgruppe
+.formula M|limge = 0|limge
+.formula M|tterm = 0|tterm
+.formula M|wterm = U|xwterm 
+.formula M|fterm = 0|fterm
+.formula M|fix = U|xfix
+.assign M|kunde = 0|kunde      ? M|bverkauf
+.formula M|verz = U|xn
+.formula M|bem = U|xbem
+.colour -background 'M|bgtable1' 'M|aktzeile' 
+..
+.select add 0|id
+..
+!LRES: 
+.. Verkauf: Auftragsposition oder Beschaffung -> letzte RES der daranhaengenden AFL
+.. Fertigung: Beliebige Beschaffung -> letzte RES der daranhaengenden AFL
+.select add H|lres
+.continue LOOP ? _G|mehr
+..*** Abstieg in AFL 'H|id'
+..
+!RES: H: irgendeine RES
+.continue PRES ? H|limge <= 0.0
+.copy U|xres = H|id
+.formula U|xresmge = H|limge
+.formula U|xproz = 0
+.formula U|xbs = ""
+.copy U|xafl = G|FALSE
+.formula U|xbem = ""
+..*** RES untersuchen 'H|id'
+.continue PRES ? 'H|tfterm:8' > 'H|fbsterm:8' & _G|bvkenn = "L"
+.. RES ist selber kritisch
+.continue RESBS ? elart<>3
+.set trans +
+.formula U|xbem = "Kapazit„tsengpass. Anfangstermin liegt in der Vergangenheit."
+.set trans -
+.continue TERM
+..
+!RESBS: fruehestmoeglichen BS-Termin merken
+.copy U|xfbsterm = H|fbsterm
+..
+.reserve
+.reserve application
+..
+!APPL
+.select application
+.continue LAGER     ?  G|bvkenn="L"
+.continue APPL      ?  G|bvkenn<>""
+.continue CONTINUE
+..
+!LAGER
+.set trans +
+.formula U|xbem = "Gedeckt aus Lagerbestand."
+.set trans -
+.select
+.continue TERM
+..
+!CONTINUE
+.select
+..
+.. kritischste zugeordnete BS zu selbstkritischer RES aufsuchen -> U|xbs
+.. H: RES -> zugeordnete spaeteste BS
+.formula U|xfterm = ""
+.. MZ_Res_Bs_Bew_Art_Lag
+.formula U|xsel = "$,,"
+.formula U|xsel = U|xsel + ";reserv<>`;reserv=" + H|id + ";einplan=1;aktiv=1;bs<>`;@richtung=rueckwaerts;@ablageart=(Both)"
+.load 1 mallocation 'U|xsel'
+..
+!MZ: mallocation
+.continue MZE  ? _G|mehr
+.select add 1|bs
+.continue NMZ  ? 'H|fterm:8' < 'U|xfterm:8'
+.copy U|xbs = H|id
+.copy U|xfterm = H|fterm
+.formula U|xproz  = 1|zuomge / U|xresmge * 100.0
+..
+!NMZ
+.load 1 mallocation
+.continue MZ
+..
+!MZE
+.continue BS ? _F|empty(U|xbs)
+..
+!NOBS: keine BS zur RES gefunden
+.set trans +
+.formula U|xbem = "Keine Beschaffung zur kritischen Reservierung gefunden."
+.set trans -
+.continue TERM
+..
+!BS: *** BS dazu 'U|xbs^id'
+.select add U|xbs
+.continue BS1 ? (_H|fix & _H|fixterm) ; 'H|tterm:8' < 'U|xfbsterm:8'
+.. RES wird allein durch ihre Zuordnung zu einer fixierten sp„teren unkritischen Beschaffung kritisch
+.set trans +
+.formula U|xbem = "Warte auf Material (siehe Beschaffungshinweis)."
+.set trans -
+.continue TERM
+..
+!BS1
+.continue BS2 ? F|empty(H|lres)
+.. BS mit AFL
+.. FV kann nur durch seine AFL kritisch sein
+.copy U|xafl = H|gruppe=5
+.continue TERM ? U|xafl
+.. externe BS. Wenn schon freigegeben, dann muss die AFL kritisch sein.
+.copy U|xafl = _F|empty(H|kopf)
+.continue TERM ? U|xafl
+.. BS-Vorschlag. Kritisch durch AFL oder durch lzeit ?
+.formula U|xfterm = F|addworkdays(H|lief,H|lgruppe,datum,H|lzeit)
+.copy U|xafl = 'U|xfterm:8' < 'H|fterm:8'
+.continue TERM ? U|xafl
+..
+!BS2: BS selber kritisch: Aufschub durch kritische Beschaffung 
+.set trans +
+.formula U|xbem = "Warte auf Material."
+.set trans -
+.continue TERM
+..
+!PRES: RES -> kritischer ppos-RES: Aufschub durch zu lange Fertigungsdauer. 
+.select add H|ppos
+.continue RES ? G|mehr
+.set trans +
+.formula U|xbem = "Arbeitsfortschritt nicht rckgemeldet."
+.set trans -
+.continue TERM
+..
+!TERM: RES U|xres  -> H
+.select add U|xres
+.formula U|xfix = ""
+.formula U|xfix = M|iconfix  ?  H|vorgfix
+..
+!TABRES: Reservierung
+.continue LOOP    ? _M|bkrit & F|empty(U|xbem) & F|empty(U|xbs)
+.select add U|xbs ? _M|bkrit & F|empty(U|xbem) & U|xafl
+.continue LRES    ? _M|bkrit & F|empty(U|xbem) & U|xafl
+.continue LOOP    ? _M|bkrit & F|empty(U|xbem) & _U|xafl                        
+.make screen line +O
+.colour -foreground -1 -1 -1 -background -1 -1 -1  'M|aktzeile'
+.copy M|bresbesz = M|reservz
+.assign M|resbes = H|id
+.copy M|planmge = G|FALSE
+.assign M|tartikel = H|elex
+.assign M|tlgruppe = H|lgruppe
+.formula M|limge = H|limge
+.formula M|tterm = H|tterm
+.formula M|wterm = H|twterm
+.formula M|fterm = H|fbsterm
+.formula M|fix = U|xfix
+.formula M|ddispoa = H|dispoa
+.formula M|bem = U|xbem
+..
+.continue LOOP ? F|empty(U|xbs)
+.. Beschaffung U|xbs  -> H
+.select add U|xbs
+.copy U|xfreig = _F|empty(H|ba)   ? H|gruppe= 5
+.copy U|xfreig = _F|empty(H|kopf) ? H|gruppe<>5
+.formula U|xfix = ""
+.formula U|xfix = M|iconfix     ?  H|fix
+.formula U|xfix = M|icontermfix ? _H|fix & H|fixterm
+..
+.. Beschaffung
+.make screen line +O
+.colour -foreground -1 -1 -1 -background -1 -1 -1  'M|aktzeile'
+.copy M|bresbesz = M|beschaffz
+.assign M|resbes = H|id
+.copy M|planmge = G|FALSE
+.copy M|planmge = G|TRUE ? H|planmge > 0
+.assign M|bsart = H|bsart 
+.assign M|tartikel = H|artikel
+.assign M|tlgruppe = H|lgruppe
+.formula M|limge = H|netlimge
+.formula M|tterm = H|tterm
+.formula M|wterm = H|twterm
+.formula M|fterm = H|fterm
+.formula M|fix = U|xfix
+.formula M|ddispoa = H|dispoa
+.formula M|proz = U|xproz
+.formula M|freig = U|xfreig
+..
+.continue LRES ? U|xafl
+..
+!LOOP
+.continue FLOOP   ? M|bfertigung
+..
+.load 0 sales
+.continue START
+..
+!FLOOP
+.load 0 purchasing
+.continue FSTART
+..
+!BFUSS
+.input 'M|bfuss'  ? _F|empty(M|bfuss)
+.continue END
+..
+..*****************************************************************************
+!END
+.continue

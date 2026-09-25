@@ -1,0 +1,69 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ENTRYCERTIFICATE.NACH
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text xtmpfile      ? _F|defined(U|xtmpfile)
+.type text xtout         ? _F|defined(U|xtout)
+.type text xterr         ? _F|defined(U|xterr)
+.type bool xbglbversandt ? _F|defined(U|xbglbversandt)
+.type bool xempty        ? _F|defined(U|xempty)
+.type ID3  xid           ? _F|defined(U|xid)
+..
+.continue END ? P|vorschau
+.continue END ? P|archiv & _F|sysinfo(18)^habel
+..
+.assign U|xid = H|vorgang ? P|archiv & F|sysinfo(18)^habel
+.assign U|xid = M|lskopf  ? _P|archiv
+..
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+.reserve
+.select modificationlock nowait sales 'H|vorgang^id' ? P|archiv & F|sysinfo(18)^habel
+.select modificationlock nowait sales 'M|lskopf^id'  ? _P|archiv
+.continue UEBERTRAGEN  ? _G|mehr
+.continue UEBERTRAGEN  ? _G|gesperrt
+..
+!OUTPUT
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=3:23
+#!action=modify
+#!charset=eks
+#!dontchange=~
+..
+.copy U|xbglbversandt = H|glbversandt
+.copy U|xempty = G|TRUE   ?  F|empty(H|glbversanddatum)
+.copy U|xempty = G|FALSE  ? _F|empty(H|glbversanddatum)
+.select
+id;glbversandt;glbversanddatum
+?'U|xid';1;~               ?  _U|xbglbversandt & _U|xempty
+?'U|xid';0;~               ?   U|xbglbversandt & _U|xempty
+?'U|xid';0;'G|datum'       ?   U|xbglbversandt &  U|xempty
+?'U|xid';1;'G|datum'       ?  _U|xbglbversandt &  U|xempty
+..
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR  ? _G|mehr
+..
+.select - 
+..
+!UEBERTRAGEN
+.select
+.continue END ? _F|sysinfo(18)^habel ; _P|archiv
+.input "DOKUMENT.UEBERTRAGEN"
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR
+.input 'U|xterr'
+.error ZurÅckschreiben in den Lieferschein gescheitert!
+.end 1

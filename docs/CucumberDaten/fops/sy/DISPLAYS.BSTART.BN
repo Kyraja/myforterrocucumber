@@ -1,0 +1,186 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name      : DISPLAYS.BSTART.BN
+.. Autor         : fwester
+.. Verantwortlich: fwester
+.. Kontrolle     : xg
+.. Funktion      : Liest die Info von lizinfo.sh aus den Ergebnisdateien in den
+.. Maskenpuffer.
+.. Ablauf        : Button-nach-EFOP
+..
+.. Functionality : Reads data of lizinfo.sh from result files into mask buffer.
+.. Program flow  : After button efop
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type integer    xdesc1 xlinesoffile
+.type text   x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 xtmpcl
+.type text   xlastscreen xnewscreen xlastusersymbol xnewusersymbol
+.type bool   xotherusersymbol xotherscreen
+.type DVM2   xtmpfile
+..
+.. Open file with treeview data
+.formula U|xtmpfile = M|treeviewfile
+.occupy 'U|xtmpfile'
+.file -test -open U|xdesc1 'U|xtmpfile'
+.continue ERROR01 ? _G|mehr
+..
+!TREE: Reading file with treeview data line by line
+.file -read U|xdesc1 U|x1 ! U|x2 ! U|x3 ! U|x4 ! U|x5 ! U|x6 ! U|x7 ! U|x8 ! U|x9 ! U|x10 ! U|x11^
+.continue SUMS ? _G|mehr
+.formula U|xlinesoffile = U|xlinesoffile + 1
+.formula U|xtmpcl = F|condexpr(M|userview, F|substr(U|x1, 1, F|typelength(F|typeof(G|mandant))), F|substr(U|x2, 1, F|typelength(F|typeof(G|mandant))))
+.continue TREE ? _F|empty(M|clientname) & M|clientname <> U|xtmpcl
+.assign M|timestampofpid = U|x10
+.assign M|dateofpid = F|date('M|timestampofpid:8')
+.continue TREE ? M|dateofpid > (G|datum - M|pidexpiry)
+.continue USRANA2 ? M|userview
+..
+!SCRANA1: Analyzing line starting with screens
+.formula M|stufe = 1
+.formula U|xnewscreen = U|x1
+.copy U|xotherscreen = U|xnewscreen <> U|xlastscreen
+.continue NEWSCR1 ? U|xotherscreen
+..
+!USRANA1: Analyzing user because screens in this view are unique
+.formula M|stufe = 2
+.formula M|client = U|x2
+.formula M|usersymbol = U|x3
+.formula U|xnewusersymbol = M|client + M|screensep + M|usersymbol
+.copy U|xotherusersymbol = U|xnewusersymbol <> U|xlastusersymbol
+.continue NEWUSR1 ? U|xotherusersymbol
+.continue PIDANA ? _U|xotherscreen
+..
+.. Show user because it's a new screen but the same user
+.formula M|elementtype = M|usernode
+.continue PIDANA ? M|stufe > M|anzstufen
+.formula M|lineoffile = U|xlinesoffile
+.input 'M|tab'
+.formula M|motherrow = M|aktzeile
+.continue PIDANA
+..
+!PIDANA
+.formula M|stufe = 3
+.formula M|pid = U|x4
+.formula M|ppid = U|x5
+.formula M|host = U|x6
+.formula M|callerno = U|x7
+.formula M|location = U|x9
+.assign M|timeofpid = U|x10 >> M|lenoftime
+.formula M|interface = U|x11
+..
+!PID: Always create a table row for the process
+.formula M|elementtype = M|pidleaf
+.formula M|lineoffile = U|xlinesoffile
+.input 'M|tab' ? M|stufe <= M|anzstufen
+.continue TREE
+..
+!NEWSCR1: Appearance of an other and unique screen/license
+.formula M|rootrow = M|aktzeile + 1
+.formula M|motherrow = M|aktzeile + 1
+.formula U|xlastscreen = U|xnewscreen
+.formula M|elementtype = M|screennode
+.formula M|allscreens = M|allscreens + 1
+.formula M|lineoffile = U|xlinesoffile
+.input 'M|tab'
+.continue USRANA1
+..
+!NEWUSR1: Appearance of an other user symbol
+.formula U|xlastusersymbol = U|xnewusersymbol
+.formula M|elementtype = M|usernode
+.formula M|usersofscr = M|usersofscr + 1
+.continue PIDANA ? M|stufe > M|anzstufen
+.formula M|lineoffile = U|xlinesoffile
+.formula M|motherrow = M|rootrow
+.input 'M|tab'
+.formula M|motherrow = M|aktzeile
+.continue PIDANA
+..
+!USRANA2: Analyzing starting with user
+.formula M|stufe = 1
+.formula M|client = U|x1
+.formula M|usersymbol = U|x2
+.formula U|xnewusersymbol = M|client + ":" + M|usersymbol
+.copy U|xotherusersymbol = U|xnewusersymbol <> U|xlastusersymbol
+.continue NEWUSR2 ? U|xotherusersymbol
+..
+!SCRANA2: Analyzing screen because users in this view are unique
+.formula M|stufe = 2
+.formula U|xnewscreen = U|x3
+.copy U|xotherscreen = U|xnewscreen <> U|xlastscreen
+.continue NEWSCR2 ? U|xotherscreen
+.continue PIDANA ? _U|xotherusersymbol
+..
+.. Show screen because it's the same screen but an other user
+.formula M|elementtype = M|screennode
+.continue PIDANA ? M|stufe > M|anzstufen
+.formula M|lineoffile = U|xlinesoffile
+.input 'M|tab'
+.formula M|motherrow = M|aktzeile
+.continue PIDANA
+..
+!NEWUSR2: Appearance of an other user symbol
+.formula M|rootrow = M|aktzeile + 1
+.formula M|motherrow = M|aktzeile + 1
+.formula U|xlastusersymbol = U|xnewusersymbol
+.formula M|elementtype = M|usernode
+.formula M|allusers = M|allusers + 1
+.formula M|lineoffile = U|xlinesoffile
+.input 'M|tab'
+.continue SCRANA2
+..
+!NEWSCR2: Appearance of an other and unique screen/license
+.formula U|xlastscreen = U|xnewscreen
+.formula M|elementtype = M|screennode
+.continue PIDANA ? M|stufe > M|anzstufen
+.formula M|lineoffile = U|xlinesoffile
+.formula M|motherrow = M|rootrow
+.input 'M|tab'
+.formula M|motherrow = M|aktzeile
+.continue PIDANA
+..
+!SUMS: Close source file and set sums for installation
+.file -close U|xdesc1
+.occupy
+..
+.formula U|xtmpfile = M|usersfile
+.occupy 'U|xtmpfile'
+.file -test -open U|xdesc1 'U|xtmpfile'
+.continue ERROR01 ? _G|mehr
+..
+.file -read U|xdesc1 U|x1^
+.continue DETAILS ? _G|mehr
+..
+.assign M|allscreens = U|x1 ? M|userview
+.continue ERROR02 ? _G|mehr
+.assign M|allusers = U|x1 ? _M|userview
+.continue ERROR02 ? _G|mehr
+..
+.formula M|allpids = U|xlinesoffile
+..
+!DETAILS: Only show details from current element
+.occupy
+.select screen header
+.select screen line
+.continue END ? _G|mehr
+.cursor tbaumicon 'M|aktzeile'
+.input 'M|rowdetails' ? M|rowdetails <> ""
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!FATAL
+.error -number 1111
+.end 1
+..
+!ERROR01: Cannot read file!
+.occupy
+.error -message Die Datei 'U|xtmpfile' kann nicht zum Lesen ge”ffnet werden!
+.end 1
+..
+!ERROR02: Assignment failed!
+.occupy
+.error -message Zuweisung gescheitert!
+.end 1

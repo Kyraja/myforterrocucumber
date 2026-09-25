@@ -1,0 +1,106 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDI.INVOIKE.EDICOLINVOICEPRINT
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : dsch
+.. Functionality  : Start edi invoice printing from edi export efop DFUE.EXP
+..									h buffer has current edi message
+..*****************************************************************************
+.set trans -
+.. 
+.. Parameter from DFUE.EXP
+.type text xDfueproto ? _F|defined(U|xDfueproto)
+.. Configuration from DFUE.EXP.INI
+.type text xDfueVKREgeraet ? _F|defined(U|xDfueVKREgeraet)
+.. 
+.. Local fields
+.type text layoutname ? _F|defined(U|layoutname)
+.type text printer ? _F|defined(U|printer)
+.type text infosyscall ? _F|defined(U|infosyscall)
+.type text infosyserrors ? _F|defined(U|infosyserrors)
+.type text infosysnotes ? _F|defined(U|infosysnotes)
+.type text syscall ? _F|defined(U|syscall)
+..
+..
+.. Edi standard is passed from DFUE.EXP
+.continue NOPROT ? F|empty(U|xDfueproto)
+.. 
+.. Printer is configured with EDIEXPINI, and stored in efop DFUE.EXP.INI
+.continue NOPRINT ? F|empty(U|xDfueVKREgeraet)
+.. 
+..!meta H|=P53
+.. Required: edi message in H buffer
+.continue NOEDI ? _F|defined(H|edinachr)
+.continue NOTYPE ? F|empty(H|edinachr)
+.continue NOINVOI ? 'H|edinachraz(L=":")'<>"(Invoice)"
+..
+.. VDA 4906 "Sammelabrechnung" for edi standard VDA
+.formula U|layoutname = "INVOICE" ? U|xDfueproto = 1
+.. EDIFACT-like "Sammelabrechnungsliste" for edi standard EDIFACT
+.formula U|layoutname = "INVOICELIST" ? U|xDfueproto <> 1
+.. 
+.. Configure printer
+.formula U|printer = U|xDfueVKREgeraet
+..
+.. Create empty error file
+.file -tempname U|infosyserrors
+.output new 'U|infosyserrors'
+.output
+..
+.. Create empty notes file
+.file -tempname U|infosysnotes
+.output new 'U|infosysnotes'
+.output
+..
+.. Create EDP script to invoke infosystem EDICOLINVOICEPRINT
+.file -tempname U|infosyscall 
+.output new 'U|infosyscall'
+.input "DATEI.F"
+.. --- --- ---
+
+#!action=do
+#!typedcmd=38
+such;kedi;bstart;>budruck;zudrucken;drucker;sofort;<
+
+EDICOLINVOICEPRINT;'H|id';;;'U|layoutname';'U|printer';;
+
+.. --- --- ---
+.output
+..
+..
+.. Invoke infosystem / print invoice summary / list 
+.formula U|syscall = F|formatstr("edpimport.sh -P -c EKS -I {1} -H {2} 2>> {3}", U|infosyscall, U|infosysnotes, U|infosyserrors)
+.system 'U|syscall' password background
+.continue ERRCALL ? _G|mehr
+..
+..*****************************************************************************
+!END
+.continue
+.. 
+.. 
+!NOPROT
+.error Fehler beim Druck der Sammelabrechnung: Kein EDI-Standard angegeben.
+.end 1
+..
+!NOEDI
+.error Fehler beim Druck der Sammelabrechnung: Kein EDI-Datensatz angegeben.
+.end 1
+..
+!NOTYPE
+.error Fehler beim Druck der Sammelabrechnung: EDI-Datensatz 'H|nummer' hat keinen Nachrichten-Eintrag.
+.end 1
+.. 
+!NOINVOI
+.error Fehler beim Druck der Sammelabrechnung: EDI-Datensatz 'H|nummer' ist keine Rechnung.
+.end 1
+.. 
+!ERRCALL
+.error Fehler beim Druck der Sammelabrechnung: Aufruf des Infosystems EDICOLINVOICEPRINT ist gescheitert.
+.output
+.input -text 'U|infosyserrors'
+.end 1
+.. 
+!NOPRINT
+.error Fehler beim Druck der Sammelabrechnung: In der EDI-Exportkonfiguration ist kein Drucker angegeben.
+.end 1

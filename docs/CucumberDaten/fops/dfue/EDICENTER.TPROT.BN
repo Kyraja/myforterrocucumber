@@ -1,0 +1,115 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDICENTER.TPROT.BN
+.. Datum          : 18.10.2007
+.. Version        : 2008r0n00
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Button "Protokoll" fÅr Infosystem EDI(A)CENTER
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+.. Ablauf         :
+..
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+.. Program flow   :
+...Includes       :
+..  include dfue/W.RECHPROT
+..  include dfue/W.LSPROT
+..  include dfue/W.EDLENT
+..*****************************************************************************
+.set trans -
+..
+.type text xtkommando
+.type text xdruckcmd
+.type text xtsel
+..
+.. params fÅr W.* Protokolle
+.type text xkunde
+.type text xeart
+.type integer  x2eing
+.type text xedi
+..
+.. fetch edi message into h buffer
+.select edifact 'M|edinr^id'
+..
+.. each transaction type has a different protokoll
+.. ----------- ---------- ---------- -------------------------------------------
+.continue NOPROT      ? H|nachrtyp="EKLAB"
+.continue PROTLAB     ? H|edinachr^nummer="2101"   
+.continue PROTLAB     ? H|edinachr^nummer="2102"
+.continue NOPROT      ? H|edinachr^nummer="2103"
+.continue PROTLAB     ? H|edinachr^nummer="2104"
+.continue NOPROT      ? H|vorart=0
+.continue NOPROT      ? H|vorart =  3  &  H|sinhouse="200"
+.continue NOPROT      ? H|vorart =  3  &  H|sinhouse="800"
+.continue PROTRE      ? H|vorart =  5  &  H|such/"VKREVA*"
+.continue PROTRE      ? H|vorart =  5  &  H|such/"VKREEA*"
+.continue NOPROT      ? H|vorart = 23
+.continue PROTLS      ? H|vorart = 25
+.continue PROTEDL     ? H|vorart = 27
+.continue NOPROT      ? H|vorart = 33
+.continue NOPROT      ? H|vorart = 52
+.continue PROTGA      ? H|vorart = 55
+.continue DRZAVS      ? H|vorart = 60
+.. ignore ATLAS
+.continue END         ? H|vorart = 80
+.. ----------- ---------- ---------- -------------------------------------------
+.continue NOPROT
+..
+!PROTGA: Credit notes, "Gutschriften",nur bei M|vorart = 55
+.command -parallel 'F|formatstr("(Infosystem) EDIGA ? edivon={1} | edibis={1} | bstart=", M|edinr)'
+.continue END
+..
+!PROTRE: Invoice "Rechnung", M|vorart =  5  &  ( M|edinr^such/"VKREVA*" ;  M|edinr^such/"VKREEA*" )
+.formula T|xkunde = 'M|idkundeab'
+.formula T|xeart  = 'M|edinr^kuartnr'
+.input "W.RECHPROT"
+.continue END
+..
+!PROTLS: Delivery note, "Lieferschein"
+.formula T|xkunde = 'M|idkundeab'
+.formula T|xeart  = 'M|edinr^kuartnr'
+.input "W.LSPROT"
+.continue END
+..
+!PROTLAB: Forecast delivery schedule, "Lieferabruf"
+.command -parallel 'F|formatstr("(Infosystem) LABDIFF ? klab={1} | bstart=", M|edinr)'
+.continue END
+..
+!DRZAVS: Payment advice note, "Zahlungsavis"
+.. Feldvorbesetzungen fÅr Druckdialog mit Zeichenschutz
+.assign T|xdruckcmd = "zudrucken=STD|drucker=bildschirm|[invisible]=1" * "+#X"
+.. endgÅltiges GUI-Kommando bauen
+.. .zuweisen T|xtkommando = kdatname65 + " EDIZAHLAV"+",?edinr="+M|edinr+"|bstart="+"|budruck=" + T|xdruckcmd + "|[invisible]=1"
+.command -parallel 'F|formatstr("(Infosystem) EDIZAHLAV ? edinr={1} | bstart= | budruck={2} | [invisible]=1", M|edinr, T|xdruckcmd)'
+.continue END
+..
+!PROTEDL: EDL message, "EDL-Meldung"
+.. Ursprungs-LS-nr, Satzart RFL1, Pos. 7
+.formula T|xtsel = "$,,;@gruppe=0;nummer=" + 'M|edinr^nummer' + ";text1=RFL1;@ordnung=nummer"
+.select edifact 'T|xtsel'
+.continue END     ? _T|mehr
+.select line 'selzeile'
+.continue END     ? _T|mehr
+.formula T|x2eing = 'H|text7'
+.formula T|xkunde = 'M|idkundeab'
+.formula T|xeart  = 'M|edinr^kuartnr'
+.input "W.EDLENT"
+..*****************************************************************************
+!END
+.select -
+.continue
+..
+..
+!NOPROT
+.error Die Protokollausgabe fÅr diese Nachricht ist nicht mîglich!
+.end 1

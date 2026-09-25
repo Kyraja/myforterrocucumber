@@ -1,0 +1,96 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : HOL.ABCANA
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       :
+.. Ablauf         :
+..
+.. Functionality  :
+.. Program flow   :
+..*****************************************************************************
+.type DVM2      xtd1        ? _F|defined(U|xtd1)
+.type DVM2      xtd2        ? _F|defined(U|xtd2)
+.type DVM2      xtd3        ? _F|defined(U|xtd3)
+.type DVM2      xtd4        ? _F|defined(U|xtd4)
+.type DVM2      xtd5        ? _F|defined(U|xtd5)
+.type bool      xbdurch     ? _F|defined(U|xbdurch)
+.type text      xtsel       ? _F|defined(U|xtsel)
+.type text      xinfosysout ? _F|defined(U|xinfosysout)
+.type text      xinfosyserr ? _F|defined(U|xinfosyserr)
+.type text      xtsys       ? _F|defined(U|xtsys)
+.type integer   xint        ? _F|defined(U|xint)
+.type ARTR51202 xsumewert   ? _F|defined(U|xsumewert)
+.type ARTR52102 xsumgwert   ? _F|defined(U|xsumgwert)
+.type ID2       xartikel    ? _F|defined(xartikel)
+..
+.set trans -
+.. Tempor„rverzeichnisse anlegen
+.file -tempname U|xtd1
+.file -tempname U|xtd2
+.file -tempname U|xtd3
+.file -tempname U|xtd4
+.file -tempname U|xtd5
+.copy U|xbdurch = G|FALSE
+..
+.file -tempname U|xinfosysout
+.file -tempname U|xinfosyserr
+..
+.formula M|hinweis = ""
+.continue DATES ? M|klgruppe <> "" ; (M|klgruppe = "" & M|algruppe)
+.. Vorbelegungen: internen Lagergruppe / default: internal warehouse group
+.copy M|klgruppe = F|sysinfo(10)^intlgruppe
+.formula M|lname      = F|sysinfo(10)^intlgruppe^sucherw
+..
+!DATES
+.formula G|adatum = M|anfdat
+.formula G|edatum = M|enddat
+..
+!NEXT: Abgang: buart = 2
+..     nur Abg„nge im angegebenen Buchungszeitraum werden ausgewertet
+.formula U|xtsel = "$,,buart=2;@ordnung=artikel^id;budat=" + 'G|adatum' + "!" + 'G|edatum'
+.select journal 'U|xtsel'
+.continue FOOTER  ? _G|mehr
+.continue BEWERTUNG ? F|equals(M|preisea, "(ValuationPrice)") ; F|equals(M|preiseb, "(ValuationPrice)")
+.continue TABELLE
+..
+!JOURNAL
+.select journal
+.continue FOOTER  ? _G|mehr
+.continue BEWERTUNG ? F|equals(M|preisea, "(ValuationPrice)") ; F|equals(M|preiseb, "(ValuationPrice)")
+.continue TABELLE
+..
+!BEWERTUNG: Einmal durchlaufen pro Artikel reicht
+.continue JOURNAL  ? H|artikel^id  = U|xartikel
+.formula U|xtsys = F|expr("edpinfosys.sh -P -s 'kartikel=" + H|artikel^id + "#adatum=" + 'G|adatum' + "#edatum=" + 'G|edatum' + "#klgruppe=" + H|lgruppe^id + "#brueckm=0#bjournal=1#abgang=1#bstart' -f - -k sumewert,sumgwert -N 10398 -o nummode=raw -t '#' > " + xinfosysout + " 2> " + xinfosyserr)
+.system 'U|xtsys' password background
+.input 'U|xinfosyserr' ? _G|mehr
+.formula U|xartikel = H|artikel^id
+..
+.. Zeile auslesen
+.file -test -open U|xint 'U|xinfosysout'
+.error Datei mit Lagerwertdaten konnte nicht ge”ffnet werden! ? _G|mehr
+.file -read U|xint xsumewert # xsumgwert #
+.file -close U|xint
+..
+!TABELLE: Tabellen-FOP einziehen
+..     nur LJ mit ursache "Lagereinheit ge„ndert"
+.formula U|xtsel = "$,,artikel="+'H|artikel^id'+";ursache=(StockUnitChanged);budat=" + 'G|adatum' + "!" + 'G|edatum'
+.load 5 journal 'U|xtsel'
+..
+.input 'M|tab' ? _F|empty(M|tab)
+.continue JOURNAL
+..
+!FOOTER: Table footer
+.. Tabelle wurde nicht durchlaufen, ich darf daher nicht durch M|bfuss
+.continue ERROR1     ? _U|xbdurch
+.input 'M|bfuss' ? _F|empty(M|bfuss)
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1: Missing entries of journal
+.error Keine Journaleintr„ge gefunden.
+.end 1

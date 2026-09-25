@@ -1,0 +1,195 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : CHANGECURRENCY.YBUANLUPD.BA
+.. Date           : 12.03.15
+.. Version        : 2015r2n04
+.. Author         : si/dr
+.. Copyright      : (c) 2015 SABA International
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xttext     ? _F|defined(U|xttext)
+.type text U|xtcmd      ? _F|defined(U|xtcmd)
+.type text U|xttmp      ? _F|defined(U|xttmp)
+.type text U|xxkto      ? _F|defined(U|xxkto)
+.type text U|xtedp      ? _F|defined(U|xtedp)
+.type text U|xtout      ? _F|defined(U|xtout1)
+.type text U|xterr      ? _F|defined(U|xterr)
+.type text U|xkto1      ? _F|defined(U|xkto1)
+.type text U|xkto2      ? _F|defined(U|xkto2)
+.type text U|xkto3      ? _F|defined(U|xkto3)
+.type text U|xkto4      ? _F|defined(U|xkto4)
+.type text U|xkto5      ? _F|defined(U|xkto5)
+.type R9.2 U|xrzuab     ? _F|defined(U|xrzuab)
+.type R9.2 U|xrafa      ? _F|defined(U|xrafa)
+.type integer U|xia     ? _F|defined(U|xia)
+..
+.continue NOTODO        ? 'M|ycurr^such' = "EUR"
+.continue NOCALC        ? M|ycalc = 0
+..
+.formula P|maskkontextfop = "CURRENCY"
+..
+.file -TEMPNAME U|xtedp
+.file -TEMPNAME U|xtout
+.file -TEMPNAME U|xterr
+..
+.note -IMMEDIATELY Kontierung in Anlagen austauschen
+..erst alle Konten kopieren
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+# Konten aus steuerlichen Abschreibungsmodellen duplizieren
+#!database=5
+#!group=1
+#!action=copy
+id;nummer;bem;eg;ausland;kopustzuord;
+.formula U|xtcmd        = "$,@datei=27:10;id=;kpmodart=(Taxable)"
+.load 0 nolock object 'U|xtcmd'
+.continue KOWEG         ? _G|mehr
+.formula U|xttmp        = ""
+.formula U|xia          = 0
+!ZANLKTO
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|afako^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|afako) & _U|xttmp/" + G|dblquote + "*" + '0|afako^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|bilkto^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|bilkto) & _U|xttmp/" + G|dblquote + "*" + '0|bilkto^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|gewko^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|gewko) & _U|xttmp/" + G|dblquote + "*" + '0|gewko^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|verko^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|verko) & _U|xttmp/" + G|dblquote + "*" + '0|verko^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|erlko^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|erlko) & _U|xttmp/" + G|dblquote + "*" + '0|erlko^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.load 0 nolock continue
+.continue ZANLKTO       ? G|mehr
+.continue ANLIMP        ? F|empty(U|xttmp)
+!TANL
+.formula U|xxkto        = U|xttmp << ","
+.continue FANL          ? F|empty(U|xxkto)
+.formula U|xttmp        = U|xttmp >> ","
+.continue TANL          ? U|xxkto/"*a"
+.formula U|xtcmd        = "$,@datei=5:1;nummer=="+U|xxkto+"a"
+.select nolock account 'U|xtcmd'
+.continue TANL          ? G|mehr
+'U|xxkto';'U|xxkto'a;KOWEG;(0,0,0);(0,0,0);'G|false';
+.formula U|xia          = U|xia + 1
+.continue TANL
+!FANL
+.output
+.continue ANLIMP        ? U|xia = 0
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Duplizieren der Konten aus Anlagen
+.set trans -
+.continue ANLIMP        ? F|filesize(U|xterr) = 0
+.error 'U|xttext'
+.edi 'U|xterr'
+.continue END
+..
+!ANLIMP
+.set trans +
+.text U|xttext 'G|bspri' Daten werden ermittelt
+.set trans -
+.note -IMMEDIATELY 'U|xttext'...
+..
+.make screen line --    ? M|tzeilen > 0
+.make screen line +
+.assign M|ytvartab      = "V-27-01"
+.formula M|ytvarbez     = M|ytvartab^namebspr
+.formula M|ytvdn        = 27
+.formula M|ytvgr        = 1
+..
+.file -TEMPNAME U|xtedp
+.file -TEMPNAME U|xterr
+.output NEW 'U|xtedp'
+.input DATEI.F
+id;>bafamodell;w2ist;upwaehr;pwaehr;erzuab;erafa;afako;bilkto;gewko;verko;erlko;
+.formula U|xtcmd        = "$,@datei=27:1;nummer=!"
+.load 0 nolock object 'U|xtcmd'
+.continue NODATA        ? _G|mehr
+.continue DAT2
+!DAT1
+.load 0 nolock continue
+!DAT2
+.continue EDP           ? _G|mehr
+..
+.formula U|xtcmd        = "$,@datei=27:10;ansn=="+'0|id'
+.load 1 nolock object 'U|xtcmd'
+.continue DAT1          ? _G|mehr
+.continue DAT1          ? 1|erzuab = 0
+..
+.formula U|xrzuab       = 1|erzuab * M|ycalc 
+.formula U|xrafa        = 1|erafa * M|ycalc
+..
+.formula U|xrzuab       = F|round(U|xrzuab, 0)
+.formula U|xrafa        = F|round(U|xrafa, 0)
+..
+.formula U|xkto1        = '1|afako^nummer' + "a"        ? _F|empty(1|afako)
+.formula U|xkto2        = '1|bilkto^nummer' + "a"       ? _F|empty(1|bilkto)
+.formula U|xkto3        = '1|gewko^nummer' + "a"        ? _F|empty(1|gewko)
+.formula U|xkto4        = '1|verko^nummer' + "a"        ? _F|empty(1|verko)
+.formula U|xkto5        = '1|erlko^nummer' + "a"        ? _F|empty(1|erlko)
+.load 1
+..
+'0|id';;'M|ycurr^id';'M|ycurr^id';'M|ycurr^id';'U|xrzuab';'U|xrafa';'U|xkto1';'U|xkto2';'U|xkto3';'U|xkto4';'U|xkto5';
+.continue DAT1
+..
+!EDP
+.output
+.formula M|ytimport     = U|xtedp
+.set trans +
+.text U|xttext 'G|bspri' Update der Anlagen wird gestartet
+.set trans -
+.note -IMMEDIATELY 'U|xttext'...
+.formula U|xtcmd        = "edpimport.sh -p abas123 -b 27:1 -a UPDATE -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.formula M|ytdone       = G|true
+.continue END           ? F|filesize(U|xterr) = 0
+.formula M|ytdone       = G|false
+.formula M|yterror      = U|xterr
+.set trans -
+.text U|xttext 'G|bspri' Die Anlagen konnten nicht korrekt umgerechnet werden
+.set trans +
+.error 'U|xttext'
+.edi 'U|xterr'
+.continue END
+..
+!NODATA
+.set trans +
+.text U|xttext 'G|bspri' Keine Anlagen vorhanden
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!NOTODO
+.set trans +
+.text U|xttext 'G|bspri' Keine Umrechnung notwendig
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!NOCALC
+.set trans +
+.text U|xttext 'G|bspri' Keine Umrechnungskurs vorhanden
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!END
+.note -IMMEDIATELY 
+.continue

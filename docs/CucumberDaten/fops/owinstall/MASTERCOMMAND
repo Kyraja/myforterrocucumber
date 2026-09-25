@@ -1,0 +1,131 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           :owinstall/MASTERCOMMAND
+.. Date           :18.6.2015
+.. Version        :
+.. Author         :dh/abas
+.. Copyright      :
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :the command for an edpexport will be created and entered to the field
+..                 Text
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+....set trace +
+..
+.. 
+.type text xtedp xt2edp xt3edp xtvar xtsep xtout xtdat xt2dat xtsys xt3dat xterrdat xtoptdat xtmsg xtbuchconfdat xtselopt xtsel
+.type bool xbseldefined
+..
+..
+.continue ORIGDAT ? M|yorigdat
+.. PrÅfen ob Tabelle das Feld yselexport enthÑlt
+.formula xtsel = "$,,@datei=" + 'M|yfilenum' + ";@gruppe=" + 'M|ygroup'
+.load 0 "object" 'U|xtsel'
+.continue ERR03 ? _G|mehr
+.formula U|xbseldefined = defined(0|yselexport)
+.formula M|yselpaket = "PRESALES"
+..
+.file -tempname U|xtoptdat
+.file -tempname U|xtdat
+.file -tempname U|xt3dat
+.file -tempname U|xterrdat
+.file -tempname U|xtbuchconfdat
+.formula U|xt2dat   = M|ywin
+.formula U|xtselopt = M|yselkrit                                               ? _F|empty(M|yselkrit)
+.formula U|xtselopt = U|xtselopt + ";yselexport=" + M|yselpaket                ? _F|empty(M|yselpaket) & U|xbseldefined
+..
+.formula U|xtedp = "edpexport.sh -l "+'M|yfilenum'+":"+'M|ygroup'+" -p abas123 -q TEXT:0 -o ENUMMODE=CODE"
+.formula U|xtedp = U|xtedp + " -k " + G|apostroph + U|xtselopt  + G|apostroph  ? _F|empty(U|xtselopt)
+.formula U|xtedp = U|xtedp + " -t " + G|apostroph + M|yfielddel + G|apostroph  ? _F|empty(M|yfielddel)
+.formula U|xtedp = U|xtedp + " -Z "                                            ? _F|empty(M|yexpzeilen)
+.formula U|xtedp = U|xtedp + " -z " + G|apostroph + M|ylinesep + G|apostroph   ? _F|empty(M|ylinesep)
+.formula U|xtedp = U|xtedp + " -F -f "
+.. Bei Buchungsvorlagen CSV-Format verwenden, sonst Importformat
+.formula U|xt2edp = "-O IMPORT:"+M|ynew+":"+'M|yfilenum'+":"+'M|ygroup'        ? _(M|yfilenum =110 & M|ygroup = 0)
+.formula U|xt2edp = U|xt2edp + ":" + M|ysatzidfelder                           ? _F|empty(M|ysatzidfelder)
+.formula U|xt2edp = U|xt2edp + " -c UTF-8" 
+.output new 'U|xtdat'
+.input DATEI.F
+.select screen header
+!LINE
+.select screen line
+.continue OUTPUT      ? _G|mehr
+.continue LINE        ? _M|yuse
+.formula U|xtvar  = 'M|yfield'
+.formula U|xtvar  = 'M|yfield' +"^nummer"    ? M|ytype /"P*" 
+'M|yfield'
+.continue LINE
+!OUTPUT
+.output TERMINAL
+.formula xtsys = U|xtedp + " `cat " + 'U|xtdat' +"|tr " + G|dblquote + "\n" + G|dblquote + " " + G|dblquote +","+ G|dblquote + "` " + U|xt2edp + " >>" +'U|xt3dat' +" 2>" + 'U|xterrdat'
+..box
+..'U|xtsys'
+..input 'U|xtdat'
+.system 'U|xtsys' background
+.continue ERR01 ? _G|mehr
+..
+.continue ZOPT  ? _(M|yfilenum =110 & M|ygroup = 0)
+.. Sonderbehandlung von Finanzbuchungsvorlagen wegen Soll- und Habenbetrag nicht exportierbar
+.formula U|xtsys = "buchvorlexpconf.sh <" + U|xt3dat + " >" + U|xtbuchconfdat +" 2>" + 'U|xterrdat'
+.system 'U|xtsys' background
+.continue ERR02 ? _G|mehr
+.formula U|xtsys = "mv " + U|xtbuchconfdat + " " + U|xt3dat
+.system 'U|xtsys' background
+..
+..
+!ZOPT
+.continue MOVEDAT ? F|empty(yf2text)
+.. ZusÑtzliche Optionen anfÅgen
+.output new 'U|xtoptdat' -encoding UTF-8
+.input DATEI.F
+.input -text 'M|yf2text'
+.output TERMINAL
+.formula U|xtsys = "cat " + U|xt3dat + ">>" + U|xtoptdat
+.system 'U|xtsys' background
+.formula U|xtsys = "cp " + U|xtoptdat + " " + U|xt3dat
+.system 'U|xtsys' background
+.continue MOVEDAT
+..
+!ORIGDAT
+.. Original Datei verwenden
+.file -tempname U|xt3dat
+.formula U|xtsys = "cp win/" + M|yftext + " " + U|xt3dat
+.system 'U|xtsys' background
+.continue MOVEDAT
+..
+!MOVEDAT
+.formula U|xtsys = "mv "+ U|xt3dat+ " "+ M|ywin
+.system 'U|xtsys' background
+.formula M|y3ftext = F|substr(M|ywin,5,F|length(M|ywin)-4)
+..
+!END
+.text U|xtmsg 'G|bsprache' Export erfolgreich!
+.box
+'U|xtmsg'
+.continue
+..
+..
+!ERR01
+.output terminal
+.error Exportkommando gescheitert!
+.input -text 'U|xterrdat'
+.end 1
+!ERR02
+.output terminal
+.error Konvertierung der Buchungsvorlage mit awk gescheitert!
+.input -text 'U|xterrdat'
+.end 1
+!ERR03
+.output terminal
+.error PrÅfung der Tabelle auf das Feld yselkrit gescheitert! Es ist mîglich, dass keine DatensÑtze vorhanden sind!
+.end 1

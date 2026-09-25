@@ -1,0 +1,83 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ABCANA.ZURUECK
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      :
+.. Functionality  : Zur…kschreibe-EFOP
+..                  Datum und Artikelklasse werden in den Artikel geschrieben
+..                  Kriterien sind in abckriterien hinterlegt.
+..                  In der Artikelmaske aber nicht sichtbar.
+..*****************************************************************************
+.set trans -
+.type bool xberst   ? _F|defined(U|xberst)
+.type text xtmpfile ? _F|defined(U|xtmpfile)
+.type text xtout    ? _F|defined(U|xtout)
+.type text xterr    ? _F|defined(U|xterr)
+..
+.continue ERROR4  ? _M|rueckschreiben
+.. nochmals pr’en, ob es sich um die interne Lagergruppe handelt / internal warehouse group?
+.continue ERROR1 ? M|klgruppe^id <> F|sysinfo(10)^intlgruppe^id
+.copy U|xberst = G|TRUE
+..
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+!NEXT
+.select screen line
+.continue ERROR2 ? _G|mehr & U|xberst
+.continue END    ? _G|mehr
+.copy U|xberst = G|FALSE
+..
+!INTERN: Auf interne Lagergruppe zur…kschreiben
+.select modificationlock nowait parts 'M|artikel^id'
+.continue ERROR3         ? _G|mehr
+.continue GESPERRT       ? _G|gesperrt
+.select -
+..
+!SCHREIBEN: 
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=2:1
+#!action=modify
+#!flddelimiter=#
+#!CHARSET=EKS
+id#abcklasse#abcvomdat#abckriterien
+'M|artikel^id'#'M|tclass'#'G|datum'#'M|abckriterien'
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR5 ? _G|mehr
+..
+!AENDERN
+.formula M|riconz = "icon:save"  
+.continue NEXT
+..
+!GESPERRT
+.formula M|riconz = "icon:stop"  
+.select -
+.continue NEXT
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR1
+.error Es wurde nicht die interne Lagergruppe gew�hlt!
+.end 1
+..
+!ERROR2
+.error Keine Zeilen vorhanden. Bitte erst den Startbutton dr…ken.
+.end 1
+..
+!ERROR3
+.error Artikel nicht vorhanden.
+.end 1
+..
+!ERROR4
+.error Zur…kschreiben ist nicht aktiviert!
+.end 1
+..
+!ERROR5
+.error Zur…kschreiben ist gescheitert!
+.end 1

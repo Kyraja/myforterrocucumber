@@ -1,0 +1,197 @@
+..!interpreter english declaration noabbrev
+.. at 2016-08-18, 09:58
+.set TRANS -
+..========================================================================
+..==  Name              : TRANSACTION.STORNO
+..==                      V3
+..==  Pfad              : allpstart
+..==  Funktion          : Funktionsbaustein zum Stornieren gebuchter
+..==                      Transaktionen
+..==  Erstellungsdatum  : 06.01.09
+..==  Autor             : alltrotec GmbH/CP
+..==  Copyright         : (c) 1990 - 2016 alltrotec GmbH
+..==
+..==  Besonderheiten    : Aufruf aus FOP.MASK.TRANSACTION
+..==                      im 0-Puffer muss der Datensatz geladen sein,
+..==                      dessen Transaktion zu stornieren ist
+..==
+..==  Dieses FOP wird ber EasyCase bearbeitet und mit easy2lg generiert!
+..==  Žnderungen auáerhalb von EasyCase werden nach der n„chsten Žnderung
+..==  im EasyCase wieder berschrieben und drfen daher NICHT mit "edi"
+..==  realisiert werden!
+..==
+..========================================================================
+.input DATEI.F
+..====================================================
+.type integer   xprocsp     ? _F|defined(U|xprocsp)
+.type integer   xi01        ? _F|defined(U|xi01)
+.type text      xt01        ? _F|defined(U|xt01)
+.type text      xedp        ? _F|defined(U|xedp)
+.type text      xout        ? _F|defined(U|xout)
+.type text      xerr        ? _F|defined(U|xerr)
+..====================================================
+.set demand -
+.formula U|xerr = "rmtmp/XTRANSACTIONERR" + G|PID + ".TMP"
+.formula U|xout = "rmtmp/XTRANSACTIONOUT" + G|PID + ".TMP"
+.formula U|xedp = "rmtmp/XTRANSACTIONEDP" + G|PID + ".TMP"
+.continue EPROCDEF
+!PROC001: ----- array -----
+.continue EL001 ? _((_(0|ytrdaten^ystorno)) & (_(F|empty(0|ytrdaten^yfbuchung))) & (F|empty(0|ytrdaten^yfbuchstorno)))
+.load 1 object '0|ytrdaten^yfbuchung'
+.continue EL002 ? _(G|mehr)
+.formula U|xi01 = U|xi01 + 1
+.type text  xbunum.xi01 xbuart.xi01 xtransdat.xi01 xterm.xi01
+.formula U|xbunum.xi01    = '1|nummer'
+.formula U|xbuart.xi01    = "F"
+.formula U|xterm.xi01     = '1|term'
+.formula U|xtransdat.xi01 = '0|ytrdaten^id'
+!EL002
+!EL001
+.continue EL003 ? _((_(0|ytrdaten^ystorno)) & (_(F|empty(0|ytrdaten^ysbuchung))) & (F|empty(0|ytrdaten^ysbuchstorno)))
+.load 1 object '0|ytrdaten^ysbuchung'
+.continue EL004 ? _(G|mehr)
+.formula U|xi01 = U|xi01 + 1
+.type text  xbunum.xi01 xbuart.xi01 xtransdat.xi01
+.formula U|xbunum.xi01    = '1|nummer'
+.formula U|xbuart.xi01    = "S"
+.formula U|xtransdat.xi01 = '0|ytrdaten^id'
+!EL004
+!EL003
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue EL005 ? _(_(0|ystorno))
+.formula U|xi01 = 0
+.continue BRK001 ? _(G|evtvar = "ybustorno")
+.load 0 line
+!LOOP001: ==============================
+.continue ELOP001 ? _(mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.load 0 line
+.continue LOOP001
+!ELOP001: ==============================
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtvar = "ybutstorno")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtvar = "ybutdstorno")
+.continue EL006 ? _((_(0|yfbuchung = "")) & (0|yfbuchstorno = ""))
+.formula U|xi01 = U|xi01 + 1
+.type text  xbunum.xi01 xbuart.xi01 xtransdat.xi01
+.type GD    xterm.xi01
+.load 1 object '0|yfbuchung'
+.formula U|xbunum.xi01    = '1|nummer'
+.formula U|xbuart.xi01    = "F"
+.formula U|xterm.xi01     =  1|term
+.formula U|xtransdat.xi01 = '0|id'
+!EL006
+.continue EL007 ? _((_(0|ysbuchung = "")) & (0|ysbuchstorno = ""))
+.formula U|xi01 = U|xi01 + 1
+.type text  xbunum.xi01 xbuart.xi01 xtransdat.xi01
+.load 1 object '0|ysbuchung'
+.formula U|xbunum.xi01    = '1|nummer'
+.formula U|xbuart.xi01    = "S"
+.formula U|xtransdat.xi01 = '0|id'
+!EL007
+.continue ESAC001
+!BRK003
+!ESAC001: =====   ENDCASE   =====
+.continue EL008 ? _(xi01 > 0)
+.output TERMINAL
+.set TRANS +
+*********** starte Stornolauf zu Transaktion '0|nummer' *****************
+
+.set TRANS -
+.formula U|xi01 = 1
+!LOOP002: ==============================
+.continue ELOP002 ? _(defined(xbunum.xi01))
+.output new 'U|xedp'
+#!action=COPY
+#!charset=EKS
+#!database=6
+#!EDP_LANGCODE='G|bsprache'
+.continue EL009 ? _(xbuart.xi01 = "F")
+#!group=0
+nummer;ysterm;storno
+'U|xbunum.xi01';'U|xterm.xi01';
+.continue FI009
+!EL009
+#!group=1
+nummer;storno
+'U|xbunum.xi01';
+!FI009
+.output NEW WERF.WEG
+.add F|sysinfo(10)^ykonfigprjm
+.continue EL010 ? _(G|mehr)
+.assign G|neuespassw = D|ybatchuser     ? _F|empty(D|ybatchuser) & D|ybatchuser^fremdok
+!EL010
+.formula U|xt01 = "edpimport.sh -p " + G|einmalpw + " -r REF " + U|xedp +" >" + U|xout + " 2>" + U|xerr
+.system 'U|xt01' background
+.select from 'U|xout' xt01^
+.select from
+.output terminal
+.select lock object 'U|xtransdat.xi01'
+.continue EL011 ? _(U|xt01 = "(0,0,0)")
+.continue EL012 ? _(xbuart.xi01 = "F")
+.set TRANS +
+TransDatensatz 'h|nummer       ':  Finanzbuchung         'xbunum.xi01' nicht storniert
+.set TRANS -
+.continue FI012
+!EL012
+.set TRANS +
+TransDatensatz 'h|nummer       ':  statistische Buchung  'xbunum.xi01' nicht storniert
+.set TRANS -
+!FI012
+.continue FI011
+!EL011
+.continue EL013 ? _(xbuart.xi01 = "F")
+.set TRANS +
+TransDatensatz 'h|nummer       ':  Finanzbuchung         'xbunum.xi01' storniert
+.set TRANS -
+.formula h|yfbuchstorno = 'U|xt01'
+.continue FI013
+!EL013
+.set TRANS +
+TransDatensatz 'h|nummer       ':  statistische Buchung  'xbunum.xi01' storniert
+.set TRANS -
+.formula h|ysbuchstorno = 'U|xt01'
+!FI013
+.formula h|ybezeich     = G|bzeichen
+.formula h|ystorno      = G|true
+.formula h|ybabl        = G|true
+.rewrite
+!FI011
+.select --
+.formula U|xi01 = U|xi01 + 1
+.continue LOOP002
+!ELOP002: ==============================
+.system 'F|formatstr("rm -f {1}", U|xedp)' background
+.system 'F|formatstr("rm -f {1}", U|xerr)' background
+.system 'F|formatstr("rm -f {1}", U|xout)' background
+.output terminal
+.set trans +
+
+*********** Stornolauf beendet zu Transaktion '0|nummer' *****************
+.set trans -
+!EL008
+.continue FI005
+!EL005
+.set TRANS +
+.box HINWEIS
+
+Die Transaktion '0|nummer' ist bereits storniert.
+
+.set TRANS -
+!FI005
+.continue

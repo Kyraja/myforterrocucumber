@@ -1,0 +1,167 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : AUSZUG2.EV
+..  Datum          : 29.11.2010
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : Allgemeines Event-FOP des Infosystems fb/AUSZUG2
+..  Functionality  : Common event FOP of the Infosystem fb/AUSZUG2
+..*****************************************************************************
+..
+.set trans -
+..
+.continue SWITCH ? G|evtartengl = "FIELD_VALIDATION"
+..
+..*****************************************************************************
+!INIT: Init mask values
+..*****************************************************************************
+.make screen line --
+.formula M|sumsoll   = 0
+.formula M|sumhaben  = 0
+.formula M|differenz = 0
+.formula M|anfsaldo  = 0
+.formula M|endsaldo  = 0
+.formula M|vkzssum   = 0
+.formula M|vkzhsum   = 0
+..
+..*****************************************************************************
+!SWITCH
+..*****************************************************************************
+.continue START  ? G|evtartengl = "BUTTON_BEFORE" &  G|evtvar = "bstart"
+.continue ACCCHK ? G|evtartengl = "FIELD_VALIDATION" &  G|evtvar = "konto"
+.continue PERIOD ? G|evtvar = "amonat"
+.continue PERIOD ? G|evtvar = "emonat"
+.continue PERIOD ? G|evtvar = "gjahr"
+.continue CURR1  ? G|evtartengl = "FIELD_EXIT"   &  G|evtvar = "waehr"
+.continue END
+..
+..*****************************************************************************
+!CURR1: Posting currency changed
+..*****************************************************************************
+.assign M|waehr = G|inland^id ? F|empty(M|waehr)
+.continue END
+..
+..*****************************************************************************
+!PERIOD: Start, end month or financial year set
+..*****************************************************************************
+.type text xxtemon xxtsmon xxtsyear xxteyear xxtfromd xxttod
+.formula U|xxtsmon = "amonat"
+.formula U|xxtemon = "emonat"
+.formula U|xxtsyear= "gjahr"
+.formula U|xxteyear= U|xxtsyear
+.formula U|xxtfromd= "adatum"
+.formula U|xxttod  = "edatum"
+.input "fb/IS.SETPERIOD"
+.make screen line --
+.continue END
+..
+..*****************************************************************************
+!ACCCHK
+..*****************************************************************************
+.load 0 add M|konto
+.continue END   ? _G|mehr
+.continue ERR02 ? F|condexpr(F|defined(0|bu), _0|bu, G|FALSE)
+.continue END
+..
+..*****************************************************************************
+!START: Start Infosystem execution level 1
+..*****************************************************************************
+.continue ERR01 ? F|empty(M|konto)
+.formula M|gjahr = G|gjahr ? F|empty(M|gjahr)
+..
+.select year 'M|gjahr' 'M|amonat' 'M|emonat' ? M|amonat > 0 & M|emonat > 0
+.select year 'M|gjahr' 'G|amonat' 'M|emonat' ? M|amonat = 0
+.select year 'M|gjahr' 'M|amonat' 'G|emonat' ? M|emonat = 0
+.select year 'M|gjahr'                       ? M|amonat = 0 & M|emonat = 0
+..
+.set setofbooks 'M|bukreis^bknr'
+..
+..*****************************************************************************
+!ACCOUNT: Account selected
+..*****************************************************************************
+.select add M|konto
+..
+.set currency 'M|waehr'
+.set outcurr 'M|waehr'
+.. set start and end balance
+.formula M|anfsaldo  = H|asaldo
+.formula M|vkzssum   = H|ssum
+.formula M|vkzhsum   = H|hsum
+.formula M|endsaldo  = H|esaldo
+.set outcurr 'M|waehr'
+..
+.continue START2 ? _F|defined(H|bu)
+.continue ERR02  ? _H|bu
+..
+..*****************************************************************************
+!START2
+..*****************************************************************************
+.set currency 'M|waehr'
+.load 0 object 'H|id'
+..
+.type bool xbbackward
+.formula U|xbbackward = G|true  ? 'M|richtung(L="0")' = "(1)"
+.formula U|xbbackward = G|false ? 'M|richtung(L="0")' = "(0)"
+..
+.input 'M|bkopf'
+.continue CTYPE ? M|konto^dnr=60
+.continue COST  ? M|konto^dnr=5 & M|konto^gruppe<>1
+.load 1 'G|hdatname131' 'F|formatstr("$,sortgjgm={1}!{2};iwbu={3};konto={4};bukreis=={5};@zeilen=(1);@ordnung=buchung;@richtung=vorwaerts", F|fysortdat(M|gjahr, M|amonat), F|fysortdat(M|gjahr, M|emonat), M|waehr^id, M|konto^id, M|bukreis^id)' ? _U|xbbackward
+.load 1 'G|hdatname131' 'F|formatstr("$,sortgjgm={1}!{2};iwbu={3};konto={4};bukreis=={5};@zeilen=(1);@ordnung=buchung;@richtung=rueckwaerts", F|fysortdat(M|gjahr, M|amonat), F|fysortdat(M|gjahr, M|emonat), M|waehr^id, M|konto^id, M|bukreis^id)' ? U|xbbackward
+.continue END ? _G|mehr
+.continue LOOP
+..*****************************************************************************
+!COST: cost center
+..*****************************************************************************
+.load 1 'G|hdatname131' 'F|formatstr("$,sortgjgm={1}!{2};iwbu={3};kstelle={4};bukreis=={5};@zeilen=(1);@ordnung=buchung;@richtung=vorwaerts", F|fysortdat(M|gjahr, M|amonat), F|fysortdat(M|gjahr, M|emonat), M|waehr^id, M|konto^id, M|bukreis^id)' ? _U|xbbackward
+.load 1 'G|hdatname131' 'F|formatstr("$,sortgjgm={1}!{2};iwbu={3};kstelle={4};bukreis=={5};@zeilen=(1);@ordnung=buchung;@richtung=rueckwaerts", F|fysortdat(M|gjahr, M|amonat), F|fysortdat(M|gjahr, M|emonat), M|waehr^id, M|konto^id, M|bukreis^id)' ? U|xbbackward
+.continue END ? _G|mehr
+.continue LOOP
+..*****************************************************************************
+!CTYPE: cost type
+..*****************************************************************************
+.load 1 'G|hdatname131' 'F|formatstr("$,sortgjgm={1}!{2};iwbu={3};koart={4};bukreis=={5};@zeilen=(1);@ordnung=buchung;@richtung=vorwaerts", F|fysortdat(M|gjahr, M|amonat), F|fysortdat(M|gjahr, M|emonat), M|waehr^id, M|konto^id, M|bukreis^id)' ? _U|xbbackward
+.load 1 'G|hdatname131' 'F|formatstr("$,sortgjgm={1}!{2};iwbu={3};koart={4};bukreis=={5};@zeilen=(1);@ordnung=buchung;@richtung=rueckwaerts", F|fysortdat(M|gjahr, M|amonat), F|fysortdat(M|gjahr, M|emonat), M|waehr^id, M|konto^id, M|bukreis^id)' ? U|xbbackward
+.continue END ? _G|mehr
+..
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+..
+.load 1 line
+.continue NEXT   ? (_F|empty(M|konzern^mdkenn) & F|trim(1|mandkenn) <> M|konzern^mdkenn) ; _G|mehr 
+..
+.input 'M|tab'
+..
+.continue LOOP
+..
+..*****************************************************************************
+!NEXT
+..*****************************************************************************
+.load 1 continue
+.continue LOOP ? G|mehr
+..*****************************************************************************
+!ELOOP
+..*****************************************************************************
+.input 'M|bfuss'
+..
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue
+..
+..
+..*****************************************************************************
+!ERR01
+..*****************************************************************************
+.error Kein Konto bzw. Kst/Ktr angegeben.
+.end 1
+..
+..*****************************************************************************
+!ERR02
+..*****************************************************************************
+.error UngÅltiger Wert. 'M|konto^nummer' ist ein Verdichtungskonto bzw. -kostenstelle.
+.end 1

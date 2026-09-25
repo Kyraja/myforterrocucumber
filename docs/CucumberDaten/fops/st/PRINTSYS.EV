@@ -1,0 +1,127 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PRINTSYS.EV
+.. Datum          : 2005-02-14
+.. Version        : 2005r2n00
+.. Autor          : fwester
+.. Verantwortlich : teamreport
+.. Kontrolle      :
+.. Funktion       : Behandelt zentral die Ereignisse der Eingabefelder mit eher
+..                  einfacherer Funktionalitaet.
+.. Ablauf         : Zentraler EFOP des Drucksystems
+..
+.. Functionality  : Handles events of the input fields which functionalitys are
+..                  less complicated in a central way.
+.. Program flow   : Central EFOP of the print system
+..*****************************************************************************
+.set trans -
+..------------------------------- Header:  -------------------------------------
+.continue GETINFO ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "rootinfosys"
+.continue GETLAY  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "rootlayout"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "anzstufen"
+.continue DATA    ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "model"
+.continue LAYOUT  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "layout"
+.continue PLAN    ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "plan"
+.continue WITHLAY ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "withlayouts"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "inactive"
+.. Only st/DRUCKKOPIE
+.continue PREFIX  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "prefix"
+..------------------------------- Table:   -------------------------------------
+.continue FORBIDD ? G|evtartengl = "ROW_MOVED_BEFORE"
+..==============================================================================
+.continue END
+..
+!GETINFO: protects input fields of the layout and sets data of the infosystem
+.assign M|rootlayout = ""
+.assign M|namelayout = ""
+.continue CLRDET
+..
+!GETLAY: protects input fields for infosystem and sets data of the given layout
+.protection -reset plan 0 ? M|rootlayout^kanal^such="JASPERREPORTS" & M|model
+.protection plan 0        ? M|rootlayout^kanal^such<>"JASPERREPORTS" & M|model
+.copy M|plan = G|FALSE    ? M|rootlayout^kanal^such<>"JASPERREPORTS" & M|model
+.assign M|rootinfosys = M|rootlayout^kontext   ? _F|empty(M|rootlayout)
+.continue CLRDET
+..
+!LAYOUT: view type has changed
+.copy M|model = G|FALSE
+.copy M|layout = G|TRUE
+.copy M|inactive = G|FALSE
+.copy M|withlayouts = G|TRUE
+.copy M|plan = G|TRUE
+.protection -reset model 0
+.protection layout 0
+.protection withlayouts 0
+.protection inactive 0
+.protection plan 0
+.protection -reset M|anzstufen 0
+.assign M|anzstufen = 9999
+.continue CLRDET
+..
+!DATA: view for data
+.copy M|layout = G|FALSE
+.protection model 0
+.protection -reset layout 0
+.protection -reset withlayouts 0
+.protection -reset plan 0
+.copy M|withlayouts = G|FALSE
+.copy M|plan = G|FALSE
+.protection -reset plan 0 ? M|rootlayout^kanal^such="JASPERREPORTS"
+.assign M|anzstufen = 1
+.protection M|anzstufen 0
+.continue CLRDET
+..
+!PLAN
+.continue PLANEND ? M|plan = G|TRUE
+.assign M|anzstufen = 1
+.protection M|anzstufen 0
+.continue CLRTAB
+!PLANEND
+.protection -reset M|anzstufen 0
+.assign M|anzstufen = 9999
+.continue CLRTAB
+..
+!CLRDET: clear details
+.assign M|kinfosys = ""
+.assign M|klayout = ""
+.assign M|kelementtype = ""
+.assign M|kcommparam = ""
+.assign M|klayoutfile = ""
+.assign M|stufe = 0
+.assign M|kparampfad = ""
+.assign M|kparampfad1 = ""
+.assign M|kparamebene = 0
+..
+!CLRTAB: clear table
+.make screen line -- ? M|tzeilen > 0
+.continue END
+..
+!FORBIDD: operation is forbidden
+.error
+.end 1
+..
+!WITHLAY: Data view with layouts
+.copy M|inactive = G|FALSE
+.continue WITH ? M|withlayouts
+.protection inactive 0
+.continue CLRTAB
+..
+!WITH
+.protection -reset inactive 0
+.continue CLRTAB
+..
+!PREFIX: Validate prefix for searchwords
+.type SW65 xxsuch65
+.assign M|prefix = F|trim(M|prefix)
+.continue ERR1 ? F|empty(M|prefix)
+.assign U|xxsuch65 = M|prefix
+.continue ERR1 ? _G|mehr
+.continue CLRTAB
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERR1
+.error -line 0 -field 'G|evtvar' -message Unzul„ssige Angabe.
+.end 1

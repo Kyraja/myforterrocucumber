@@ -1,0 +1,435 @@
+..!interpreter english translate
+..*****************************************************************************
+..
+..  Name      : BILKON.EXCEL
+..  Datum     : 16.07.96
+..  Vers.     : 7.1
+..  Autor     : Andrzej Klusek
+..
+..  Verantwortlich : hc
+..  Kontrolle      : mh
+..
+..
+..  Funktion  : BILKON.EXCEL wird aus BILANZ aufgerufen
+..
+..  Ablauf    : Bilazsummen bilden und EXCEL Diagramme ausgeben
+..
+..*****************************************************************************
+..                           SUBROUTINE
+..                           ----------
+..
+.end .  ?  txname / "*BILKON.EXCEL"
+..*****************************************************************************
+.type text xth1:3 xth2:3 xth3:3
+.type text x1einsw:70 x1aussw:70 xxt1fkt:10 xthexcel:80
+.formula xxt1fkt = "SPACE.WEG"
+..
+..  x1icol - Aktiva_Zeilenanzahl(Column)  / x1iakr - Aktiva_Zeilenanzahl(Row)
+..  x1icol - Passiva_Zeilenanzahl(Column) / x1ipar - Passiva_Zeilenanzahl(Row)
+..
+..  xyiak/xyipa - Aktiva/Pasiva_Start
+.type integer xyi xyiak xyipa x1irow x1iakr x1ipar
+.formula xyiak = 1000
+.formula xyipa = 5000
+.formula xyi   = xyiak
+.separator #
+.output terminal
+.input BILD.F
+                          Daten fr EXCEL aufbereiten
+
+.set trans -
+.formula xtmp = "X" + pid + ".TMP"
+.output new 'xtmp'
+.input "DATEI.F"
+.formula xl  = ""
+..
+.formula xl  = "ba"   ?  _xnachweis  &  xwahl = "A"
+.formula xlg = "bap"  ?  _xnachweis  &  xwahl = "A"  &  (gform = 1  ;  xtgesf = "P")
+.formula xlg = "bak"  ?  _xnachweis  &  xwahl = "A"  &  (gform = 2  ;  xtgesf = "K")
+..
+.formula xl  = "gv"   ?  _xnachweis  &  xwahl = "B"
+.formula xlg = "gv"   ?  _xnachweis  &  xwahl = "B"
+..
+!VA1
+.formula xii = 1
+..
+!VA2: LGP_Var. initialisieren: Gesamtsumme -> xrgs,  Gruppe 1/2 -> xrg1
+.type real xrgs.xii xrg1.xii
+..
+.formula xii = xii + 1
+.continue VA2  ?  xii <= ximax
+..
+!VA3
+.select from
+..
+!VA5: 1. Zeile fr Bilanz oder GuV suchen
+.select from 'xtkotab' xkenn # xart # xber # xinf # xdv # xnam^
+.continue VE90    ? _mehr
+.continue VA5     ?  xkenn <> xl   &  xkenn<> xlg
+.continue VA5     ?  xkenn = "gv"  &  xinf = "p"
+..
+.formula xyi = xyipa ?  xl = "bp"
+..
+!VB1: 1. richtige Zeile aus KOTAB gelesen
+.formula xii = 1
+..
+!VB5
+.formula xrg1.xii = 0.0
+.formula xii = xii + 1
+.continue VB5              ?  xii <= ximax
+..
+..  Informationen aus KOTAB merken
+.formula xi = xinf
+.formula xa = xart
+.formula xk = xkenn
+..
+..  šberschrift, G„nsefáchen abschneiden
+.formula xn = xnam  << -1
+.formula xn = xn    >> -1
+..
+..  n„chste Zeile lesen, wenn keine Konten im Bereich oder Zwischensummen (s/ss)
+.continue VB100  ?  xber = ""
+..
+!VB30: budget_Rechnung fr einen Bereich (xber) aus KOTAB
+..     LABEL fr Folgezeile
+.formula xb    = xber
+.formula xii   = 1
+..
+!VB35: Zeitraum xii aktivieren
+..  xwastun = 4 -> Ist-Plan-Vergleich -> xips == 0 Std_Belegung
+..                 xips == 1 -> Ist-Zahlen, wenn 1. Lauf (xii==1)
+..                 xips == 2 -> Planzahlen, wenn 2. Lauf (xii==2)
+.formula xips  = 1  ?  xwastun = 4  &  (xii = 1  ;  xii = 3  ;  xii = 5)
+.formula xips  = 2  ?  xwastun = 4  &  (xii = 2  ;  xii = 4)
+.formula xjahr = xjahr.xii
+.formula xam   = xam.xii
+.formula xem   = xem.xii
+.input VKZHOLJAHR
+.continue VB40   ?  xips = 2
+..
+.budget 'xb'             ?  xb<> "-b !" & (xdv="b" ; xdv="")
+.budget -v 'xb'          ?  xb<> "-b !" &  xdv="bv"
+.budget -b !             ?  xb = "-b !"
+.continue VB50
+..
+!VB40: Planzahlen
+.budget -p  'xb'         ?  xb<> "-b !" & (xdv="b" ; xdv="")
+.budget -vp 'xb'         ?  xb<> "-b !" &  xdv="bv"
+.budget -bp !            ?  xb = "-b !"
+..
+!VB50
+.input 'xt2fkt'
+..
+..  Summen bilden
+..  Gruppensumen -> xriezw
+.formula xrg1.xii = xrg1.xii + xriezw
+.formula xriezw = 0
+..
+..  Gesamtsumme  -> xrezw
+.formula xrezw    =-xrezw             ?   xart =  "E"
+.formula xrgs.xii = xrgs.xii + xrezw
+.formula xrezw = 0
+..
+..  n„chster Zeitraum
+.formula xii   = xii + 1
+.continue VB35   ?  xii <= ximax
+.formula xips  = 0  ?  xwastun = 4
+..
+!VB100: 2.-n. Zeile aus KOTAB lesen
+.select from 'xtkotab' xkenn # xart # xber # xinf # xdv # xnam^
+.continue VE1    ? _mehr
+.continue VB100  ?  xber = ""   &  xnam = ""
+.continue VB100  ?  xkenn<> xl  &  xkenn<> xlg
+.continue VB100  ?  xinf = "d"  ;  xinf = "s"  ;  xinf = "ss"
+..
+..  xnam == "" -> Folgezeile
+.continue VB30   ?  xnam = ""
+.continue VB30   ?  xinf = "3"  ;  xinf = "4"
+..
+..  Ausgabe fr Gruppe 1/2
+.formula xtskip = "VB1"
+.continue VF160  ?  xwastun = 1
+.continue VF260  ?  xwastun = 2
+.continue VF360  ?  xwastun = 3
+.continue VF460  ?  xwastun = 4
+..
+!VE1: Table_EOF / letzte Zeile ausgeben
+.formula xtskip = "VE10"
+.continue VF160  ?  xwastun = 1
+.continue VF260  ?  xwastun = 2
+.continue VF360  ?  xwastun = 3
+.continue VF460  ?  xwastun = 4
+..
+!VE10: Endsummen
+.formula xtskip = "VE50"
+.continue VF180    ?  xwastun = 1
+.continue VF280    ?  xwastun = 2
+.continue VF380    ?  xwastun = 3
+.continue VF480    ?  xwastun = 4
+..
+!VE50
+.continue VE60     ?  xl = "gv"
+.continue VE60     ?  xl = "bp"
+..
+!VE55
+.formula xl  = "bp"
+.formula xlg = "bpp"  ?  gform = 1  ;  xtgesf = "P"
+.formula xlg = "bpk"  ?  gform = 2  ;  xtgesf = "K"
+.continue VA1
+..
+!VE60: EXCEL Ausgabe
+.output terminal
+.input BILD.F
+.set trans +
+                             EXCEL Ausgabe starten
+
+.formula xtmp1 = "X1" + pid + ".TMP"
+.continue VE65  ? _xl = "gv"
+..
+..  GuV
+.output new 'xtmp1'
+.input "DATEI.F"
+?Gewinn  und Verlust Rechnung                      ? _xwastun = 1
+?Gewinn und Verlust Rechnung 'xdanf' - 'xdend'     ?  xwastun = 1
+..
+?'xjahr1';'xjahr2'                        ?  xwastun = 1
+?'xam1'-'xem1' 'xjahr1';'xam2'-'xem2' 'xjahr2';'xam3'-'xem3' 'xjahr3';'xam4'-'xem4' 'xjahr4'  ?  xwastun = 2
+?'xt21t'                                  ?  xwastun = 3  &  ximax = 1
+?'xt21t';'xt22t'                          ?  xwastun = 3  &  ximax = 2
+?'xt21t';'xt22t';'xt23t'                  ?  xwastun = 3  &  ximax = 3
+?'xt21t';'xt22t';'xt23t';'xt24t'          ?  xwastun = 3  &  ximax = 4
+?'xt21t';'xt22t';'xt23t';'xt24t';'xt25t'  ?  xwastun = 3  &  ximax = 5
+?Ist 'xam1'-'xem1' 'xjahr1';Plan 'xam2'-'xem2' 'xjahr2';Ist 'xam3'-'xem3' 'xjahr3';Plan 'xam4'-'xem4' 'xjahr4';Ist 'xam5'-'xem5' 'xjahr5'  ?  xwastun = 4
+.set trans -
+.input 'xtmp'
+.output new "WERF.WEG"
+.pc.graph 'xtmp1' 'xy1dde' 'xy2dde' 'xy3dde'
+.formula xkom = "cat " + xtmp + " | cut -d# -f2- > " + xtmp1
+.system 'xkom' background
+.output E
+.input EXCEL.F
+.input 'xtmp1'
+.continue VE90
+..
+!VE65: Bilanz
+.output new "WERF.WEG"
+.formula xkom = "sort -t# +0n -1 -o " + xtmp + " " + xtmp
+.system 'xkom' background
+.formula xkom = "cat " + xtmp + " | cut -d# -f2- > " + xtmp1
+.system 'xkom' background
+..
+..  EXCEL ber DDE
+..  Column      -> x1icol
+..  Row_Aktiva  -> x1iakr
+..  Row_Passiva -> x1ipar
+.output E
+.input EXCEL.F
+.input 'xtmp1'
+..
+.continue VE80  ?  x1iakr = 0
+..
+..  Aktiva: Bereich markieren  Zelle[1,1] - Zelle[ROW_Aktiva,COLUMN]
+.formula xth1     = x1iakr
+..
+..  ACHTUNG!!!
+..  Um Datenreihe Spalte/Zeile umzugehen MUá ein gr”áerer Bereich markiert
+..  werden, dh. markieren -> Anzahl_Spalten == Anzahl_Zeilen (Quadrat)
+..fo xth2     = x1icol
+.formula xth2     = x1iakr
+..
+..  Bereich ausw„hlen/aktivieren
+.formula xthexcel = "[SELECT(" + dblquote + t|dderow + "1" + t|ddecol + "1:" + t|dderow + xth1 + t|ddecol + xth2 + dblquote + ")]"
+.dde.exec 'ddekanal' 'xthexcel'
+..
+..  Diagramm aufbauen
+.dde.exec 'ddekanal' [NEW(2,2)]
+..
+..  Typ des Diagramms (3D_S„ulen/Muster 3)
+.dde.exec 'ddekanal' [GALLERY.3D.COLUMN(3)]
+..
+..  Legende einfgen
+.dde.exec 'ddekanal' [LEGEND(TRUE)]
+..
+..  einen leeren Bereich ausw„hlen
+.formula xthexcel = "[SELECT(" + dblquote + dblquote + ")]"
+.dde.exec 'ddekanal' 'xthexcel'
+..
+..  Tabelle aktivieren
+.formula xthexcel = "[ACTIVATE(" + dblquote + ddename + dblquote + ")]"
+.dde.exec 'ddekanal' 'xthexcel'
+..
+!VE80: Passiva (DDE_Kommentare s. Aktiva)
+.continue VE90  ?  x1ipar = 0
+..
+..  Passiva: Bereich markieren Zelle[ROW_Aktiva+1,1]
+..                           - Zelle[ROW_Passiva+ROW_Aktiva,COLUMN]
+.formula xth1     = x1iakr + 1
+.formula xth3     = x1iakr + x1ipar
+..
+..  Um Datenreihe Spalte/Zeile umzugehen wird ein Quadrat markiert
+.formula xth2     = x1ipar
+..
+.formula xthexcel = "[SELECT(" + dblquote + t|dderow + xth1 + t|ddecol + "1:" + t|dderow + xth3 + t|ddecol + xth2 + dblquote + ")]"
+.dde.exec 'ddekanal' 'xthexcel'
+.dde.exec 'ddekanal' [NEW(2,2)]
+.dde.exec 'ddekanal' [GALLERY.3D.COLUMN(3)]
+.dde.exec 'ddekanal' [LEGEND(TRUE)]
+.formula xthexcel = "[SELECT(" + dblquote + dblquote + ")]"
+.dde.exec 'ddekanal' 'xthexcel'
+..
+!VE90: Bilanz + GuV
+.output terminal
+.set trans +
+                             EXCEL Ausgabe beendet
+
+.set trans -
+.output terminal ...
+..
+!VE100
+.continue
+..
+..  In TMP_File schreiben
+..  xwastun = 1
+!VF160: Gruppe 1/2
+.formula x1einsw = xn
+.input 'xxt1fkt'
+.formula xn = x1aussw
+..
+?'xn         ';'xrg11';'xrg12'                             ?  xl = "gv"
+?'xyi'#'xn             ';'xrg11';'xrg12'                   ? _xl = "gv"
+.formula xyi = xyi - 1
+.continue 'xtskip'
+..
+!VF180: Endsumme
+.set trans +
+?GewinnVerlust;'xrgs1';'xrgs2'                             ?  xl = "gv"
+?'xyi'#;Aktiva 'xjahr1';Aktiva 'xjahr2'                    ?  xl = "ba"
+?'xyi'#;Passiva 'xjahr1';Passiva 'xjahr2'                  ?  xl = "bp"
+.set trans -
+.formula xyi = xyi - 1
+..
+..  Anzahl Spalten
+.formula x1icol = 3
+..
+..  Anzahl Zeilen
+.formula x1iakr = xyiak - xyi                                   ?  xl = "ba"
+.formula x1ipar = xyipa - xyi                                   ?  xl = "bp"
+.continue 'xtskip'
+..
+..  xwastun = 2
+!VF260: Gruppe 1/2
+.formula x1einsw = xn
+.input 'xxt1fkt'
+.formula xn = x1aussw
+..
+?'xn         ';'xrg11';'xrg12';'xrg13';'xrg14'             ?  xl = "gv"
+?'xyi'#'xn             ';'xrg11';'xrg12';'xrg13';'xrg14'   ? _xl = "gv"
+.formula xyi = xyi - 1
+.continue 'xtskip'
+..
+!VF280: Endsumme
+.set trans +
+?GewinnVerlust;'xrgs1';'xrgs2';'xrgs3';'xrgs4'             ?  xl = "gv"
+.set trans -
+?'xyi'#;A 'xam1'-'xem1' 'xjahr1';A 'xam2'-'xem2' 'xjahr2';A 'xam3'-'xem3' 'xjahr3';A 'xam4'-'xem4' 'xjahr4'  ?  xl = "ba"
+?'xyi'#;P 'xam1'-'xem1' 'xjahr1';P 'xam2'-'xem2' 'xjahr2';P 'xam3'-'xem3' 'xjahr3';P 'xam4'-'xem4' 'xjahr4'  ?  xl = "bp"
+.formula xyi = xyi - 1
+..
+..  Anzahl Spalten
+.formula x1icol = 5
+..
+..  Anzahl Zeilen
+.formula x1iakr = xyiak - xyi                                   ?  xl = "ba"
+.formula x1ipar = xyipa - xyi                                   ?  xl = "bp"
+.continue 'xtskip'
+..
+..  xwastun = 3
+!VF360: Gruppe 1/2
+.formula x1einsw = xn
+.input 'xxt1fkt'
+.formula xn = x1aussw
+..
+.formula xt1aus = xrg11                                         ?  ximax >= 1
+.formula xt2aus = xrg12                                         ?  ximax >= 2
+.formula xt1aus = xt1aus + ";" + xt2aus                         ?  ximax >= 2
+.formula xt2aus = xrg13                                         ?  ximax >= 3
+.formula xt1aus = xt1aus + ";" + xt2aus                         ?  ximax >= 3
+.formula xt2aus = xrg14                                         ?  ximax >= 4
+.formula xt1aus = xt1aus + ";" + xt2aus                         ?  ximax >= 4
+.formula xt2aus = xrg15                                         ?  ximax >= 5
+.formula xt1aus = xt1aus + ";" + xt2aus                         ?  ximax >= 5
+?'xn         ';'xt1aus'                                    ?  xl = "gv"
+?'xyi'#'xn             ';'xt1aus'                          ? _xl = "gv"
+.formula xyi = xyi - 1
+.continue 'xtskip'
+..
+!VF380: Endsumme
+.formula xt1aus = xrgs1                                         ?  ximax >= 1
+.formula xt4aus = xjahr1                                        ?  ximax >= 1
+.set trans +
+.formula xt3aus = ";Aktiva "  + xt4aus                          ?  ximax >= 1  &  xl = "ba"
+.formula xt3aus = ";Passiva " + xt4aus                          ?  ximax >= 1  &  xl = "bp"
+..
+.formula xt2aus = xrgs2                                         ?  ximax >= 2
+.formula xt1aus = xt1aus + ";" + xt2aus                         ?  ximax >= 2
+.formula xt4aus = xjahr2                                        ?  ximax >= 2
+.formula xt3aus = xt3aus + ";Aktiva "  + xt4aus                 ?  ximax >= 2  &  xl = "ba"
+.formula xt3aus = xt3aus + ";Passiva " + xt4aus                 ?  ximax >= 2  &  xl = "bp"
+..
+.formula xt2aus = xrgs3                                         ?  ximax >= 3
+.formula xt1aus = xt1aus + ";" + xt2aus                         ?  ximax >= 3
+.formula xt4aus = xjahr3                                        ?  ximax >= 3
+.formula xt3aus = xt3aus + ";Aktiva "  + xt4aus                 ?  ximax >= 3  &  xl = "ba"
+.formula xt3aus = xt3aus + ";Passiva " + xt4aus                 ?  ximax >= 3  &  xl = "bp"
+..
+.formula xt2aus = xrgs4                                         ?  ximax >= 4
+.formula xt1aus = xt1aus + ";" + xt2aus                         ?  ximax >= 4
+.formula xt4aus = xjahr4                                        ?  ximax >= 4
+.formula xt3aus = xt3aus + ";Aktiva "  + xt4aus                 ?  ximax >= 4  &  xl = "ba"
+.formula xt3aus = xt3aus + ";Passiva " + xt4aus                 ?  ximax >= 4  &  xl = "bp"
+..
+.formula xt2aus = xrgs5                                         ?  ximax >= 5
+.formula xt1aus = xt1aus + ";" + xt2aus                         ?  ximax >= 5
+.formula xt4aus = xjahr5                                        ?  ximax >= 5
+.formula xt3aus = xt3aus + ";Aktiva "  + xt4aus                 ?  ximax >= 5  &  xl = "ba"
+.formula xt3aus = xt3aus + ";Passiva " + xt4aus                 ?  ximax >= 5  &  xl = "bp"
+..
+?GewinnVerlust;'xt1aus'                                    ?  xl = "gv"
+?'xyi'#'xt3aus'                                            ? _xl = "gv"
+.set trans -
+.formula xyi = xyi - 1
+..
+..  Anzahl Spalten
+.formula x1icol = ximax + 1
+..
+..  Anzahl Zeilen
+.formula x1iakr = xyiak - xyi                                   ?  xl = "ba"
+.formula x1ipar = xyipa - xyi                                   ?  xl = "bp"
+.continue 'xtskip'
+..
+..  xwastun = 4
+!VF460: Gruppe 1/2
+.formula x1einsw = xn
+.input 'xxt1fkt'
+.formula xn = x1aussw
+..
+?'xn         ';'xrg11';'xrg12';'xrg13';'xrg14';'xrg15'            ?  xl = "gv"
+?'xyi'#'xn             ';'xrg11';'xrg12';'xrg13';'xrg14';'xrg15'  ? _xl = "gv"
+.formula xyi = xyi - 1
+.continue 'xtskip'
+..
+!VF480: Endsumme
+.set trans +
+?GewinnVerlust;'xrgs1';'xrgs2';'xrgs3';'xrgs4';'xrgs5'     ?  xl = "gv"
+?'xyi'#;A-Ist 'xam1'-'xem1' 'xjahr1';A-Plan 'xam2'-'xem2' 'xjahr2';A-Ist 'xam3'-'xem3' 'xjahr3';A-Plan 'xam4'-'xem4' 'xjahr4';A-Ist 'xam5'-'xem5' 'xjahr5'  ?  xl = "ba"
+?'xyi'#;P-Ist 'xam1'-'xem1' 'xjahr1';P-Plan 'xam2'-'xem2' 'xjahr2';P-Ist 'xam3'-'xem3' 'xjahr3';P-Plan 'xam4'-'xem4' 'xjahr4';P-Ist 'xam5'-'xem5' 'xjahr5'  ?  xl = "bp"
+.set trans -
+.formula xyi    = xyi - 1
+..
+..  Anzahl Spalten
+.formula x1icol = 6
+..
+..  Anzahl Zeilen
+.formula x1iakr = xyiak - xyi                                   ?  xl = "ba"
+.formula x1ipar = xyipa - xyi                                   ?  xl = "bp"
+.continue 'xtskip'

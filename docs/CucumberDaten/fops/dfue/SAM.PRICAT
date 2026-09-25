@@ -1,0 +1,282 @@
+..!interpreter english translate
+..*****************************************************************************
+.. FOP-Name       : SAM.PRICAT
+.. Autor          : ok
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Unterprogramm zu dfue/PRICAT.STD
+.. Functionality  :
+..*****************************************************************************
+..#KOR#EDI-MODUL#DATUM#éNDERUNGS-INDEX#MitarbeiterkÅrzel#
+..#KOR#PRI#08.06.2003#0#ok#
+..#KOR#PRI#18.11.2003#1#ok#
+..#KOR#PRI#02.01.2004#2#ok#
+..#KOR#PRI#28.01.2005#3#ok#
+..#KOR#PRI#03.08.2006#4#ok# (u.a. .sys --> hinter ergÑnzt)
+..#KOR#PRI#26.09.2007#5#mh# M|num durch M|art^nummer ersetzt
+..*****************************************************************************
+.set trans -
+..
+.continue VPRGRP  ? xmarke = "VPRGRP"
+.continue VPRFIND ? xmarke = "VPRFIND"
+.continue VPRZUOR ? xmarke = "VPRZUOR"
+.continue ACTCODE ? xmarke = "ACTCODE"
+.continue ACTCPRU ? xmarke = "ACTCPRU"
+.end
+..
+!VPRGRP
+..======== BEGINN VPRGRP =========
+.type integer xint
+.type real xvpr
+.formula xint = 0          ?  'M|kunderab'/"*(A-Z)*"
+.continue INT           ?  'M|kunderab'/"*(A-Z)*"
+!INT
+.formula xvpr = vpr
+.formula T|xvkpreis = xvpr
+.formula M|kdvpr = xvpr
+.continue
+..========  ENDE VPRGRP  =========
+..
+!VPRFIND
+..====== BEGINN PREISFIND ========
+.type bool xmitstapel
+.type bool xistprfind
+.type text xmhe
+.type integer xi
+..
+.formula xi = 0
+.formula T|xpreis    = M|vpr
+.continue    ? +M|suchwpr=0
+.select pricing 'M|suchwpr'
+.continue ENDE ? _mehr
+.formula xsuchpr = H|such
+..StÅckpreis
+.formula xspreis = H|spreis
+.. WÑhrung fÅr StÅckpreis
+.formula xmland  = H|mland
+..Teuerungzuschlag  (1-99 in %)
+.formula xtz     = H|tz
+.. Einheit fÅr StÅckpreis (StÅck, usw.)
+.formula xmhe    = H|mhe
+!ZEILE
+.select line
+.continue ENDE ? _mehr
+.formula xmitstapel = true ? mehr
+.type text xmnrab.xi
+.type text xmproz.xi
+.type text xmpreis.xi
+.type text xmenge.xi
+.formula xmnrab.xi  = H|mnrab
+.formula xmproz.xi  = H|mproz
+.formula xmpreis.xi = H|mpreis
+.formula xmenge.xi  = H|mgrenze
+.formula xi = xi + 1
+.continue ZEILE
+..
+!ENDE
+.continue
+..======   ENDE PREISFIND ========
+..
+!VPRZUOR
+..====== BEGINN PRZUORD   ========
+.continue REST ? xmhe = ""
+.formula xposphe = xmhe
+.input "EDI.UNITS"
+.formula xmasseinhq = U|eiso
+!REST
+.formula T|xmeinheit = xmasseinhq
+.formula T|xtstmge   = xmenge.xzaehler
+.type integer xvorzaehler
+.continue CONT    ? xzaehler = 0
+.formula xvorzaehler = xzaehler - 1
+.formula T|xbergrunt = xmenge.xvorzaehler
+!CONT
+.formula T|xbergrunt = 1   ? xzaehler = 0
+.formula T|xrabnat   = xmnrab.xzaehler
+..
+.formula T|xpreis    = xmpreis.xzaehler
+.formula T|xpreis    = xvkpreis               ? T|xpreis="0.00" & xvkpreis<>"0.00"
+.type real xzwpreis xzwtz
+.formula xzwpreis    = T|xpreis
+.formula xzwtz       = xtz
+.formula xzwpreis    = xzwpreis * ((100 + xzwtz)/100) ? xzwtz<>0
+.formula T|xpreis    = xzwpreis
+..
+.formula T|xwaehrung = xmland              ? xmland<>""
+.formula T|xprozsatz = xmproz.xzaehler
+.formula T|xprozsatzq= ""
+.formula T|xprozsatzq= "2"              ? T|xprozsatz<<1 <> "-" & _T|xprozsatz="0.00"
+.formula T|xprozsatzq= "1"                 ? T|xprozsatz<<1 =  "-"
+.formula T|xprozsatz = xmproz.xzaehler<<-1 ? T|xprozsatzq= "1"
+.continue
+..======   ENDE PRZUORD   ========
+..
+!ACTCODE
+..====== BEGINN ACTCODE   ========
+.. Funktion        :   Programm vergleicht fÅr jeden Artikel die neue PRICAT-
+..                     Angaben mit den alten Angaben in der vorhergehenden
+..                     PRICAT-Datei (wenn vorhanden) und vergibt die entspre-
+..                     chende Actionscode wie folgend:
+..                     Actionscode: 1  Addiert
+..                     Actionscode: 2  Gelîscht
+..                     Actionscode: 3  GeÑndert
+..                     Actionscode: 4  Keine énderung
+..
+.. Wenn dies der erste Artikel in der Tabelle ist, gehe zu "MERK"
+.. ab der zweiten Artikel ist die Variable xnumvor belegt
+..
+.continue MERK ? xnumvor=""
+..
+.. Falls fÅr den vorhergehenden Artikel im alten PRICAT-EDI-Datensatz Angaben
+.. vorhanden waren, wurde auch im vorhergehenden Lauf eine Datei mit den Namen
+.. "XALT.." schon angelegt
+.formula x1alt  = "XALT" + M|idprialt + xnumvor + ".TMP"
+.formula x1neu  = "XNEU" + M|idprialt + xnumvor + ".TMP"
+.formula xdiff  = "XERG" + xnumvor
+..
+.. Meldung auf dem Bildschirm
+.. die Variable xerst ist in PRICAT.STD definiert (als Boolean)                                                                  
+.set trans +
+?PRICAT-Datei wird erstellt! Bitte warten ... ? _xerst
+Artikel: 'xnumvor'
+.set trans -
+.formula xerst = true
+..
+..
+.. Wenn in die Dialogmaske eine Actionscode eingetragen ist, wird sie Åbernom-
+.continue MASKACT   ? xaktactcode<>""
+..
+!DIFF
+.formula xdiff = "XERG" + xnumvor
+.. Wenn kein alter PRICAT-EDI-Datensatz vorhanden ist, dann sind alle Artikel-
+.. angaben NEU bzw. "ADDIERT" (Actionscode=1)
+.continue AUS  ? M|idprialt=""
+.. Es wird getestet, ob die Datei mit dem Namen "XALT.." existiert und die
+.. Dateigrî·e grî·er als 0 ist
+.formula xsys = "test -s " + x1alt
+.system 'xsys' background
+..
+.. Alte und neue Artikelangaben werden durch den "diff"-Befehl verglichen
+.formula xsys = "diff " + x1alt + " " + x1neu + " > " + xdiff
+.. Es wird ein Diff-Vergleich gemacht, wenn die Datei "XALT.." existiert
+.system 'xsys' background  ? mehr
+..
+..Es wird getestet, ob die Diff-Datei mit dem Namen "XERG..." angelegt ist
+.. und die Dateigrî·e grî·er als 0 ist
+.formula xsys = "test -s " + xdiff
+.system 'xsys' background
+..
+.. Wenn keine Diff-Datei vorhanden ist
+.. Actionscode:  4  Keine énderung
+.formula xartaktiv = "4"       ? _mehr & (xartaktiv<>"1")
+.output addedto 'xpprot'          ? _mehr & (xartaktiv<>"1")
+?ART1#4# # # 'xnumvor' #  ? _mehr & (xartaktiv<>"1")
+..
+.. Wenn die Diff-Datei vorhanden ist
+.. Actionscode:  3  GeÑndert
+.formula xartaktiv = "3"   ? mehr
+..
+.. Wenn ein Differenz vorhanden ist, wird es in eine Protokolldatei geschrieben
+.output addedto 'xpprot'      ? mehr
+.input 'x1alt'          ? mehr
+.input 'xdiff'          ? mehr
+.output                  ? mehr
+..
+!AUS
+.. Wenn kein alter PRICAT-EDI-Datensatz vorhanden ist, dann sind alle Artikel-
+.. angaben NEU bzw. "ADDIERT" (Actionscode=1)
+.. Actionscode:  1  Neu bzw. Addiert
+.formula xartaktiv = "1"       ? M|idprialt=""
+.output addedto 'xpprot'          ? M|idprialt=""
+?ART1#1# # # 'xnumvor' #  ? M|idprialt=""
+..
+!MASKACT
+.. Wenn in die Dialogmaske eine Actionscode eingetragen ist, wird sie Åbernommen
+.formula xartaktiv = xaktactcode            ? xaktactcode<>""
+.output addedto 'xpprot'                       ? xaktactcode<>""
+?ART1#'xartaktiv'# # # 'xnumvor' #     ? xaktactcode<>""
+..
+..      .fo xartaktiv = 'M|actcode'            ? 'M|actcode' <>""
+..      .aus an 'xpprot'                       ? 'M|actcode' <>""
+..      ?ART1#'xartaktiv'# # 'xnumvor' #       ? 'M|actcode' <>""
+..
+.output addedto 'xtdatname'
+'xtsatzlin1'#'xtversion1'#'xartaktiv'#######################
+.formula xsys = "test -s " + x1neu
+.system 'xsys' background
+.continue DELETE ? _mehr
+.input 'x1neu'
+.output
+..
+!DELETE
+.. TemporÑre Dateien werden gelîscht
+..
+.formula xsys = "rm -f " + x1alt
+.system 'xsys' background
+.formula xsys = "rm -f " + x1neu
+.system 'xsys' background
+.formula xsys = "rm -f " + xdiff
+.system 'xsys' background
+..
+.continue WEITER        ? M|idprialt=""
+..
+!MERK
+.. xmehr wird in PRICAT.STD nach "hol zeile" gesetzt
+.continue WEITER ? _xmehr
+.formula xaktactcode = M|actcode
+.reserve
+.formula xartaktiv = ""
+..
+.. Es wird in dem vorgehenden PRICAT-EDI-Datensatz gesucht, ob fÅr den Artikel
+.. Angabe Åbertragen worden war.
+.. Suchen in der alten bzw. vorhergehenden PRICAT-Datei nach Artikelangaben
+.formula xtsel = "$,,;@gruppe=0;nummer=" + idprialt + ";text1al=ART1;text5al=" + 'M|art^nummer'
+.select edifact 'xtsel'
+.. Actionscode:1  Neu bzw. Addiert
+.formula M|actcode = "1"        ? _mehr
+.formula xartaktiv = "1"        ? _mehr
+.output addedto 'xpprot'           ? _mehr
+?ART1#1# # # 'M|art^nummer' #     ? _mehr
+.continue WEITER             ? _mehr
+..
+.. WENN im vorgehenden PRICAT-EDI-Datensatz Angaben fÅr diesen Artikel vorhan-
+.. den sind, werden sie in eine Datei (xdatei) geschrieben
+.formula xdatei = "XALT" + M|idprialt + 'M|art^nummer' + ".TMP"
+.output new 'xdatei'
+.output addedto 'xdatei'
+.input "DATEI.F"
+.select line 'selzeile'
+'text1'#'text2'#'text3'#'text4'#'text5'#'text6'#'text7'#'text8'#'text9'#'text10'#'text11'#'text12'#'text13'#'text14'#'text15'#'text16'#'text17'#'text18'#'text19'#'text20'#'text21'#'text22'#'text23'#'text24'##
+!Z1
+.select line
+.continue WEITER ? _mehr
+.continue WEITER ? text1al="PGI1"
+.continue WEITER ? text1al="LIN1"
+.continue WEITER ? text1al="UNZI"
+'text1'#'text2'#'text3'#'text4'#'text5'#'text6'#'text7'#'text8'#'text9'#'text10'#'text11'#'text12'#'text13'#'text14'#'text15'#'text16'#'text17'#'text18'#'text19'#'text20'#'text21'#'text22'#'text23'#'text24'##
+.continue Z1
+..
+!WEITER
+..
+.select
+.formula xnumvor = xsuartnum
+.continue
+
+..======   ENDE ACTCODE   ========
+..
+!ACTCPRU
+..====== BEGINN ACTCPRUEF ========
+.formula xanfang = false
+.formula xPGTYP = 2        ? M|pgrnr=""
+.formula xPGNR  = ""       ? M|pgrnr=""
+.formula xPGI = false      ? M|pgrnr = xPGNRvor
+.formula xPGI = true       ? M|pgrnr <>xPGNRvor
+.continue ACT           ? M|pgrnr = xPGNRvor
+.formula xPGTYP = 4        ? M|pgrnr<>""
+.formula xPGNR  = M|pgrnr  ? M|pgrnr<>""
+.formula xPGNRvor = xPGNR
+..
+!ACT
+.continue
+..======   ENDE ACTCPRUEF ========
+..

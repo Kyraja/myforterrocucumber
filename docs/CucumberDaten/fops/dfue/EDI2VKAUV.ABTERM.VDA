@@ -1,0 +1,187 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDI2VKAUV.ABTERM.VDA
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : EntschlÅsselung der VDA Termincoces
+.. Functionality  : Decryption of VDA schedule codes
+..
+..  VerschlÅsselung (DFUE.EDI2VKAUVUP2)
+..  EntschlÅsselung der Termine und Kommentierung in Variable ptext
+..
+..  JJJJMMTT    bedeutet Tagesdatum als Eintrefftermin
+..
+..  000000      Kennzeichnet das letzte Abruf-Feld einer Sachnummer
+..              im vorliegenden Lieferabruf. Das dazugehîrige
+..              Mengenfeld sowie alle weiteren Abruffelder des
+..              Datensatzes sind BLANK.
+..
+..  222222      Kennzeichnet, dass fÅr die Sachnummer kein Bedarf
+..              vorliegt. Das dazugehîrige Mengenfeld sowie alle
+..              weiteren Abruffelder dieser Satzart sind BLANK.
+..
+..  333333      Kennzeichnet die dazugehîrige Menge als RöCKSTAND.
+..
+..  444444      Kennzeichnet die dazugehîrige Menge als SOFORTBEDARF.
+..
+..  555555      Kennzeichnet, dass die folgenden Abruffelder Abrufmengen
+..              enthalten, die sich auf den im Abrufdatum angegebenen
+..              Zeitraum beziehen. Das dazugehîrige Mengenfeld ist auf
+..              "Null" zu setzen. Wenn alle Mengen einer Sachnummer
+..              sich auf Zeitraeume beziehen, beginnt das erste
+..              Abruffeld mit 555555
+..
+..  JJJJWWWW    Bedarf fÅr den Zeitraum WW bis WW
+..
+..  JJJJMM00    Bedarf fÅr Monat MM
+..
+..  JJJJ00WW    Bedarf fÅr Woche WW
+..
+..  999999      Kennzeichnet das Mengenfeld, das im Lieferabruf
+..              unterm dem Termin "Rest" die Vorschaumengen mehrerer
+..              Monate enthalten kann.
+..*****************************************************************************
+.set trans -
+..
+.. locally used helpers
+.type text   xtfehler    ? _F|defined(T|xtfehler)
+.type text   xt1         ? _F|defined(T|xt1)
+.type integer xijahrnext ? _F|defined(U|xijahrnext)
+..
+.copy U|xtfehler = ""
+..
+.. evalute H|text4
+..
+.continue VDA000  ?  H|text4 / "*000000*"
+.continue VDA222  ?  H|text4 / "*222222*"
+.continue VDA333  ?  H|text4 / "*333333*"
+.continue VDA444  ?  H|text4 / "*444444*"
+.continue VDA555  ?  H|text4 / "*555555*"
+.continue VDA999  ?  H|text4 / "*999999*"
+.continue T4EMPTY ?  F|empty(H|text4)
+.continue T4DATE
+..
+..
+!VDA000
+.copy T|xiausgabe = U|kotermZEITRAUMENDE
+.continue END
+..
+!VDA222: no demand
+.copy T|xiausgabe = U|kotermKEINBEDARF
+.continue END
+..
+!VDA333: backlog
+.copy T|xiausgabe = U|kotermRUECKSTAND
+.continue END
+..
+!VDA444: immediate demand
+.copy T|xiausgabe = U|kotermSOFORTBEDARF
+.continue END
+..
+!VDA555: start call of quantities
+.copy T|xiausgabe = U|kotermABRUFMENGE
+.continue END
+..
+!VDA999: Vorschaumenge / Rest:
+..       Abruftermin auf letzten Tag des Jahres, ggf eines bestimmten Jahres
+.. note: "19810101" is the initialization value for xttermlast
+.formula T|xdabruftermin = 'F|year(T|datum)' + "1231"           ?  'T|xttermlast:8' =  "19810101"  ;  F|empty(T|xttermlast)
+.formula T|xdabruftermin = 'F|year(T|xttermlast)' + "1231"      ?  'T|xttermlast:8' <> "19810101"  & _F|empty(T|xttermlast)
+.copy T|xiausgabe =  U|kotermREST
+.continue END
+..
+!T4EMPTY    H|text4 = <empty>
+.copy T|xiausgabe = U|kotermLEER
+.continue END
+..
+..
+!T4DATE:     H|text4 = <date>
+.continue ACHT    ? +H|text4 = 8
+.continue SECHS   ? +H|text4 = 6
+.continue ERRDATE
+
+!ACHT
+.formula T|xttermincode = H|text4
+.continue TXTTERM
+..
+!SECHS
+.. JJMMTT   Tagesdatum als Eintrefftermin
+.. JJWWWW   Bedarf fÅr den Zeitraum WW bis WW
+.. JJMM00   Bedarf fÅr Monat MM
+.. JJ00WW   Bedarf fÅr Woche WW
+.formula T|xt1 = F|substr(H|text4, 1, 2)
+.formula T|xttermincode = "20" + H|text4    ?  T|xt1 <  "80"
+.formula T|xttermincode = "19" + H|text4    ?  T|xt1 >  "80"
+.continue TXTTERM
+..
+..
+!TXTTERM: in T|xttermincode ist ein 8stelliges Datum
+.. JJJJMMTT Tagesdatum als Eintrefftermin
+.. JJJJWWWW Bedarf fÅr den Zeitraum WW bis WW
+.. JJJJMM00 Bedarf fÅr den Zeitraum Monat MM
+.. JJJJ00WW Bedarf fÅr den Zeitraum Woche WW
+.formula T|xtjahr    = F|substr(T|xttermincode, 1, 4)
+.formula T|xtmonat   = F|substr(T|xttermincode, 5, 2)
+.formula T|xtwoche   = F|substr(T|xttermincode, 7, 2)
+.formula U|xijahrnext  = T|xtjahr
+.formula U|xijahrnext  = U|xijahrnext + 1
+.. Bedarf Woche bis Woche: xtwovon=Woche von, xtwobis=Woche bis
+.formula T|xtwovon = T|xtmonat
+.formula T|xtwobis = T|xtwoche
+..
+.continue DATE    ? _T|xistabrzeitraum
+.continue MONTH   ?  T|xtwoche = "00"
+.continue WEEK    ?  T|xtmonat = "00"
+.continue W2W
+..
+!WEEK: demand for week
+.formula U|xkw1 = U|xtwoche + U|xwtrenn + U|xtjahr>>2 ? U|xwweekfirst
+.formula U|xkw1 = U|xtjahr>>2 + U|xwtrenn + U|xtwoche ? U|xwyearfirst
+.copy T|xiausgabe = U|kotermWOCHE
+.continue END
+..
+!MONTH: demand for month
+.copy T|xiausgabe = U|kotermMONAT
+.continue END
+..
+!W2W: demand week to week
+.formula U|xkw1 = U|xtmonat + U|xwtrenn + U|xtjahr>>2     ? U|xwweekfirst
+.formula U|xkw1 = U|xtjahr>>2 + U|xwtrenn + U|xtmonat     ? U|xwyearfirst
+.formula U|xkw2 = U|xtwoche + U|xwtrenn + U|xtjahr>>2     ? U|xwweekfirst
+.formula U|xkw2 = U|xtjahr>>2  + U|xwtrenn + U|xtwoche    ? U|xwyearfirst
+.formula U|xkw2 = U|xtwoche + U|xwtrenn + 'U|xijahrnext'  ? U|xwweekfirst & T|xtwobis < T|xtwovon
+.formula U|xkw2 = 'U|xijahrnext' + U|xwtrenn + U|xtwoche  ? U|xwyearfirst & T|xtwobis < T|xtwovon
+.copy T|xiausgabe = U|kotermWOCHE2WOCHE
+.continue END
+..
+!DATE: Lieferung Eintrefftermin
+.assign T|xdabruftermin = 'T|xttermincode'
+.assign U|xttermzeit = H|text6 ? H|text1 = "821"
+.assign U|xttermzeit = H|text8 ? H|text1 = "521"
+.assign U|xdelivscheddate = 'U|xdabruftermin' + " " + 'U|xttermzeit'
+.continue ERRCODE ? _T|mehr
+.copy T|xiausgabe = U|kotermTERMIN
+..*****************************************************************************
+!END
+.continue
+..
+.. Date normalization might be used during edi import processing,
+.. This processing must not terminate "anywhere", but
+.. write an error state into the edi message.
+.. Hence no exit here, but returning an error state
+..
+..
+!ERRDATE
+.set trans +
+.formula T|xtfehler = F|formatstr("Falsches Datum {1} in Feld 4 in Satzart {2} in Nachricht {3}.", H|text4, H|text1, H|nummer)
+.set trans -
+.copy U|xiausgabe = U|kotermUNBEKANNT
+.continue
+..
+!ERRCODE
+.set trans +
+.formula T|xtfehler = F|formatstr("Fehlerhafter Termincode: {1}", 'T|xttermincode')
+.set trans -
+.copy U|xiausgabe = U|kotermUNBEKANNT
+.continue

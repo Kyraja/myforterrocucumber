@@ -1,0 +1,102 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDINFAKT.EV
+.. Datum          : 24.05.2007
+.. Version        : 2007r3n00
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Zentrales Eventhandling
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+.. Ablauf         : Feldaustritts-Events und Blockieren der Zeilenoperationen
+..
+.. Functionality  : central eventhandling
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+.. Program flow   : field exit events, and blocking of row-operations
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.. event evaluation
+.. ----------- ----- Kopfteil Button -------------------------------------------
+.continue LS      ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kls"
+.continue RAHMEN  ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "krahmen"
+.continue KUNDE   ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kkunde"
+.continue ARTIKEL ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kartikel"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue BOOLPRU ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kbsofortprue"
+.continue BOOLZEI ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kbsofortzeil"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue TABINIT ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kartikel"
+.continue TABINIT ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kland"
+.continue TABINIT ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kwerk"
+.continue TABINIT ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kablstelle"
+.continue TABINIT ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kvom"
+.continue TABINIT ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kbis"
+.continue TABINIT ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kpreisdat"
+.. ----------- ----- Tabellenteil ----------------------------------------------
+.continue FORBID  ? T|evtartengl = "ROW_MOVE_BEFORE"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+!LS: only show one specific delivery note
+.formula M|krahmen   = M|kls^rahmen
+!RAHMEN: fetch customer from blanket order
+.continue TABINIT ?  F|empty(M|krahmen)
+.formula M|kls       = ""                     ?  M|kls^rahmen <> M|krahmen
+.formula M|kkunde    = M|krahmen^kunde
+.formula M|kkunname  = M|krahmen^kunde^sucherw
+.formula M|kkunde2   = M|krahmen^kunde2
+.formula M|kdebname  = M|krahmen^kunde2^sucherw
+.formula M|kwerk     = M|krahmen^werk
+.formula M|kablstelle= M|krahmen^ablstelle
+.assign M|kland   = M|krahmen^land^id
+.continue TABINIT
+..
+!KUNDE: show name for customer
+.formula M|kkunname    = M|kkunde^sucherw
+.continue SACHB   ?  M|kkunde^gruppe <> 1
+.formula M|kkunde2     = M|kkunde^id
+.formula M|kdebname    = M|kkunde2^sucherw
+.assign M|kland     = M|kkunde2^land^id
+.continue TABINIT
+!SACHB: show plant,  unloading point, and actual AR if "customer" is a "customer staff reference"
+.formula M|kkunde2    = M|kkunde^firma^id
+.formula M|kdebname   = M|kkunde2^sucherw
+.assign M|kland    = M|kkunde2^land^id
+.formula M|kwerk      = M|kkunde^werk
+.formula M|kablstelle = M|kkunde^ablstelle
+.continue TABINIT
+..
+!ARTIKEL: show name for product
+.formula M|kartname   = M|kartikel^sucherw
+.continue TABINIT
+..
+!BOOLPRU: if price check is disabled, the rows cannot be reduced either
+.formula M|kbsofortzeil = false  ? _M|kbsofortprue
+.continue END
+..
+!BOOLZEI: if row reduction is activated, the price check has to be done as well
+.formula M|kbsofortprue = true   ?  M|kbsofortzeil
+.continue END
+..
+..
+!TABINIT: a key field was changed, remove old rows
+.formula M|ksumme = 0.00
+.make screen line -- ? M|tzeilen > 0
+.continue END
+..
+!FORBID: an event was triggered, which is not allowed
+.error
+.end 1
+..*****************************************************************************
+!END
+.continue

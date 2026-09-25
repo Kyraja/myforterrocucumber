@@ -1,0 +1,309 @@
+..!interpreter english declaration noabbrev
+.. at 2017-08-16, 11:04
+.set TRANS -
+..========================================================================
+..==  Name              : FOP.PRJM.DATUM.EV
+..==  Pfad              : allpstart
+..==  Funktion          : Ereignisse an den Datumsfeldern der ProjectSuite (PV/AA/Plandef)
+..==  Erstellungsdatum  : 09.04.2010
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2016 alltrotec GmbH
+..==  Besonderheiten    :
+..==  Dieses FOP wird ber EasyCase bearbeitet und mit easy2lg generiert!
+..==  Žnderungen auáerhalb von EasyCase werden nach der n„chsten Žnderung
+..==  im EasyCase wieder berschrieben und drfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+..====================================================
+.type text    xtsel             ? _F|defined(U|xtsel)
+.type real    xrzugstd          ? _F|defined(U|xrzugstd)
+.type integer xiatanz           ? _F|defined(U|xiatanz)
+.type GD      xdatum            ? _F|defined(U|xdatum)
+.type GD      xd1               ? _F|defined(U|xd1)
+.type bool    xbstdvert         ? _F|defined(U|xbstdvert)
+.type bool    xbfixdauer        ? _F|defined(U|xbfixdauer)
+.type bool    xbok              ? _F|defined(U|xbok)
+.type P137    xpkal             ? _F|defined(U|xpkal)
+.type VP28    xpdispobezobj     ? _F|defined(U|xpdispobezobj)
+.type integer xprocsp      ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- HKalenderBezugsobjekt -----
+.assign U|xpdispobezobj = ""
+.assign U|xpkal         = ""
+.copy U|xpkal = F|getwcal(H|id, "", H|yedatum)
+.copy U|xpkal = F|getwcal(H|yprojekt, "", H|yedatum)            ? U|xpkal^stdkal
+.copy U|xpkal = F|getwcal(H|ystandort, "", H|yedatum)           ? U|xpkal^stdkal & _F|empty(H|ystandort)
+.copy U|xpkal = F|getwcal(H|yprojekt^ystandort, "", H|yedatum)  ? U|xpkal^stdkal & _F|empty(H|yprojekt^ystandort)
+.copy U|xpdispobezobj = U|xpkal^dispobezobj
+.continue 'xprocst.xprocsp'
+!PROC002: ----- KalenderBezugsobjekt -----
+.continue EL001 ? _(F|defined(M|ypvorgang))
+.select add M|ypvorgang
+.continue EL002 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+!EL002
+.continue FI001
+!EL001
+.assign U|xpdispobezobj = ""
+.assign U|xpkal         = ""
+.copy U|xd1 = M|yedatum ? _F|empty(M|yedatum)
+.copy U|xd1 = M|yadatum ?  F|empty(M|yedatum)
+.copy U|xpkal = F|getwcal(M|id, "", U|xd1)
+.copy U|xpkal = F|getwcal(M|yprojekt, "", U|xd1)            ? U|xpkal^stdkal
+.copy U|xpkal = F|getwcal(M|ystandort, "", U|xd1)           ? U|xpkal^stdkal & _F|empty(M|ystandort)
+.copy U|xpkal = F|getwcal(M|yprojekt^ystandort, "", U|xd1)  ? U|xpkal^stdkal & _F|empty(M|yprojekt^ystandort)
+.copy U|xpdispobezobj = U|xpkal^dispobezobj
+!FI001
+.continue 'xprocst.xprocsp'
+!PROC003: ----- ZuordnungszeitAbweichung -----
+.continue EL003 ? _((M|dnr   = 149) & ((M|gruppe = 2) ; (M|gruppe = 3)))
+.formula U|xrzugstd = 0
+.continue EL004 ? _(_(F|empty(M|id)))
+.formula U|xtsel = "$,,yaufgabe=="  + M|id      ?  M|dnr = 149 &  M|gruppe = 3
+.formula U|xtsel = "$,,ypvorgang==" + M|id      ?  M|dnr = 149 &  M|gruppe = 2
+.formula U|xtsel = U|xtsel + ";ydatum=" + M|yadatum:8 + "!" + M|yedatum:8
+.formula U|xtsel = U|xtsel + ";ybsim==0;@filingmode=(Active)"
+.load 9 group "154:2" 'U|xtsel'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.formula U|xrzugstd = U|xrzugstd + 9|ywert
+.load 9 continue
+.continue LOOP001
+!ELOP001: ==============================
+!EL004
+.continue EL005 ? _((M|dnr   = 149) & (M|gruppe = 3))
+.formula M|yzugstd   = U|xrzugstd
+!EL005
+.continue EL006 ? _((M|dnr   = 149) & (M|gruppe = 2))
+.formula M|ypvzugstd = U|xrzugstd   ?  F|modifiable(M|ypvzugstd)
+!EL006
+.continue EL007 ? _((M|dnr   = 149) & (M|gruppe = 2) & (_(F|empty(M|yedatum))))
+.formula M|yabwterminist  = F|numworkdays("", "", M|ydatumletztelm, M|yedatum) * (-1)   ? M|yedatum >= M|ydatumletztelm & _F|empty(M|ydatumletztelm)
+.formula M|yabwterminist  = F|numworkdays("", "", M|yedatum, M|ydatumletztelm)          ? M|yedatum  < M|ydatumletztelm & _F|empty(M|ydatumletztelm)
+.formula M|yabwterminplan = F|numworkdays("", "", M|yistend, M|yedatum)        * (-1)   ? M|yedatum >= M|yistend        & _F|empty(M|yistend)
+.formula M|yabwterminplan = F|numworkdays("", "", M|yedatum, M|yistend)                 ? M|yedatum  < M|yistend        & _F|empty(M|yistend)
+.input allpstart/FOP.PRJM.UP.ICONS
+!EL007
+!EL003
+.continue 'xprocst.xprocsp'
+!PROC004: ----- yadatum -----
+.continue EL008 ? _(_(F|empty(M|yadatum)))
+.copy U|xbok = G|true
+.continue EL009 ? _(F|defined(M|ybmeilenstein))
+.continue EL010 ? _(M|ybmeilenstein)
+.copy    M|yedatum = M|yadatum
+.formula M|ydauer  = 0
+.copy    U|xbok = G|false
+!EL010
+!EL009
+.continue EL011 ? _(U|xbok)
+.continue EL012 ? _(U|xbfixdauer)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC002
+!RET002
+.formula xprocsp = xprocsp - 1
+.formula U|xiatanz = (M|ydauer - 1)
+.formula M|yedatum = F|addworkdays(U|xpdispobezobj, "", M|yadatum, U|xiatanz, G|true)
+.continue FI012
+!EL012
+.formula M|ydauer = 0   ?  F|empty(M|yadatum) & F|modifiable(M|ydauer)
+.formula M|yedatum = M|yadatum          ?  F|empty(M|yedatum) ;  M|yadatum > M|yedatum
+.formula M|yedatum = M|yadatum & 4      ?  F|empty(M|yedatum) & _F|empty(M|yadatum) & M|dnr = 149 & M|gruppe = 2
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC002
+!RET003
+.formula xprocsp = xprocsp - 1
+.formula U|xiatanz = F|numworkdays(U|xpdispobezobj, "", M|yadatum, M|yedatum)
+.formula M|ydauer  = U|xiatanz                                                  ?  F|modifiable(M|ydauer)
+.formula M|ydauer  = M|ydauer  + 1      ?  F|isworkday(U|xpdispobezobj, "", M|yedatum) & F|modifiable(M|ydauer)
+.formula U|xiatanz = U|xiatanz + 1      ?  F|isworkday(U|xpdispobezobj, "", M|yedatum)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC003
+!RET004
+.formula xprocsp = xprocsp - 1
+!FI012
+!EL011
+!EL008
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.copy U|xbstdvert  = M|ybstdvert                ?  F|defined(M|ybstdvert)
+.copy U|xbstdvert  = M|ypvorgang^ybstdvert      ?  F|defined(M|ypvorgang)
+.copy U|xbfixdauer = M|ysbfixedatum             ?  F|defined(M|ysbfixedatum)
+.continue BRK001 ? _(G|evtart = "buttonvor")
+.continue EL013 ? _((G|evtvar = "ybusimdatueber") ; (G|evtvar = "ybusimdatueberedp"))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC001
+!RET005
+.formula xprocsp = xprocsp - 1
+.formula U|xiatanz = F|numworkdays(U|xpdispobezobj, "", H|yadatum, H|yedatum)
+.formula U|xdatum  = F|addworkdays(U|xpdispobezobj, "", H|yadatum, 0)
+.formula U|xiatanz = U|xiatanz + 1                                              ?  H|yadatum = U|xdatum
+.continue FI013
+!EL013
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC004
+!RET006
+.formula xprocsp = xprocsp - 1
+!FI013
+.continue
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "feldpruef")
+.formula U|xdatum = M|.evtvar
+.continue EL014 ? _((_(U|xbstdvert)) & ((F|defined(M|ypvorgang)) ; ((M|dnr    = 149) & (M|gruppe = 2))))
+.copy U|xbok = G|TRUE
+.continue EL015 ? _(F|defined(M|ypvorgang))
+.copy U|xbok = _F|empty(M|ypvorgang)
+.continue FI015
+!EL015
+.copy U|xbok = _F|empty(M|id)
+!FI015
+.continue EL016 ? _(U|xbok)
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ypvorgang==" + M|id              ?  M|dnr = 149 &  M|gruppe = 2
+.formula U|xtsel = U|xtsel + ";ypvorgang==" + M|ypvorgang^id    ?  F|defined(M|ypvorgang)
+.formula U|xtsel = U|xtsel + ";ydatum<"     + U|xdatum:8        ?  G|evtvar = "yadatum"
+.formula U|xtsel = U|xtsel + ";ydatum>"     + U|xdatum:8        ?  G|evtvar = "yedatum"
+.formula U|xtsel = U|xtsel + ";ybsim==0;@filingmode=(Active)"
+.load 0 group "154:2" 'U|xtsel'
+.continue EL017 ? _(G|mehr)
+.set TRANS +
+.formula U|xtsel = "Projektvorgang"
+.formula U|xtsel = U|xtsel + " " + M|nummer             ?  M|dnr = 149 &  M|gruppe = 2
+.formula U|xtsel = U|xtsel + " " + M|ypvorgang^nummer   ?  F|defined(M|ypvorgang)
+.box 'U|xtsel'
+Das Datum des Projektvorgangs kann nicht ge„ndert werden,
+?da Stunden vor dem 'M|yadatum' verteilt wurden.        ? G|evtvar = "yadatum"
+?da Stunden nach dem 'M|yedatum' verteilt wurden.       ? G|evtvar = "yedatum"
+
+Vor Žnderung der Termine bitte die Stundenverteilung anpassen!
+.set TRANS -
+.error
+.end 1
+!EL017
+!EL016
+!EL014
+.continue
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtart = "feldaus")
+.continue BRK004 ? _(G|evtvar = "yadatum")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC004
+!RET007
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK004
+.continue BRK005 ? _(G|evtvar = "yedatum")
+.formula M|ydauer = 0   ?  F|empty(M|yedatum)
+.continue EL018 ? _(_(F|empty(M|yedatum)))
+.continue EL019 ? _(U|xbfixdauer)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC002
+!RET008
+.formula xprocsp = xprocsp - 1
+.formula U|xiatanz = (-1 * (M|ydauer - 1))
+.formula M|yadatum = F|addworkdays(U|xpdispobezobj, "", M|yedatum, U|xiatanz)
+.continue FI019
+!EL019
+.formula M|yadatum = M|yedatum          ?  F|empty(M|yadatum) ;  M|yadatum > M|yedatum
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC002
+!RET009
+.formula xprocsp = xprocsp - 1
+.formula U|xiatanz = F|numworkdays(U|xpdispobezobj, "", M|yadatum, M|yedatum)
+.formula M|ydauer  = U|xiatanz                                                  ?  F|modifiable(M|ydauer)
+.formula U|xdatum  = F|addworkdays(U|xpdispobezobj, "", M|yedatum, 0)
+.formula M|ydauer  = M|ydauer  + 1                                              ?  M|yedatum = U|xdatum & F|modifiable(M|ydauer)
+.formula U|xiatanz = U|xiatanz + 1                                              ?  M|yedatum = U|xdatum
+!FI019
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC003
+!RET010
+.formula xprocsp = xprocsp - 1
+!EL018
+.continue ESAC002
+!BRK005
+.continue BRK006 ? _(G|evtvar = "ydauer")
+.continue EL020 ? _((_(F|empty(M|yadatum))) & (_(F|empty(M|yedatum))))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC002
+!RET011
+.formula xprocsp = xprocsp - 1
+.continue EL021 ? _(M|ydauer = 0)
+.copy M|yedatum = M|yadatum ? _F|empty(M|yadatum)
+.copy M|yadatum = M|yedatum ?  F|empty(M|yadatum)
+.continue FI021
+!EL021
+.continue EL022 ? _(F|empty(M|yadatum))
+.formula U|xiatanz = (-1 * M|ydauer) + 1
+.formula M|yadatum = F|addworkdays(U|xpdispobezobj, "", M|yedatum, U|xiatanz)
+.continue FI022
+!EL022
+.formula U|xiatanz = (-1 * (M|ydauer - 1))                                      ?  M|ysbfixedatum
+.formula M|yadatum = F|addworkdays(U|xpdispobezobj, "", M|yedatum, U|xiatanz)   ?  M|ysbfixedatum
+.formula U|xiatanz = M|ydauer - 1                                               ? _M|ysbfixedatum
+.formula M|yedatum = F|addworkdays(U|xpdispobezobj, "", M|yadatum, U|xiatanz)   ? _M|ysbfixedatum
+!FI022
+!FI021
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC003
+!RET012
+.formula xprocsp = xprocsp - 1
+!EL020
+.continue ESAC002
+!BRK006
+.continue EL023 ? _((_(F|empty(M|yadatum))) & (_(F|empty(M|yedatum))))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET013" 
+.continue PROC002
+!RET013
+.formula xprocsp = xprocsp - 1
+.formula U|xiatanz = F|numworkdays(U|xpdispobezobj, "", M|yadatum, M|yedatum)
+.formula M|ydauer  = U|xiatanz                                                  ?  F|modifiable(M|ydauer)
+.formula U|xdatum  = F|addworkdays(U|xpdispobezobj, "", M|yedatum, 0)
+.formula M|ydauer  = M|ydauer  + 1                                              ?  M|yedatum = U|xdatum & F|modifiable(M|ydauer)
+.formula U|xiatanz = U|xiatanz + 1                                              ?  M|yedatum = U|xdatum
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET014" 
+.continue PROC003
+!RET014
+.formula xprocsp = xprocsp - 1
+!EL023
+!ESAC002: =====   ENDCASE   =====
+.continue
+.continue ESAC001
+!BRK003
+!ESAC001: =====   ENDCASE   =====
+.continue

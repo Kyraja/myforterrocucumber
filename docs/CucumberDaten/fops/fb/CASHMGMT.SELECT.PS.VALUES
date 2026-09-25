@@ -1,0 +1,212 @@
+..!interpreter english translate noabbrev
+.continue OUT2 ? F|defined(U|xrexrate)
+.continue OUT
+..*****************************************************************************
+.. FOP-Name       : CASHMGMT.SELECT.PS.VALUES
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Berechnung des Werts einer Obligoposition
+.. Functionality  :
+..*****************************************************************************
+..
+.set trans -
+..
+.. input parameters
+.. fixed value for exchange rate
+..art R    xrexratefixed
+.. if exchangerate is fixed
+..art bool xbexratefixed
+..
+..*****************************************************************************
+!OUT
+..*****************************************************************************
+.type R xrexrate      ? _F|defined(U|xrexrate)
+.type R xrstwert      ? _F|defined(U|xrstwert)
+.type R xrpwert       ? _F|defined(U|xrpwert)
+.. outstanding invoice value (gross)
+.type R xroutinv      ? _F|defined(U|xroutinv)
+.. outstanding delivery value (gross)
+.type R xroutdel      ? _F|defined(U|xroutdel)
+.type R xrquantitydel ? _F|defined(U|xrquantitydel)
+.. factor for outstanding invoice value ( < 1 )
+.type R xroutinvfact  ? _F|defined(U|xroutinvfact)
+.type R xroutdelfact  ? _F|defined(U|xroutdelfact)
+.. currency of line item
+.type ID94:1 xpposcurr ? _F|defined(U|xpposcurr)
+.. set to true if the item values are taken from a billing plan row
+.type bool xbplanneditem ? _F|defined(U|xbplanneditem)
+..
+..*****************************************************************************
+!OUT2
+..*****************************************************************************
+.copy U|xrstwert = 0.0
+.copy U|xrexrate = 1.0
+.copy U|xroutdel = 0.0
+.copy U|xroutinv = 0.0
+.copy U|xrpwert  = 0.0
+.copy U|xpposcurr = 0|pland
+.copy U|xbplanneditem = G|false
+.. items of type DELPOS or PRPOS inherit factor from their
+.. corresponding ARPOS (which is expected to be just above the DELPOS/PRPOS items)
+.copy U|xroutdelfact = 0.0 ? 0|typ = G|ARPOS
+.copy U|xroutinvfact = 0.0 ? 0|typ = G|ARPOS
+..
+.continue END ? 0|artex^umlage
+..
+.continue ABKO  ? F|empty(0|kotyp)
+.continue ABKO  ? 0|kotyp = G|ABKO
+.continue ABKO  ? 0|kotyp = G|SBKO
+.continue ABKO  ? 0|kotyp = G|SRKO
+.continue LIKO  ? 0|kotyp = G|LIKO
+.continue REKO  ? 0|kotyp = G|REKO
+.error Unerwarteter Headertyp: '0|kotyp'
+.end 1
+..
+!ABKO
+.continue ARPOS1 ? 0|typ = G|ARPOS
+.continue DELPOS ? 0|typ = G|DELPOS
+.continue PRPOS  ? 0|typ = G|PRPOS
+.continue ZUPOS1
+..
+!ARPOS1: Artikelposition (inkl. Pseudopos)
+.continue TAX ? 0|mge = 0
+.. Artikelpositionen in Auftraegen:
+.. der Mengenanteil aus dem Auftrag, zu dem es bislang weder Lieferscheine noch Rechnungen
+.. gegeben hat kommt ins Lieferobligo. Die Differenzmenge zwischen der offenen Rechnungsmenge
+.. und diesem Mengenanteil kommt ins Rechnungsobligo.
+..
+.. AU              |<-- mge ------------------------------------------------->|
+.. LS              |<-- mge ----------------------------|<-- limge-lifrg ---->
+.. RE              |<-- mge ------|<------------------------ remge-refrg ---->
+.. Lieferobligo                                          <-- xrquantitydel -->
+.. Rechnungsobligo                 <-- xrquantityinv -->
+..
+.. Was dann noch fehlt ist die bereits berechnete Menge und die steht (wenn noch offen)
+.. in den Offenen Posten.
+..
+.copy U|xrquantitydel = F|min((0|limge - 0|lifrg), (0|remge - 0|refrg)) ? 0|mge >= 0
+.copy U|xrquantitydel = F|max((0|limge - 0|lifrg), (0|remge - 0|refrg)) ? 0|mge  < 0
+.copy U|xroutdelfact = U|xrquantitydel / 0|mge
+.copy U|xroutinvfact = (0|remge - 0|refrg - U|xrquantitydel) / 0|mge
+.. Bug: nwert enthaelt Quatsch, wenn es sich um Bestellvorschlaege o.ae. handelt (kotyp ist leer)
+.copy U|xroutdel = U|xroutdelfact * F|condexpr(F|empty(0|kotyp), 0|pwert, 0|nwert)
+.copy U|xroutinv = U|xroutinvfact * F|condexpr(F|empty(0|kotyp), 0|pwert, 0|nwert)
+.continue TAX
+..
+!PRPOS
+.copy U|xroutdelfact = 0.0
+.copy U|xroutinvfact = 1.0
+.copy U|xroutinv = 0|pwert
+.continue TAX
+..
+!DELPOS
+.. Faktoren aus Vorgaenger AU-Position uebernehmen
+.copy U|xroutinv = U|xroutinvfact * 0|nwert
+.copy U|xroutdel = U|xroutdelfact * 0|nwert
+.continue TAX
+..
+!ZUPOS1: Nicht mengenbehaftet, Zusatzposition Text-/neutrale -Pos (Mengenwerte = Positionswerte)
+.continue DPITEM ? U|xbbillpl & 0|remge = 0 & 0|refrg = 0
+.copy U|xroutdelfact = 0.0
+.copy U|xroutinvfact = 1.0
+.copy U|xroutinv = 0|remge - 0|refrg
+.continue TAX
+..
+!DPITEM: Planned billing line item for downpayment found
+.copy U|xbplanneditem = G|true
+.copy U|xroutdelfact = 0.0
+.copy U|xroutinvfact = 1.0
+.copy U|xroutinv =  0|fktaplanpos^anzpwert
+.copy U|xpposcurr = 0|fktaplanpos^zwaehr 
+.continue TAX
+..
+!LIKO
+.continue ARPOS2 ? 0|typ = G|ARPOS
+.continue DELPOS ? 0|typ = G|DELPOS
+.continue PRPOS  ? 0|typ = G|PRPOS
+.continue ZUPOS2
+..
+!ARPOS2: Artikelposition (inkl. Pseudopos)
+.. hack: ungebuchte Lieferscheine haben falsche Werte in remge und refrg
+.continue TAX ? 0|mge = 0
+.copy U|xroutdelfact = 0.0
+.copy U|xroutinvfact = F|condexpr(U|xbaeob, 1.0, (0|remge - 0|refrg) / 0|mge)
+.copy U|xroutinv = U|xroutinvfact * 0|nwert
+.continue TAX
+..
+!ZUPOS2: Nicht mengenbehaftet, Zusatzposition Text-/neutrale -Pos (Mengenwerte = Positionswerte)
+.. hack: ungebuchte Lieferscheine haben falsche Werte in remge und refrg
+.copy U|xroutdelfact = 0.0
+.copy U|xroutinvfact = 1.0
+.copy U|xroutinv = 0|remge - 0|refrg ? _U|xbaeob
+.copy U|xroutinv = 0|pwert ? U|xbaeob
+.continue TAX
+..
+!REKO
+.copy U|xroutdelfact = 0.0
+.copy U|xroutinvfact = 1.0
+.copy U|xroutinv = 0|nwert
+.continue TAX
+..
+!TAX
+.continue END     ?  U|xroutinv = 0 & U|xroutdel = 0
+.. Bei Anzahlungspositionen ist 0|stwert == 0 und 0|stsatz != 0. Beispiel:
+.. edpexport.sh -p sy -l 3:22 -Z -f '1:zn,1:remge,1:refrg,1:limge,1:lifrg,1:mge,1:nwert,1:pwert,1:stwert,1:stsatz,1:typ' -k 'nummer==200001' -O TAB:auto -o trimvalues=1
+.. 1:zn 1:remge 1:refrg 1:limge 1:lifrg 1:mge 1:nwert  1:pwert  1:stwert 1:stsatz 1:typ
+.. ------------------------------------------------------------------------------------------------
+.. 1    1       0       1       0       1     10000.00 10000.00 1900.00  19       AU/BE-Position,BV
+.. 2    -2000   0       0       0       0     0.00     0.00     0.00     19       neutrale Position
+.continue EXCHNGE ?  0|stwert = 0 & (_U|xbdownp ; 0|stsatz = 0)
+.continue TAX2    ?  F|empty(0|kopf)
+.continue EXCHNGE ?  '0|tustart(L=":")' = "(TaxFreeWithTaxLines)"
+.continue EXCHNGE ?  '0|tustart(L=":")' = "(TaxfreeNoTaxLines)"
+!TAX2
+.continue NET     ? _0|kobrutto
+.continue GROSS
+!GROSS
+.copy U|xrstwert  = (0|stwert * U|xroutinvfact) + (0|stwert * U|xroutdelfact)
+.copy U|xrstwert  = (U|xroutinv - (U|xroutinv / ((100 + 0|stsatz)/100))) + (U|xroutdel - (U|xroutdel / ((100 + 0|stsatz)/100))) ? 0|stwert = 0 & 0|stsatz <> 0 & U|xbdownp
+.continue EXCHNGE
+!NET
+.continue NETDP ? 0|stwert = 0 & 0|stsatz <> 0 & U|xbdownp
+.copy U|xrstwert  = U|xroutinv + U|xroutdel
+.copy U|xroutinv  = U|xroutinv + (0|stwert * U|xroutinvfact)
+.copy U|xroutdel  = U|xroutdel + (0|stwert * U|xroutdelfact)
+.copy U|xrstwert  = (U|xroutinv + U|xroutdel) - U|xrstwert
+.continue EXCHNGE
+!NETDP
+.copy U|xrstwert  = U|xroutinv + U|xroutdel
+.copy U|xroutinv  = U|xroutinv * ((0|stsatz + 100) / 100)
+.copy U|xroutdel  = U|xroutdel * ((0|stsatz + 100) / 100)
+.copy U|xrstwert  = (U|xroutinv + U|xroutdel) - U|xrstwert
+.continue EXCHNGE
+..
+!EXCHNGE: Exchange value of item into output currency
+.continue CALC    ? U|xpoutcurr^id = U|xpposcurr
+.continue CURRATE
+..
+!CURRATE: Which rate for exchange?
+.continue FIXED ? U|xbexratefixed
+.continue DAILY
+..
+!FIXED: Fixed rate in document
+.copy U|xrexrate = 1 / U|xrexratefixed ? G|inland^id = U|xpoutcurr^id
+.copy U|xrexrate = 1 / U|xrexratefixed * F|fxrate(U|xpoutcurr, U|xddate, G|inland) ? G|inland^id <> U|xpoutcurr^id
+.continue CALC
+..
+!DAILY: Daily rate
+.copy U|xddate = U|xdhterm ? 'U|xddate' = ""
+.copy U|xrexrate = F|fxrate(U|xpoutcurr, U|xddate, U|xpposcurr)
+..
+!CALC
+.copy U|xroutinv = U|xrexrate * U|xroutinv
+.copy U|xroutdel = U|xrexrate * U|xroutdel
+.copy U|xrpwert  = U|xroutinv + U|xroutdel
+.copy U|xrstwert = U|xrexrate * U|xrstwert
+.copy U|xrstwert = -U|xrstwert ? U|xepurchsales = "(Purchasing)"
+.continue END
+..
+!END
+.continue
+

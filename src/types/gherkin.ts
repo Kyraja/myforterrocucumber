@@ -34,12 +34,16 @@ export type ActionType =
   | 'zeileAnlegen'
   | 'buttonDruecken'
   | 'subeditorOeffnen'
+  | 'subeditorSchliessen'
+  | 'subeditorSpeichern'
   | 'infosystemOeffnen'
   | 'tabelleZeilen'
   | 'exceptionSpeichern'
   | 'exceptionFeld'
   | 'dialogBeantworten'
-  | 'zeilenAnfuegen';
+  | 'zeilenAnfuegen'
+  | 'boxMeldung'
+  | 'editorOeffnenTipp';
 
 /** A single field name / value pair, used inside data tables or multi-field steps. */
 export interface FieldValue {
@@ -58,13 +62,22 @@ export type EditorCommand =
   | 'COPY' | 'DELIVERY' | 'INVOICE' | 'REVERSAL'
   | 'RELEASE' | 'PAYMENT' | 'CALCULATE' | 'TRANSFER' | 'DONE';
 
-/** Opens an abas editor (mask) for a specific record and EDP command. */
+/**
+ * Opens an abas editor (mask) for a specific record and EDP command.
+ *
+ * `record` and `recordFromEditor` are mutually exclusive:
+ * - `record` holds a record number / search word (e.g. "PO001-01", "SPS001-01", "").
+ * - `recordFromEditor` holds the name of a previously opened editor in the same
+ *   scenario when this step chains from it (→ "for record from editor \"AUF1\"").
+ *   Used for follow-up commands like DELIVERY/INVOICE on an earlier document.
+ */
 export interface ActionEditorOeffnen {
   type: 'editorOeffnen';
   editorName: string;
   tableRef: string;
   command: EditorCommand;
   record: string;
+  recordFromEditor?: string;
 }
 
 /** Opens an abas editor by performing a search rather than loading a specific record ID. */
@@ -76,13 +89,18 @@ export interface ActionEditorOeffnenSuche {
   searchCriteria: string;
 }
 
-/** Opens an abas editor by navigating through a menu path from an existing record. */
+/**
+ * Opens an abas editor by navigating through a menu path from an existing record.
+ *
+ * `record` and `recordFromEditor` are mutually exclusive — see {@link ActionEditorOeffnen}.
+ */
 export interface ActionEditorOeffnenMenue {
   type: 'editorOeffnenMenue';
   editorName: string;
   tableRef: string;
   command: EditorCommand;
   record: string;
+  recordFromEditor?: string;
   menuChoice: string;
 }
 
@@ -156,6 +174,16 @@ export interface ActionSubeditorOeffnen {
   row: string;
 }
 
+/** Closes the current subeditor without saving and switches back to the parent editor. */
+export interface ActionSubeditorSchliessen {
+  type: 'subeditorSchliessen';
+}
+
+/** Saves the current subeditor and switches back to the parent editor. */
+export interface ActionSubeditorSpeichern {
+  type: 'subeditorSpeichern';
+}
+
 export interface ActionInfosystemOeffnen {
   type: 'infosystemOeffnen';
   infosystemName: string;
@@ -195,6 +223,24 @@ export interface ActionZeilenAnfuegen {
   type: 'zeilenAnfuegen';
 }
 
+/** Asserts that an abas hint/info box with the given message text was displayed. */
+export interface ActionBoxMeldung {
+  type: 'boxMeldung';
+  messageText: string;
+}
+
+/**
+ * Opens an editor via an abas typed command (Tippkommando).
+ * Step pattern: `Given I open an editor "<name>" for tip command "<cmd>" and arguments "<args>"`
+ * No `from table` or `with command` — the framework derives the target from the typed command.
+ */
+export interface ActionEditorOeffnenTipp {
+  type: 'editorOeffnenTipp';
+  editorName: string;
+  tipCommand: string;
+  arguments: string;
+}
+
 /**
  * Discriminated union of every concrete step action.
  * The `type` field is the discriminant; components and the generator switch on it.
@@ -214,12 +260,16 @@ export type StepAction =
   | ActionZeileAnlegen
   | ActionButtonDruecken
   | ActionSubeditorOeffnen
+  | ActionSubeditorSchliessen
+  | ActionSubeditorSpeichern
   | ActionInfosystemOeffnen
   | ActionTabelleZeilen
   | ActionExceptionSpeichern
   | ActionExceptionFeld
   | ActionDialogBeantworten
-  | ActionZeilenAnfuegen;
+  | ActionZeilenAnfuegen
+  | ActionBoxMeldung
+  | ActionEditorOeffnenTipp;
 
 // ── Core model ────────────────────────────────────────────────
 
@@ -418,6 +468,8 @@ export interface TocEntry {
 export interface FieldDef {
   name: string;
   description: string;
+  /** abas effective type from the uploaded variable table (for example I9 or C20). */
+  dataType?: string;
   /** German description (when available from export) */
   descriptionDe?: string;
   /** English description (when available from export) */

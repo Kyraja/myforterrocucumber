@@ -1,0 +1,226 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SQANALYSIS.EV
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text      xtsel       ? _F|defined(U|xtsel)
+.type integer   xzn         ? _F|defined(U|xzn)
+..
+.continue BSTART     ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "bstart"
+.continue VERW       ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "verwendbez"
+.continue PROJ       ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "projektbez"
+.continue MARK       ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "allmark"
+.continue DEMARK     ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "demark"
+.continue MENGE      ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "tmge"
+.continue UEB        ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "ueberd"
+.continue CHARGE     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "charge"
+.continue TABLEEREN  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "projekt"
+.continue LPLATZ     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "lplatz"
+.continue TABLEEREN  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "artikel"
+.continue TABLEEREN  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "lgruppe"
+.continue BEHAELTER  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "selbehaelter"
+.continue BBEHAELTER ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "behaelter"
+.. Tabelle
+.continue FAKTOR     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "tlezu"
+.continue AUFZU      ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "tbaumaufzu"
+.continue END
+..
+!AUFZU
+.continue AUF ?   M|tbaumstat = "+"  
+.continue ZU  ?   M|tbaumstat = "-"
+.continue END
+..
+!ZU
+.formula U|xzn = M|zn + 1
+.formula M|tbaumstat = "+"
+..
+.select screen line 'U|xzn'
+..
+!DEL
+.continue END        ? _M|aufgeklappt
+.make screen line -O ?  M|aufgeklappt
+.continue DEL
+..
+!AUF
+.. Aufklappen einer šberdeckung zum manuellen Umbuchen
+.continue END ? _M|schreibschutz
+.formula M|tbaumstat = "-"
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";artikel=" + 'M|tartikel^id'
+.formula U|xtsel = U|xtsel + ";platz=" + 'M|tlplatz^id'
+.formula U|xtsel = U|xtsel + ";lgruppe=" + 'M|tlgruppe^id'
+.formula U|xtsel = U|xtsel + ";verw==" + 'M|tverw'          ? _F|empty(M|tverw)
+.formula U|xtsel = U|xtsel + ";verw=`"                      ?  F|empty(M|tverw)
+.formula U|xtsel = U|xtsel + ";projekt=" + 'M|tprojekt^id'  ? _F|empty(M|tprojekt)
+.formula U|xtsel = U|xtsel + ";projekt=`"                   ?  F|empty(M|tprojekt)
+.formula U|xtsel = U|xtsel + ";gebf=" + 'M|tfaktor'
+.formula U|xtsel = U|xtsel + ";gebeinh=" + 'M|tlezu'
+.formula U|xtsel = U|xtsel + ";gebmge="
+.formula U|xtsel = U|xtsel + ";@ablageart=(Active)"
+.formula U|xtsel = U|xtsel + ";@ordnung=artikel,lgruppe,platz" 
+.. Platzmengenelemente
+.load 5 group "40:4" 'U|xtsel'
+!PLMGEEL
+.make screen line +O
+.copy M|schreibschutz = G|FALSE
+.copy M|aufgeklappt = G|TRUE
+.protection hinweis 'M|aktzeile'
+.assign M|tartikel = 5|artikel^id
+.assign M|tlgruppe = 5|lgruppe
+.copy M|tlagereinheit = M|tartikel^le
+.assign M|tlplatz = 5|platz^id
+.formula M|gebmge = 5|gebmge
+.formula M|tverw = 5|verw
+.assign M|tprojekt = 5|projekt
+.copy M|tle = 5|gebeinh
+.formula M|tmge = M|gebmge
+.formula M|tfaktor = 5|gebf
+.assign M|tcharge = 5|charge
+.assign M|tfertig = 5|lffert
+.assign M|tlplatzzu = M|tlplatz^id
+.formula M|tfaktorzu = 5|gebf
+.assign M|tchargezu = M|tcharge^id
+.copy M|tlezu = 5|gebeinh 
+.formula M|tverwzu = 5|verw         ? M|projektbez
+.formula M|tprojektzu = 5|projekt   ? M|verwendbez
+.protection tverwzu 'M|aktzeile'    ? M|projektbez
+.protection tprojektzu 'M|aktzeile' ? M|verwendbez
+.protection tverwzu 'M|aktzeile'    ? F|equals(5|artikel^dispoa, "(EmptyEntry)") ; F|equals(5|artikel^dispoa, "(RemainingQuantitiesRelated)") ; F|equals(5|artikel^dispoa, "(MinimumStockLevelRelated)") ; F|equals(5|artikel^dispoa, "(RequirementRelated)")
+.protection tprojektzu 'M|aktzeile' ? F|equals(5|artikel^dispoa, "(EmptyEntry)") ; F|equals(5|artikel^dispoa, "(RemainingQuantitiesRelated)") ; F|equals(5|artikel^dispoa, "(MinimumStockLevelRelated)")
+.load 5 squantity
+.continue PLMGEEL ? G|mehr
+.continue END
+!LPLATZ
+.protection -reset ueberd ?  F|empty(M|lplatz)
+.continue TABLEEREN       ?  F|empty(M|lplatz)
+.copy M|ueberd = G|FALSE  ? _F|empty(M|lplatz)
+.protection ueberd        ? _F|empty(M|lplatz)
+.continue TABLEEREN
+..
+!FAKTOR
+.formula M|tfaktorzu = ""  
+.formula M|tfaktorzu = M|tfaktor ? M|tlezu = M|tle
+.formula M|tfaktorzu = 1         ? M|tlezu = M|tlagereinheit
+.continue END
+..
+!CHARGE
+.formula M|excharge = M|charge^exnum ? _F|empty(M|charge)
+.formula M|excharge = ""             ?  F|empty(M|charge)
+.continue TABLEEREN
+..
+!UEB
+.continue TABLEEREN
+..
+!MENGE
+.continue ERROR1 ? M|tmge > M|gebmge & M|gebmge > 0
+.continue ERROR1 ? M|tmge < M|gebmge & M|gebmge < 0
+.continue END
+..
+!BEHAELTER
+.continue PROTECTION ? _F|empty(M|selbehaelter)
+.copy M|behaelter = G|FALSE
+.protection -reset projektbez
+.protection -reset projekt
+.protection -reset verwendbez
+.protection -reset verw
+.protection -reset artikel
+.protection -reset lplatz
+.protection -reset lgruppe
+.protection -reset charge
+.protection -reset behaelter
+.protection -reset ueberd
+.continue TABLEEREN
+..
+!PROTECTION
+.copy M|behaelter = G|TRUE
+.copy M|ueberd = G|FALSE
+.copy M|verwendbez = G|FALSE
+.copy M|projektbez = G|FALSE
+.formula M|charge = ""
+.formula M|lgruppe = ""
+.formula M|lplatz = ""
+.formula M|verw = ""
+.formula M|projekt = ""
+.formula M|artikel = ""
+.protection projektbez
+.protection projekt
+.protection verwendbez
+.protection verw
+.protection artikel
+.protection lplatz
+.protection lgruppe
+.protection charge
+.protection ueberd
+.continue TABLEEREN
+..
+!VERW 
+.copy M|projektbez = G|FALSE  ?  M|verwendbez
+.protection projektbez        ?  M|verwendbez 
+.protection projekt           ?  M|verwendbez
+.formula M|projekt = ""       ?  M|verwendbez
+.protection -reset projektbez ? _M|verwendbez
+.protection -reset projekt    ? _M|verwendbez       
+.continue TABLEEREN
+..
+!PROJ
+.copy M|verwendbez = G|FALSE  ?  M|projektbez
+.protection verwendbez        ?  M|projektbez 
+.protection verw              ?  M|projektbez
+.formula M|verw  = ""         ?  M|projektbez
+.protection -reset verwendbez ? _M|projektbez
+.protection -reset verw       ? _M|projektbez
+.continue TABLEEREN
+..
+!TABLEEREN
+.input "is/TABLEEREN"
+.continue END
+..
+!MARK
+.assign M|mark = "(SelectAll)"
+.input "is/TAB.MARK"
+.continue END
+..
+!DEMARK
+.assign M|mark = "(DeselectAll)"
+.input "is/TAB.MARK"
+.continue END
+..
+!BSTART
+.input 'M|tab' ? _F|empty(M|tab)
+.continue END
+..
+!BBEHAELTER
+.formula M|selbehaelter = "" ? _M|behaelter
+.protection -reset ueberd    ? _M|behaelter
+.copy M|ueberd = G|FALSE     ?  M|behaelter
+.protection ueberd           ?  M|behaelter
+.continue TABLEEREN          ? _F|empty(M|selbehaelter)
+.protection -reset projektbez
+.protection -reset projekt
+.protection -reset verwendbez
+.protection -reset verw
+.protection -reset artikel
+.protection -reset lplatz
+.protection -reset lgruppe
+.protection -reset charge
+.protection -reset behaelter
+.continue TABLEEREN
+..
+..*****************************************************************************
+!END
+.input "la/BEHAELTER.FUSS" ? _F|empty(M|selbehaelter)
+.continue
+..
+!ERROR1
+.error Menge darf nicht gr”áer der Gebindemenge sein! 
+.formula M|tmge = ""
+.end 1
+..
+!ERROR2
+.error Der edpimport ist gescheitert!
+.end 1
+

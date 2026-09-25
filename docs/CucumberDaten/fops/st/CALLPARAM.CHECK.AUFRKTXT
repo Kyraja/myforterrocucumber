@@ -1,0 +1,91 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : CALLPARAM.CHECK.AUFRKTXT
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      : xg
+.. Functionality  : Checks visibility of the target and sets it in xaufrref.
+..*****************************************************************************
+.set trans -
+..
+.. Initializations
+.assign U|xvisible = G|FALSE
+.assign U|xerrmessage = ""
+.assign U|xaufrref = ""
+.assign U|xaufrsel = ""
+..
+.continue VISIBLE ? F|empty(0|aufrziel)
+.continue HBUFFER ? F|equals(0|aufrzieltyp, "(HeaderField)")
+.continue TBUFFER ? F|equals(0|aufrzieltyp, "(TableField)")
+.continue PBUFFER ? F|equals(0|aufrzieltyp, "(PrintParameter)")
+.continue FORMULA ? F|equals(0|aufrzieltyp, "(Formula)")
+.continue CONSTNT
+
+!HBUFFER: selection is a name for a variable in the header of buffer M
+.copy U|xfadr = F|formatstr("F|adr({1}M{1}, {1}{2}{1}, 0)", G|DBLQUOTE, 0|aufrziel)
+.continue CHECKVAR
+..
+!TBUFFER: selection is a name for a variable in the table of buffer M
+.copy U|xfadr = F|formatstr("F|adr({1}M{1}, {1}{2}{1}, {3})", G|DBLQUOTE, 0|aufrziel, M|aktzeile)
+.continue CHECKVAR
+..
+!PBUFFER: selection is a name for a variable in the head of buffer P
+.copy U|xfadr = F|formatstr("F|adr({1}P{1}, {1}{2}{1}, 0)", G|DBLQUOTE, 0|aufrziel)
+.continue CHECKVAR
+..
+!FORMULA: selection is a FO expression
+.assign U|xaufrref = F|eval(0|aufrziel)
+.continue ERROR3 ? _G|mehr
+.continue MNDTORY
+..
+!CONSTNT: selection is constant
+.assign U|xaufrref = '0|aufrziel'
+.continue ERROR3 ? _G|mehr
+.continue MNDTORY
+..
+!CHECKVAR: Field value represents an unique record
+.assign U|xaufrref = F|eval(U|xfadr)
+.continue MNDTORY ? G|mehr
+..
+.. Sometimes fields are no reference but representing a unique key for an other record
+.assign U|xaufrsel = F|eval(U|xfadr)
+.load 9 group 'F|formatstr("{1}", 0|zieldn)' 'U|xaufrsel'
+.continue ERROR3 ? _G|mehr
+.assign U|xaufrref = 9|id
+.load 9
+.continue MNDTORY
+..
+!MNDTORY: Choice of target is a mandatory item
+.continue ERROR4 ? F|empty(U|xaufrref)
+..
+!VISIBLE: Data object is defined
+.copy U|xreusewindow = G|FALSE
+.copy U|xvisible = G|TRUE
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR3: Concrete data object is not found!
+.set trans +
+.assign U|xerrmessage = F|formatstr("Die Datensatzselektion {1} definiert kein bestehendes Datenobjekt", 0|aufrziel)
+.set trans -
+.continue END
+..
+!ERROR4: Concrete data object for choice of target is missing!
+.set trans +
+.assign U|xerrmessage = "Die Datensatzselektion liefert nur eine leere Referenz"
+.set trans -
+.continue END
+..
+!SCREEN
+.set trans +
+.output terminal
+Aufrufparameter '0|nummer', in Zeile '0|aktzeile':
+'U|xerrmessage'
+.set trans -
+.continue BREAK
+..
+!BREAK
+.error -message Die Bestimmung der Datensatzselektion wurde abgebrochen!
+.end 1

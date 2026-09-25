@@ -1,0 +1,2188 @@
+..!interpreter declaration english translate
+..************************************************************************************
+..
+..  FOP-Name       : KOTAB.UEBER
+..  Datum          : 09.07.03
+..  Version        : 2003r3
+..  Autor          : Uwe Oberle
+..  Verantwortlich : uo
+..  Kontrolle      : cl
+..
+..  Funktion       : - KOTAB in neue DB (Kontenbereiche), Gruppe-1 Åbernehmen
+..                   - Hierarchiestufen fÅr Bilanz und GuV in
+..                     Kontenbereichshierarchien Åbernehmen.
+..                   - Kontenbereichsformulare fÅr Bilanz und GuV generieren
+..                   - Die KOTAB kann an beliebiger Stellte liegen.
+..                   - Im Verzeichnis der KOTAB werden zwei Dateien abgelegt,
+..                     eine Datei *IDENT3 zum Nachweis der Nummernvergabe und
+..                     Hierachiezuordnung und eine *PROT als Protokoll im
+..                     Fehlerfalle.
+..                   - Bis auf Standardkonten ausserhalb von -b! wird alles
+..                     automatisch angelegt.
+..                     => die Sprungmarken !VOBI1 - !VOBI8 bearbeiten die Ausgabe
+..                        dass Standardkonten nicht in bestimmten Kontenbereichen
+..                        eingetragen wurden. Dieser Bereich mÅ·te erstetzt werden,
+..                        wenn man auch die Standardkonten noch manuell eintragen
+..                        wollte.
+..
+.. Mîgliche Fehler:
+..     *************************************************
+..      Protokolldatei aus KOTAB.UEBER          *
+..     *************************************************
+..     Fehler: Die gefundene Stufe (1) von Kontenbereich 2002
+..     ist nicht identisch mit der gesuchten oberen Kontenbereichsformularstufe 0.
+..                   #2002       #           # ba #  #  #
+..
+..     Wenn mal so eine Meldungen im KOTAB-Protokoll steht, dann
+..     stimmt was mit den Stufennummern nicht!
+..     Es muss fÅr ba* und bp*-Zeilen immer mit 1 beginnen nicht bei 0 ...
+..
+..************************************************************************************
+..
+..
+.type text xtwas xtwie xtktober xtst xtb xttext
+.type text xtsu xttxt1 xttxt2 xtvon xtbis xtber xtmp
+.type integer  xiz xi1 xiga xiba xign xibn xitz xis
+.type text xtpk xtlad:25
+.type text xsys xtstu:2 xtsto:2 xtmpo:2 xtmpu:2
+.type text xtkotab xtid xtid2 xtblist:100 xx:100 xclosed:100 xtkotabcpy
+.type text xtverbko:25 xtsverbko:25 xtfordko:25 xtsfordko:25
+.type text xfverbko:25 xfsverbko:25 xffordko:25 xfsfordko:25
+.type text xtko1 xtko2 xtkovon xtkobis xtkorest
+.type text xttmpl xtname:200 xtkobsuch:10 xttmp1:30 xttmp2:10
+.type text xfko1:25 xfkovon:25 xfkobis:25 xtfmtktonr:25
+..
+..   xtstu    : Textvarible fÅr die gesuchte untere Stufe der Kontenbereichshierarchie
+..   xtsto    : Textvarible fÅr die gesuchte obere Stufe der Kontenbereichshierarchie
+..   xtmpo    : Textvarible fÅr die aktuelle, gefundene obere  Stufe der
+..              Kontenbereichshierarchie
+..   xtmpu    : Textvarible fÅr die aktuelle, gefundene untere Stufe der
+..              Kontenbereichshierarchie
+..   xtverbko : Standardverdichtungskonto und KoBer fÅr          Verbindlichkeiten aus Standarkontierung
+..   xtsverbko: Standardverdichtungskonto und KoBer fÅr sonstige Verbindlichkeiten aus Standardkontierung
+..   xtfordko : Standardverdichtungskonto und KoBer fÅr          Forderungen       aus Standardkontierung
+..   xtsfordko: Standardverdichtungskonto und KoBer fÅr sonstige Forderungen       aus Standardkontierung
+..
+..   xfverbko : wie oben jedoch rechtsbÅndig mit fÅhrenden Leerzeichen formatiert.
+..   xfsverbko:
+..   xffordko :
+..   xfsfordko:
+..
+..   xtblist  : Liste aller Åbergeordneter Kontenbereiche die -b! beinhalten. Deren
+..              Rechenregel muss auf Summe geÑndert werden, damit Kontenkollissionen
+..              nichts ausmachen.
+..   xtko1, xtko2
+..   xtkovon, xtkobis
+..   xtkorest : Variablen fÅr fÅr die Zerlegung der Kontenangaben in ihre Einzelbestandteile
+..   xtkotabcpy: Kopie der KOTAB fÅr evtl. Konvertierung von UTF8 nach S3
+..   xtname:200    Name     fÅr automatisch generierte Kontenbereiche
+..   xtkobsuch:10  Suchwort fÅr automatisch generierte Kontenbereiche (nur deutsch oder englisch,
+..                          weil im Suchwort keine Unicodezeihen enthalten sein dÅrfen!
+..   xtfmtktonr:20 Leerzeichen zur rechtsbÅndigen Formatierung von Kontonummer fÅr Stringvergleich.
+..   xfkovon : Von-Kontoangabe in KOTAB (xtktober) formatiert
+..   xfkobis : Bis-Kontoangabe in KOTAB (xtktober) formatiert
+..
+.type integer  xistu xisto xikbh xi xidz xicasiz xilkoll xilkolm xilkolr xikolsta xilkto xilast xicstu
+.type integer  xistdif xicko1 ximaxbil ximaxguv xisumaid xisumpid xiguvid xistdko
+.type integer  xibzeile xibzmax
+.type integer  xistdnr xicsem xiktonrlge
+.type integer  xiverbko xisverbko xifordko xisfordko
+..
+..   xistu : ZÑhler fÅr die gesuchte untere Stufe der Kontenbereichshierarchie
+..   xisto : ZÑhler fÅr die gesuchte obere  Stufe der Kontenbereichshierarchie
+..   xikbh : Zahler [1..2] fÅr Schleife Åber GuV und Bilanzbearbeitung (1="gv", 2=>/"b*")
+..   xi    : ZÑhler fÅr Identnummernarray xti
+..   xidz  : Identnummer die vorab in die Zwischendatei generiert wird
+..   xicasiz: Konstante fÅr Array-Dimensionierung. Falls das Array einmal zu klein sein sollte
+..            einfach die Konstante vergrîssern.
+
+..   Steuerung der ZeilenumbrÅche fÅr die Kontenlisten. Maximal sind 3 Zeilen mîglich.
+..   xilkoll : LÑnge der linken Kontenliste (von!bis,konto;...) links vom ersten Semikolon
+..   xilkolm : LÑnge der mittleren Kontenliste zwischen dem ersten und einem evtl. zweiten Semikolon
+..   xilkolr : LÑnge der rechten Kontenliste nach einem evtl. zweiten Semikolon
+..   xikolsta: Status der BefÅllung der Kontenliste 1, 2 oder 4 = schon voll
+..   xicsem  : ZÑhlen der schon vorhandenen ZeilenumbrÅche
+..   xttmpl  : Hilfsvariable fÅr die ZeilenumbrÅche
+
+..   xilkto : LÑnge der dazu kommenden Kontenliste aus der akutellen Zeile (von!bis,konto, ...)
+..   xilast : letzter Eintrag ins Array
+..   xicstu : Konstante fÅr maximalen Zahlenwert der unteren Stufe
+..            (Startwert = 5, da sofort um 1 dekrementiert wird => echter Startwert = 4)
+..   xistdif: Laufvariable fÅr den Stufenabstand zwischen oberer und unterer Stufe.
+..   xicko1 : Maximale TextlÑnge von einer Kontenzeile fÅr korrekten Zeilenumbruch im
+..            Eingabefeld Konten Kontenbereiche
+..   ximaxbil: maximal vergebene Identnummer fÅr Bil
+..   ximaxguv: maximal vergebene Identnummer fÅr Guv
+..   xisumaid: Ident des Kontenbereichs Summe Aktiva
+..   xisumpid: Ident des Kontenbereichs Summe Passiva
+..   xiguvid : Ident des Kontenbereichs Summe Gewinn/Verlust
+..   xistdko : Vorgabe fÅr Identnummern der Standardkontenbereiche
+..   xiktonrlge: FormatierungslÑnge fÅr Kontonummern
+..   xiverbko xisverbko xifordko xisfordko: Kobereichsnummer fÅr Standardverdicht.konten merken
+..
+.type bool xbmehr xbsto xbgrupp xbkbneu xbkbe xbdat1 xbdat4 xberror
+..
+..   xbsto : Schalter "Stufe oben" ist auf false gesetzt, solange das
+..           Kommando <kober><aendern> noch nicht in die Laderdatei geschrieben
+..           wurde.
+..   xbgrupp:Schalter fÅr Gruppierung unterschiedlicher Berechnungsarten
+..   xbkbneu:True, wenn <kober> <neu> bereits in der Laderdatei steht.
+..   xbkbe : True, wenn Kontenbereiche in den Zeilen des Åbergeordenten Kontenbereichs
+..           einzutragen sind.
+..   xbdat4: true, wenn gelesene Zeile aus xtmpdat3 schon in xtmpdat4 geschrieben wurde
+..   xberror: Fehlerverwaltung
+..
+.type text xtcguv xtcbil xtmpdat1 xtmpdat2 xtwie2 xti:xi:10 xtidold xtidold2 xtkolist xtkolist1
+.type text xtprodat xtst2 xtsf xtmpdat3 xtmpdat4 xth xtrunlad xtcball xtsumap
+.type text xtwas2 xtwas3 xtslines xtsslines xtb2 xtdatkta
+.type text  xtxt  xdlader
+..
+..  xtcguv: Konstante fÅr das Suchwort der GuV-Kontenbereiche
+..  xtcbil: Konstante fÅr das Suchwort der Bilanz-Kontenbereiche
+..  xtmpdat1:TemporÑre KOTAB mit generierten Identnummern
+..  xtmpdat2:TemporÑre KOTAB mit generierten Identnummern - zusÑtzlich zweite Spalte
+..  xtmpdat3:Eingabedatei fÅr die Hierarchieverarbeitung. ZusÑtzlich zu xtmpdat2
+..           wird hier in der ersten Spalte noch die Zuordnung eines Kontenbereichs zu
+..           einer hîheren Hierarchie eingetragen. Zugeordnete Bereiche werden in
+..           xtmpdat4 festgehalten. Am Ende eines Durchlaufes wird xtmpdat4 wieder auf
+..           xtmpdat3 kopiert, damit die Ergebnisse der Vorlaufs wieder verfÅgbar sind.
+..           Diese Vorgehensweise ist nur erfordlich, weil auch StufensprÅnge 1-3
+..           gearabeitet werden mÅssen; und das geht leider nicht mehr ohne die erfolgten
+..           Zuordnungen abzuspeichern.
+..  xtmpdat4:Ergebnisse auf Hierarchieverarbeitung werden pro Loop hier eingetragen
+..  xtwie2: Puffer fÅr die Berechnungsart der vorgÑngerzeile
+..  xtwas2: Puffer fÅr die Zeilenart der vorgÑngerzeile
+..  xtwas3: Puffer (Ebene 2) fÅr die Zeilenart der vorgÑngerzeile
+..  xtst2 : Puffer fÅr die Stufe der VorgÑngerzeile
+..  xtb2  : Puffer fÅr die Filterart (b, bv ) der VorgÑngerzeile
+..  xti:    Identnummernarry fÅr Spezialbehandlung von zusammengesetzen Kontenbereichen
+..  xtidold:VorgÑnger-ID bei Abarbeitung von xtmpdat2
+..  xtprodat: Protokolldatei
+..  xtsf:    Marke fÅr Sonderfall als Bearbeitungskennzeichen fÅr zweiten Lauf
+..          (nur in xtmpdat1)
+..  xth:    Hierarchiekennzeichen. 1. Spalte in xtmpdat3 (und 4). Hier wird sukzessive
+..          die in den Lader geschriebene Hierarchiezuordnung eingetragen um doppelzu-
+..          ordnungen zu verhindern. Vgl. auch Beschreibung zu xtmpdat3.
+..  Xtrunlad: Eingabe fÅr LaderausfÅhrung
+..  xtcball: TextKonstante zur Suche von -b! Kontenangaben (steht fÅr b..alle Konten)
+..  xtsumap: Protokolldatei fÅr Kontenbereiche der Summe Aktiva und Passiva
+..  xtslines: temporÑre Datei zur Sammlung von Kontenbereichen fÅr s-Zeilen
+..  xtsslines: temporÑre Datei zur Sammlung von Kontenbereichen fÅr ss-Zeilen
+..  xtdatkta : Nur der Dateiname der KOTAB
+..  xtxt    : Name der Laderdatei in LESELADER (Standardvariable)
+..  xdlader : Name der Laderdatei in LESELADER.GUI (Standardvariable)
+..
+.type text  xdstderr
+.type text  xdstdout xtsys
+.type bool  xblad  xbutf8s3
+..
+..        xblad: ist der Lader bereits vorhanden, dann = true
+..        xbutf8s3: steuert, ob die KOTAB vor der Bearbeitung von UTF8 nach s3 konvertiert wird.
+..                  das ist notwendig fÅr chinesische und andere KOTABs.
+.type GLA10 xtbilabk:10  xtguvabk:10  xtaktiabk:10 xtpassabk:10
+..          xt*abk SuchwortabkÅrzungen fÅrs Ausland ohne Unicode!
+..
+.formula xbutf8s3 = false
+.set trans -
+..
+.input "ARB"
+..
+.formula xtlad   = xarb + "XKOTAB2.LAD"
+.formula xtxt    = xtlad
+.formula xdlader = xtlad
+..
+.formula xtcball = "*-*b*!*"
+..
+.. maximale Anzahl von Sonderfallzeilen
+.formula xicasiz = 100
+.. unterste Stufe + 1
+.formula xicstu  = 5
+..
+.. Konstanten fÅr korrekten Zeilenumbruch - Feld Konten
+.formula xicko1  = 64
+..
+.formula xiktonrlge = 20
+..
+!GENARRAY: Array xti fÅr Sonderfallliste generieren
+.type text xti.xi ? _defined(xti.xi)
+.. xti1, xti2, ...
+.formula xi = xi + 1
+.continue GENARRAY ? xi < xicasiz
+..
+..
+.output terminal
+..
+.output terminal
+.input BILD.F
+.formula xtrunlad = "2"
+.formula xiga = 1001
+.formula xiba = 2001
+.formula xistdko = 3001
+.formula xign = 100000
+.formula xibn = 200000
+.formula xtpk = "1"
+.formula xtkotab = "fb/KOTAB"
+..
+.. Defaultwerte fÅr Suchwortgenerierungen
+.formula t|xtbilabk ="BIL-"
+.formula t|xtguvabk ="GUV-"
+.formula t|xtaktiabk="A-"
+.formula t|xtpassabk="P-"
+.formula t|xtfmtktonr="                   "
+..
+!MEN
+..
+.formula xtsys = "test -s " + xtlad
+.system 'xtsys' background
+.formula xblad = mehr
+..
+.set trans +
+.menu AuswÑhlen
+Ladergenerierung mit Vorbelegungen starten                 :                    >>  .continue STLAD
+KOTAB-Datei                                                : 'xtkotab         ' >>  .continue KOTAB
+UTF-8 KOTAB vorher in S3-Zeichensatz konvertieren          : 'xbutf8s3        ' >>  .continue UTF8S3
+Suchwortkonfiguration                                                           >>  .continue SWMENU
+Kontenbereichs(1)- oder CoCo-Formulare(2) anlegen          : 'xtrunlad '        >>  .continue FORMART
+Anfang NummernzÑhler fÅr GUV-Kontenbereiche                : 'xiga    '         >>  .continue NUMZ
+Anfang NummernzÑhler fÅr Bilanz -Kontenbereiche            : 'xiba    '         >>  .continue BILZ
+Anfang NummernzÑhler fÅr Kontenbereiche der Standardkonten : 'xistdko '         >>  .continue STKO
+Identnummer fÅr GUV-Auswertung                             : 'xign    '         >>  .continue IGUV
+Identnummer fÅr Bilanz-Auswertung                          : 'xibn    '         >>  .continue IBIL
+Kapital(1)- oder Personengesellschaft(2)                   : 'xtpk    '         >>  .continue  PK
+?Lader starten                                              : 'xtlad           ' >>  .continue RUNLADER  ? xblad
+Beenden                                                                         >>  .continue ENDE
+.set trans -
+..
+.continue ENDE    ?  F|empty(G|menue)
+..
+!SWMENU: Suchwortkuerzel konfigurieren
+.set trans +
+.menu SuchwortabkÅrzungen konfigurieren
+fÅr Bilanz                      : 't|xtbilabk'    >> .read "Maximal 4 Zeichen ohne Unicode mit A-Z beginnend" t|xtbilabk
+fÅr Gewinn- und Verlustrechnung : 't|xtguvabk'    >> .read "Maximal 4 Zeichen ohne Unicode mit A-Z beginnend" t|xtguvabk
+fÅr Aktiva                      : 't|xtaktiabk'   >> .read "Maximal 2 Zeichen ohne Unicode" t|xtaktiabk
+fÅr Passiva                     : 't|xtpassabk'   >> .read "Maximal 2 Zeichen ohne Unicode" t|xtpassabk
+ZurÅck                                            >>  .continue MEN
+..
+.set trans -
+.formula t|xtbilabk  = t|xtbilabk  << 4
+.formula t|xtbilabk  = "B-"                  ?   _((t|xtbilabk << 1)/"(A-Z)")
+.formula t|xtguvabk  = t|xtguvabk  << 4
+.formula t|xtguvabk  = "G-"                  ?   _((t|xtguvabk << 1)/"(A-Z)")
+.formula t|xtaktiabk = t|xtaktiabk << 2
+.formula t|xtpassabk = t|xtpassabk << 2
+..
+.continue SWMENU
+..
+!FORMART: Eingabe der Formularart.
+..
+.set trans +
+.menu AuswÑhlen
+Kontenbereichsformulare
+CorridorControlling-Formulare
+ZurÅck                        >>  .continue MEN
+.set trans -
+..
+.formula xtrunlad = "1" ? G|menue = 1
+.formula xtrunlad = "2" ? G|menue = 2
+.continue MEN
+..
+!NUMZ
+.read "Anfang NummernzÑhler fÅr GUV-Kontenbereiche " xiga
+.formula xiga = 1001 ? xiga = 0
+.continue MEN
+!BILZ:..
+.read "Anfang NummernzÑhler fÅr Bilanz -Kontenbereiche " xiba
+..fo xiba = 2001 ? xiba = 0
+.continue MEN
+..
+!STKO:..
+.read "Anfang NummernzÑhler fÅr Kontenbereiche der Standardkonten " xistdko
+.continue MEN
+...
+!IGUV:...
+.read "Identnummer fÅr GUV-Auswertung " xign
+.continue MEN
+..
+!IBIL:...
+.read "Identnummer fÅr Bilanz-Auswertung " xibn
+.continue MEN
+..
+!PK: Eingabe Personen- oder Kapitalgesellschaft ?
+..
+.set trans +
+.menu AuswÑhlen
+Kapitalgesellschaft
+Personengesellschaft
+ZurÅck                        >>  .continue MEN
+.set trans -
+..
+.formula xtpk = "1" ? G|menue = 1
+.formula xtpk = "2" ? G|menue = 2
+.continue MEN
+..
+!KOTAB:...
+.read "KOTAB-Datei " xtkotab
+.continue MEN
+..
+!UTF8S3
+.formula xbutf8s3 = _xbutf8s3
+.continue MEN
+..
+!STLAD:..
+.set trans +
+.output terminal
+Generierung wird gestartet ...
+
+.set trans -
+..
+.formula xtcguv  = t|xtguvabk
+.formula xtcbil  = t|xtbilabk
+..
+.formula xberror = false
+..
+.formula xtdatkta = xtkotab        ? _xtkotab/"*\/*"
+.formula xtdatkta = xtkotab >$"/" ?  xtkotab/"*\/*"
+..
+.input "DATEI.F"
+..
+.formula xtkotabcpy = "rmtmp/" + xtdatkta + ".CPY"
+.formula xtmpdat1 = "rmtmp/" + xtdatkta + ".IDENT1"
+.formula xtmpdat2 = "rmtmp/" + xtdatkta + ".IDENT2"
+..aus auf 'xtmpdat2'
+.formula xtmpdat3 = xtkotab + ".IDENT3"
+..aus auf 'xtmpdat3'
+.formula xtmpdat4 = "rmtmp/" + xtdatkta + ".IDENT4"
+..aus auf 'xtmpdat4'
+.formula xtprodat = xtkotab + ".PROT"
+.output new 'xtprodat'
+.set trans +
+*************************************************
+*       Protokolldatei aus KOTAB.UEBER          *
+*************************************************
+.set trans -
+.output terminal
+..
+.formula xtsumap = "rmtmp/" + xtdatkta + ".SUMAP"
+.output new 'xtsumap'
+.formula xtslines = "rmtmp/" + xtdatkta + ".SLINES.TMP"
+.formula xtsslines = "rmtmp/" + xtdatkta + ".SSLINES.TMP"
+..
+.. KOTAB kopieren
+.formula xsys="cp " + 'xtkotab' + " " + 'xtkotabcpy'
+.system 'xsys' background
+.. Schreibrecht auf der Kopie aufheben (war in ref_kotab_ueber aufgefallen)
+.formula xsys="chmod +w " + 'xtkotabcpy'
+.system 'xsys' background
+.. KOTAB von UTF8 nach S3 kopieren
+.formula xsys="s3_conv 51 " + 'xtkotabcpy'
+.system 'xsys' background ? xbutf8s3
+..
+..=======================================================================
+.. Schritt 0: Standardverdichtungskonten aus dem Firmenstamm holen
+..=======================================================================
+.output new 'xtlad'
+..
+.select company "$,,@gr=7"
+.continue FIRMAERR ? _mehr
+.formula t|xtverbko  = h|verb   ? h|verb <> ""
+.formula t|xfverbko  = (xtfmtktonr + t|xtverbko)>>xiktonrlge
+..
+.formula t|xtsverbko = h|sverb   ? h|sverb <> ""
+.formula t|xfsverbko = (xtfmtktonr + t|xtsverbko)>>xiktonrlge
+..
+.formula t|xtfordko  = h|ford    ? h|ford <> ""
+.formula t|xffordko  = (xtfmtktonr + t|xtfordko)>>xiktonrlge
+..
+.formula t|xtsfordko = h|sford   ? h|sford <> ""
+.formula t|xfsfordko = (xtfmtktonr + t|xtsfordko)>>xiktonrlge
+..
+.formula t|xistdnr = 1
+..
+<#> =================================================================
+<#> Kontenbereiche fÅr Standardkonten aus Standardkontierung anlegen:
+<#> =================================================================
+<R+>
+<Abbruch>
+<Abbruch>
+<Abbruch>
+<Abbruch>
+<R->
+..
+!STDKO1: Falls Konto fehlt keinen KoBereich anlegen.
+.continue STDKO4  ?  t|xistdnr = 1 & xtverbko  = ""
+.continue STDKO4  ?  t|xistdnr = 2 & xtsverbko = ""
+.continue STDKO4  ?  t|xistdnr = 3 & xtfordko  = ""
+.continue STDKO4  ?  t|xistdnr = 4 & xtsfordko = ""
+..
+!STDKO2: Suche nach freier Nummer - gibt es den kontenbereich schon?
+.select accrange 'xistdko'
+.formula xistdko = xistdko + 1  ? mehr
+.continue STDKO2             ? mehr
+.. Ok, jetzt ist einer freie Identnummer gefunden ...
+..
+<kober> <neu> <menue> Kontenbereich
+`num 'xistdko'
+..
+.formula xtkobsuch = ""
+.formula xtname    = ""
+..
+.formula xiverbko  = xistdko                                      ? t|xistdnr = 1
+.formula xtkobsuch = "STDVERB"                                    ? t|xistdnr = 1
+.formula xtkobsuch = "STDLIABIL"                                  ? t|xistdnr = 1 & t|bsprache <> "D"
+..
+.formula xisverbko  = xistdko                                     ? t|xistdnr = 2
+.formula xtkobsuch = "STDSVERB"                                   ? t|xistdnr = 2
+.formula xtkobsuch = "STDOLIABIL"                                 ? t|xistdnr = 2 & t|bsprache <> "D"
+..
+.formula xifordko  = xistdko                                      ? t|xistdnr = 3
+.formula xtkobsuch = "STDFORD"                                    ? t|xistdnr = 3
+.formula xtkobsuch = "STDRECEIV"                                  ? t|xistdnr = 3 & t|bsprache <> "D"
+..
+.formula xisfordko = xistdko                                      ? t|xistdnr = 4
+.formula xtkobsuch = "STDSFORD"                                   ? t|xistdnr = 4
+.formula xtkobsuch = "STDORECEIV"                                 ? t|xistdnr = 4 & t|bsprache <> "D"
+..
+.set trans +
+.formula xtname    = "Standardkonto fÅr Verbindlichkeiten"        ? t|xistdnr = 1
+.formula xtname    = "Standardkonto fÅr sonst. Verbindlichkeiten" ? t|xistdnr = 2
+.formula xtname    = "Standardkonto fÅr Forderungen"              ? t|xistdnr = 3
+.formula xtname    = "Standardkonto fÅr sonst. Forderungen"       ? t|xistdnr = 4
+.set trans -
+..
+?`such 'xtkobsuch'   ? _xtkobsuch = ""
+?`name 'xtname'      ? _xtname = ""
+..
+`fausart  Bilanz
+`reregeln Endsaldo
+..
+..
+`anteil 1
+`ek j
+`vk j
+.. nur bebuchbare Konten auf ja einstellen?
+`bebuchbar j
+.. nur/auch Verdichtungskonten auf ja einstellen?
+`verd j
+..
+.. Konten in den Kontenbereich eintragen und dann die Variable
+.. auch gleich zum sichern des neuen Kontenbereiches verwenden
+?`konum 'xtverbko'                                ? t|xistdnr = 1
+.formula xtverbko = xistdko                            ? t|xistdnr = 1
+..
+?`konum 'xtsverbko'                               ? t|xistdnr = 2
+.formula xtsverbko = xistdko                           ? t|xistdnr = 2
+..
+?`konum 'xtfordko'                                ? t|xistdnr = 3
+.formula xtfordko = xistdko                            ? t|xistdnr = 3
+..
+?`konum 'xtsfordko'                               ? t|xistdnr = 4
+.formula xtsfordko = xistdko                           ? t|xistdnr = 4
+..
+`autokbpf ja
+<fertig>
+<abbruch>
+<#> -----------------------------------------------------
+..
+.. da Nummer verbraucht, Identnummer weiterzÑhlen
+.formula xistdko = xistdko + 1
+..
+!STDKO4:
+.formula t|xistdnr   = t|xistdnr   + 1
+..
+.continue STDKO1 ? t|xistdnr < 5
+..
+.continue IDGEN
+..
+!FIRMAERR: Fehler im Firmenstamm keine Fibu zu laden
+.output addedto 'xtprodat'
+.set trans +
+Der FiBu-Firmenstamm (Kontenrahmen) konnte nicht gelesen werden.
+Damit stehen fÅr die Verarbeitung keine Standard-Verdichtungskonten
+zur VerfÅgung!
+
+Da dieser Fehler auf ein schwerwiegendes Problem im System hindeutet,
+empfehlen wir dringend eine öberprÅfung durchzufÅhren. Der Firmen-
+stamm muss immer verfÅgbar und lesbar sein!
+
+Der KOTAB-Lader 'xtlad' sollte in diesem Systemzustand nicht
+ausgefÅhrt werden. Die Standardverdichungskonten werden nicht
+automatisch in die betroffenen Kontenbereiche Åbernommen.
+Diese mÅssten zusÑtzlich manuell eingetragen werden.
+..
+.set trans -
+.formula xberror = true
+=====================================================
+..
+..=======================================================================
+.. 1. Schritt: Generieren der Identnummern in einer neuen Datei
+..             In der ersten Spalte wird die generelle Identnummer generiert
+..             In der zweiten Spalte die Identnummern fÅr unterschiedliche
+..             Berechnungsarten.
+..=======================================================================
+..
+!IDGEN:
+.input "DATEI.F"
+.output new 'xtmpdat2'
+..
+.formula xikbh = 0
+..
+!IDGEN0: Schleife Åber GuV (1) und Bilanz (2)
+..
+.formula xikbh = xikbh + 1
+..
+.formula xtmpdat1 = xtmpdat1 + 'xikbh'
+.input "DATEI.F"
+.output new 'xtmpdat1'
+..
+.formula xidz = xiga     ? xikbh = 1
+.formula xidz = xiba     ? xikbh = 2
+.formula xtst2  = ""
+.formula xtb2   = ""
+.formula xtwie2 = ""
+.formula xbdat1 = false
+..
+.formula xi  = 0
+..
+.. Jegliche Ersetzung von Zeilentrennern ausschalten, damit ein ";" im
+.. Kontenbereichsnamen aus der KOTAB aus als solches in den Lader wandert
+.. und das mehrzeilige Feld dann korrekt getrennt wird.
+.. Achtung: Jegliches noch so ausgefallene ASCII-Zeichen oder s3-Zeichen
+.. macht hier wenig Sinn. Es kann nÑmlich bei einer KOTAB mit UTF-8-Code
+.. ganz schnell zu einem existierenden Zeichen werden, das dann fÑlschlicher
+.. weise ersetzt werden wÅrde und den UTF-Namen zerstîren wÅrde. So geschehen
+.. bei einer chinesischen KOTAB. Im Åbrigen dÅrfen als Zeilentrenner nur
+.. s3-Sonderzeichen verwendet werden. Davon gibt es auch auch nicht unendlich
+.. viele.
+..
+.set separator =
+..
+!IDGUV: NÑchste Zeile einlesen
+.formula xtwie2 = xtwie   ? xbdat1
+.formula xtst2  = xtst    ? xbdat1
+.formula xtb2   = xtb     ? xbdat1
+..
+.. s-Zeilen sind nicht vergleichsrelevant!
+..fo xtwie2 = xtwie   ? xbdat1  & xtwie <> "s" & xtwie <> "ss"
+..fo xtst2  = xtst    ? xbdat1  & xtwie <> "s" & xtwie <> "ss"
+..
+.select from 'xtkotabcpy' xtwas # xtwie # xtktober # xtst # xtb # xttext^
+.formula xbdat1 = false
+..
+.. Dateiende?
+.continue IDGUV2 ? _mehr
+..
+.. Abfrage fÅr GuV-Durchlauf nur wenn => xikbh = 1!
+.. ist die Zeile fÅr GuV?
+.continue IDGUV ? (xtwas <> "gv" ; (xtst="p" & xtwas = "gv")) & xikbh = 1
+..
+.. Abfragen fÅr BIL-Durchlauf nur wenn => xikbh = 2!
+.. ist die Zeile fÅr Bilanz und die Gesellschaftsform relevant?
+.. xtwas = "st" wird Åberlesen
+.continue IDGUV ? _xtwas / "b/ap/*"       & xikbh = 2
+.continue IDGUV ? xtwas/"??p" & xtpk="1"  & xikbh = 2
+.continue IDGUV ? xtwas/"??k" & xtpk="2"  & xikbh = 2
+..
+.formula xttxt1 = xttext >> dblquote
+.formula xttxt1 = xttxt1 <$ dblquote
+.formula xttxt1 = (xttxt1<<"")>>""
+..
+!IDGUV1: gibt es den kontenbereich schon?
+.select accrange 'xidz'
+.formula xidz = xidz + 1  ? mehr
+.continue IDGUV1       ? mehr
+.. freie Identnummer gefunden => in Datei schreiben
+..
+.. SonderfÑlle in Array merken
+.formula xtsf = ""
+.. eine s-Zeile ist in keinem Fall ein Grund fÅr einen untergeordneten Kontenbereich (SF)
+.continue IDGUV7 ? xtwie = "s" ;  xtwie = "ss"
+.continue IDGUV7 ? _(xttxt1 = "" & (xtwie <> xtwie2; xtb<>xtb2) & (xidz > xiga & xikbh = 1;xidz > xiba & xikbh = 2)) & _(xtst = "d" & xttxt1 <> "")
+.formula xtsf = "SF"
+..
+.formula xti.xi = xidz -1  ?  xilast <> xidz-1
+.formula xi = xi + 1       ?  xilast <> xidz-1
+.formula xilast = xidz -1  ?  xilast <> xidz-1
+.continue IDGUV7
+..
+!IDGUV7:
+?'xidz     '#'xtsf '#'xtwas '# 'xtwie ' # 'xtktober' # 'xtst' # 'xtb' # 'xttext'  ? xttxt1 <> "" & xtst <> "d"
+.formula xidz = xidz + 1                                                               ? xttxt1 <> "" & xtst <> "d"
+.formula xbdat1 = true                                                                 ? xttxt1 <> "" & xtst <> "d"
+..weiter IDGUV
+..
+.continue IDERR1 ? xttxt1 = "" & xtst <> "d" & xtst <> xtst2 ; xttxt1 = "" & (xtwie2 = "s"; xtwie2="ss")
+?           #'xtsf '#'xtwas '# 'xtwie ' # 'xtktober' # 'xtst' # 'xtb' # 'xttext'  ? xttxt1 =  "" ; xtst = "d"
+.formula xbdat1 = true                                                                 ? xttxt1 =  "" ; xtst = "d"
+.continue IDGUV
+..
+!IDERR1:
+.output addedto 'xtprodat'
+.set trans +
+Die Zeile wurde als Folgezeile erkannt, hat aber nicht dieselbe Stufe wie
+die VorgÑngerzeile. => Zeile wird nicht bearbeitet.
+   'xtsf '#'xtwas '# 'xtwie ' # 'xtktober' # 'xtst' # 'xtb' # 'xttext'
+Typische Fehlerursachen kînnen sein:
+1. Falsche Stufennummer innerhalb von Folgezeilen.
+2. s-Zeilen innerhalb von Folgezeilen sind nicht mîglich.
+.set trans -
+..
+.formula xberror = true
+=====================================================
+.output addedto 'xtmpdat1'
+..
+.continue IDGUV
+..
+..----------------------------------------------------------------------------------------------
+!IDGUV2: Ab hier Generierung der Zusammenzufassenden Kontenbereich wg. unterschiedl. Berechnung
+..       'xti0' 'xti1' 'xti2'
+..----------------------------------------------------------------------------------------------
+..
+.formula xi = 0
+.output addedto 'xtmpdat2'
+..setz debug +
+..
+!IDGUV5: Schleife Åber alle Kotab-Zeilen inklusive Id-Suche und Id-Vergabe fÅr SonderfÑlle
+.select accrange 'xidz'
+.formula xidz = xidz + 1     ? mehr
+.continue IDGUV5          ? mehr
+..
+.formula xtwie2 = xtwie
+.formula xtst2  = xtst
+.select from 'xtmpdat1' xtid # xtsf # xtwas # xtwie # xtktober # xtst # xtb # xttext^
+.continue IDGUV3   ? _mehr
+.formula xi = xi + 1  ?  xti.xi < xtid & xti.xi <> ""
+.continue IDGUV4   ? (xti.xi <> ""  & xtid = xti.xi) ; (xtid = "" & xbgrupp = true)
+..
+..Normalfall
+'xtid     '#           # 'xtwas' # 'xtwie ' # 'xtktober' # 'xtst' # 'xtb' # 'xttext'
+.. Gruppierung wieder ausschalten, da Normalfall vorliegt
+.formula xbgrupp = false
+.continue IDGUV5
+..
+!IDGUV4: Sonderfallbehandlung (Gruppierung verschiedener Berechnungsarten)
+.. ist der Gruppenwechsel in der Berechnungsart oder in der Stufe (=>d) erreicht?
+.. Falls nicht noch weiter IDGUV6
+..weiter IDGUV6  ? xtwie2 = xtwie & (xtid = "" & xbgrupp = true)
+.continue IDGUV6  ? xtsf ="" & xtid = "" & xbgrupp = true
+..
+'xtid     '#'xidz     '# 'xtwas' # 'xtwie ' # 'xtktober' # 'xtst' # 'xtb' # 'xttext'
+..
+.. Neue Id suchen
+.formula xidz = xidz + 1
+..
+.. Arrayindex erhîhen => ID fÅr den nÑchsten Sonderfall
+.. aber nur einmalig erhîhen! (also genau dann, wenn auch xbgrupp = true gesetzt wird)
+.formula xi   = xi   + 1       ? _xbgrupp
+..
+.. Gruppierung einschalten
+.. xbgrupp wird true sobald, ein Kontenbereich aus der Sonderfallliste erreicht wird
+.formula xbgrupp = true
+.continue IDGUV5
+..
+!IDGUV6: Noch im Sonderfall, jedoch Ausgabe ohne neue Identnummer zu generieren,
+..       da mehrere Zeilen der selben Berechnungsart vorliegen (noch kein Gruppenwechsel)
+'xtid     '#           # 'xtwas' # 'xtwie ' # 'xtktober' # 'xtst' # 'xtb' # 'xttext'
+.continue IDGUV5
+..
+!IDGUV3: Dateiendeverabeitung
+..
+.. Zwischendatei entfernen
+..fo xsys = "rm -f " + 'xtmpdat1'
+..sys 'xsys'
+..
+.formula ximaxguv = xidz   ?  xikbh = 1
+.formula ximaxbil = xidz   ?  xikbh = 2
+..
+.continue IDGEN0        ?  xikbh < 2
+..
+..=======================================================================
+.. 2. Schritt:
+.. Neuanlage aller Kontenbereiche fÅr GuV und Bilanz
+.. Beachte: FÅr davon-Konten werden keine Konten eingetragen. Dies wird
+..          erst nach Aufbau der Kontenbereichshierachien gemacht, um
+..          in Ñlteren Versionen die Plausi (KontenÅberschneidung) zu
+..          umgehen.
+..=======================================================================
+..
+!GUV0: Start GuV
+..
+.input "DATEI.F"
+.output addedto  'xtlad'
+.set trans +
+<#> ===========================================
+<#> Kontenbereiche fÅr GuV und Bilanz anlegen
+<#> ===========================================
+.set trans -
+..
+.formula xtid = ""
+.formula xtid2 = ""
+.formula xis  = 0
+..
+!GUV: 2 DurchlÑufe Åber 'xtmpdat2' mit Neuanlage aller Kontenbereiche
+..    1. Durchlauf: Spalte 2 (xtid2) bearbeiten.
+..    2. Durchlauf: Spalte 1 (xtid) bearbeiten.
+..
+..'xtid' 'xis' 'xbkbe'
+.formula xtidold  = xtid   ?  xtid <> ""
+.formula xtidold2 = xtid2  ?  xtid2 <> "" ; xtid <> ""
+..
+.select from 'xtmpdat2' xtid # xtid2 # xtwas # xtwie # xtktober # xtst # xtb # xttext^
+.. Dateiende mit <fertig>
+.continue GUV4 ? _mehr & xbkbneu
+.. Dateiende ohne <fertig>
+.continue GUV1 ? _mehr
+.. Filter fÅr GuV-Zeilen
+..weiter GUV  ? xtwas <> "gv"
+..
+.formula xikbh = 0
+.formula xikbh = 1 ? xtwas = "gv"
+.formula xikbh = 2 ? xtwas / "b/ap/*"
+..
+.continue GUV ? xikbh = 0
+.continue GUV ? xtwas/"??p" & xtpk="1" & xikbh = 2
+.continue GUV ? xtwas/"??k" & xtpk="2" & xikbh = 2
+..
+.. andere irrelevante Zeilen Åbergehen
+.continue GUV  ? xtst="p"
+..
+.. Sprungbedingungen fÅr 1. Durchlauf => 2. Spalte
+.continue GUV3 ? xtid="" & xtid2 = "" & xis = 0 & xtidold2<>"" & xbkbneu & _xbkbe
+.continue GUV5 ? xtid2 <> "" & xis = 0 & _xbkbneu
+..   nicht relevant, weil Spalte 2 keine Identnummer trÑgt
+.continue GUV  ? xtid2 = "" & xis = 0
+..
+.. Sprungbedingungen fÅr 2. Durchlauf => 1. Spalte
+.continue GUV3 ? xtid="" & xtid2 = "" & xis = 1 & xtidold<>"" & xbkbneu & _xbkbe
+.continue GUV5 ? xtid <> "" & xis = 1 & _xbkbneu
+.continue GUV6 ? xis = 1 & xtid ="" & xtid2 <> "" & xbkbneu & xbkbe
+..   nicht mehr relevant, weil fÅr solche Zeilen schon Kontenbereiche angelegt wurden
+.continue GUV  ? xis = 1 & xtid ="" & xtid2 =  "" & xbkbneu & xbkbe
+..
+.. neuer Datensatz ist gelesen => VorgÑngersatz vervollstÑndigen und mit <fertig> speichern
+.. Kontonummern nur eintragen, wenn welche vorhanden sind und keine Kontenbereiche da sind
+..
+.. Das "-b" ist in den Kontenbereichen nicht mehr gÅltig. Es muss deshalb entfernt werden.
+.. so dass nur das "!" verbleibt.
+.assign t|xtkolist1 = t|xtkolist * "+LX/-b// /-g// /-v// /-p// /-s//"
+?`konum 'xtkolist1'   ? _xbkbe & xtkolist <>""
+.. ?<#> 1 ? _xbkbe & xtkolist <>"" & (xtkolist / xtcball)
+?`autokbpf ja        ? _xbkbe & xtkolist <>""
+..------------------------------------
+.continue GUV2 ? xbkbe ; _(xtkolist / xtcball)
+.. Sonderfall -b!
+.. noch in die Zeile gehen
+?`                      ? xtverbko <>""; xtsverbko <>""; xtfordko <>"" ; xtsfordko <>""
+..
+?<L+>                   ? xtverbko <>""
+?`kbereich 'xtverbko'   ? xtverbko <>""
+?<c+>                   ? xtverbko <>""
+..
+?<L+>                   ? xtsverbko <>""
+?`kbereich 'xtsverbko'  ? xtsverbko <>""
+?<c+>                   ? xtsverbko <>""
+..
+?<L+>                   ? xtfordko <>""
+?`kbereich 'xtfordko'   ? xtfordko <>""
+?<c+>                   ? xtfordko <>""
+..
+?<L+>                   ? xtsfordko <>""
+?`kbereich 'xtsfordko'  ? xtsfordko <>""
+?<c+>                   ? xtsfordko <>""
+..------------------------------------
+!GUV2:
+<fertig>
+<abbruch>
+<#> -----------------------------------------------------
+.formula xbkbe    = false
+.formula xbkbneu  = false
+.formula xtkolist = ""
+.continue GUV5
+..
+!GUV6: Nur im Hierarchiefall: nÑchste Kontenbereichszeile eintragen
+<c+>
+`kbereich 'xtid2'
+?`zanteil   0           ? xtst = "d"
+.continue GUV
+..
+!GUV5: Neuanlage eines Kontenbereichs (Durchlauf 1 und 2)
+.formula xttext = xttext >> dblquote
+.formula xttext = xttext <$ dblquote
+.formula xttext = (xttext<<"")>>""
+.. Falls 1. Durchlauf xtid2 in xtid Åbernehmen, da weitere Logik identisch ist.
+.. Spalte 2 zuerst abarbeiten (primÑre Kontenbereiche)
+.formula xtid = xtid2                     ? xis = 0
+..
+.. Suchwort GuV
+.formula xtsu = xtcguv                    ? xikbh = 1
+..
+.. Suchwort Bilanz
+.formula xtsu = xtcbil      ?               xikbh = 2
+.formula xtsu = xtsu + t|xtaktiabk ? xtwas/"ba*" & xikbh = 2
+.formula xtsu = xtsu + t|xtpassabk ? xtwas/"bp*" & xikbh = 2
+..
+.. Suchwort + Ident
+.formula xtsu = xtsu + xtid
+..
+<kober> <neu> <menue> Kontenbereich
+`num 'xtid'
+`such 'xtsu'
+.. Wert fÅr das Feld name auf maximal 2 Zeilen kÅrzen:
+.formula xttxt1 = ""
+.formula xttxt2 = ""
+.formula xttxt1 = xttext << ";"
+.formula xttxt2 = xttext >> ";" ? xttext /"*;*"
+.formula xttxt1 = (xttxt1<<"")>>""
+.formula xttxt2 = (xttxt2<<"")>>""
+.formula xttxt1 = xttxt1 + ";" + xttxt2 ? xttxt2 <> ""
+<home>
+`name 'xttxt1'
+..
+.continue GUV10  ? xikbh <> 1
+.. GuV Fall
+?`fausart GuV
+?`reregeln Soll-Haben    ? xtwie <> "s" & xtwie <> "ss"
+?`reregeln Summe         ? xtwie  = "s" ; xtwie =  "ss"
+?`anteil 1
+.. Vorzeichen auf unterster Ebene genau einmal drehen, falls erforderlich
+?`anteil -1              ? xtwie =  "V" & (xis = 0 ; xis = 1 & xtid2 = "") & xtktober <>""
+.continue GUV11
+..
+!GUV10: Bilanzfall
+.continue GUV11  ? xikbh <> 2
+?`fausart Bilanz
+?`reregeln Endsaldo       ? xtwie = "es"
+.. Endsaldo Haben auf unterster Ebene genau einmal, sonst nirgends mehr!
+.. Endsaldo Soll ist nicht so kritisch wie Endsaldo Haben, weil diese Berechnungsart
+.. positive Salden nicht auf 0,00 abschneidet. Genau das fÅr nÑmlich bei mehreren hierarchischen
+.. Endsaldo Haben dazu, dass Zahlen durch Abschneiden verschwinden.
+?`reregeln Endsaldo Haben ? xtwie = "ha" & (xis = 0 ; xis = 1 & xtid2 = "") & xtktober <>""
+?`reregeln Endsaldo       ? xtwie = "ns"
+?`reregeln Endsaldo Soll  ? xtwie = "so"
+?`reregeln Summe          ? xtwie = "s" ; xtwie = "ss"
+..
+?`anteil 1
+.. Vorzeichen auf unterster Ebene genau einmal drehen, falls erforderlich
+?`anteil -1               ? xtwie = "ns" & (xis = 0 ; xis = 1 & xtid2 = "") & xtktober <>""
+?`ek j
+?`vk j
+.. bebuchbare Konten einstellen?
+?`bebuchbar j      ? xtb/"*b*"
+.. Verdichtungskonten einstellen?
+?`verd j    ? xtb/"*v*"
+..
+!GUV11:
+..
+.. Konten zuweisen / davon-Konten kommen spÑter dran / -b! auch eingetragen
+..
+.formula xtkolist = 'xtktober'          ? xis = 0 & xtst <> "d"
+..
+.. beim 2. Durchlauf muss zwischen dem Normalfall (Konten in Feld konum eintragen)
+.. und dem Hierachiefall (Kontenbereiche aus Spalte 2 in Kontenbereich eintragen)
+.. unterschieden werden:
+.. Konten eintragen...
+.formula xtkolist = ""                  ? xis = 1;  xtst = "d"
+.formula xtkolist = 'xtktober'          ? xis = 1 & xtid2 = ""  & xtst <> "d"
+..
+.. Hierarchiefall: Kontenbereiche aus Spalte 2 in Kontenbereich eintragen
+.. geh dazu zuerst in erste Zeile
+.formula xbkbe = (xis = 1 & xtid2 <> "")
+?`                                   ? xbkbe
+?`kbereich 'xtid2'                   ? xbkbe
+?`zanteil   0                        ? xbkbe & xtst = "d"
+..
+.. Schalter ("Bearbeitung des KoBereichs mit <neu> ist im Lader geschrieben") setzen
+.formula xbkbneu  = true
+..
+.continue GUV
+..
+!GUV3: Bearbeitung von Folgezeilen fÅr den Normalfall im Durchlauf 1 und 2
+.continue GUV  ?  xtktober="" ; xtst = "d"
+.. -b! ? Fehlermeldung aber nur einmal ausgeben
+.continue GUV9 ?  (xtktober / xtcball)
+..
+..==================================================
+.. BefÅllung der Kontenliste mit ZeilenumbrÅchen
+..==================================================
+.. Beachte! Redundanter Code unter Marke !CSEM2
+..
+.formula xicsem = 0
+.formula xttmpl = xtkolist
+!CSEM1: Semikolons zÑhlen
+.formula xicsem = xicsem + 1    ?     (xttmpl << 1)  =  ";"
+.. erstes Zeichen abschneiden
+.formula xttmpl = xttmpl << -1
+.continue CSEM1 ? + xttmpl > 0
+..
+.formula xilkoll  = + (xtkolist<<";")
+.formula xilkto   = +  xtktober
+..
+.formula xilkolm  = + ( (xtkolist>>";") <<";")
+..
+.formula xilkolr  = + ( (xtkolist>>";") >> ";")
+..
+.. Annahme: Kontenliste ist voll. Mehr als 3 Zeilen sind nicht mîglich
+.formula xikolsta = 4
+.. hat der neue Eintrag noch Platz in der jeweils angefangenen Zeile?
+..
+.. linker Teil l;; => Zeile 1
+.formula xikolsta   = 1 ?    xilkoll + xilkto + 1 <= xicko1 & xicsem = 0
+..
+.. mittlerer Teil ;m; => Zeile 2
+.formula xikolsta = 1   ?    xilkolm + xilkto + 1 <= xicko1  &  xilkoll > 0 & xicsem = 1
+..
+.. rechter Teil ;;r => Zeile 3
+.formula xikolsta = 1   ?   xilkolr + xilkto + 1 <= xicko1  &  xilkoll > 0  &  xilkolm > 0 & xicsem = 2
+..
+.. der neue Konteneintrag hat keinen Platz mehr. Es muss ein Zeilenumbruch (;) mit rein.
+.formula xikolsta = 2 ?   (xicsem = 0; xicsem = 1) & xikolsta = 4
+..
+..<#>DDD/'xtkolist'/'xtktober'/'xilkto'/'xilkoll'/'xilkolm'/'xilkolr'/'xikolsta'/'xicsem'
+..
+.. Kontenliste entsprechend dem Erweitertungsstatus xikolsta ohne oder mit Zeilenumbruch erweitern
+.. ohne Zeilenumbruch
+.formula xtkolist = xtkolist + ","  + 'xtktober'<<xicko1   ? xikolsta = 1
+.. mit Zeilenumbruch (mit Semikolon)
+.formula xtkolist = xtkolist + ",;" + 'xtktober'<<xicko1   ? xikolsta = 2
+..
+.continue GUV  ? xikolsta < 4
+..
+.. Fehlerfall => Protokolleintrag
+.output addedto 'xtprodat'
+.set trans +
+Kontoliste fÅr Kontenbereich 'xtidold' 'xtidold2' war zu lang zur Aufname im Feld Konten.
+-> Åbernommene Konten: 'xtkolist'
+-> nicht Åbernommene Konten: 'xtktober'
+-> Bitte die Konten im Kontenbereich manuell nachpflegen, nachdem der Lader gelaufen ist!
+.formula xberror = true
+=====================================================
+.output addedto 'xtlad'
+.set trans -
+.continue GUV
+..
+!GUV4: Abschliessen der Neuanlage nach Dateiende (Durchlauf 1 und 2)
+.. Kontonummern nur eintragen, wenn welche vorhanden sind und keine Kontenbereiche da sind
+..
+.. Das "-b" ist in den Kontenbereichen nicht mehr gÅltig. Es muss deshalb entfernt werden.
+.. so dass nur das "!" verbleibt.
+.assign t|xtkolist1 = t|xtkolist * "+LX/-b// /-g// /-v// /-p// /-s//"
+?`konum 'xtkolist1'   ? _xbkbe & xtkolist <>""
+.. ?<#> 2  ? _xbkbe & xtkolist <>""
+?`autokbpf  ja       ? _xbkbe & xtkolist <>""
+..------------------------------------
+.continue GUV12 ? xbkbe ; _(xtkolist / xtcball)
+.. Sonderfall -b!
+.. noch in die Zeile gehen
+?`                      ? xtverbko <>""; xtsverbko <>""; xtfordko <>"" ; xtsfordko <>""
+..
+?<L+>                   ? xtverbko <>""
+?`kbereich 'xtverbko'   ? xtverbko <>""
+?<c+>                   ? xtverbko <>""
+..
+?<L+>                   ? xtsverbko <>""
+?`kbereich 'xtsverbko'  ? xtsverbko <>""
+?<c+>                   ? xtsverbko <>""
+..
+?<L+>                   ? xtfordko <>""
+?`kbereich 'xtfordko'   ? xtfordko <>""
+?<c+>                   ? xtfordko <>""
+..
+?<L+>                   ? xtsfordko <>""
+?`kbereich 'xtsfordko'  ? xtsfordko <>""
+?<c+>                   ? xtsfordko <>""
+..------------------------------------
+!GUV12:
+<fertig>
+<abbruch>
+<#> -----------------------------------------------------
+.formula xbkbe    = false
+.formula xbkbneu  = false
+.formula xtkolist = ""
+..
+.. =========================================================================================
+!GUV1: Endebedingung fÅr Spaltenabarbeitung der Identnummern (Durchlauf 1 und 2)
+..     Man beachte, dass Spalte 2 zuerst abgearbeitet werden muss, weil dort primÑre
+..     Kontenbereich angelegt werden, die von anderen Kontenbereichen wieder verwendet werden.
+.. =========================================================================================
+.. Datei Schliessen
+.select from
+.. Ende dieses Bearbeitungsblocks?
+.continue GUV7  ?  xis = 1
+.. Schleifeninitialisierungen:
+.formula xis = xis + 1
+.formula xtidold  = ""
+.formula xtidold2 = ""
+.formula xtid     = ""
+.formula xtid2    = ""
+.continue GUV
+..
+!GUV7: Lader sichern
+..fo xsys="cp " + 'xtlad' + " " + 'xtlad' + "1"
+..sys 'xsys'
+..
+..===================================================================
+.. 3. Schritt
+.. Kontenbereichshierachien fÅr GuV und Bilanz einlesen und in den
+.. in Schritt (2) angelegten Kontenbereichen Ñndern.
+..===================================================================
+..
+.. in der Eingabe Datei eine Spalte hinzufÅgen
+.output new 'xtmpdat3'
+.input "DATEI.F"
+.select from
+..
+..-------------------------------------------------------------------
+!ADDCOL: Schleife zum Kopieren der Datei xtmpdat2 (add column loop)
+.select from 'xtmpdat2' xttext^
+.continue ADDCOLE ? _mehr
+  # 'xttext'
+.continue ADDCOL
+..
+!ADDCOLE: Ende des Kopiervorgangs fÅr xtmpdat3 (end of add column)
+.. testausgabe
+..fo xsys="cp " + 'xtmpdat3' + " " + 'xtmpdat3' + "_copy_of_2"
+..sys 'xsys'
+..-------------------------------------------------------------------
+..
+.formula xikbh = 0
+..
+!KBH: Schleife Åber GuV (1) und Bilanz (2)
+..
+.formula xikbh = xikbh + 1
+..
+.formula xistdif = 0
+..
+!KBHDIFF: Schleife Åber den Stufenabstand zwischen oben und unten (aufsteigend)
+.formula xistu = xicstu
+.formula xistdif = xistdif + 1
+..
+!KBHGUV0: Schleife Åber alle Stufen (Stufen aufsteigend von unten nach oben)
+.. Datei Schliessen
+.select from
+.output new 'xtmpdat4'
+..
+.. Da hier Bereichsneubeginn (logisch gleichbedeutend mit neuem ôffnen der Datei)
+.. ist hier die erste Zeile => der H-Puffer ist leer und entsprechend kann nichts
+.. geschrieben werden.
+.formula xbdat4 = true
+..
+.output addedto 'xtlad'
+.formula xistu = xistu - 1
+.formula xisto = xistu - xistdif
+.formula xtstu = xistu
+.formula xtsto = xisto
+..
+.. Kommando <Aendern> der oberen Stufe ist noch nicht in den Lader geschrieben
+.formula xbsto = false
+..
+.formula xtst = ""
+.formula xtmpo = ""
+..
+<#> ==============================================================================
+?<#> Kontenbereichshierarchieen fÅr die Gewinn- und Verlustrechnung (GuV) ? xikbh = 1
+?<#> Kontenbereichshierarchieen fÅr die Bilanz                            ? xikbh = 2
+<#>  obere Stufe = 'xtsto', untere Stufe = 'xtstu', Stufendifferenz = 'xistdif'
+<#> ==============================================================================
+..
+!KBHGUV1: Schleife Åber alle Zeilen der Datei xtmpdat3
+.continue KBHGUV6 ? xbdat4
+..------------------------
+.. Zugeordnete Kontenbereiche in der ersten Spalte markieren
+.output addedto 'xtmpdat4'
+'xth   '#'xtid     '#'xtid2    '# 'xtwas' # 'xtwie' # 'xtktober' # 'xtst' # 'xtb' # 'xttext'
+.output addedto 'xtlad'
+..------------------------
+..
+!KBHGUV6: NÑchste Zeile einlesen
+.select from 'xtmpdat3' xth # xtid # xtid2 # xtwas # xtwie # xtktober # xtst # xtb # xttext^
+.formula xbdat4 = false
+..
+.. Dateiende, aber per Lader der zuletzt geîffnete und geÑnderte
+.. Kontenbereich wurde noch nicht gespeichert (xbsto=true)
+.continue KBHGUV3 ? _mehr & xbsto
+..
+.. Dateiende, ohne relevante SÑtze am Ende
+.continue KBHGUV4 ? _mehr
+..
+.. Gleich die nÑchste Zeile, falls die aktuelle Zeile schon zugeordnet wurde
+.. ODER keine id vorhanden ist => Folgezeile die gar nicht in der reinen Hierachie
+.. zuordnung bearbeitet wird.
+.. ODER s- / ss-Zeilen die immer direkt ins Formular mÅssen (implizit immer = oberste Stufe)
+.continue KBHGUV1 ? xth <> "" ; xtid = ""; xtwie="s"; xtwie="ss"
+..
+.. Abfrage fÅr GuV-Durchlauf nur wenn => xikbh = 1!
+.. ist die Zeile fÅr GuV ?
+.continue KBHGUV1 ? xtwas <> "gv" & xikbh = 1
+..
+.. Abfragen fÅr BIL-Durchlauf nur wenn => xikbh = 2!
+.. ist die Zeile fÅr Bilanz und die Gesellschaftsform relevant?
+.continue KBHGUV1 ? _xtwas / "b/ap/*"       & xikbh = 2
+.continue KBHGUV1 ? xtwas/"??p" & xtpk="1"  & xikbh = 2
+.continue KBHGUV1 ? xtwas/"??k" & xtpk="2"  & xikbh = 2
+..
+.. Passt die Zeile zur oberen oder einer unteren Hierarchiestufe?
+.. Falls obere Stufe (xtmpo = "") weitergehen und unten prÅfen ob obere Stufe gefunden ...
+.continue KBHGUV1 ? xtsto <> xtst & xtmpo = ""
+..
+.. Fall die Stufen gegebenÅber der gesuchten oberen Stufe (xsto) abnimmt ist dies
+.. ein Aufstieg im Hierachiebaum => also ist keine obere Stufe bekannt
+.formula xtmpo = ""  ? xtsto  > xtst
+.continue KBHGUV1 ? xtsto  > xtst
+..
+.. diese PrÅfung wird erst relevant, sobald die obere Stufe (xtmpo) gefunden ist
+.. und die Stufe der gelesenen Zeile nicht kleiner ist als die gesuchte
+.. falls es nicht die obere Stufe ist muss es die untere sein, ansonsten
+.. nÑchste Zeile lesen.
+.continue KBHGUV1 ? xtstu <> xtst & xtsto <> xtst
+..
+.. Entweder die obere oder untere Stufe ist gefunden
+.. Suchwort aufbauen (egal fÅr welche Stufe)
+.formula xtsu = xtcguv                       ?   xikbh = 1
+..
+.formula xtsu = xtcbil                       ?   xikbh = 2
+.formula xtsu = xtsu + t|xtaktiabk ? xtwas/"ba*"      & xikbh = 2
+.formula xtsu = xtsu + t|xtpassabk ? xtwas/"bp*"      & xikbh = 2
+..
+.continue KBHGUV5 ? _(xtstu <> xtst  &  xbsto)
+..
+.. Kontenbereichsbearbeitung beenden
+<fertig>
+<abbruch>
+<#>-----------------------------------------------
+.formula xbsto = false
+..
+!KBHGUV5: Eine Relevante Zeile gefunden. Es ist eine obere oder eine untere Stufe gefunden
+.. Ist die obere Stufe gefunden?
+.formula xtmpo = xtid    ? xtsto = xtst
+.continue KBHGUV1     ? xtsto = xtst
+..
+.. Jetzt ist die erste oder eine weitere untere Stufe gefunden!
+..fo xtmpu = H|id
+.formula xtmpu = xtid
+..
+.. Ist das Kommando fÅr die obere Stufe schon geschrieben?
+.. es darf erst geschrieben werden wenn man erfolgreich die erste
+.. zugehîrige untere Stufe gefunden hat:
+.continue KBHGUV8  ? xbsto
+.. Obere Stufe zum Aendern laden
+<kober> 'xtmpo'
+<aendern>
+..
+`
+.formula xibzmax = 1
+.. Schalter: Kommando fÅr obere Stufe ist bereits beschrieben
+.formula xbsto = true
+..
+!KBHGUV8: Untere Stufe in die geîffnete obere Stufe als Zeile eintragen
+..
+`kbereich 'xtmpu'
+<c+>
+.formula xibzmax = xibzmax + 1
+..------------------------
+.. Zugeordnete Kontenbereiche in der ersten Spalte markieren
+.output addedto 'xtmpdat4'
+'xtmpo   '#'xtid     '#'xtid2    '# 'xtwas' # 'xtwie' # 'xtktober' # 'xtst' # 'xtb' # 'xttext'
+.formula xbdat4 = true
+.output addedto 'xtlad'
+..------------------------
+.continue KBHGUV1
+..
+!KBHGUV3: Dateiendeverarbeitung bei geîffnetem Kontenbereich
+.. ---------------------------
+<fertig>
+<abbruch>
+<#>-----------------------------------------------
+..
+!KBHGUV4: Datei 4 mit Zwischenzustand zurÅck auf 3 kopieren.
+..
+.. reine Testausgaben
+..fo xsys="cp " + 'xtmpdat4' + " " + 'xtmpdat4' + "_gv_" + 'xistu' + "_" + 'xistdif' ? xikbh = 1
+..fo xsys="cp " + 'xtmpdat4' + " " + 'xtmpdat4' + "_bil_" + 'xistu'+ "_" + 'xistdif' ? xikbh = 2
+..sys 'xsys'
+..
+.. nicht lîschen - wichtiges kommando!
+.formula xsys="mv " + 'xtmpdat4' + " " + 'xtmpdat3'
+.system 'xsys'
+..
+.. reine Testausgaben:
+..fo xsys="mv " + 'xtlad' + " " + 'xtlad' + "5_gv_" + 'xistu' + "_" + 'xistdif' ? xikbh = 1
+..fo xsys="mv " + 'xtlad' + " " + 'xtlad' + "5_bil_" + 'xistu'+ "_" + 'xistdif' ? xikbh = 2
+..sys 'xsys'
+..
+.continue KBHGUV0    ?  xistu  - xistdif       > 1
+..
+.continue KBHDIFF    ?  xistdif  < 3
+..
+.continue KBH        ?  xikbh < 2
+..
+..=======================================================================
+.. 4. Schritt:
+.. FÅr davon-Konten werden hier die Konten eingetragen.
+..=======================================================================
+..
+!DGUV0: Start GuV
+..
+.input "DATEI.F"
+.output addedto  'xtlad'
+.select from
+..
+.set trans +
+<#> ====================================================
+<#> Konten in davon-Konten der GuV und Bilanz eintragen
+<#> ====================================================
+.set trans -
+..
+.formula xtid2 = ""
+.formula xbkbneu = false
+..
+!DGUV: Ein Durchlauf Åber GuV und Bilanz davon-Konten
+..
+.select from 'xtmpdat3' xth # xtid # xtid2 # xtwas # xtwie # xtktober # xtst # xtb # xttext^
+..
+.. Dateiende mit <fertig>
+.continue DGUV4 ? _mehr & xbkbneu
+..
+.. Dateiende ohne <fertig>
+.continue DGUV1 ? _mehr
+..
+.. Filter fÅr davon-Zeilen
+.continue DGUV ? xtst <> "d"
+..
+.. Folgezeile einer davon-Zeile
+.continue DGUV3 ? xth="" & xtid="" & xtid2 = ""  &  xbkbneu
+..
+.. allererste davon-Zeile mit ID
+.continue DGUV5 ? xth="" & xtid="" & xtid2 <> "" & _xbkbneu
+..
+.. verwaiste davon-Zeile ohne ID (Fehlerfall)
+.continue DGUV6 ? xth="" & xtid="" & xtid2 = ""  & _xbkbneu
+..
+.. weitere davon-Zeilen mit ID
+.. neuer Datensatz ist gelesen => VorgÑngersatz vervollstÑndigen und mit <fertig> speichern
+.. Kontonummern nur eintragen, wenn welche vorhanden sind und keine Kontenbereiche da sind
+?`konum 'xtkolist'   ? xbkbneu & xtkolist <>""
+?`autokbpf ja        ? xbkbneu & xtkolist <>""
+<fertig>
+<abbruch>
+<#> -----------------------------------------------------
+.formula xbkbneu  = false
+.formula xtkolist = ""
+..
+!DGUV5: Kommando Aendern des davon-Kontenbereichs
+<kober> 'xtid2'
+<aendern>
+<home>
+.. erste Fundstelle fÅr Konten
+.formula xtkolist = 'xtktober'  ? _(xtktober / xtcball)
+..
+.. Schalter ("Bearbeitung des KoBereichs mit <aendern> ist im Lader geschrieben") setzen
+.formula xbkbneu  = true
+..
+.. PrÅfen auf den Sonderfall -b! und gegebenfalls Warnung ins Protokoll schreiben
+.continue DGUV8 ? _(xtktober / xtcball)
+..
+!DGUV9:
+.output addedto 'xtprodat'
+.set trans +
+Achtung: Sonderfall -b!
+Der Eintrag der Konten in die davon-Konten wird nicht automatisch unterstÅtzt.
+Der Kontenbereich 'xtid' 'xtid2' wurde ohne -b! angelegt.
+.set trans -
+.formula xberror = true
+=====================================================
+.output addedto 'xtlad'
+!DGUV8: Uebersprungmarke fÅr Sonderfall -b!
+..
+.continue DGUV
+..
+!DGUV3: Bearbeitung von Folgezeilen
+.continue DGUV  ? xtktober = ""
+.. -b! ?
+.continue DGUV9 ? (xtktober / xtcball)
+..
+..==================================================
+.. BefÅllung der Kontenliste mit ZeilenumbrÅchen
+..==================================================
+.. Beachte! Redundanter Code unter !CSEM1
+..
+.formula xicsem = 0
+.formula xttmpl = xtkolist
+!CSEM2: Semikolons zÑhlen
+.formula xicsem = xicsem + 1    ?     (xttmpl << 1)  =  ";"
+.. erstes Zeichen abschneiden
+.formula xttmpl = xttmpl << -1
+.continue CSEM2 ? + xttmpl > 0
+..
+.formula xilkoll  = + (xtkolist<<";")
+.formula xilkto   = +  xtktober
+..
+.formula xilkolm  = + ( (xtkolist>>";") <<";")
+..
+.formula xilkolr  = + ( (xtkolist>>";") >> ";")
+..
+.. Annahme: Kontenliste ist voll. Mehr als 3 Zeilen sind nicht mîglich
+.formula xikolsta = 4
+.. hat der neue Eintrag noch Platz in der jeweils angefangenen Zeile?
+..
+.. linker Teil l;; => Zeile 1
+.formula xikolsta   = 1 ?    xilkoll + xilkto + 1 <= xicko1 & xicsem = 0
+..
+.. mittlerer Teil ;m; => Zeile 2
+.formula xikolsta = 1   ?    xilkolm + xilkto + 1 <= xicko1  &  xilkoll > 0 & xicsem = 1
+..
+.. rechter Teil ;;r => Zeile 3
+.formula xikolsta = 1   ?   xilkolr + xilkto + 1 <= xicko1  &  xilkoll > 0  &  xilkolm > 0 & xicsem = 2
+..
+.. der neue Konteneintrag hat keinen Platz mehr. Es muss ein Zeilenumbruch (;) mit rein.
+.formula xikolsta = 2 ?   (xicsem = 0; xicsem = 1) & xikolsta = 4
+..
+..<#>XXX/'xtkolist'/'xtktober'/'xilkto'/'xilkoll'/'xilkolm'/'xilkolr'/'xikolsta'/'xicsem'
+..
+.. Kontenliste entsprechend dem Erweitertungsstatus xikolsta ohne oder mit Zeilenumbruch erweitern
+.. ohne Zeilenumbruch
+.formula xtkolist = xtkolist + ","  + 'xtktober'<<xicko1   ? xikolsta = 1
+.. mit Zeilenumbruch (mit Semikolon)
+.formula xtkolist = xtkolist + ",;" + 'xtktober'<<xicko1   ? xikolsta = 2
+..
+.continue DGUV ? xikolsta < 4
+..
+.. Fehlerfall => Protokolleintrag
+.output addedto 'xtprodat'
+.set trans +
+Kontoliste fÅr Kontenbereich 'xtidold2' war zu lang zur Aufname im Feld Konten.
+-> Åbernommene Konten: 'xtkolist'
+-> nicht Åbernommene Konten: 'xtktober'
+-> Bitte die Konten im Kontenbereich manuell nachpflegen, nachdem der Lader gelaufen ist!
+.set trans -
+.formula xberror = true
+=====================================================
+.output addedto 'xtlad'
+.continue DGUV
+..
+!DGUV6: verwaiste davon-Zeile ohne ID
+.. Fehlerfall => Protokolleintrag
+.output addedto 'xtprodat'
+.set trans +
+Der davon-Zeile mit folgenden Feldinhalten fehlt die Identnummer
+ 'xtwas' # 'xtwie' # 'xtktober' # 'xtst' # 'xtb' # 'xttext'
+-> Bitte Datei 'xtmpdat3' auf PlausbilitÑt ÅberprÅfen!
+.set trans -
+.formula xberror = true
+=====================================================
+.output addedto 'xtlad'
+.continue DGUV
+..
+!DGUV4: Abschliessen der Neuanlage nach Dateiende (Durchlauf 1 und 2)
+.. Kontonummern nur eintragen, wenn welche vorhanden sind und keine Kontenbereiche da sind
+?`konum 'xtkolist'   ? xbkbneu & xtkolist <>""
+?`autokbpf ja        ? xbkbneu & xtkolist <>""
+<fertig>
+<abbruch>
+<#> -----------------------------------------------------
+.formula xbkbneu  = false
+.formula xtkolist = ""
+..
+.. =========================================================================================
+!DGUV1: Endebedingung fÅr Spaltenabarbeitung der Identnummern (Durchlauf 1 und 2)
+..     Man beachte, dass Spalte 2 zuerst abgearbeitet werden muss, weil dort primÑre
+..     Kontenbereich angelegt werden, die von anderen Kontenbereichen wieder verwendet werden.
+.. =========================================================================================
+.. Datei Schliessen
+.select from
+..
+..===================================================================
+.. 5. Schritt
+.. Summe Aktiva und Summe Passiva als Kontebereiche anlegen
+.. anlegen.
+..===================================================================
+..
+.. Merker fÅr die oberste noch zuzuordnende Stufe
+.formula xtsto  = ""
+.formula xtwas2 = ""
+.formula xtwas3 = ""
+..
+.. Datei Schliessen
+.select from
+..
+.output addedto 'xtlad'
+..
+.set trans +
+<#> ==============================================================================
+<#> Kontenbereiche fÅr Summe Aktiva und Passiva erzeugen
+<#> ==============================================================================
+.set trans -
+..
+!YKBH1: Schleife Åber alle Zeilen der Datei xtmpdat3
+.select from 'xtmpdat3' xth # xtid # xtid2 # xtwas # xtwie # xtktober # xtst # xtb # xttext^
+..
+.. Dateiende, mit oder ohne relevante SÑtze am Ende
+.continue YKBH4 ? _mehr
+..
+.. Zeile Åbergehen, da irrelevant falls,
+..  - die Zeile schon zugeordnet wurde (xth <> "") oder
+..  - keine id vorhanden ist (xtid = "") (=> ist nur eine Folgezeile) oder
+..  - Stufentyp d (davon-Position)
+.continue YKBH1 ? xth <> "" ; xtid = "";  xtst = "p" ; xtst="d"; xtwie="s" ; xtwie="ss"
+..
+.formula xtwas2 = xtwas << 2
+.. Nur Bilanzzeilen aktiv/passiv sind relevant
+.continue YKBH1 ? _xtwas2 / "b/ap/"
+..
+.. ist die oberste Stufe schon identifziert, falls ja weiter bei YKBH2?
+.continue YKBH2 ?   xtsto <> "" & xtwas2 = xtwas3 & xtwas3 <> ""
+..
+.. Gruppenwechsel von Aktiv nach Passiv?
+.continue YKBH4 ?   xtsto <> "" & xtwas2 <> xtwas3 & xtwas2 <> ""
+..
+!YKBH6:
+?<kober> <neu> <menue> Kontenbereich
+...
+!YKBH3: Neuanlage des Kobereichs fÅr Bilanz
+.. Suche nach freier Identnummer
+.select accrange 'ximaxbil'
+.formula ximaxbil = ximaxbil + 1  ? mehr
+.continue YKBH3                ? mehr
+..
+.. freie Identnummer gefunden ...
+..
+`num 'ximaxbil'
+.formula xisumaid = ximaxbil                             ? xtwas2 = "ba"
+.formula xisumpid = ximaxbil                             ? xtwas2 = "bp"
+.formula ximaxbil = ximaxbil + 1
+..
+.formula xtkobsuch  = ""
+.formula xtkobsuch  = "BIL-SUMA"   ? xtwas2 = "ba"
+.formula xtkobsuch  = "BAL-SUMASS" ? xtwas2 = "ba" & t|bsprache <> "D"
+.formula xtkobsuch  = "BIL-SUMP"   ? xtwas2 = "bp"
+.formula xtkobsuch  = "BAL-SUMLIA" ? xtwas2 = "bp" & t|bsprache <> "D"
+..
+.. öbersetzung von Name
+.set trans +
+.formula xtname  = ""
+.formula xtname  = "Summe Aktiva  (automatisch erzeugt)"   ? xtwas2 = "ba"
+.formula xtname  = "Summe Passiva (automatisch erzeugt)"   ? xtwas2 = "bp"
+.set trans -
+?`such 'xtkobsuch'              ? _xtkobsuch  = ""
+?`name 'xtname'                 ? _xtname     = ""
+`fausart   Bilanz
+`reregeln  Summe
+..
+..und gehe in die erste Zeile
+`
+..
+.. oberste Stufe gefunden => merken und spÑter gegen die restlichen Zuordnungen vergleichen
+.formula xtsto = xtst   ?   xtsto = ""
+..
+!YKBH2: Zeilenverarbeitung in der Formularanlage
+.continue YKBH8  ? xtsto <> xtst
+<#>              'xtwas' 'xtid' 'xttext'
+`kbereich 'xtid'
+<c+>
+..
+..-------------------------------------------------------------------------------------
+.. in der ersten Spalte die Formularnummer der zugeordneten Kontenbereiche eintragen
+.output addedto 'xtsumap'
+'xtwas' 'xtid' 'xttext'
+.output addedto 'xtlad'
+..-------------------------------------------------------------------------------------
+..
+.formula xtwas3 = xtwas2
+.continue YKBH1
+..
+!YKBH8: Fehler, gefundene Stufe ist nicht identisch mit der gesuchten
+.output addedto 'xtprodat'
+.set trans +
+Fehler: Die gefundene Stufe ('xtst') von Kontenbereich 'xtid' 'xtid2'
+ist nicht identisch mit der gesuchten oberen Kontenbereichsformularstufe 'xtsto'.
+?Mîglicher Fehler: Die oberste Stufe der ba* und bp*-Zeilen beginnt mit 0 anstatt mit 1. ? xtst = "1" & xtsto = "0"
+  'xth            '#'xtid     '#'xtid2    '# 'xtwas' # 'xtwie' # 'xtktober' #
+.set trans -
+.formula xberror = true
+=====================================================
+.output addedto 'xtlad'
+.continue YKBH1
+..
+!YKBH4: Gruppenwechsel oder Dateiendeverarbeitung
+.. wurde vor dem Dateiende Åberhaupt schon ein neues Formular angelegt?
+.continue YKBH5 ? xtsto = "" & _mehr
+<fertig>
+<abbruch>
+<#>-----------------------------------------------
+..
+.continue YKBH6 ? mehr
+..
+!YKBH5: Ende dieser Bearbeitung
+..
+..===================================================================
+.. 5b. Schritt
+.. GuV-Ergebnis in einem Kontenbereich anlegen
+..===================================================================
+..
+.. Merker , ob Lader schon begonnen wurde (false bedeutet er ist noch leer)
+.formula xbkbneu=false
+..
+.. Datei Schliessen
+.select from
+..
+.output addedto 'xtlad'
+..
+<#> ==============================================================================
+?<#> Kontenbereich fÅr das GuV-Ergebnis (Summe aus Gewinnen/Verlusten) erzeugen
+<#> ==============================================================================
+..
+!GEWINN1: Schleife Åber alle Zeilen der Datei xtmpdat3
+.select from 'xtmpdat3' xth # xtid # xtid2 # xtwas # xtwie # xtktober # xtst # xtb # xttext^
+..
+.. Dateiende, mit oder ohne relevante SÑtze am Ende
+.continue GEWINN4 ? _mehr
+..
+.. Nur GuV-Zeilen sind relevant
+.continue GEWINN1 ? xtwas <> "gv"
+..
+.. Zeile Åbergehen, da irrelevant falls,
+..  - keine id und keine id2 vorhanden ist (=> ist nur eine Folgezeile) oder
+..  - Stufentyp d (davon-Position)
+..  - Summenzeilen
+.continue GEWINN1 ? xtid ="" & xtid2 =""; (xtwie <> "s" & xtwie <> "ss" & xtktober = ""); xtst="d"; xtwie="s" ; xtwie="ss"
+..
+.continue GEWINN2 ? xbkbneu
+..
+.. Die Neuanlage des Kobereich-Kopfes nur einmalig durchlaufen
+<kober> <neu> <menue> Kontenbereich
+.formula xbkbneu = true
+...
+!GEWINN3: Neuanlage des Kobereichs fÅr GuV
+.. Suche nach freier Identnummer
+.select accrange 'ximaxguv'
+.formula ximaxguv = ximaxguv + 1   ? mehr
+.continue GEWINN3               ? mehr
+..
+.. freie Identnummer gefunden ...
+..
+`num 'ximaxguv'
+.formula xiguvid = ximaxguv
+..
+.formula xtkobsuch = "GUV-SUMGV"
+.formula xtkobsuch = "P+L-SUMPL"  ? t|bsprache <> "D"
+..
+.set trans +
+.formula xtname = "Ergebnis(automatisch erzeugt)"
+.set trans -
+..
+`such 'xtkobsuch'
+`name 'xtname'
+`fausart   GuV
+`reregeln  Summe
+..
+..und gehe in die erste Zeile
+`
+..
+!GEWINN2: Zeilenverarbeitung
+<#>              'xtwas' 'xtid' 'xtid2' 'xttext'
+?`kbereich 'xtid'   ?  xtid2  = ""
+?`kbereich 'xtid2'  ?  xtid2 <> ""
+..
+.. Vorzeichen fÅr GuV-Summierungen korrekt setzen
+?`zanteil    1         ? (xtwie = "V" )
+?`zanteil   -1         ? (xtwie = "E" )
+?`zanteil    0         ? (xtwie <> "E" & xtwie <> "V")
+..
+<c+>
+.continue GEWINN1
+..
+!GEWINN4: Dateiendeverarbeitung
+.. wurde vor dem Dateiende Åberhaupt schon ein neuer KoBereich angelegt?
+.continue GEWINN5 ? _xbkbneu & _mehr
+.. falls ja, muss abgespeichert werden:
+<fertig>
+<abbruch>
+<#>-----------------------------------------------
+..
+!GEWINN5: Ende dieser Bearbeitung
+..
+..===================================================================
+.. 6. Schritt
+.. Neue Kontenbereichsformulare fÅr die verbleibenden Kontenbereiche,
+.. s- und ss-Zeilen in den Formularen anlegen.
+..===================================================================
+..
+.formula xikbh = 0
+..
+!ZKBH: Schleife Åber GuV (1) und Bilanz (2)
+..
+.formula xikbh = xikbh + 1
+..
+.. Merker fÅr die oberste noch zuzuordnende Stufe
+.formula xtsto = ""
+.formula xtwas2 = ""
+.formula xtwas3 = ""
+..
+.. Datei Schliessen
+.select from
+.output new 'xtmpdat4'
+..
+.. Da hier Bereichsneubeginn (logisch gleichbedeutend mit neuem ôffnen der Datei)
+.. ist hier die erste Zeile => der H-Puffer ist leer und entsprechend kann nichts
+.. geschrieben werden.
+.formula xbdat4 = true
+..
+.output addedto 'xtlad'
+..
+.set trans +
+<#> ==============================================================================
+?<#> Kontenbereichsformular fÅr die Gewinn- und Verlustrechnung (GuV) ? xikbh = 1
+?<#> Kontenbereichsformular fÅr die Bilanz                            ? xikbh = 2
+<#> ==============================================================================
+.set trans -
+..
+!ZKBH1: Schleife Åber alle Zeilen der Datei xtmpdat3
+.continue ZKBH6 ? xbdat4
+..------------------------
+.. Zugeordnete Kontenbereiche in der ersten Spalte markieren
+.output addedto 'xtmpdat4'
+'xth        '#'xtid     '#'xtid2    '# 'xtwas' # 'xtwie' # 'xtktober' # 'xtst' # 'xtb' # 'xttext'
+.output addedto 'xtlad'
+..------------------------
+..
+!ZKBH6: NÑchste Zeile lesen
+.select from 'xtmpdat3' xth # xtid # xtid2 # xtwas # xtwie # xtktober # xtst # xtb # xttext^
+.formula xbdat4 = false
+..
+.. Dateiende, ohne relevante SÑtze am Ende
+.continue ZKBH4 ? _mehr
+..
+.. Zeile Åbergehen, da irrelevant falls,
+..  - die Zeile schon zugeordnet wurde (xth <> "") oder
+..  - keine id vorhanden ist (xtid = "") (=> ist nur eine Folgezeile) oder
+..  - Stufentyp p oder
+..  - Stufentyp d (davon-Position)
+.continue ZKBH1 ? xth <> "" ; xtid = "";  xtst="p" ; xtst="d"
+..
+.. Abfrage fÅr GuV-Durchlauf nur wenn => xikbh = 1!
+.. ist die Zeile fÅr GuV ?
+.continue ZKBH1 ? xtwas <> "gv" & xikbh = 1
+.. fÅr GuV alle xtwas merken
+.formula xtwas2 = xtwas << 2       ? xikbh = 1
+..
+.. Abfragen fÅr BIL-Durchlauf nur wenn => xikbh = 2!
+.. ist die Zeile fÅr Bilanz und die Gesellschaftsform relevant?
+.continue ZKBH1 ? _xtwas / "b/ap/*"       & xikbh = 2
+.continue ZKBH1 ? xtwas/"??p" & xtpk="1"  & xikbh = 2
+.continue ZKBH1 ? xtwas/"??k" & xtpk="2"  & xikbh = 2
+..
+.. FÅr Eingabe der Summen-Kontenbereiche in Bilanz nur ba oder bp zum Vergleich merken
+.formula xtwas2 = xtwas << 2                 ? xikbh = 2
+..
+.. ist die oberste Stufe schon identifziert, falls ja weiter bei ZKBH2?
+.continue ZKBH2 ?   xtsto <> ""
+..
+?<kober> <neu> <menue> Kontenbereich-Formular        ? xtrunlad = "1"
+?<kober> <neu> <menue> Corridor Controlling - GuV    ? xtrunlad = "2" & xikbh = 1
+?<kober> <neu> <menue> Corridor Controlling - Bilanz ? xtrunlad = "2" & xikbh = 2
+...
+.. Bilanzdurchlauf?
+.continue ZKBH3 ? xikbh = 2
+..
+.. GuV-Durchlauf: Neuanlage der Formulars fÅr GuV
+!ZKBH10: Nummernsuche GuV
+.select accrange 'xign'
+.formula xign = xign + 1  ? mehr
+.continue ZKBH10        ? mehr
+.. freie Identnummer gefunden => in Datei schreiben
+..
+.formula xtkobsuch = "GUV"
+.formula xtkobsuch = "P+L" ? t|bsprache <> "D"
+..
+.set trans +
+.formula xtname = "Gewinn- und Verlustrechnung"
+.set trans -
+..
+`num 'xign'
+`such 'xtkobsuch'
+`name 'xtname'
+`fausart   GuV
+`reregeln  Soll-Haben
+.continue ZKBH7
+..
+!ZKBH3: Neuanlage der Formulars fÅr Bilanz
+.. Nummernsuche Bilanz
+.select accrange 'xibn'
+.formula xibn = xibn + 1  ? mehr
+.continue ZKBH3        ? mehr
+.. freie Identnummer gefunden => in Datei schreiben
+..
+.formula xtkobsuch = "Bilanz"
+.formula xtkobsuch = "Balance"  ? t|bsprache <> "D"
+..
+.set trans +
+.formula xtname = "Bilanz"
+.set trans -
+..
+`num 'xibn'
+`such 'xtkobsuch'
+`name 'xtname'
+`fausart   Bilanz
+`reregeln  Endsaldo
+..
+!ZKBH7: Generelle Komandos fÅr GuV und Bilanz
+`waehr     'T|inland'
+..und gehe in die erste Zeile
+`
+..
+.. oberste Stufe gefunden => merken und spÑter gegen die restlichen Zuordnungen vergleichen
+.formula xtsto = xtst   ?   xtsto = ""
+..
+!ZKBH2: Zeilenverarbeitung in der Formularanlage
+.continue ZKBH8  ? xtsto <> xtst & xtwie <> "s" & xtwie <> "ss"
+.. gibt es einen Gruppenwechels von ba nach bp oder umgekehrt?
+.. nur im Bilanzdurchlauf
+.continue ZKBH9  ? xtwas3 = "" ; xtwas3 = xtwas2 ; xikbh = 1
+..
+.. vor dem Gruppenwechel noch schnell die Summenzeile eintragen..
+?`kbereich 'xisumaid'    ? xtwas3 = "ba"
+?<c+>                    ? xtwas3 = "ba"
+..
+?`kbereich 'xisumpid'    ? xtwas3 = "bp"
+?<c+>                    ? xtwas3 = "bp"
+..
+!ZKBH9:
+`kbereich 'xtid'
+<#> closed auf false in den Zeilen setzen, wo Kontebereich in Verbindung mit -b ! vorkommt
+.formula xx = "*" + xtid + "*"
+?`closed nein  ? (xclosed/xx)
+<c+>
+.. die alte Zeilenart (ba oder bp) merken
+.formula xtwas3 = xtwas2
+..
+..-------------------------------------------------------------------------------------
+.. in der ersten Spalte die Formularnummer der zugeordneten Kontenbereiche eintragen
+.output addedto 'xtmpdat4'
+?G 'xign     '#'xtid     '#'xtid2    '# 'xtwas' # 'xtwie' # 'xtktober' # 'xtst' # 'xtb' # 'xttext' ? xikbh = 1
+?B 'xibn     '#'xtid     '#'xtid2    '# 'xtwas' # 'xtwie' # 'xtktober' # 'xtst' # 'xtb' # 'xttext' ? xikbh = 2
+.formula xbdat4 = true
+.output addedto 'xtlad'
+..-------------------------------------------------------------------------------------
+.continue ZKBH1
+..
+!ZKBH8: Fehler, gefundene Stufe ist nicht identisch mit der gesuchten
+.output addedto 'xtprodat'
+.set trans +
+Fehler: Die gefundene Stufe ('xtst') von Kontenbereich 'xtid' 'xtid2'
+ist nicht identisch mit der gesuchten oberen Kontenbereichsformularstufe 'xtsto'.
+?Mîglicher Fehler: Die oberste Stufe der ba* und bp*-Zeilen beginnt mit 0 anstatt mit 1. ? xtst = "1" & xtsto = "0"
+  'xth            '#'xtid     '#'xtid2    '# 'xtwas' # 'xtwie' # 'xtktober' #
+.set trans -
+.formula xberror = true
+=====================================================
+.output addedto 'xtlad'
+.continue ZKBH1
+..
+!ZKBH4: Dateiendeverarbeitung
+.. wurde vor dem Dateiende Åberhaupt schon ein neues Formular angelegt?
+.continue ZKBH5 ? xtsto = ""
+..
+.. vor dem Gruppenwechel noch schnell die Summenzeile eintragen..
+?`kbereich 'xisumaid'    ? xtwas3 = "ba"
+?<c+>                    ? xtwas3 = "ba"
+..
+?`kbereich 'xisumpid'    ? xtwas3 = "bp"
+?<c+>                    ? xtwas3 = "bp"
+..
+?`kbereich 'xiguvid'     ? xtwas3 = "gv"
+?<c+>                    ? xtwas3 = "gv"
+..
+<fertig>
+<abbruch>
+<#>-----------------------------------------------
+..
+!ZKBH5: Datei 4 mit Zwischenzustand zurÅck auf 3 kopieren.
+..
+.. Datei Schliessen
+.select from
+..
+.. reine Testausgabe
+..fo xsys="cp " + 'xtmpdat4' + " " + "XXXXX" + 'xikbh'
+..sys 'xsys'
+..
+.. geîffnete Datei vor dem move schlie·en
+.output new WERF.WEG
+.formula xsys="mv " + 'xtmpdat4' + " " + 'xtmpdat3'
+.system 'xsys'
+..
+.continue ZKBH        ?  xikbh < 2
+..
+..===================================================================
+.. 7. Schritt (7a):
+.. Kontenbereiche fÅr s- und ss-Zeilen sammeln
+..===================================================================
+..
+.formula xikbh = 0
+..
+!SAM: Schleife Åber GuV (1) und Bilanz (2)
+..
+.formula xikbh = xikbh + 1
+.formula xtwas2 = ""
+.formula xtwas3 = ""
+..
+.. Datei Schliessen
+.select from
+.output new 'xtslines'
+.output new 'xtsslines'
+..
+!SAM1: Schleife Åber alle Zeilen der Datei xtmpdat3
+..
+.. VorgÑngerzeilentyp zur Erkennung von Gruppenwechseln sichern
+.formula xtwas3 = xtwas2
+..
+.select from 'xtmpdat3' xth # xtid # xtid2 # xtwas # xtwie # xtktober # xtst # xtb # xttext^
+..
+.. Dateiende, ohne relevante SÑtze am Ende
+.continue SAM5 ? _mehr
+..
+.. Zeile Åbergehen, da irrelevant
+.. Åbergeordnete Kontenbereiche dÅrfen nicht gezÑhlt werden (xtktober = "")
+..     alt: weiter SAM1 ? xtid ="" ; (xtwie <> "s" & xtwie <> "ss" & xtktober = ""); xtst="d"
+.continue SAM1 ? xtid ="" & xtid2 =""; (xtwie <> "s" & xtwie <> "ss" & xtktober = ""); xtst="d"
+..
+.. Abfrage fÅr GuV-Durchlauf nur wenn => xikbh = 1!
+.. ist die Zeile fÅr GuV?
+.continue SAM1 ? xtwas <> "gv" & xikbh = 1
+.. GuV hat keine Gruppenwechsel-Verarbeitung zwischen E <==> V. DafÅr mÅssen hier
+.. die Vorzeichen nochmals gedreht werden.
+.continue SAM4 ? xikbh = 1
+..
+.. Abfragen fÅr BIL-Durchlauf nur wenn => xikbh = 2!
+.. ist die Zeile fÅr Bilanz relevant?
+..
+.. nur die ersten beiden Zeichen auswerten
+.formula xtwas2 = xtwas << 2
+.. Nur Bilanzzeilen aktiv/passiv sind relevant
+.continue SAM1 ? _xtwas2 / "b/ap/"
+..
+.. ist die Zeile fÅr Bilanz die gewÑhlte Gesellschaftsform relevant?
+.continue SAM1 ? xtwas/"??p" & xtpk="1"
+.continue SAM1 ? xtwas/"??k" & xtpk="2"
+..
+.. Gruppenwechsel von Aktiv nach Passiv oder von GuV nach Bilanz umgekehrt prÅfen?
+.continue SAM4 ?  xtwas2 = xtwas3 & xtwas2 <> ""
+..
+.. Verarbeitung des Bilanz-Gruppenwechsels: TemporÑre Dateien werden geleert.
+.output new 'xtslines'
+.output new 'xtsslines'
+..
+!SAM4: Bilanz-Gruppenwechsel Åbersprungen - Beginn der Zeilenbearbeitung
+..-------------------------------------------------------------------------------------
+.. Sammlung potentieller s-Zeilen fÅr den spÑteren Eintrag in den s-Zeilen-Kontenbereich
+.continue SAM12 ? xtwie = "ss"
+.continue SAM10 ? xtwie = "s"
+.output addedto 'xtslines'
+.. `kbereich 'xtid'
+?`kbereich 'xtid'   ?  xtid2  = ""
+?`kbereich 'xtid2'  ?  xtid2 <> ""
+..
+.. Vorzeichen fÅr GuV-Summierungen korrekt setzen (nur Durchlauf 1 GuV)
+?`zanteil    1         ? xikbh=1 & (xtwie = "V" )
+?`zanteil   -1         ? xikbh=1 & (xtwie = "E" )
+?`zanteil    0         ? xikbh=1 & (xtwie <> "E" & xtwie <> "V")
+<c+>
+.continue SAM11
+..
+!SAM10:
+.. geîffnete Datei vor dem move schlie·en
+.output new WERF.WEG
+.. move, damit die ZÑhlung wieder bei 0 beginnt.
+.formula xsys="mv " + 'xtslines' + " rmtmp/" + 'xtdatkta' + "." + 'xtid'
+.system 'xsys'
+.output new 'xtslines'
+..-------------------------------------------------------------------------------------
+..
+!SAM11: Sammlung potentieller ss-Zeilen fÅr den spÑteren Eintrag in den ss-Zeilen-Kontenbereich
+.continue SAM13 ? xtwie = "s"
+.output addedto 'xtsslines'
+..`kbereich 'xtid'
+?`kbereich 'xtid'   ?  xtid2  = ""
+?`kbereich 'xtid2'  ?  xtid2 <> ""
+..
+.. Vorzeichen fÅr GuV-Summierungen korrekt setzen (nur Durchlauf 1 GuV)
+?`zanteil    1         ? xikbh=1 & (xtwie = "V" )
+?`zanteil   -1         ? xikbh=1 & (xtwie = "E" )
+?`zanteil    0         ? xikbh=1 & (xtwie <> "E" & xtwie <> "V")
+<c+>
+.continue SAM13
+..
+!SAM12:
+.. nur copy, damit xtsslines als Quelle erhalten bleibt
+.formula xsys="cp " + 'xtsslines' + " rmtmp/" + 'xtdatkta' + "." + 'xtid'
+.system 'xsys'
+..
+!SAM13:
+..-------------------------------------------------------------------------------------
+.continue SAM1
+..
+!SAM5: Datei 4 mit Zwischenzustand zurÅck auf 3 kopieren.
+..
+.continue SAM        ?  xikbh < 2
+..
+.. Datei Schliessen
+.select from
+..
+..===================================================================
+.. 7. Schritt (7b)
+.. Kontenbereiche fÅr Zwischensummen mit Zeilen ergÑnzen
+.. Voraussetzungen:
+..  - es muss s-Zeilen geben
+..  - Schritt 7a: muss erfolgreich gelaufen sein
+..===================================================================
+..
+.. Datei Schliessen
+.select from
+..
+.output addedto 'xtlad'
+..
+.set trans +
+<#> ==============================================================================
+<#> Kontenbereichsformular fÅr Zwischensummen (s-Zeilen in KOTAB )
+<#> um Zeilen erweitern.
+<#> ==============================================================================
+.set trans -
+..
+!SZEI1: Schleife Åber alle Zeilen der Datei xtmpdat3
+.select from 'xtmpdat3' xth # xtid # xtid2 # xtwas # xtwie # xtktober # xtst # xtb # xttext^
+..
+.. Dateiende, ohne relevante SÑtze am Ende
+.continue SZEI5 ? _mehr
+..
+.. Zeile Åbergehen, da irrelevant falls,
+.continue SZEI1 ? (xtwie <> "s" & xtwie <> "ss")
+..
+.continue SZEI6 ? xtid = ""
+..
+<kober> 'xtid'
+<aendern>
+..und gehe in die erste Zeile
+`
+.. 'xtlad' soll vor dem Systemkommando geschlossen werden, sonst kînnte es zu
+.. Komplikationen kommen.
+.output addedto 'xtslines'
+.formula xsys="cat rmtmp/" + 'xtdatkta' + "." + 'xtid' + " >> " + 'xtlad'
+.system 'xsys'
+..
+.output addedto 'xtlad'
+<fertig>
+<abbruch>
+<#>-----------------------------------------------
+..
+.continue SZEI1
+..
+!SZEI6: Fehler s-Zeile ohne ID
+.output addedto 'xtprodat'
+.set trans +
+Fehler: s-/ss-Zeile ohne Identnummer.
+.set trans -
+  'xth            '#'xtid     '#'xtid2    '# 'xtwas' # 'xtwie' # 'xtktober' #
+.formula xberror = true
+=====================================================
+.output addedto 'xtlad'
+.continue SZEI1
+..
+!SZEI5: Datei 4 mit Zwischenzustand zurÅck auf 3 kopieren.
+..
+..===================================================================
+.. 8. Schritt: Suche nach versteckten Standardkonten in den
+.. Kontenangaben "von!bis". Keine Ausgabe in die Laderdatei, sondern
+.. nur in die Protokolldatei.
+..===================================================================
+..
+.. Datei Schliessen
+.select from
+..
+.output addedto 'xtlad'
+.set trans +
+<#> ==============================================================
+<#> ErgÑnzung der Kontenbereiche um noch fehlende oder versteckte
+<#> Standardverdichtungskonten
+<#> ==============================================================
+.set trans -
+..
+!VOBI1: Schleife Åber alle Zeilen der Datei xtmpdat3
+.select from 'xtmpdat3' xth # xtid # xtid2 # xtwas # xtwie # xtktober # xtst # xtb # xttext^
+..
+.. Dateiende, ohne relevante SÑtze am Ende
+.continue VOBI7 ? _mehr
+.. Wenn keine Konten angegeben weiter zur nÑchsten Zeile
+.continue VOBI1 ? xtktober = ""
+..
+.formula xtkorest = xtktober
+..
+!VOBI3: ZeilenprÅfung der Einzelkonten und der von!bis-Konten auf versteckte Standardkonten
+.formula xtko1   = xtkorest << ","
+.formula xtko2   = xtkorest >> ","
+..
+.formula xtkovon = xtko1 << "!"
+.formula xtkobis = xtko1 >> "!"
+..
+.. Sonderfall -b! Åbergehen!!
+.. und Kontenbereiche die schon Verdichtungskonten auch Åbergehen!
+.continue VOBI6 ? xtko1 / xtcball ; xtb/"*v*"
+..
+.. Fehlerfall alphanumerischer Konten
+.continue VOBI4 ? xtko1 / "*(AZ)*"  ; xtko1 / "*(az)*"
+..
+.continue VOBI2 ? xtkobis <> ""
+.. Vergleich bei Einzelkontenangabe
+.formula xfko1 = (xtfmtktonr + t|xtko1)>>xiktonrlge
+.formula xfkovon = xfko1
+.formula xfkobis = xfko1
+.continue VOBI5 ? xfko1 = xfverbko ; xfko1 = xfsverbko ; xfko1 = t|xffordko ; xfko1 = t|xfsfordko
+.continue VOBI6
+..
+!VOBI2: frÅhere Integer Umwandlungsmarke
+.formula xfkovon = (xtfmtktonr + t|xtkovon)>>xiktonrlge
+.formula xfkobis = (xtfmtktonr + t|xtkobis)>>xiktonrlge
+..
+!VOBI5
+.. : Kontrolle auf verstecktes oder aufgelistetes Standardkonto 1
+.continue VOBI51 ? _(xfkovon <= t|xfverbko  &  t|xfverbko  <= xfkobis)
+..
+?<kober> 'xtid2' ? xtid2 <>""
+?<kober> 'xtid' ?  xtid <> "" & xtid2 =""
+<aendern>
+.. Entfernen der Konsistenzforderung in autokbpf, da Verdichtungskonto diese zerstîrt!
+`
+<L+>
+`kbereich 't|xiverbko'
+..
+<fertig>
+<abbruch>
+..
+!VOBI51: Kontrolle auf verstecktes oder aufgelistetes Standardkonto 2
+.continue VOBI52 ? _(xfkovon <= t|xfsverbko &  t|xfsverbko <= xfkobis)
+..
+?<kober> 'xtid2' ? xtid2 <>""
+?<kober> 'xtid' ?  xtid <> "" & xtid2 =""
+<aendern>
+`
+<L+>
+`kbereich 't|xisverbko'
+..
+<fertig>
+<abbruch>
+..
+!VOBI52: Kontrolle auf verstecktes oder aufgelistetes Standardkonto 3
+.continue VOBI53 ? _(xfkovon <= t|xffordko  &  t|xffordko  <= xfkobis)
+..
+?<kober> 'xtid2' ? xtid2 <>""
+?<kober> 'xtid' ?  xtid <> "" & xtid2 =""
+<aendern>
+`
+<L+>
+`kbereich 't|xifordko'
+..
+<fertig>
+<abbruch>
+..
+!VOBI53: Kontrolle auf verstecktes oder aufgelistetes Standardkonto 4
+.continue VOBI6 ? _(xfkovon <= t|xfsfordko &  t|xfsfordko <= xfkobis)
+..
+?<kober> 'xtid2' ? xtid2 <>""
+?<kober> 'xtid' ?  xtid <> "" & xtid2 =""
+<aendern>
+`
+<L+>
+`kbereich 't|xisfordko'
+..
+<fertig>
+<abbruch>
+..
+.continue VOBI6
+..
+!VOBI4: Fehlerfall alphanumerische Konten => nicht verarbeitbar, wegen numerischem Vergleich
+.output addedto 'xtprodat'
+.set trans +
+Fehler: Die Konten sind nicht rein numerisch definiert:
+'xtktober' (=>'xtko1')
+Eine Verarbeitung dieser Konten ist nur begrenzt - d.h. ohne
+öberprÅfung der Standardkonten - mîglich.
+.set trans -
+.formula xberror = true
+===================================================================================
+..
+!VOBI6: Gibt's noch einen Token in dieser Zeile? Falls ja, weiter mit Zeilenanalyse
+.formula xtkorest = xtko2
+.continue VOBI3 ? xtkorest <> ""
+.continue VOBI1
+..
+!VOBI7: Ende des Scans
+..
+<abbruch><abbruch>
+<TEXT><zeigen>
+.formula xttmp1 = ".sys"
+.formula xttmp2 = "'"
+'t|xttmp1' "batchlg.sh -PASSARGS de.abas.jfop.fb.FixAccountRangeFactors.class -q 't|xttmp2'@gruppe=2.4.5;nummer=='t|xign''t|xttmp2' -b 1" PASSWORT
+'t|xttmp1' "batchlg.sh -PASSARGS de.abas.jfop.fb.FixAccountRangeFactors.class -q 't|xttmp2'@gruppe=2.4.5;nummer=='t|xibn''t|xttmp2' -b 1" PASSWORT
+<abbruch><abbruch>
+.. Datei Schliessen
+.select from
+..
+..=====================================================================
+.. 9. Schritt:
+.. Ergebnisausgabe - Fehlerausgabe und Ende
+..=====================================================================
+.output terminal
+.set trans +
+Der Nachweis der vorgesehenen Kontenbereiche befindet sich in
+der Protokolldatei 'xtmpdat3'. ZusÑtzlich generierte Kontenbereiche,
+wie z.B. die Summen Aktiv/Passiv werden nicht in der Datei
+protokolliert.
+
+Sie kînnen die Datei einsehen, dÅrfen Sie aber nicht Ñndern!
+Die Spalten 1, 2 und 3 dieser Datei haben folgende Bedeutung:
+
+Spalte 1: Zuordnung zu Åbergeordneten Kontenbereichen und Formularen
+Spalte 2: Identnummer eines Kontenbereichs
+Spalte 3: Identnummern der SonderfÑlle
+          (abweichende Berechnungsart, davon-Konten)
+
+.set trans -
+.output terminal ...
+.continue ERROUT1 ? xberror
+.set trans +
+Der KOTAB-Lader 'xtlad' wurde ohne Fehler oder Warnungen generiert.
+
+.set trans -
+.output terminal ...
+..
+.continue MEN
+..
+!ERROUT1
+.set trans +
+Bitte bearbeiten Sie alle Hinweise, Warnungen und
+Fehler der Protokolldatei 'xtprodat', bevor Sie den Lader
+'xtlad' starten!
+
+.set trans -
+.output terminal ...
+.continue ENDE
+..
+..
+!RUNLADER
+..Aufruf des Laders 'xtlad'
+..=============================================================================
+..
+..Zum Start bitte obigen Ladernamen eingeben ...
+..
+..
+.continue STGUI ? _(_(grafik))
+.set trans +
+Starten der Laderdatei 'xtxt'
+.set trans -
+.input LESELADER
+.continue ENDE
+!STGUI
+.set trans +
+Starten der Laderdatei 'xdlader'
+.set trans -
+.input LESELADER.GUI
+..
+!ENDE
+.end

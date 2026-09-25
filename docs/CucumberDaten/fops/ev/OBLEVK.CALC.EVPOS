@@ -1,0 +1,100 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : OBLEVK.CALC.EVPOS
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Berechnet Positionswert und Wert inkl. Umlagen.
+.. Ablauf         : Unterprogramm von OBLEVK.TAB
+..*****************************************************************************
+.set trans -
+..
+.. nichts, wenn nicht Einkauf/Verkauf
+.continue END ? (H|dnr <> 3 & H|dnr <> 4)
+..
+.. Deklarationen
+.type real xrpwert ? _F|defined(U|xrpwert)
+.type real xrnwert ? _F|defined(U|xrnwert)
+..
+.formula U|xrpwert = 0.0
+.formula U|xrnwert = 0.0
+..
+!VERTEIL: Verteilung nach Positionsart
+.continue ALTPOS ? H|alternativpos
+.continue ARPOS  ? H|typ = G|ARPOS ; H|typ = G|DELPOS
+.continue ZUPOS  ? H|typ = G|ZUPOS
+.continue END
+..
+!ALTPOS: Alternative item
+.formula U|xrpwert = H|pwert:2
+.formula U|xrnwert = H|nwert:2
+.continue NET ? H|kobrutto
+.continue EXCHNGE
+..
+!ARPOS: Artikelposition (inkl. Pseudopos)
+.continue FLTRATE ? F|empty(H|preis) & _F|empty(U|xremge) & _F|empty(H|pwert)
+.continue DEVOID  ? H|refrg = H|remge & (M|inkl ; M|reo)
+.formula U|xrpwert = (U|xremge * H|pehe * H|preis  * (100 + H|proz ) / 100):2
+.formula U|xrnwert = H|nwert:2
+.formula U|xrnwert = (H|nwert * U|xremge / H|mge):2 ? _F|empty(H|mge)
+.continue NET ? H|kobrutto
+.continue EXCHNGE
+..
+!DEVOID: Clear values of item
+.formula U|xrpwert = 0.0
+.formula U|xrnwert = 0.0
+.continue END
+..
+!FLTRATE: All inklusive value
+.continue NOQUANT ? F|empty(H|mge)
+.formula U|xrpwert = (H|pwert * U|xremge / H|mge):2
+.formula U|xrnwert = (H|nwert * U|xremge / H|mge):2
+.continue NET ? H|kobrutto
+.continue EXCHNGE
+..
+!ZUPOS: Zusatzposition Text-/neutrale -Pos (Mengenwerte = Positionswerte)
+.continue END ? F|empty(H|remge)
+.continue RELEASE ? M|inkl ; M|reo
+.formula U|xrnwert = H|remge:2
+.formula U|xrpwert = U|xrnwert
+.continue NET ? H|kobrutto
+.continue EXCHNGE
+..
+!RELEASE: Substract released quantity
+.formula U|xrnwert = (H|remge - H|refrg):2
+.formula U|xrpwert = U|xrnwert
+.continue NET ? H|kobrutto
+.continue EXCHNGE
+..
+!NOQUANT: Do not calculate because there is no quantity
+.formula U|xrpwert = H|pwert
+.formula U|xrnwert = H|nwert
+.continue NET ? H|kobrutto
+.continue EXCHNGE
+..
+!NET: No tax
+.formula U|xrpwert = (U|xrpwert * 100 / (100 + H|stsatz)):2
+.formula U|xrnwert = (U|xrnwert * 100 / (100 + H|stsatz)):2
+..
+!EXCHNGE: Exchange value of item into output currency
+.continue END     ? M|auswaehr^id = 0|land^id
+.continue CURRATE ? M|auswaehr^id = G|inland^id
+.continue DAILY
+..
+!CURRATE: Which rate for exchange?
+.continue FIXED ? 0|kursfix
+.continue DAILY
+..
+!FIXED: Fixed rate in document
+.formula M|vorgrate = 1 / 0|kurs
+.continue RECHNEN
+..
+!DAILY: Daily rate
+.formula M|vorgrate = F|fxrate(M|auswaehr, G|datum, 0|land)
+..
+!RECHNEN
+.formula U|xrpwert = F|round(M|vorgrate * U|xrpwert, M|ausnkst)
+.formula U|xrnwert = F|round(M|vorgrate * U|xrnwert, M|ausnkst)
+..*****************************************************************************
+!END
+.continue

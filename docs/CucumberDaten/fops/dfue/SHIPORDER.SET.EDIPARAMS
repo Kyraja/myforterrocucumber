@@ -1,0 +1,103 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SHIPORDER.SET.EDIPARAMS
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : amk
+.. Functionality  : Set check box send message and transmit date for a Shipping
+..                  Order and all its Packing Slips.
+..                  If a problem occurs, all changes are rolled back!
+..                  Shipping Order must be in buffer h, but not yet locked!
+..                  Finishes with shipping order in buffer h!
+..
+..    Argument          Type        Meaning
+..    -------------------------------------------------------------------------
+..    buffer h          ID55        Shipping Order
+..    setdfuesenden     bool        New bool value for send message   in  Shipping Order and Packing Slip
+..    setdfuedat        GD or GD2   New date for edi transmit date    in  Packing Slip
+..*****************************************************************************
+.set trans -
+..
+.continue NOARGS ? F|empty(H|dnr) ; _F|defined(U|setdfuesenden) ; _F|defined(U|setdfuedat)
+.continue NOSPED ? H|dnr<>55
+..
+.type bool setdfuesenden ? _F|defined(U|setdfuesenden)
+.type GD setdfuedat ? _F|defined(U|setdfuedat)
+.type ID55 shippingorder ? _F|defined(U|shippingorder)
+.copy U|shippingorder = H|id
+..
+..
+.reserve
+..
+..*****************************************************************************
+.. 
+.. The FO command ".action abort" will cause a rollback with a hard program 
+.. termination: the info system will close!
+.. To reduce rollbacks on failed lock aquisition the locking of a shipping order 
+.. with all its packing slips is tested before doing the actual transaction.
+..
+..!meta H|=P55
+.select lock transportcompany nowait 'U|shippingorder'
+.continue NOLOCK ? _G|mehr ; _G|gesperrt
+..
+..!meta H|=P3:1
+.select lock sales nowait 'F|formatstr("$,,;@gruppe=1;typ=(PackingSlip);@ablage=(Both);@zeilen=(No);sped={1}", U|shippingorder)'
+!TRYNEXT
+.continue TESTED ? _G|mehr
+.continue NOLOCK ? _G|gesperrt & G|mehr 
+.select lock sales nowait
+.continue TRYNEXT
+..
+!TESTED
+..
+..*****************************************************************************
+..
+.action +
+..
+..!meta H|=P55
+.select lock transportcompany wait 'U|shippingorder'
+.continue ABORT ? _G|mehr ; _G|gesperrt
+.copy H|dfuesenden = U|setdfuesenden
+.formula H|uebdat = U|setdfuedat
+.rewrite
+.continue ABORT ? _G|mehr
+..
+..!meta H|=P3:1
+.select lock sales wait 'F|formatstr("$,,;@gruppe=1;typ=(PackingSlip);@ablage=(Both);@zeilen=(No);sped={1}", U|shippingorder)'
+!DONEXT
+.continue DONE ? _G|mehr
+.continue ABORT ? _G|gesperrt
+.copy H|dfuesenden = U|setdfuesenden
+.formula H|dfuedat = U|setdfuedat
+.rewrite
+.select lock sales wait
+.continue DONEXT
+..
+!DONE
+.action -
+..
+..*****************************************************************************
+..
+.select
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!NOARGS
+.error Fehlerhafter Aufruf der FO-Programms SHIPORDER.SET.EDIPARAMS.
+.end 1
+..
+!NOSPED
+.error Vorgang 'H|nummer' ist kein Speditionsauftrag.
+.end 1
+..
+!ABORT
+.action abort
+.error Die Lieferscheine zum Speditionsauftrag 'U|shippingorder^nummer' konnten nicht ge„ndert werden.
+.end 1
+..
+!NOLOCK
+.error Es konnten nicht alle Lieferscheine zum Speditionsauftrag 'U|shippingorder^nummer' gesperrt werden.
+.end 1

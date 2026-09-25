@@ -1,0 +1,70 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : ZUGFERDXML.SPECIFIEDTRADEALLOWANCECHARGE
+..  Autor          : saac
+..  Verantwortlich : teamreport
+..  Kontrolle      : cl
+..  Funktion       : XML-Datengenerator des Infosystems ev/EVVORGANG zur Erzeugung
+..                   der Rechnungsdaten im ZUGFeRD-Format
+..  Functionality  : XML data generator for the Infosystem ev/EVVORGANG to build
+..                   invoice date for ZUGFeRD
+..*****************************************************************************
+..
+.type text xcurrencyID                    ? _F|defined(U|xcurrencyID)
+.type R13.2 xChargeTotalAmount            ? _F|defined(U|xChargeTotalAmount)
+.type R13.2 xAllowanceTotalAmount         ? _F|defined(U|xAllowanceTotalAmount)
+.type text xIndicator                     ? _F|defined(U|xIndicator)
+.type R13:2 xCalculationPercent           ? _F|defined(U|xCalculationPercent)
+.type R13:2 xBasisAmount                  ? _F|defined(U|xBasisAmount)
+.type R xActualAmount                     ? _F|defined(U|xActualAmount)
+.type text xReason                        ? _F|defined(U|xReason)
+.type text xTypeCode                      ? _F|defined(U|xTypeCode)
+.type text xCategoryCode                  ? _F|defined(U|xCategoryCode)
+.type R13.2 xApplicablePercent            ? _F|defined(U|xApplicablePercent)
+..
+.set trans -
+..
+.select screen header
+..*****************************************************************************
+!NEXTROW
+..*****************************************************************************
+.select screen line
+.continue END ? _G|mehr
+.continue NEXTROW ? _F|equals(M|vktypa, "(PercentageItem)")
+..
+.formula U|xChargeTotalAmount = U|xChargeTotalAmount + M|gpreis       ? M|proz > 0.0
+.formula U|xAllowanceTotalAmount = U|xAllowanceTotalAmount - M|gpreis ? M|proz < 0.0
+..
+.copy U|xIndicator = "true" ? M|proz > 0.0
+.copy U|xIndicator = "false" ? M|proz < 0.0
+.formula U|xBasisAmount = M|epreis
+.formula U|xActualAmount = F|abs(M|gpreis)
+.copy U|xReason = M|vbez
+.copy U|xReason = M|ptext ? F|empty(U|xReason)
+..
+.copy U|xTypeCode = "VAT"
+.copy U|xCategoryCode = "S"
+.copy U|xCategoryCode = "E"  ? M|stsatz = 0.0 & _F|equals(M|vorgang^stlaart, "(EUCountry)")
+.copy U|xCategoryCode = "IC" ? M|stsatz = 0.0 & F|equals(M|vorgang^stlaart, "(EUCountry)")
+.copy U|xCategoryCode = "AE" ? F|equals(M|position^tustart, "(TaxFreeWithTaxLines)")
+.copy U|xApplicablePercent = M|stsatz
+..
+..*****************************************************************************
+!OUTPUT
+..*****************************************************************************
+            <ram:SpecifiedTradeAllowanceCharge>
+                <ram:ChargeIndicator><udt:Indicator>'U|xIndicator'</udt:Indicator></ram:ChargeIndicator>
+                <ram:BasisAmount currencyID="'U|xcurrencyID'">'U|xBasisAmount'</ram:BasisAmount>
+                <ram:ActualAmount currencyID="'U|xcurrencyID'">'U|xActualAmount:2'</ram:ActualAmount>
+                <ram:Reason>'U|xReason'</ram:Reason>
+                <ram:CategoryTradeTax>
+                    <ram:TypeCode>'U|xTypeCode'</ram:TypeCode>
+                    <ram:CategoryCode>'U|xCategoryCode'</ram:CategoryCode>
+                    <ram:ApplicablePercent>'U|xApplicablePercent'</ram:ApplicablePercent>
+                </ram:CategoryTradeTax>
+            </ram:SpecifiedTradeAllowanceCharge>
+..
+.continue NEXTROW
+..*****************************************************************************
+!END
+.continue

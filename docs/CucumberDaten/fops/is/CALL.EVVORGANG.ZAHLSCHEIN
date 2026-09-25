@@ -1,0 +1,132 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : CALL.EVVORGANG.ZAHLSCHEIN
+.. Datum          : 26.06.06
+.. Version        : 2006r3
+.. Autor          : kk
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : EVVORGANG und ZAHLSCH in Abh„ngigkeit
+..                  von der Umgebung und den Vorgangsdaten
+..*****************************************************************************
+.set trans -
+.type text xtvorgang     ? _F|defined(U|xtvorgang)
+.type text xtlakenninl   ? _F|defined(U|xtlakenninl)
+.type text xtbetrag      ? _F|defined(U|xtbetrag)
+.type text xtedpdat      ? _F|defined(U|xtedpdat)
+.type text xtsys         ? _F|defined(U|xtsys)
+.type bool xbbetrag      ? _F|defined(U|xbbetrag)
+..
+.. ber Firma Betriebsdaten das Inland ermitteln
+.load 0 company "$,,@gruppe=10"
+.formula U|xtlakenninl = 0|lakenn
+..
+.. Datenselektion je Umgebung ausfhren
+.continue SPM136                     ? G|evtmaske = 36
+.continue SPINFO                     ? G|evtmaske > 9999
+.continue ENDPR
+..
+!SPM136
+.formula U|xtvorgang  = M|id
+.formula U|xtbetrag   = "0"         ? M|skbbetr > 0.00
+.formula U|xtbetrag   = "1"         ? M|skbbetr = 0.00
+.continue SPEVVOR                    ? _(M|ablagef) ; U|xtbetrag = "1"
+.read "Soll der Zahlschein mit Betrag gedruckt werden?" U|xbbetrag
+.formula U|xtbetrag   = "0"         ? _(U|xbbetrag)
+.formula U|xtbetrag   = "1"         ?   U|xbbetrag
+.continue SPEVVOR
+..
+!SPM236
+.continue SPZAHL    ? M|lakenn = U|xtlakenninl
+.continue SPZAHL    ? M|lakenn = "FL" & U|xtlakenninl = "CH"
+.continue ENDPR
+..
+!SPINFO
+.continue SP1INFO   ? M|num65 = "10119"
+.continue SP3INFO   ? M|num65 = "10147"
+.continue ENDPR
+..
+!SP1INFO
+.formula U|xtvorgang = M|vorgang^id
+.formula U|xtbetrag   = "0"         ? M|vorgang^skbbetr > 0.00
+.formula U|xtbetrag   = "1"         ? M|vorgang^skbbetr = 0.00
+.continue SPEVVOR
+..
+!SP2INFO
+.continue ENDPR     ? M|vorgang^ktyp <> 5
+.continue SPZAHL    ? M|vorgang^lakenn = U|xtlakenninl
+.continue SPZAHL    ? M|vorgang^lakenn = "FL" & U|xtlakenninl = "CH"
+.continue ENDPR
+..
+!SP3INFO
+.select screen line
+.continue ENDPR        ? _G|mehr
+.formula U|xtvorgang  = M|transaction^id
+.formula U|xtbetrag   = "0"         ? M|transaction^skbbetr > 0.00
+.formula U|xtbetrag   = "1"         ? M|transaction^skbbetr = 0.00
+.continue SPEVVOR
+..
+!SP4INFO
+.continue SP3INFO   ? M|transaction^ktyp <> 5
+.continue SPZAHL    ? M|transaction^lakenn = U|xtlakenninl
+.continue SPZAHL    ? M|transaction^lakenn = "FL" & U|xtlakenninl = "CH"
+.continue SP3INFO
+..
+!SPEVVOR: Vorgang drucken
+.formula U|xtedpdat = "rmtmp/XEVVORG" + 'G|aufrufernr' + ".TMP"
+.output new 'U|xtedpdat'
+.input "DATEI.F"
+#!action=get
+#!database=65
+..  @@@ NOCHARCHECK @@@
+#!dontchange=¾
+..  @@@ CHARCHECK @@@
+#!charset=EKS
+such;vorgang;bstart;>budruck;zudrucken;drucker;<
+10119;'U|xtvorgang';;;MASTER;'P|drucker';
+.output new WERF.WEG
+.formula U|xtsys = "edpimport.sh -c EKS -I " + 'U|xtedpdat' + " -p " + 'G|einmalpw'
+.system 'U|xtsys' background
+..
+.. keine Druckschlange setzen, wenn aus der Rechnungsmaske gedruckt wird
+.continue SP5INFO     ? G|evtmaske = 36
+.continue SP5INFO     ? G|evtmaske > 9999 & M|num65 = "10119"
+..
+.select lock object 'U|xtvorgang'
+.continue SP5INFO     ? _G|mehr
+.output new "WERF.WEG"
+.printed
+.output
+.. Datensatzsperre aufheben
+.select -
+..
+!SP5INFO: Zurck zur Datenselektion springen
+.continue SPM236     ? G|evtmaske = 36
+.continue SP2INFO    ? G|evtmaske > 9999 & M|num65 = "10119"
+.continue SP4INFO    ? G|evtmaske > 9999 & M|num65 = "10147"
+..
+!SPZAHL: Zahlscheinausgabe via Direktaufruf Infosystem
+.formula U|xtedpdat = "rmtmp/XZAHL" + 'G|aufrufernr' + ".TMP"
+.output new 'U|xtedpdat'
+.input "DATEI.F"
+#!action=get
+#!database=65
+..  @@@ NOCHARCHECK @@@
+#!dontchange=¾
+..  @@@ CHARCHECK @@@
+#!charset=EKS
+such;vorgang;bstart;beinzahlsch;>budruck;zudrucken;<
+10215;'U|xtvorgang';;'U|xtbetrag';;ZAHLSCHEIN;
+.output new WERF.WEG
+.formula U|xtsys = "edpimport.sh -c EKS -I " + 'U|xtedpdat' + " -p " + 'G|einmalpw'
+.system 'U|xtsys' background
+..
+.. zurck zur Datenselektion springen
+.continue ENDPR    ? G|evtmaske = 36
+.. EVVORGANG 10119
+.continue ENDPR    ? G|evtmaske > 9999 & M|num65 = "10119"
+.. PRINTQUEUE 10147
+.continue SP3INFO  ? G|evtmaske > 9999 & M|num65 = "10147"
+..
+!ENDPR: fertig
+.continue

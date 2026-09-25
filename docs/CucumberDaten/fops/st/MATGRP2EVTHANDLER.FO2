@@ -1,0 +1,172 @@
+..!interpreter english declaration noabbrev
+..============================================================================
+.. Name           : MATGRPEVTHANDLER.FO2
+.. Author         : rowa
+.. Verantwortlich : mh
+.. Functionality  : Eventhandler for the Infosystem st/MATGRP
+..============================================================================
+..
+..<VAR>
+    .var GL30 xpvon            = "waregrpvon" 
+    .var GL30 xpbis            = "waregrpbis"
+    .var bool valueMethodValid = G|False
+    .var bool selectOverId     = G|False
+..</VAR>
+
+..<META H|='P12:28' >
+..<META M|='st/MATGRP2' >
+def main() {
+	.set trans -
+    switch(G|evtartengl) {
+        case("FIELD_EXIT") {
+            .call emptyTable()
+            
+            if (G|evtvar = "bewertrel") {
+                .call toggleLockOnBewert()        
+            }
+            
+            if (G|evtvar = "bestrel") {
+                .call toggleLockOnBestRel()        
+            }
+        }
+        case ("FIELD_VALIDATION") {
+            if (G|evtvar = "ekbewverf") {
+                .call checkValuationMethod()        
+            }
+        }
+        case("SCREEN_ENTER") {
+            .call screenEnter()
+        }
+        case("BUTTON_BEFORE") {
+            .call checkRange()
+            .call emptyTable()    
+        }
+        case ("BUTTON_AFTER") {
+            .call getResults()
+        }
+    }
+}
+
+def toggleLockOnBestRel( ) { 
+    .protection -reset befuehr ? M|bestrel
+    .protection befuehr        ? _M|bestrel
+} 
+
+def getResults( ) { 
+    .call buildSelString()
+    .select company 'M|select'
+    .call buildTable()
+}
+
+def buildTable( ) { 
+    while(G|mehr) {
+        .make screen line +O 
+        
+        .assign M|twaregrp         = H|id
+        .copy   M|tbefuehr         = H|befuehr
+        .copy   M|twgkst           = H|wgkst
+        .copy   M|tbestand         = H|bestand
+        .copy   M|tekbewverf       = H|ekbewverf
+        .copy   M|ttabgef          = G|True                    ? H|ozeilen > 0
+        .copy   M|tbestausekso     = H|bestausekso
+        .copy   M|tbestgelniber    = H|bestgelniber
+        .copy   M|tbvaussozug      = H|bvaussozug
+        .copy   M|tlohnktr         = H|lohnktr
+        .copy   M|tbestausfert     = H|bestausfert
+        .copy   M|tbvausfertzug    = H|bvausfertzug
+        .copy   M|tbvgkausfertzug  = H|bvgkausfertzug
+        .copy   M|tbestabohnezu    = H|bestabohnezu
+        .copy   M|tbestausgelniber = H|bestausgelniber
+        .copy   M|tbveksoinfert    = H|bveksoinfert
+        .copy   M|tbveksoinserv    = H|bveksoinserv
+        .copy   M|tbveksoinvk      = H|bveksoinvk
+        .copy   M|tbveksoinman     = H|bveksoinman
+        .copy   M|tbveksoinbeist   = H|bveksoinbeist
+        .copy   M|tbvfertinfert    = H|bvfertinfert
+        .copy   M|tbvfertinserv    = H|bvfertinserv
+        .copy   M|tbvfertinvk      = H|bvfertinvk
+        .copy   M|tbvfertinman     = H|bvfertinman
+        .copy   M|tbvfertinbeist   = H|bvfertinbeist
+        .copy   M|tbvabohnezu      = H|bvabohnezu
+        .copy   M|tlohnktr         = H|lohnktr
+        .copy   M|tbvausumlager    = H|bvausumlager
+        .copy   M|tbvausumlagzu    = H|bvausumlagzu
+        .copy   M|tbvausumlagab    = H|bvausumlagab
+        .copy   M|tbvausinventzu   = H|bvausinventzu
+        .copy   M|tbvausinventab   = H|bvausinventab
+        .copy   M|tbewdiff         = H|bewdiff
+        .select continue
+    }
+} 
+
+def buildSelString( ) {
+    .call checkIfId()
+    .formula M|select = "$,"
+    .formula M|select = M|select + ";" + M|suchfeld + "=" + M|waregrpvon + "!" + M|waregrpbis      ? _U|selectOverId
+    .formula M|select = M|select + ";id=" + M|waregrpvon + "!" + M|waregrpbis                      ? U|selectOverId
+    .formula M|select = M|select + ";befuehr=="        + 'M|befuehr'                               ? M|bestrel
+    .formula M|select = M|select + ";bestausekso="    + 'M|bestausekso'                            ? _F|empty(M|bestausekso)
+    .formula M|select = M|select + ";bestgelniber="     + 'M|bestgelniber'                         ? _F|empty(M|bestgelniber)
+    .formula M|select = M|select + ";bestausgelniber="     + 'M|bestausgelniber'                   ? _F|empty(M|bestausgelniber)
+    .formula M|select = M|select + ";lohnktr=" + 'M|lohnktr'                                       ? _F|empty(M|lohnktr)
+    .formula M|select = M|select + ";bestausfert="         + 'M|bestausfert'                       ? _F|empty(M|bestausfert)
+    .formula M|select = M|select + ";bestabohnezu="         + 'M|bestabohnezu'                     ? _F|empty(M|bestabohnezu)
+    .formula M|select = M|select + ";ekbewverf="         + 'M|ekbewverf'                           ? M|bewertrel
+    .formula M|select = M|select + ";@gruppe=28;gruppe=28;@ordnung=" + M|suchfeld                  ? _U|selectOverId
+    .formula M|select = M|select + ";@gruppe=28;gruppe=28;@ordnung=nummer"                         ? _U|selectOverId
+} 
+
+def checkRange( ) { 
+    .input "is/RANGECHECK"
+    .assign M|suchfeld = U|xxtfield
+    .call checkIfId()
+}
+
+def checkIfId( ) {
+    .assign U|selectOverId = M|waregrpvon / "\((0-9)*,(0-9)*,0\)"
+} 
+
+def screenEnter() {
+    .copy M|bestrel   = G|True
+    .copy M|befuehr   = G|True
+    .copy M|bewertrel = G|False
+    
+    .. Bewertungsverfahren der Standardwarengruppe
+    .copy M|ekbewverf = F|sysinfo(7)^wgruppe^ekbewverf ?  M|bewertrel
+    .call toggleLockOnBewert()
+    .call toggleLockOnBestRel()
+    .call emptyTable()
+}
+
+def toggleLockOnBewert( ) {
+    .protection -reset ekbewverf ? M|bewertrel
+    .protection ekbewverf        ? _M|bewertrel
+}
+
+def emptyTable( ) { 
+    .input "is/TABLEEREN"
+} 
+
+..<META H|='P12:15' >
+def checkValuationMethod( ) {
+    .copy U|valueMethodValid = G|False
+    .select company "$,;@gruppe=15;gruppe=15"
+    
+    if(G|mehr) {
+        .select line
+        
+        while (G|mehr) {
+            if (H|bewverf = M|ekbewverf) {
+                .copy U|valueMethodValid = G|True
+                .break
+            }
+            .select line
+        }
+        
+    }
+    
+    if (_U|valueMethodValid) {
+	   .set trans +
+       .error -line 'M|aktzeile' -field M|ekbewverf -message Bitte valides Bewertungsverfahren w„hlen.
+    }
+}

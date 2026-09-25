@@ -1,0 +1,102 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KDINFO.BUUMSVKZ.BN
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Zeigt die Umsatz- oder Verkehrszahlen aus dem Stammdaten an.
+.. Ablauf         : Button-nach-EFOP
+..
+.. Functionality  : Shows the turnover or transaction figures through the graphics
+.. in the masterfile record.
+.. Program flow   : After button efop
+..*****************************************************************************
+.set trans -
+..
+.continue END ? G|evtvar <> "buums" & G|evtvar <> "buvkz"
+.continue ERROR1 ? F|empty(M|knumkusa)
+.continue ERROR2 ? _F|cmdpermitted(M|knumkusa^dnr, 12,,M|knumkusa^gruppe)
+..
+.. Declarations
+.type text xmentit xkulifirma xvertret xhaendl xtcmd
+.type VID7 xkuli
+..
+.. Initializations
+.atext -language 'G|bsprache' U|xvertret 2134 Vertreter
+.text U|xhaendl 'G|bsprache' Rechnungsempf„nger ? F|defined(M|kbkdinfo)
+.text U|xhaendl 'G|bsprache' Rechnung an ? F|defined(M|kblfinfo)
+.set trans +
+.formula U|xmentit = "Gesch„ftspartner w„hlen"
+.set trans -
+..
+.continue STAFFER ? M|istsachkd
+..
+.. Business partner is not a staffer
+.continue LFINFO1 ? F|defined(M|kblfinfo)
+.continue ERROR3 ? M|knumkusa^gruppe <> 1 & M|kvertret^gruppe <> 1 & M|khaendl^gruppe <> 1
+.assign U|xkuli = M|knumkusa ? M|knumkusa^gruppe = 1 & M|kvertret^gruppe <> 1 & M|khaendl^gruppe <> 1
+.continue COMMAND ? _F|empty(U|xkuli)
+.text U|xkulifirma 'G|bsprache' Gesch„ftspartner
+.menu 'U|xmentit'
+?'U|xkulifirma' >> .assign U|xkuli = M|knumkusa ? M|knumkusa^gruppe = 1
+?'U|xvertret' >> .assign U|xkuli = M|kvertret ? M|kvertret^gruppe = 1
+?'U|xhaendl' >> .assign U|xkuli = M|khaendl  ? M|khaendl^gruppe = 1
+.end 0 ? G|menue = 0
+.continue COMMAND
+..
+!STAFFER: Business partner is a staffer
+.continue LFINFO2 ? F|defined(M|kblfinfo)
+.continue ERROR3 ? M|knumsaku^gruppe <> 1 & M|kfvertret^gruppe <> 1 & M|kfhaendl^gruppe <> 1
+.assign U|xkuli = M|knumsaku ? M|knumsaku^gruppe = 1 & M|kfvertret^gruppe <> 1 & M|kfhaendl^gruppe <> 1
+.continue COMMAND ? _F|empty(U|xkuli)
+.atext -language 'G|bsprache' U|xkulifirma 668 Firma
+.menu 'U|xmentit'
+?'U|xkulifirma' >> .assign U|xkuli = M|knumsaku ? M|knumsaku^gruppe = 1
+?'U|xvertret' >> .assign U|xkuli = M|kfvertret ? M|kfvertret^gruppe = 1
+?'U|xhaendl' >> .assign U|xkuli = M|kfhaendl ? M|kfhaendl^gruppe = 1
+.end 0 ? G|menue = 0
+.continue COMMAND
+..
+!LFINFO1
+.continue ERROR3 ? M|knumkusa^gruppe <> 1
+.assign U|xkuli = M|knumkusa
+.continue COMMAND ? _F|empty(U|xkuli)
+.text U|xkulifirma 'G|bsprache' Gesch„ftspartner
+.menu 'U|xmentit'
+?'U|xkulifirma' >> .assign U|xkuli = M|knumkusa
+.end 0 ? G|menue = 0
+.continue COMMAND
+..
+!LFINFO2
+.continue ERROR3 ? M|knumsaku^gruppe <> 1
+.assign U|xkuli = M|knumsaku
+.continue COMMAND ? _F|empty(U|xkuli)
+.atext -language 'G|bsprache' U|xkulifirma 668 Firma
+.menu 'U|xmentit'
+?'U|xkulifirma' >> .assign U|xkuli = M|knumsaku
+.end 0 ? G|menue = 0
+..
+!COMMAND
+.formula U|xtcmd = "<(Customer)>" ? F|defined(M|kbkdinfo)
+.formula U|xtcmd = "<(Vendor)>" ? F|defined(M|kblfinfo)
+.formula U|xtcmd = U|xtcmd + 'U|xkuli'
+.formula U|xtcmd = U|xtcmd + "<(View)>?"
+.formula U|xtcmd = U|xtcmd + "chums=|[pos]=0:chums" ? G|evtvar = "buums"
+.formula U|xtcmd = U|xtcmd + "chvkz=|[pos]=0:chvkz" ? G|evtvar = "buvkz"
+.command -parallel 'U|xtcmd'
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1: No data for business partner
+.error -line 0 -field M|knumkusa -message Es fehlt die Angabe eines Gesch„ftspartners!
+.end 1
+..
+!ERROR2: Not allowed
+.error -message Dem Bediener fehlt die Erlaubnis zur Einsicht in einen Gesch„ftspartner!
+.end 1
+..
+!ERROR3: No result for the business partners
+.error -message Keiner der vorhandenen Gesch„ftspartner hat Umsatz- bzw. Verkehrszahlen
+.end 1

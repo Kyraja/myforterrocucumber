@@ -1,0 +1,83 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : LPREISE.BSTART.BA
+.. Author         : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  : Handles multi-level request and sorts if neccessary.
+..*****************************************************************************
+.set trans -
+.protection -reset ktyp 0 ?  F|empty(M|ekvk)
+..
+!FOR0: Outer loop to iterate partner price or discount groups if option is active
+.continue FOR1 ? _M|selpartner & _M|selartikel
+.continue DOSORT ? M|partnerlevel > M|partnersellevel & M|selpartner
+.continue DOSORT ? M|artikellevel > M|artikelsellevel & M|selartikel
+.formula M|partnerselect0 = M|partnerselect.M|partnerlevel  ? M|selpartner
+.formula M|artikelselect0 = M|artikelselect.M|artikellevel  ? M|selartikel
+..
+!FOR1: Inner loop to iterate period
+.continue ENDFOR1 ? M|stufe > M|sellevel
+.formula M|select = "$,,"
+.formula M|select = M|select + M|partnerselect0 ? M|selpartner
+.formula M|select = M|select + M|artikelselect0 ? M|selartikel
+.continue BASESEL ? M|sellevel = M|minsellevel
+.formula M|select = M|select + M|select0 + M|select.M|stufe
+.continue QUERY
+..
+!BASESEL: Basic selection
+.formula M|select = M|select + M|select0
+..
+!QUERY
+.input "is/HOL.LISTE"
+.. Iterate inner loop counter
+.formula M|stufe = M|stufe + 1
+.continue FOR1
+..
+!ENDFOR1: Iterate outer loop counter
+.continue DOSORT ? _M|selpartner & _M|selartikel
+.formula M|partnerlevel = M|partnerlevel + 1  ? M|selpartner
+.formula M|artikellevel = M|artikellevel + 1  ? M|selartikel
+.copy M|stufe = 1
+.continue FOR0
+..
+!DOSORT: Do we have to sort?
+.output
+.continue END ? _M|sort
+.continue END ? _F|fileexists(M|sortfilename)
+.continue END ? _F|filenotempty(M|sortfilename)
+..
+.type text xcommand    ? _F|defined(U|xcommand)
+.type bool xbackground ? _F|defined(U|xbackground)
+.type DVM2 xstdout     ? _F|defined(U|xstdout)
+..
+.copy U|xbackground = G|TRUE
+.formula U|xstdout = M|resultfilename
+.formula U|xcommand = F|formatstr("sort -t\# -k1,2 {1} | uniq", M|sortfilename)
+.input "is/FO.SYSTEM"
+.continue END ? _F|fileexists(M|resultfilename)
+.continue END ? _F|filenotempty(M|resultfilename)
+..
+.type text    xxfrom ? _F|defined(U|xxfrom)
+.type text    xxto   ? _F|defined(U|xxto)
+.type text    xxid   ? _F|defined(U|xxid)
+.type integer xxdesc ? _F|defined(U|xxdesc)
+..
+.copy M|sort = G|FALSE
+.file -open U|xxdesc 'M|resultfilename'
+..
+!GETLINE: Read log file
+.file -read U|xxdesc U|xxfrom # U|xxto # U|xxid
+.continue CLOSE   ? _G|mehr
+.continue GETLINE ? F|empty(U|xxid)
+..
+.select object 'U|xxid'
+.continue GETLINE ? _G|mehr
+.input 'M|tab' ? _F|empty(M|tab)
+.continue GETLINE
+..
+!CLOSE
+.file -close U|xxdesc
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,104 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SRMBESCHLVORSCHL.BSTART
+.. Autor/Author   : dr
+.. Verantwortlich : cl 
+.. Kontrolle      : tiwe
+.. Funktion       : Validiert Eingaben, formuliert und wertet DB-Anfragen aus.
+..
+.. Function       : Validates inputs, builds and analyzses database query.
+..*****************************************************************************
+.set trans -
+..
+.. Validations
+.continue ERROR01 ? _F|empty(M|bis1) & M|bis1 < M|von1
+.continue ERROR01 ? _F|empty(M|bis2) & M|bis2 < M|von2
+.continue ERROR01 ? _F|empty(M|bis3) & M|bis3 < M|von3
+.continue ERROR01 ? _F|empty(M|bis4) & M|bis4 < M|von4
+.continue ERROR01 ? _F|empty(M|bis5) & M|bis5 < M|von5
+.continue ERROR01 ? _F|empty(M|bis6) & M|bis6 < M|von6
+.continue ERROR01 ? _F|empty(M|bis7) & M|bis7 < M|von7
+.continue ERROR01 ? _F|empty(M|bis8) & M|bis8 < M|von8
+.continue PROJ    ?  F|sysinfo(18)^projekt
+.continue ERROR02 ?  F|empty(M|lief) 
+.continue DEC 
+..
+!PROJ 
+.continue ERROR03 ?  F|empty(M|lief) & F|empty(M|kprojekt)
+..
+!DEC: Declarations
+.type integer xi
+.type bool xend
+..
+.. Initializations
+.assign U|xi = 1
+.copy U|xend = G|FALSE
+.formula M|formatselect = "$,,;"
+.formula M|formatselect = M|formatselect + "bsart=(ExternalProcurement)" ? M|bevor
+.formula M|formatselect = M|formatselect + "bsart=(Subcontracting)"      ? M|lfvor
+.formula M|formatselect = M|formatselect + "bsart=(Relocation)"          ? M|umlvor
+.formula M|formatselect = M|formatselect + ";tsterm=!{1}"
+.formula M|formatselect = M|formatselect + ";projekt="  + M|kprojekt^id  ? _F|empty(M|kprojekt)
+..
+.. Clear report header
+.input 'M|bkopf' ? _F|empty(M|bkopf)
+..
+.. Build database query
+.formula M|select = F|formatstr(M|formatselect, M|bis8)
+.continue CONSWGR ? M|umlvor & _F|empty(M|lgruppe)
+.formula M|select = M|select + ";lief=" + M|lief^id                      ? _F|empty(M|lief)
+.continue SORT
+..
+!CONSWGR: No supplier, only add warehouse group
+.formula M|select = M|select + ";lgruppe=" + M|lgruppe^id
+..
+!SORT: Add sort key
+.formula M|select = M|select + ";@ordnung=sterm;@gruppe=2;@ablageart=(Active);kopf==`;bveinplan=1"
+..
+.. Query database
+.select group  'M|grliste' 'M|select'
+..
+!CHECK
+.continue QURYEND ? _G|mehr
+.continue NEXTREC ? _F|empty(H|kopf) ; _F|empty(H|status) ; _H|einplan
+.continue CALCULT ? H|tsterm <= M|bis.U|xi
+..
+!ITERATE: Sum and iterate next level
+.formula M|sumanzahl = M|sumanzahl + M|anz.U|xi
+.formula M|sumwert = M|sumwert + M|wert.U|xi
+.continue END ? U|xend
+.formula U|xi = U|xi + 1
+.continue END ? U|xi > M|zraummax
+.continue CALCULT ? H|tsterm <= M|bis.U|xi
+.continue ITERATE
+..
+!QURYEND
+.copy U|xend = G|TRUE
+.continue ITERATE
+..
+!CALCULT: Calculate sum and value
+.formula M|anz.U|xi = M|anz.U|xi + 1
+.continue EXCHNGE ? M|auswaehr^nummer <> H|pland^nummer
+.formula M|wert.U|xi = M|wert.U|xi + H|pwert
+..
+!NEXTREC: Get next record
+.select continue
+.continue CHECK
+..
+!EXCHNGE: Exchange value of item into output currency
+.formula M|wert.U|xi = M|wert.U|xi + F|round(F|fxrate(M|auswaehr, G|datum, H|pland) * H|pwert, M|auswaehr^nkst)
+.continue NEXTREC
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR01: Illegal date area!
+.error -message von-Termin ist gr”áer als bis-Termin.
+.end 1
+..
+!ERROR02: Missing supplier!
+.error -line 0 -field M|lief -message Bitte Lieferant/Spediteur eintragen!
+.end 1
+!ERROR03: Missing supplier or project
+.error Bitte Lieferant/Spediteur oder ein Projekt eintragen!

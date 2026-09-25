@@ -1,0 +1,143 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KOAUSWERT.EV
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Allgemeines Event-FOP des Infosystems fb/KOAUSWERT
+.. Functionality  : Common event FOP of the Infosystem fb/KOAUSWERT
+..*****************************************************************************
+..
+.set trans -
+..
+.type bool xbremoved
+..
+.set setofbooks 'M|bukreis^bknr'
+.continue PERIOD    ? G|evtvar = "amonat"
+.continue PERIOD    ? G|evtvar = "emonat"
+.continue PERIOD    ? G|evtvar = "ajahr"
+.continue PERIOD    ? G|evtvar = "ejahr"
+.continue PERIOD    ? G|evtvar = "adatum"
+.continue PERIOD    ? G|evtvar = "edatum"
+.continue SELDB     ? G|evtvar = "vdn" ; G|evtvar = "vgr" ; G|evtvar = "vtab"
+.continue ADDDATA   ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bstart"
+.continue REMDUPES  ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bentfdopp"
+.continue REMMARKED ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bentfmark"
+.continue SELBAR    ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bselekt"
+.continue ACCSEL    ? G|evtartengl = "FIELD_EXIT"   & G|evtzeile > 0
+.continue END
+..
+..*****************************************************************************
+!PERIOD: Sets the beginning resp. end date of period
+..*****************************************************************************
+.type text xxtemon xxtsmon xxtsyear xxteyear xxtfromd xxttod
+.formula U|xxtsmon = "amonat"
+.formula U|xxtemon = "emonat"
+.formula U|xxtsyear= "ajahr"
+.formula U|xxteyear= "ejahr"
+.formula U|xxtfromd= "adatum"
+.formula U|xxttod  = "edatum"
+.input "fb/IS.SETPERIOD"
+.continue END
+..
+..*****************************************************************************
+!SELDB
+..*****************************************************************************
+.input "is/DBCHOOSER"
+.formula M|select = "!"
+.continue END
+..
+..*****************************************************************************
+!ADDDATA
+..*****************************************************************************
+.type bool xbbal
+.formula U|xbbal = G|true ? +'M|gjahr' > 0 & M|amonat > 0 & M|emonat > 0
+.formula M|select = "!" ? +'M|select' = 0
+..
+.type text xxlbuffer
+.formula U|xxlbuffer = "9"
+..
+.input "is/HOL.LISTE"
+.continue END
+..
+..*****************************************************************************
+!ACCSEL: Data added or changed in table row
+..*****************************************************************************
+.continue END     ?  G|evtzeile = 0
+.continue END     ? +'M|tkonto' = 0
+.load 9 object 'M|tkonto^id'
+.continue END     ? _G|mehr
+.input 'M|tab'    ? +'M|tab' > 0
+.continue END
+..
+..*****************************************************************************
+!SELBAR: Invoke selection bar for selected item type
+..*****************************************************************************
+.type text xtsel ? _F|defined(U|xtsel)
+.formula M|datnr = M|vdn
+.formula M|select = "!"
+.formula U|xtsel = "%,,@gruppe=" + 'M|vgr'
+.select 'G|hdatname.datnr' 'U|xtsel'
+.continue END ? _G|mehr
+.formula M|select = "$," + 'G|selkrit' ? _'G|selkrit'/("$*")
+.continue ADDDATA
+..
+..*****************************************************************************
+!REMDUPES: Remove duplicate entries
+..*****************************************************************************
+.type text xtfile
+.type text xtid xtlid xtsys
+.type integer  xirow
+.continue END ? M|tzeilen = 0
+.formula U|xtfile = "rmtmp/KOAUSWERT" + G|aufrufernr + ".TMP"
+.output new 'U|xtfile'
+..
+.select screen header
+..
+..*****************************************************************************
+!REM1
+..*****************************************************************************
+.select screen line
+.continue REM2    ? _G|mehr
+.continue REM1    ? +'M|tid' = 0
+'M|tid^id' # 'M|aktzeile'
+.continue REM1
+..
+..*****************************************************************************
+!REM2
+..*****************************************************************************
+.output terminal
+.formula U|xtsys = "sort -o " + 'U|xtfile' + " " + 'U|xtfile'
+.system 'U|xtsys' background
+..
+..*****************************************************************************
+!REM3
+..*****************************************************************************
+.select from 'U|xtfile' U|xtid # U|xirow
+.continue REMMARKED        ? _G|mehr
+.select screen line 'U|xirow'
+.formula M|trem = G|false       ? U|xtlid <> U|xtid
+.formula M|trem = G|true        ? U|xtlid  = U|xtid
+.formula U|xtlid = U|xtid
+.continue REM3
+..
+..*****************************************************************************
+!REMMARKED
+..*****************************************************************************
+.continue END ? M|tzeilen = 0
+.select screen header
+..
+..*****************************************************************************
+!REMM1
+..*****************************************************************************
+.select screen line     ? _U|xbremoved
+.continue END ? _G|mehr
+.continue END ? M|tzeilen = 0
+.formula U|xbremoved = M|trem
+.make screen line -O ? M|trem
+.continue REMM1
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

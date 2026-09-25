@@ -1,0 +1,79 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : IS.ELINVOICEPROCESS.TAUSWAHL.FX.FO
+.. Author         : mh
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+..
+..<META M|='ev/ELINVOICEPROCESS'>
+..
+.type real xremge ? _F|defined(U|xremge)
+.type real xbilledqty ? _F|defined(U|xbilledqty)
+.type integer xrowno ? _F|defined(U|xrowno)
+.type P4 xposid ? _F|defined(U|xposid)
+.type bool xbsamepos ? _F|defined(U|xbsamepos)
+..
+..
+.. --- EVENTS --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---  
+.continue AN     ?  M|tauswahl
+.continue AUS    ? _M|tauswahl
+.. --- EVENTS --- --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---  
+.continue
+..
+..
+!AN: this click should have been prevented by .protection on tauswahl field
+.continue NIXDA ? M|tremge = 0
+.continue AUS   ? F|protected(M|tauswahl, M|aktzeile)
+..
+.. if one product has multiple entries in the e-invoice, 
+.. the total assigned quantity must not exceed the value of tremge 
+.formula U|xremge = M|tremge
+.formula U|xrowno = 'M|aktzeile'
+.formula U|xposid = M|lsposid^id 
+.formula U|xbsamepos = G|FALSE
+..
+.select screen header
+..
+!NEXT
+.select screen line 
+.continue SETMGE ? _G|mehr
+.. get billed quantity from e-invoice product line before current row
+.formula U|xbilledqty = M|BilledQuantity ? M|aktzeile < U|xrowno & M|zeilentyp=0 & _F|empty(M|zeilentyptext)
+.formula U|xbsamepos = G|TRUE ? M|aktzeile < U|xrowno & M|zeilentyp=0 & _F|empty(M|zeilentyptext)
+.formula U|xbsamepos = G|FALSE ? M|aktzeile > U|xrowno & M|zeilentyp=0 & _F|empty(M|zeilentyptext)
+.formula U|xbilledqty = U|xbilledqty - M|zugeordnetemenge ? U|xbsamepos
+.continue NEXT ? U|xposid^id <> M|lsposid^id
+.continue NEXT ? U|xrowno = M|aktzeile
+.continue NEXT ? M|zugeordnetemenge = 0.0
+.. reduce quantities, which still haveto be assigned, if values are already set
+.formula U|xremge = U|xremge - M|zugeordnetemenge
+.. .formula U|xbilledqty = U|xbilledqty - M|zugeordnetemenge ? U|xbsamepos
+.continue NEXT
+!SETMGE
+.select screen line 'U|xrowno'
+.. assign max free remge; reduce to billedqty, if later is lower
+.formula M|zugeordnetemenge = U|xremge
+.formula M|zugeordnetemenge = U|xbilledqty ? U|xbilledqty < U|xremge
+.formula M|tauswahl = G|FALSE ? M|zugeordnetemenge = 0.0
+.continue END ? M|tauswahl
+.note Diese Menge der Lieferscheinposition wurde bereits vollst„ndig verteilt. ? U|xremge = 0.0
+.note Dieser Position der E-Rechnung wurde die volle Menge bereits zugeordnet. ? U|xbilledqty = 0.0
+.continue END
+..
+..
+!AUS
+.formula M|zugeordnetemenge = 0.0
+.formula M|tauswahl = G|false
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+!NIXDA
+.error Die Lieferscheinposition ist bereits vollst„ndig berechnet.
+.end 1
+

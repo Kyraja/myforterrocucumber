@@ -1,0 +1,179 @@
+..!interpreter english translate
+..*****************************************************************************
+..
+..  Name      : BILKON.ABFR
+..  Datum     : 15.04.1999
+..  Vers.     : 8.5N14
+..  Autor     : Andrzej Klusek
+..
+..  Verantwortlich : hc
+..  Kontrolle      : mh
+..
+..  Funktion  : Abfrage im BILANZ / KONACH
+..
+..*****************************************************************************
+..
+..   Input:  -
+..  Output:  xwastun (int)      - Typ der  Ausgabe
+..           xips (int)         - Ist / Plan Zahlen
+..           xtips (text)       - Text mit "Ist" oder "Plan"
+..           xybmit (bool)      - Mit (true)/Ohne(false) EXCEL_Anbindung
+..           ximax (Max == 5)   - Anzahl Zeitr„ume
+..           xjahr.xii xam.xii xem.xii - Zeitr„ume
+..
+.end .  ?  txname / "*BILKON.ABFR"
+..*****************************************************************************
+.set trans +
+.type text xjahr.xii xam.xii xem.xii
+.type text xth1 xth2 xth3
+.type integer ximax
+..
+.type text x1gjahr x2gjahr
+.type integer xiyerg
+..
+..  Max_Anzahl vergl. Zeitr„ume
+.formula ximax = 5
+..
+..  Ist - Plan Zahlen vergleichen
+.formula xips  = 0
+.formula xtips = "Ist - Plan Zahlen Vergleich"
+.type real xr1dz xr2dz x1 x2 xr11 xr12 xr21 xr22
+.type text xx1:10 xx2:10
+..
+!VA1
+.menu Ausgabe
+Normale                             >>  .formula xwastun = 1
+Mit Gesamtverkehrszahlen            >>  .formula xwastun = 2
+Zeitr„ume vergleichen, bis 'ximax ' >>  .formula xwastun = 3
+Ist und Plan Zahlen vergleichen     >>  .formula xwastun = 4
+Vorheriges Men                     >>  .formula xwastun = 99
+..
+.continue BEENDEN  ?  F|empty(G|menue)
+.continue VA100    ?  xwastun = 99
+?                                Normale Ausgabe          ?  xwastun = 1
+?                            Mit Gesamtverkehrszahlen     ?  xwastun = 2
+?                             Zeitr„ume vergleichen       ?  xwastun = 3
+?                        Ist und Plan Zahlen vergleichen  ?  xwastun = 4
+
+.continue VA20  ?  xwastun = 4
+..
+!VA10
+.menu
+Ist Zahlen         >>  .formula xips = 1
+Plan Zahlen        >>  .formula xips = 2
+Vorheriges Men    >>  .continue VA1
+..
+.continue BEENDEN            ?  F|empty(G|menue)
+.formula xtips = "Ist-Zahlen"   ?  xips = 1
+.formula xtips = "Plan-Zahlen"  ?  xips = 2
+                                  'xtips'
+
+..
+!VA20: Mit EXCEL Ausgabe - nur wenn DB_Var dde = true
+.formula xybmit = false
+.formula xytlgp = "BILANZ"
+..
+..  EXCEL_Ausgabe nur in BILANZ
+.input DDE.MENUE                ?  dde  & _xnachweis
+..
+?                               Mit EXCEL Ausgabe  ?  xybmit
+?                                                  ?  xybmit
+..
+!VA30
+.formula xii = 0
+..
+!VA35
+.input VKZRAUM
+..
+.formula xii   = xii + 1
+.continue VA40          ? _xwastun = 3
+..
+..  mehrere Zeitr„ume (xwastun = 3): xii >= ximax - Max_Anzahl erreicht
+.formula xtskip = "VA100"  ?  xii >= ximax
+.continue UPRO          ?  xii >= ximax
+..
+.menu
+N„chsten Zeitraum eingeben   >>  .formula xtskip = "VA35"
+Weiter                       >>  .formula xtskip = "VA100"
+..
+.continue BEENDEN       ?  F|empty(G|menue)
+.continue UPRO
+..
+!VA40: Zeitr„ume abspeichern, wie folgt   -1-      -2-      -3-     -4-
+..     normale Ausgabe: (xwastun = 1) - Eingabe/Vorjahrwerte
+..     mit GesamtVKZ:   (xwastun = 2) - Eingabe/Eingabe.JJ-1/1-EM.JJ/1-EM.JJ-1
+..                      die Zeitr. werden in der Reihenfolge 1 3 2 4 ausgegeben
+..     IST-PLAN Vergl:  (xwastun = 4) - Eingabe/Eingabe/1-EM.JJ/1-EM.JJ/1-EM.JJ-1
+..
+..     den eingegebenen Zeitraum speichern
+.formula xtskip = "VA44"
+.continue UPRO
+..
+!VA44: xii == 2
+.formula xii   = xii + 1
+.continue VA60  ?  xwastun = 1
+.continue VA50  ?  xwastun = 2
+..
+..  xwastun == 4
+.formula xtskip = "VA45"
+.continue UPRO
+..
+!VA45: xii == 3
+.formula xii   = xii + 1
+.formula xam   = "1"
+.formula xtskip = "VA46"
+.continue UPRO
+..
+!VA46: xii == 4
+.formula xii   = xii + 1
+.formula xtskip = "VA60"
+.continue UPRO
+..
+!VA48: damit bei xwastun = 2 -> xii auf 4 gesetzt wird
+.formula xii    = xii + 1
+..
+!VA50: Anf_Monat auf 1 setzen, Jahr unver„ndert (3. Zeitraum)
+.formula xii    = xii + 1
+.formula xih1   = xam
+.formula xam    = "1"
+.formula xtskip = "VA55"
+.formula xtskip = "VA100"  ?  xii = 4
+.continue UPRO
+..
+!VA55: 3. Zeitraum wurde gesp. (xwastun = 2)
+..     2. Zeitraum speichern   (xwastun = 1 und xwastun = 2)
+.formula xam = xih1
+.formula xii = xii - 1
+..
+!VA60
+.formula xii = xii + 1     ?  xwastun = 4
+.formula xtskip = "VA100"  ?  xwastun = 1  ;  xwastun = 4
+.formula xtskip = "VA48"   ?  xwastun = 2
+..
+..  GJahr-1
+.formula xjahr = x2xjahr
+..
+..  wird aktuelles Jahr mit alten verglichen und wurde der lt. Monat des akt.GJ
+..  eingegeben, wird im alten GJ Endmonat auf 15 gesetzt
+..  Anzahlmonate, x1xanzm ist Int
+.formula x1gjahr     = gjahr
+.formula x2gjahr     = x1xjahr
+.input GJAHR.CMP
+.formula xth3 = x1xanzm
+..      .fo xem  = "15"  ?  xem = xth3  &  x1xjahr = gjahr
+.formula xem  = "15"  ?  xem = xth3  &  xiyerg = 0
+.continue UPRO
+..
+!VA100
+.formula ximax = xii
+.continue
+..
+!BEENDEN
+.end .
+..
+!UPRO
+.formula xjahr.xii = xjahr
+.formula xam.xii   = xam
+.formula xem.xii   = xem
+..
+.continue 'xtskip'

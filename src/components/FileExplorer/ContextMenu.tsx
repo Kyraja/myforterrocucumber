@@ -4,7 +4,7 @@
  *
  * Key responsibilities:
  * - Renders context-sensitive actions depending on node type: folders get create/rename/delete,
- *   files get rename/delete; scenario nodes are ignored (returns null).
+ *   files get duplicate/rename/delete; scenario nodes are ignored (returns null).
  * - Positions itself within the viewport bounds to avoid clipping at screen edges.
  * - Closes automatically when a click outside the menu is detected.
  * @prop {number} x - Screen X coordinate for placement.
@@ -14,6 +14,7 @@
  */
 import { useEffect, useRef } from 'react';
 import type { FileTreeNode } from '../../types/fileExplorer';
+import { useTranslation } from '../../i18n';
 import styles from './FileExplorer.module.css';
 
 interface ContextMenuProps {
@@ -25,6 +26,7 @@ interface ContextMenuProps {
   onCreateFile: (parentPath: string) => void;
   onDeleteFolder: (path: string) => void;
   onDeleteFile: (path: string) => void;
+  onDuplicateFile: (path: string) => void;
   onRename: (path: string) => void;
 }
 
@@ -37,8 +39,10 @@ export function ContextMenu({
   onCreateFile,
   onDeleteFolder,
   onDeleteFile,
+  onDuplicateFile,
   onRename,
 }: ContextMenuProps) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -96,6 +100,13 @@ export function ContextMenu({
       )}
       {node.type === 'file' && (
         <>
+          <button
+            className={styles.contextMenuItem}
+            onClick={() => { onDuplicateFile(node.path); onClose(); }}
+            type="button"
+          >
+            📄 {t('app.duplicateFile')}
+          </button>
           <button
             className={styles.contextMenuItem}
             onClick={() => { onRename(node.path); onClose(); }}

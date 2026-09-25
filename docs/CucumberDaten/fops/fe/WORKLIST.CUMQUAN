@@ -1,0 +1,117 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : WORKLIST.CUMQUAN
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  : Berechnung des Bearbeitungsfortschritts
+..                  xrgutmenge = Summe der gemeldeten Gutmenge in Auftragszeiten
+..                  xrprodmenge = zu produzierende Menge aus Reservierung in AFL
+..                  tfortschritt = Tabellenfeld im Infosystem ( xrgutmenge / xrprodmenge)
+..
+..                  -> wenn mehr produziert wurde als geplant ist tfortschritt > 100 %
+..                  -> in diesem Fall wird der Arbeitschein als abgeschlossen gekennzeichnet
+..
+..*****************************************************************************
+.set trans -
+..
+.type text       xtsel         ? _F|defined(U|xtsel)
+.type text       xtfertstatus  ? _F|defined(U|xtfertstatus)
+.type ARTR51000  xrgutmenge1   ? _F|defined(U|xrgutmenge1)
+.type ARTR51000  xrgutmenge2   ? _F|defined(U|xrgutmenge2)
+.type ARTR51000  xrprodmenge   ? _F|defined(U|xrprodmenge)
+.type M5.2       xristzeit     ? _F|defined(U|xristzeit)
+.type M5.2       xrsollzeit    ? _F|defined(U|xrsollzeit)
+..
+..  Mengenberechnung
+.formula U|xrprodmenge = 0
+.formula U|xtsel = "$,,nummer="+'M|taschein'+";art=;mgr=;@ablageart=(Active);@gruppe=1;"
+.select workorder nolock 'U|xtsel'
+.select add lres
+.formula U|xrprodmenge = H|mge
+.. zu produzierende Menge aus AFL ermittelt, welche Mengen stehen nun in den AZ
+.formula U|xrgutmenge1 = 0
+.formula U|xrgutmenge2 = 0
+.formula U|xtsel = "$,,nummer=;such=;asnr="+'M|taschein'+";ma=;endzeit<>`;uebertr=;fertstatus=;@ablageart=(Active);"
+.select pdc 'U|xtsel'
+.continue KL   ? _G|mehr
+..
+!AZLOOP
+.. xgugtmenge1 => fÅr die prozentuale Fortschrittsanzeige braucht man alle Gutmengen in den AZ
+.formula U|xrgutmenge1 = U|xrgutmenge1 + H|istmge
+.. xgugtmenge2 => zum Aktualisieren der offenen Menge, braucht man die Gutmengen in nicht Åbertragenen AZ
+.formula U|xrgutmenge2 = U|xrgutmenge2 + H|istmge   ? H|uebertr
+.select pdc
+.continue AZLOOP ? G|mehr
+...KurzlÑuferloop
+!KL
+.formula U|xtsel = "$,,nummer=;such=;asnr="+'M|taschein'+";ma=;anfdat=;anfzeit=;uebertr=;@gruppe=4;@ablageart=(Active);"
+.select pdc 'U|xtsel'
+.continue AKTUAL ? _G|mehr
+!KLLOOP
+.. xgugtmenge1 => fÅr die prozentuale Fortschrittsanzeige braucht man alle Gutmengen in den AZ
+.formula U|xrgutmenge1 = U|xrgutmenge1 + H|istmge
+.. xgugtmenge2 => zum Aktualisieren der offenen Menge, braucht man die Gutmengen in nicht Åbertragenen AZ
+.formula U|xrgutmenge2 = U|xrgutmenge2 + H|istmge   ? H|uebertr
+.select pdc
+.continue KLLOOP ? G|mehr
+..Ende KurzlÑuferloop
+..durch das direkte buchen in der AZ kann sich die Menge im Arbeitsschein geÑndert haben - deswegen aktualisieren
+!AKTUAL
+.formula M|tsollmge = M|taschein^mge
+.. offene Menge aktualisieren
+.formula M|tofmge = M|tsollmge -  U|xrgutmenge2
+.continue FORTMGE ? M|tgesamtmge > 1
+.continue FORTZEI ? M|tgesamtmge = 1
+!FORTMGE
+.. Fortschritt ermitteln Åber die Menge (tgesamtmge > 1)
+.formula M|tfortschritt = (U|xrgutmenge1 / U|xrprodmenge) * 100      ? U|xrprodmenge > 0
+.continue FORTEND
+!FORTZEI
+.. Fortschritt ermitteln Åber die Zeit (tgesamtmge = 1)
+..Ist-Zeiten aus RÅckmeldung ermitteln
+.formula U|xristzeit  = 0
+.formula U|xrsollzeit = 0
+.formula U|xtsel      = "$,,nummer=="+'M|taschein'+";@.gruppe=2;@.ablage=(Filed)"
+.select workorder 'U|xtsel'
+.continue RMEND ? _G|mehr
+!RMLOOP
+.formula U|xristzeit = U|xristzeit + H|bzeit + H|bzeit2+ H|bzeit3 + H|bzeit4 + H|bzeit5
+.select workorder
+.continue RMLOOP ? G|mehr
+!RMEND
+.formula U|xrsollzeit = M|taschein^vzeit
+.formula M|tfortschritt = (U|xristzeit / U|xrsollzeit) * 100     ? U|xrsollzeit > 0
+.formula M|tfortschritt = 100 ? M|tofmge = 0
+!FORTEND
+.. 
+.. dieses Unterprogramm wird aus "Komplett rÅckmelden", "TeilrÅckmelden" und "Start-Button" aufgrufen,
+.. um den Fortschritt zu errechnen
+.. nur bei der KomplettrÅckmeldung soll der Arbeitsschein als abgeschlossen gekennzeichnet werden
+.. es gibt ja auch Prozesse bei denen man Åberliefert, das kann Åber TeilrÅckmeldungen abgebildet werden
+.continue ENDE    ? U|xrgutmenge1 < U|xrprodmenge
+.. normale KomplettrÅckmeldung
+.continue FERTIG  ? G|evtvar = "tkomplettrueck"
+.. KomplettrÅckmeldung mit RÅckmeldung im Dialog
+.continue FERTIG  ? G|evtvar = "fertig" &  M|bkomplett  & M|rmimdialog
+.. TeilrÅckmeldung, man darf nicht Åberbuchen, deswegen auf fertig stellen
+.continue FERTIG  ? G|evtvar = "fertig" &  M|bteilrueck & M|tofmge <= 0 & _M|ueberbuchen
+..KurzlÑufer wie TeilrÅckmeldung
+.continue FERTIG  ? G|evtvar = "fertig" &  M|bkurzlauf  & M|tofmge <= 0 & _M|ueberbuchen
+.continue ENDE
+..
+!FERTIG
+.formula U|xtsel = "$,,nummer="+'M|taschein'+";art=;mgr=;@ablageart=(Active);@gruppe=1"
+.select workorder nolock 'U|xtsel'
+.formula M|iev = 11
+.formula U|xtfertstatus = "(Completed)"
+.input "fe/WORKLIST.EDP"
+.select -
+..
+!ENDE:  terminkritische VorgÑnge markieren
+.continue TERMOK ? M|tendedat >= G|datum
+.continue TERMOK ? M|tfortschritt >= 100
+.formula M|ttermin = M|leg4
+..
+!TERMOK
+.continue

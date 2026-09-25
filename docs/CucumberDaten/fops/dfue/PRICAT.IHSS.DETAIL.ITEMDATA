@@ -1,0 +1,103 @@
+..!interpreter english translate noabbrev
+..!meta M|=dfue/PRICAT
+..*****************************************************************************
+.. Name           : PRICAT.IHSS.DETAIL.ITEMDATA
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : Construct message ABPRICAT
+.. 
+..      3   LIN1 Muss    1  Positions-Info 
+..      3   ART1 Muss    1  Artikeldaten 
+..      3   QTY1 Kann   10  Mengen-Info 
+..      3   PRI1 Kann  100  Preis-Info 
+..      3   RNG1 Kann    1  Wertebereich-Info 
+..
+...Includes       :  
+..  include dfue/PRICAT.IHSS.DETAIL.DISCOUNTS
+..*****************************************************************************
+.set trans -
+..
+.type text xtversion1 ? _F|defined(U|xtversion1)
+.copy U|xtversion1 = "01"
+.. 
+.type text xLIN1 ? _F|defined(U|xLIN1)
+.type text xART1 ? _F|defined(U|xART1)
+.type text xQTY1 ? _F|defined(U|xQTY1)
+.type text xPRI1 ? _F|defined(U|xPRI1)
+.type text xRNG1 ? _F|defined(U|xRNG1)
+.. 
+.formula U|xLIN1 = "LIN1"
+.formula U|xART1 = "ART1"
+.formula U|xQTY1 = "QTY1"
+.formula U|xPRI1 = "PRI1"
+.formula U|xRNG1 = "RNG1"
+..
+.type text xARTBERQ ? _F|defined(U|xARTBERQ)
+..
+.type text xmgrenzeUntenPreise ? _F|defined(U|xmgrenzeUntenPreise)
+.. 
+.. Trim white spaces from MP7.3 fields 
+.type text xtmgrenze ? _F|defined(U|xtmgrenze)
+.type text xtmnrab ? _F|defined(U|xtmnrab)
+..
+.. Split sales description into three fields
+.type text vbezX ? _F|defined(U|vbezX)
+.type text vbez1 ? _F|defined(U|vbez1)
+.type text vbez2 ? _F|defined(U|vbez2)
+.type text vbez3 ? _F|defined(U|vbez3)
+..
+.formula U|vbezX = F|regreplaceall('M|vbez', ";", "")
+.formula U|vbez1 = U|vbezX<<35
+.formula U|vbez2 = U|vbezX<<-35<<35
+.formula U|vbez3 = U|vbezX<<-35<<-35<<17
+..
+.. Required segments
+.output addedto 'M|dateiname'
+.input "DATEI.F"
+'U|xLIN1'#'U|xtversion1'#'M|actcode'#######################
+'U|xART1'#'U|xtversion1'#'M|gtin'#'M|kuartnr'#'M|artikelnummer'#####'U|vbez1'#'U|vbez2'#'U|vbez3'##############
+.. 
+..
+.. No quantity and price information needed when deleted
+.. ----------- ---------- ---------- -------------------------------------------
+.continue CLOSE   ?  M|actcode=2
+.continue PREISE  ? _F|empty(M|tpreise)
+.continue EINZEL  ? _F|empty(M|vpr)
+.. ----------- ---------- ---------- -------------------------------------------
+.continue CLOSE
+..
+..
+!EINZEL
+.. 'U|xQTY1'#'U|xtversion1'########################
+'U|xPRI1'#'U|xtversion1'##'M|vpr'####'M|vpeiso'####'M|vpr'#######'M|land'#######
+.. 'U|xRNG1'#'U|xtversion1'########################
+.input "PRICAT.IHSS.DETAIL.DISCOUNTS" ? _F|empty(M|trabatte)
+.continue CLOSE
+.. 
+.. 
+!PREISE
+..!meta 1|=P82:1
+.load 1 pricing 'M|tpreise^id'
+.formula U|xmgrenzeUntenPreise = "1"
+!NPREISE
+.load 1 pricing line
+.continue EPREISE ? _G|mehr
+.formula U|xARTBERQ = "4"
+.formula U|xtmgrenze = '1|mgrenze'
+.formula U|xtmnrab = '1|mnrab'
+'U|xQTY1'#'U|xtversion1'#'U|xtmgrenze'#'M|vpeiso'#'U|xtmnrab'#####################                   
+'U|xPRI1'#'U|xtversion1'##'1|mpreis'####'M|vpeiso'####'1|mpreis'#######'M|land'#######
+'U|xRNG1'#'U|xtversion1'#'U|xARTBERQ'#'M|vpeiso'#'U|xmgrenzeUntenPreise'#'U|xtmgrenze'####################
+.formula U|xmgrenzeUntenPreise = 'U|xtmgrenze'
+.input "PRICAT.IHSS.DETAIL.DISCOUNTS" ? _F|empty(M|trabatte)
+.continue NPREISE
+!EPREISE
+.load 1
+.. 
+!CLOSE
+.output 
+.. 
+..*****************************************************************************
+!END
+.continue

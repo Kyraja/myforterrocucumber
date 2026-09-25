@@ -1,0 +1,130 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : USTDIFF.TAB
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Tabellen-FOP des Infosystems fb/USTDIFF
+.. Functionality  :
+..*****************************************************************************
+..
+..!meta H|=P6:0
+..
+.. Variablen
+.type text U|xstper ? _F|defined(U|xstper)
+.set trans -
+..
+.. Storno-Buchung und stornierte Buchung ueberlesen
+.continue END ? _F|empty(H|stornovorlobjekt)
+.continue END ? _F|empty(H|stornoobjekt)
+.copy U|xbstkonto  = G|false
+.copy U|xbupos     = G|false
+.formula   U|xrbemsoll  = 0
+.formula   U|xrbemhaben = 0
+.formula   U|xrstsoll   = 0
+.formula   U|xrsthaben  = 0
+.formula   U|xrnet      = 0
+.formula   U|xrhilf     = 0
+.formula   U|xrsteu     = 0
+.formula   U|xstper     = ""
+..
+.continue RLOOP
+..
+..*****************************************************************************
+!RLOOP
+..*****************************************************************************
+..naechste Zeile der Finanzbuchung
+.select line
+.continue LE ? _G|mehr
+.continue RLOOP ? _F|empty(M|ustart) & 'M|ustart(L="0")'<>'H|ustart(L="0")'
+..
+.. Bemessungsgrundlage
+.formula U|xrbemsoll  = U|xrbemsoll  + H|betrag ?  H|soll & H|ustva^id = M|ustvapos^id
+.formula U|xrbemhaben = U|xrbemhaben + H|betrag ? _H|soll & H|ustva^id = M|ustvapos^id
+..
+.continue RLOOP ? F|empty(M|stkonto)
+..
+.formula U|xbstkonto = G|true  ?  F|equals(H|kart,"(TaxAccount)") 
+.formula U|xstper    = H|stper ?  F|equals(H|kart,"(TaxAccount)") 
+.formula U|xbupos    = G|true  ? (H|ustva^id = M|ustvapos^id)
+..
+.. gebuchte Steuer
+..Steuerregel aus Finanzbuchung prÅfen, wg. Umstellung auf mehrere Steuerkonten
+.continue RLOOP ? F|empty(H|strgl)
+.load 0 object 'H|strgl^id'
+.continue RLOOP ? _G|mehr
+.load 0 line
+.continue RLOOP ? _G|mehr
+!STRGL
+.continue NEXT ? M|ustvapos <> 0|ktoustpos
+.continue NEXT ? U|xstper   <> 0|stdatstper
+..Steuerperiode Buchungsdatum lesen
+.load 1 object '0|budatstper^id'
+.continue NEXT ? _G|mehr
+!STSCHL
+.continue NEXT ? H|budat > 1|gbis
+.continue NEXT ? H|budat < 1|gvon
+.continue TREFFER
+!TREFFER
+..Einkaufs-/Verkaufskonto beruecksichtigen
+.continue RLOOP ? M|posev <> H|eva
+.formula U|xrstsoll  = U|xrstsoll  + H|betrag ?  H|soll & F|equals(H|kart,"(TaxAccount)") 
+.formula U|xrsthaben = U|xrsthaben + H|betrag ? _H|soll & F|equals(H|kart,"(TaxAccount)") 
+.continue RLOOP
+!NEXT
+..naechste Zeile der Steuerregel
+.load 0 line
+.continue STRGL ? G|mehr
+.continue RLOOP
+..
+..*****************************************************************************
+!LE: Loop end
+..*****************************************************************************
+..keine Differenz, wenn beide Variablen null sind
+.continue END ? U|xrbemsoll = 0 & U|xrbemhaben = 0
+.formula U|xrnet  = U|xrbemhaben - U|xrbemsoll
+.formula U|xrhilf = U|xrnet * (M|stsatz / 100)
+.formula U|xrsteu = U|xrsthaben - U|xrstsoll
+.formula U|xshilf = U|xrhilf - U|xrsteu
+..
+.formula M|stsoll   = M|stsoll   + U|xrstsoll
+.formula M|sthaben  = M|sthaben  + U|xrsthaben
+.formula M|bemsoll  = M|bemsoll  + U|xrbemsoll
+.formula M|bemhaben = M|bemhaben + U|xrbemhaben
+.continue CHKERR
+..
+..*****************************************************************************
+!CHKERR
+..*****************************************************************************
+.. control position?
+.continue END     ?   F|value(M|postyp, "AN57") = 107
+.continue CHKERR2 ? _(U|xshilf < (M|mindiff*-1) ; U|xshilf > M|mindiff)
+..
+.make screen line +O
+.assign M|tbuchung  = H|id
+.formula   M|terrech   = U|xrhilf
+.formula   M|tverbucht = U|xrsteu
+.copy M|tursache  = H|ursache
+.copy M|tartst    = H|artst
+.set trans +
+.formula   M|tfehler   = "Differenz"
+.set trans -
+..
+..*****************************************************************************
+!CHKERR2
+..*****************************************************************************
+.continue END ? U|xbstkonto = U|xbupos
+.make screen line +O
+.assign M|tbuchung  = H|id
+..
+.set trans +
+.formula   M|tfehler   = "Keine Umsatzsteuerposition" ?  U|xbstkonto & _U|xbupos
+.formula   M|tfehler   = "Kein Steuerkonto"           ? _U|xbstkonto &  U|xbupos
+.set trans -
+..
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

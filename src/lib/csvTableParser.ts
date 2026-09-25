@@ -4,23 +4,33 @@
  * into the application's internal `TableDef` data model.
  *
  * Key responsibilities: handles both the legacy 9-column and current 11-column abas
- * export formats (English/German), normalises database and infosystem rows into
+ * export formats, normalises database and infosystem rows into
  * `TableDef[]`, deduplicates fields, merges multiple imports, and persists/loads
  * the result via IndexedDB (with a one-time localStorage migration).
  *
  * @exports parseXlsx, parseTextDump, parseTableCsv, mergeTableDefs,
  *          saveTableDefs, loadTableDefs, clearTableDefs,
- *          migrateTableDefsFromLocalStorage, tablesNeedReimport
+ *          migrateTableDefsFromLocalStorage
  */
 import * as XLSX from 'xlsx';
 import type { TableDef } from '../types/gherkin';
+import type { KBChunk, KBDocument } from '../types/knowledgeBase';
 
 const IS_SKIP_VALUES = new Set(['x', 'ja', 'yes', '1', 'true']);
+
+/** Matches values of the abas "Header or table section?" (vkt) column that mean "table". */
+function isTableSectionValue(v: string): boolean {
+  const s = v.trim().toLowerCase();
+  if (!s) return false;
+  if (IS_SKIP_VALUES.has(s)) return true;
+  if (s === 't') return true;
+  return s.includes('table') || s.includes('tabelle');
+}
 
 /**
  * ## CSV/XLSX Column Structure (abas Variablentabelle export)
  *
- * ### New format (English export, 11 columns for databases, 9 for infosystems):
+ * ### New format (11 columns for databases, 9 for infosystems):
  * Identity number | Search word | Text in German | Text in English | Meaning | Displayed meaning |
  * Effective type | Write-protect entry for screens | Variable name | New variable name | Skip field?
  *
@@ -40,6 +50,7 @@ interface RawRow {
   identity: string;
   screenNr: string;
   searchWord: string;
+  effectiveType: string;
   textGerman: string;
   textEnglish: string;
   meaning: string;
@@ -84,13 +95,13 @@ function compareTableRef(a: string, b: string): number {
 function processRows(
   rows: RawRow[],
   isNewFormat: boolean,
-  hasBothLangs: boolean,
 ): TableDef[] {
   const tableMap = new Map<string, TableDef>();
 
   for (const row of rows) {
     const identity = parseInt(row.identity, 10);
     const searchWord = row.searchWord.trim();
+    const effectiveType = row.effectiveType.trim();
     const descOperating = row.textGerman.trim();
     const descGeneral = row.textEnglish.trim();
     const meaning = row.meaning.trim();
@@ -109,52 +120,48 @@ function processRows(
     const tableRef = parseSearchWord(searchWord);
     const key = isInfosystem ? searchWord : (tableRef ?? searchWord);
 
+    const cleanGerman = stripPrefix(descOperating);
+    const cleanEnglish = stripPrefix(descGeneral);
+    const uploadedName = cleanGerman || cleanEnglish || '';
+
     if (!tableMap.has(key)) {
       if (isInfosystem) {
         // For infosystems: use identity number as maskNr (screenNr is usually empty)
         const isMaskNr = !isNaN(screenNr) && row.screenNr.trim() ? screenNr : (!isNaN(identity) ? identity : undefined);
-        console.log(`[csvParser-IS] ${key} name="${descOperating}" identity=${identity} screenNr=${screenNr} → maskNr=${isMaskNr}`);
         tableMap.set(key, {
           database: '',
           group: '',
           tableRef: searchWord,
-          name: descOperating || searchWord,
-          nameDe: descOperating || undefined,
-          nameEn: descGeneral || undefined,
+          name: uploadedName || searchWord,
           fields: [],
           kind: 'infosystem',
           ...(isMaskNr !== undefined && { maskNr: isMaskNr }),
         });
       } else if (tableRef) {
-        const name = stripPrefix(descGeneral || descOperating || '');
         tableMap.set(key, {
           database: tableRef.split(':')[0],
           group: tableRef.split(':')[1],
           tableRef,
-          name: name || searchWord,
+          name: uploadedName || searchWord,
           ...(!isNaN(screenNr) && { maskNr: screenNr }),
-          ...(hasBothLangs && {
-            nameDe: stripPrefix(descOperating) || undefined,
-            nameEn: stripPrefix(descGeneral) || undefined,
-          }),
           fields: [],
           kind: 'database',
         });
       } else {
-        const name = stripPrefix(descGeneral || descOperating || '');
         tableMap.set(key, {
           database: '',
           group: '',
           tableRef: searchWord,
-          name: name || searchWord,
-          ...(hasBothLangs && {
-            nameDe: stripPrefix(descOperating) || undefined,
-            nameEn: stripPrefix(descGeneral) || undefined,
-          }),
+          name: uploadedName || searchWord,
           fields: [],
           kind: 'database',
         });
       }
+    } else {
+      // Backfill table name from later rows that carry table-level descriptions
+      // (abas often leaves these cells empty on subsequent rows).
+      const existing = tableMap.get(key)!;
+      if (!existing.name && uploadedName) existing.name = uploadedName;
     }
 
     if (variableName) {
@@ -166,6 +173,7 @@ function processRows(
           tableMap.get(key)!.fields.push({
             name: fieldName,
             description: displayedMeaning || variableName,
+            ...(effectiveType && { dataType: effectiveType }),
             ...(isSkip && { skip: true }),
             ...(isReadonly && { readonly: true }),
           });
@@ -174,9 +182,9 @@ function processRows(
         // New format (all) + old format (databases): strip 2-char prefix from variable name
         // Prefix first char: K = header/Kopf field, T = table/row field
         const prefix = variableName.length > 2 ? variableName[0].toUpperCase() : '';
-        // Explicit "Variable in table section?" column has priority over variable name prefix
+        // Explicit "Header or table section?" (vkt) column has priority over variable name prefix
         const isTableField = explicitTableSection
-          ? IS_SKIP_VALUES.has(explicitTableSection)
+          ? isTableSectionValue(explicitTableSection)
           : prefix === 'T';
         const fieldName = variableName.length > 2 ? variableName.slice(2) : variableName;
         if (fieldName) {
@@ -184,21 +192,13 @@ function processRows(
           // — these describe the TABLE, not the FIELD, and waste prompt tokens
           const cleanMeaning = isTableLevelDesc(meaning) ? '' : meaning;
           const cleanDisplayed = isTableLevelDesc(displayedMeaning) ? '' : displayedMeaning;
-          // Debug: log first 3 fields per table to check column mapping
-          if (tableMap.get(key)!.fields.length < 1) {
-            const tbl = tableMap.get(key)!;
-            console.log(`[csvParser] ${key} kind=${tbl.kind} maskNr=${tbl.maskNr} screenNr=${screenNr} raw="${row.screenNr}" identity=${identity}`);
-          }
-          // description = best available (prefer English for prompt compatibility)
+          // Single-language import: keep only one effective description string.
+          // Prefer "Meaning" and fall back to "Displayed meaning".
           const desc = cleanMeaning || cleanDisplayed || '';
-          // Always set descriptionDe/En when we have content — even if only one language
-          const descDe = cleanDisplayed || cleanMeaning || undefined;
-          const descEn = cleanMeaning || undefined;
           tableMap.get(key)!.fields.push({
             name: fieldName,
             description: desc,
-            ...(descDe && { descriptionDe: descDe }),
-            ...(descEn && descEn !== descDe && { descriptionEn: descEn }),
+            ...(effectiveType && { dataType: effectiveType }),
             ...(isSkip && { skip: true }),
             ...(isReadonly && { readonly: true }),
             isTableField,
@@ -230,34 +230,65 @@ function processRows(
 
 // ── XLSX parser ─────────────────────────────────────────────────
 
+function readXlsxCell(row: Record<string, string | number>, keys: string[]): string {
+  const keySet = new Set(keys.map((key) => key.toLocaleLowerCase()));
+  const entry = Object.entries(row).find(([key]) => keySet.has(key.trim().toLocaleLowerCase()));
+  return entry ? String(entry[1]) : '';
+}
+
+function readXlsxCellAt(row: Record<string, string | number>, column: number): string {
+  const value = Object.values(row)[column - 1];
+  return value === undefined ? '' : String(value);
+}
+
 export function parseXlsx(buffer: ArrayBuffer): TableDef[] {
   const workbook = XLSX.read(buffer, { type: 'array' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   if (!sheet) return [];
 
-  const xlsxRows = XLSX.utils.sheet_to_json<Record<string, string | number>>(sheet);
+  const xlsxRows = XLSX.utils.sheet_to_json<Record<string, string | number>>(sheet, { defval: '' });
   if (xlsxRows.length === 0) return [];
 
   const firstRow = xlsxRows[0];
-  const isNewFormat = !!(firstRow && ('Text in German' in firstRow || 'Text in English' in firstRow));
-  const hasBothLangs = !!(firstRow && 'Text in German' in firstRow && 'Text in English' in firstRow);
-
+  const firstValues = Object.values(firstRow ?? {}).map(String);
+  const usesVariableLayout = /^V-\d+-\d+$/i.test(firstValues[2] ?? '');
+  const usesInfosystemLayout = Number(firstValues[0]) > 9999 && !!firstValues[1];
+  const isNewFormat = !!firstRow && (
+    !!readXlsxCell(firstRow, ['Text in German', 'Text in English', 'name1'])
+    || usesVariableLayout
+    || usesInfosystemLayout
+  );
   // Map XLSX rows to normalized RawRow[]
-  const rows: RawRow[] = xlsxRows.map((row) => ({
-    identity: String(row['Identity number'] ?? row['Identity'] ?? ''),
-    screenNr: String(row['Number of 1st screen'] ?? row['Nummer des 1. Bildschirms'] ?? ''),
-    searchWord: String(row['Search word'] ?? ''),
-    textGerman: String(row['Text in German'] ?? row['Description in operating language'] ?? ''),
-    textEnglish: String(row['Text in English'] ?? row['Description'] ?? ''),
-    meaning: String(row['Meaning'] ?? ''),
-    displayedMeaning: String(row['Displayed meaning'] ?? ''),
-    variableName: String(row['Variable name'] ?? ''),
-    skip: String(row['Skip field?'] ?? row['Skip'] ?? ''),
-    writeProtect: String(row['Write-protect entry for screens'] ?? row['Schreibschutz'] ?? ''),
-    inTableSection: String(row['Variable in table section?'] ?? ''),
-  }));
+  const rows: RawRow[] = xlsxRows.map((row, rowIndex) => {
+    const values = Object.values(row).map(String);
+    const isVariableRow = /^V-\d+-\d+$/i.test(values[2] ?? '');
+    const hasTechnicalLayout = isVariableRow || (Number(values[0]) > 9999 && !!values[1]);
+    const identity = readXlsxCell(row, ['Identity number', 'Identity', 'nummer']) || (hasTechnicalLayout ? values[isVariableRow ? 1 : 0] ?? '' : '');
+    const searchWord = readXlsxCell(row, ['Search word', 'such']) || (hasTechnicalLayout ? values[isVariableRow ? 2 : 1] ?? '' : '');
+    const headerType = readXlsxCell(row, ['Effective type', 'Type', 'vitefff']);
+    const isInfosystem = Number(identity) > 9999;
+    const typeColumn = isInfosystem ? 5 : 6;
+    const positionalType = readXlsxCellAt(row, typeColumn);
+    const effectiveType = headerType || positionalType;
+    const offset = isVariableRow ? 0 : -1;
+    return {
+      identity,
+      screenNr: readXlsxCell(row, ['Number of 1st screen', 'Nummer des 1. Bildschirms', 'vmnr1']) || (isVariableRow ? values[0] ?? '' : ''),
+      searchWord,
+      // abas export layout: vitefff is column 6 for variables, column 5 for infosystems.
+      effectiveType,
+      textGerman: readXlsxCell(row, ['Text in German', 'Description in operating language', 'name1']) || (hasTechnicalLayout ? values[3 + offset] ?? '' : ''),
+      textEnglish: readXlsxCell(row, ['Text in English', 'Description']),
+      meaning: readXlsxCell(row, ['Meaning', 'vbed']) || (hasTechnicalLayout ? values[4 + offset] ?? '' : ''),
+      displayedMeaning: readXlsxCell(row, ['Displayed meaning']),
+      variableName: readXlsxCell(row, ['Variable name', 'vname']) || (hasTechnicalLayout ? values[7 + offset] ?? '' : ''),
+      skip: readXlsxCell(row, ['Skip field?', 'Skip', 'vskip']) || (isVariableRow ? values[9] ?? '' : ''),
+      writeProtect: readXlsxCell(row, ['Write-protect entry for screens', 'Schreibschutz', 'vms']) || (hasTechnicalLayout ? values[6 + offset] ?? '' : ''),
+      inTableSection: readXlsxCell(row, ['Header or table section?', 'Variable in table section?', 'Kopf- oder Tabellenteil?', 'Kopf oder Tabellenteil?', 'vkt']) || (hasTechnicalLayout ? values[isVariableRow ? 10 : 7] ?? '' : ''),
+    };
+  });
 
-  return processRows(rows, isNewFormat, hasBothLangs);
+  return processRows(rows, isNewFormat);
 }
 
 // ── Text dump parser (paste) ────────────────────────────────────
@@ -278,13 +309,12 @@ export function parseTextDump(text: string): TableDef[] {
   const hasHeader =
     firstCols.some((c) => c.includes('identity')) ||
     firstCols.some((c) => c.includes('search word') || c.includes('suchwort')) ||
-    firstCols.some((c) => c.includes('variable name') || c.includes('variablenname'));
+    firstCols.some((c) => c.includes('variable name') || c.includes('variablenname') || c === 'vname');
 
   const colMap = detectColumnMapping(hasHeader ? firstCols : []);
   const startIndex = hasHeader ? 1 : 0;
 
-  const isNewFormat = hasHeader && firstCols.some((c) => c.includes('text in german') || c.includes('text in deutsch'));
-  const hasBothLangs = isNewFormat && firstCols.some((c) => c.includes('text in english') || c.includes('text in englisch'));
+  const isNewFormat = hasHeader && firstCols.some((c) => c.includes('text in german') || c.includes('text in deutsch') || c === 'name1');
 
   // Map text lines to normalized RawRow[]
   const rows: RawRow[] = [];
@@ -295,6 +325,7 @@ export function parseTextDump(text: string): TableDef[] {
       identity: cols[colMap.identity] ?? '',
       screenNr: colMap.screenNr >= 0 ? (cols[colMap.screenNr] ?? '') : '',
       searchWord: cols[colMap.searchWord] ?? '',
+      effectiveType: colMap.effectiveType >= 0 ? (cols[colMap.effectiveType] ?? '') : '',
       textGerman: cols[colMap.textGerman] ?? '',
       textEnglish: cols[colMap.textEnglish] ?? '',
       meaning: cols[colMap.meaning] ?? '',
@@ -306,7 +337,7 @@ export function parseTextDump(text: string): TableDef[] {
     });
   }
 
-  return processRows(rows, isNewFormat, hasBothLangs);
+  return processRows(rows, isNewFormat);
 }
 
 /** Column index mapping for text/CSV parsing. */
@@ -314,6 +345,7 @@ interface ColumnMapping {
   identity: number;
   screenNr: number; // -1 if not present
   searchWord: number;
+  effectiveType: number; // -1 if not present
   textGerman: number;
   textEnglish: number;
   meaning: number;
@@ -331,32 +363,41 @@ interface ColumnMapping {
 function detectColumnMapping(headerCols: string[]): ColumnMapping {
   if (headerCols.length === 0) {
     // Legacy 9-column positional
-    return { identity: 0, screenNr: -1, searchWord: 1, textGerman: 2, textEnglish: 3, meaning: 7, displayedMeaning: 8, variableName: 6, skip: 5, writeProtect: -1, inTableSection: -1 };
+    return { identity: 0, screenNr: -1, searchWord: 1, effectiveType: 4, textGerman: 2, textEnglish: 3, meaning: 7, displayedMeaning: 8, variableName: 6, skip: 5, writeProtect: -1, inTableSection: -1 };
   }
 
   const find = (needles: string[]): number =>
     headerCols.findIndex((h) => needles.some((n) => h.includes(n)));
 
-  const identityIdx = find(['identity']);
-  const searchWordIdx = find(['search word', 'suchwort']);
-  const meaningIdx = find(['meaning']);
+  const identityIdx = find(['identity', 'nummer']);
+  const searchWordIdx = find(['search word', 'suchwort', 'such']);
+  const effectiveTypeIdx = find(['effective type', 'vitefff', 'type', 'typ']);
+  const meaningIdx = find(['meaning', 'vbed']);
   const displayedIdx = headerCols.findIndex((h, i) => i !== meaningIdx && h.includes('meaning') && h.includes('displayed'));
-  const varNameIdx = find(['variable name', 'variablenname']);
-  const skipIdx = find(['skip']);
-  const textGermanIdx = find(['text in german', 'text in deutsch']);
+  const varNameIdx = find(['variable name', 'variablenname', 'vname']);
+  const skipIdx = find(['skip', 'vskip']);
+  const textGermanIdx = find(['text in german', 'text in deutsch', 'name1']);
   const textEnglishIdx = find(['text in english', 'text in englisch']);
   const descOpIdx = find(['description in operating', 'beschreibung in betrieb']);
   const descIdx = headerCols.findIndex((h, i) =>
     i !== descOpIdx && (h === 'description' || h === 'beschreibung')
   );
-  const writeProtectIdx = find(['write-protect', 'write protect', 'schreibschutz']);
-  const inTableSectionIdx = find(['variable in table section', 'variable im tabellenteil']);
-  const screenNrIdx = find(['number of 1st screen', 'nummer des 1. bildschirms', 'bildschirm']);
+  const writeProtectIdx = find(['write-protect', 'write protect', 'schreibschutz', 'vms']);
+  const inTableSectionIdx = find([
+    'header or table section',
+    'kopf- oder tabellenteil',
+    'kopf oder tabellenteil',
+    'variable in table section',
+    'variable im tabellenteil',
+    'vkt',
+  ]);
+  const screenNrIdx = find(['number of 1st screen', 'nummer des 1. bildschirms', 'bildschirm', 'vmnr1']);
 
   return {
     identity: identityIdx >= 0 ? identityIdx : 0,
     screenNr: screenNrIdx >= 0 ? screenNrIdx : -1,
     searchWord: searchWordIdx >= 0 ? searchWordIdx : 1,
+    effectiveType: effectiveTypeIdx >= 0 ? effectiveTypeIdx : -1,
     textGerman: textGermanIdx >= 0 ? textGermanIdx : (descOpIdx >= 0 ? descOpIdx : 2),
     textEnglish: textEnglishIdx >= 0 ? textEnglishIdx : (descIdx >= 0 ? descIdx : 3),
     meaning: meaningIdx >= 0 ? meaningIdx : 4,
@@ -438,6 +479,105 @@ export function parseTableCsv(csv: string): TableDef[] {
 
 import { openDb, IDB_TABLES_STORE } from './idb';
 
+// ── Workspace-scoped persistence ───────────────────────────────
+
+const WORKSPACE_TABLES_FILE = 'variablentabelle-cache.json';
+const WORKSPACE_SETTINGS_DIR = '.cucumbergnerator-settings';
+
+export async function saveTableDefsToWorkspace(
+  rootHandle: FileSystemDirectoryHandle,
+  tables: TableDef[],
+): Promise<void> {
+  try {
+    const settingsDir = await rootHandle.getDirectoryHandle(WORKSPACE_SETTINGS_DIR, { create: true });
+    const fileHandle = await settingsDir.getFileHandle(WORKSPACE_TABLES_FILE, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(tables, null, 2));
+    await writable.close();
+  } catch {
+    // ignore — workspace may be read-only
+  }
+}
+
+export async function loadTableDefsFromWorkspace(
+  rootHandle: FileSystemDirectoryHandle,
+): Promise<TableDef[] | null> {
+  try {
+    const settingsDir = await rootHandle.getDirectoryHandle(WORKSPACE_SETTINGS_DIR);
+    const fileHandle = await settingsDir.getFileHandle(WORKSPACE_TABLES_FILE);
+    const file = await fileHandle.getFile();
+    const parsed = JSON.parse(await file.text());
+    return Array.isArray(parsed) ? parsed as TableDef[] : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeWorkspaceJson(rootHandle: FileSystemDirectoryHandle, fileName: string, data: unknown): Promise<void> {
+  try {
+    const settingsDir = await rootHandle.getDirectoryHandle(WORKSPACE_SETTINGS_DIR, { create: true });
+    const fileHandle = await settingsDir.getFileHandle(fileName, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(data, null, 2));
+    await writable.close();
+  } catch { /* read-only workspace */ }
+}
+
+async function readWorkspaceJson(rootHandle: FileSystemDirectoryHandle, fileName: string): Promise<unknown[] | null> {
+  try {
+    const settingsDir = await rootHandle.getDirectoryHandle(WORKSPACE_SETTINGS_DIR);
+    const fileHandle = await settingsDir.getFileHandle(fileName);
+    const file = await fileHandle.getFile();
+    const parsed = JSON.parse(await file.text());
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export const saveFopBindingsToWorkspace = (h: FileSystemDirectoryHandle, b: unknown[]) =>
+  writeWorkspaceJson(h, 'fop-bindings-cache.json', b);
+export const loadFopBindingsFromWorkspace = (h: FileSystemDirectoryHandle) =>
+  readWorkspaceJson(h, 'fop-bindings-cache.json');
+
+export const saveIsBindingsToWorkspace = (h: FileSystemDirectoryHandle, b: unknown[]) =>
+  writeWorkspaceJson(h, 'is-bindings-cache.json', b);
+export const loadIsBindingsFromWorkspace = (h: FileSystemDirectoryHandle) =>
+  readWorkspaceJson(h, 'is-bindings-cache.json');
+
+// ── Knowledge Base workspace cache ─────────────────────────────
+
+async function readWorkspaceJsonObject(rootHandle: FileSystemDirectoryHandle, fileName: string): Promise<unknown | null> {
+  try {
+    const settingsDir = await rootHandle.getDirectoryHandle(WORKSPACE_SETTINGS_DIR);
+    const fileHandle = await settingsDir.getFileHandle(fileName);
+    const file = await fileHandle.getFile();
+    return JSON.parse(await file.text());
+  } catch {
+    return null;
+  }
+}
+
+export async function saveKBToWorkspace(
+  rootHandle: FileSystemDirectoryHandle,
+  docs: KBDocument[],
+  // Strip htmlContent from chunks to keep the file manageable; search still works via `text`.
+  chunks: KBChunk[],
+): Promise<void> {
+  const lean = chunks.map(({ htmlContent: _html, ...rest }) => rest);
+  await writeWorkspaceJson(rootHandle, 'kb-cache.json', { docs, chunks: lean });
+}
+
+export async function loadKBFromWorkspace(
+  rootHandle: FileSystemDirectoryHandle,
+): Promise<{ docs: unknown[]; chunks: unknown[] } | null> {
+  const data = await readWorkspaceJsonObject(rootHandle, 'kb-cache.json');
+  if (!data || typeof data !== 'object') return null;
+  const d = data as { docs?: unknown; chunks?: unknown };
+  if (!Array.isArray(d.docs) || !Array.isArray(d.chunks)) return null;
+  return { docs: d.docs, chunks: d.chunks };
+}
+
 const IDB_STORE = IDB_TABLES_STORE;
 const IDB_KEY = 'tableDefs';
 
@@ -512,15 +652,6 @@ export async function loadTableDefs(): Promise<TableDef[]> {
   }
 }
 
-/** Check if tables need re-import for bilingual support.
- *  Only warns if the majority of database tables lack nameDe. */
-export function tablesNeedReimport(tables: TableDef[]): boolean {
-  const dbs = tables.filter((t) => t.kind === 'database');
-  if (dbs.length === 0) return false;
-  const missingCount = dbs.filter((t) => !t.nameDe).length;
-  return missingCount > dbs.length / 2;
-}
-
 export async function clearTableDefs(): Promise<void> {
   try {
     const db = await openDb();
@@ -570,20 +701,22 @@ export function mergeTableDefs(a: TableDef[], b: TableDef[]): TableDef[] {
       if (t.name) existing.name = t.name;
       if (t.maskNr !== undefined) existing.maskNr = t.maskNr;
 
-      const existingByName = new Map(existing.fields.map((f) => [f.name, f]));
+      const existingByName = new Map(existing.fields.map((f) => [f.name.trim().toLowerCase(), f]));
       for (const f of t.fields) {
-        const ef = existingByName.get(f.name);
+        const fieldKey = f.name.trim().toLowerCase();
+        const ef = existingByName.get(fieldKey);
         if (ef) {
           if (f.descriptionDe) ef.descriptionDe = f.descriptionDe;
           if (f.descriptionEn) ef.descriptionEn = f.descriptionEn;
           if (f.description) ef.description = f.description;
+          if (f.dataType) ef.dataType = f.dataType;
           // Always update structural flags from new import
           ef.isTableField = f.isTableField;
           ef.skip = f.skip;
           ef.readonly = f.readonly;
         } else {
           existing.fields.push(f);
-          existingByName.set(f.name, f);
+          existingByName.set(fieldKey, f);
         }
       }
     } else {

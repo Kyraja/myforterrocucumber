@@ -1,0 +1,153 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : CRMWEITER.SEL
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      :
+.. Funktion       : Setzt Selektion zusammen und Datenbankanfrage in Gang.
+.. Ablauf         : Unterprogramm
+.. Function       : Builds and executes query.
+.. Program flow   : Subroutine
+..*****************************************************************************
+.set trans -
+..
+.input "is/TABLEEREN"
+..
+.. Selction bar was used to build query
+.continue HOL  ? M|kbsel
+..
+.. Validating
+.continue ERROR03 ? _M|kbaktionen & _M|kbprojekte
+.continue ERROR02 ?  M|kdstart > M|kdbisstart & (F|empty(M|kdstart) ; F|empty(M|kdbisstart))
+..
+.. Definitions
+.type integer  xischritt
+.type integer  xitmpindex
+.type integer  xiz
+.type A101 XTFERTIG ? _F|defined(U|XTFERTIG)
+..
+.type integer  xiindex
+.type integer  xizeigen
+.formula U|xiindex  = 0
+.formula U|xizeigen = 0
+.type text xtvertnrfeld.xiindex
+..
+.assign M|dn = "(Transaction)"
+.assign U|XTFERTIG = "(Done)"
+.formula U|xiz = 0
+..
+.. Represantation
+.load 9 add M|kmitarb
+.formula U|xtvertnrfeld.U|xiindex = 9|id ? G|mehr
+.formula U|xizeigen = U|xiindex
+..
+!VERT: Vertretungsschleife
+.continue END ? M|stufe = 0 & M|kbvert & (U|xizeigen > U|xiindex)
+.formula M|kvertg = 'U|xtvertnrfeld.U|xizeigen' ? _F|empty(M|kmitarb)
+..
+.. Set query level
+.formula M|stufe = 2 ? M|kbaktionen
+.formula M|stufe = 1 ? M|kbprojekte
+..
+.. Set query step counter
+.formula U|xischritt = 1
+.formula U|xischritt = 2 ? M|kbprojekte & _M|kbaktionen
+..
+!START: Anfang der Holschleife
+.continue SETVERT ? M|stufe = 0 &  M|kbvert & (U|xizeigen <= U|xiindex)
+.continue END     ? M|stufe = 0 & _M|kbvert
+..
+.. Verteilung nach versch. Holstufen:
+.continue PROJEKT   ? M|stufe = 1
+.continue AKTION    ? M|stufe = 2
+.formula M|stufe = 0
+.continue PJLOOP    ? U|xiz = 1
+.continue TTLOOP    ? U|xiz = 2
+.continue START
+..
+!PROJEKT: Projekte anzeigen
+.formula M|grliste = F|formatstr("{1}:1", M|datnr)
+!PJLOOP: weil keine WHERE-Klausel mit UND/ODER moeglich
+.. Bearbeiter  xiz = 1
+.. Bestaetiger xiz = 2
+.formula M|select = "$,,"
+.formula U|xiz = U|xiz + 1
+.continue ENDLOOP ? U|xiz = 3
+.continue INTEXT
+..
+!AKTION: Aktionen anzeigen
+.formula M|grliste = F|formatstr("{1}:2", M|datnr)
+!TTLOOP: weil keine WHERE-Klausel mit UND/ODER moeglich
+.. Bearbeiter  xiz = 1
+.. Bestaetiger xiz = 2
+.formula M|select = "$,,"
+.formula U|xiz = U|xiz + 1
+.continue ENDLOOP ? U|xiz = 3
+.continue INTEXT
+..
+!INTEXT: Add criteria for ex or internal processes
+.continue SCHLAG ? (_M|kbintern & _M|kbextern) ; (M|kbintern & M|kbextern)
+.formula M|select = M|select + ";intern=" + 'G|TRUE'  ? M|kbintern
+.formula M|select = M|select + ";intern=" + 'G|FALSE' ? M|kbextern
+.continue SCHLAG
+..
+!SCHLAG: Add criteria for key word
+.formula M|select = M|select + ";schlag=" + M|ktschlag ? _F|empty(M|ktschlag)
+.continue ZEIT
+..
+!ZEIT: Add date area
+.continue SORT ? F|empty(M|kdstart) & F|empty(M|kdbisstart)
+.formula M|select = M|select + ";start=" + 'M|kdstart:8' + "!" + 'M|kdbisstart:8'
+.continue SORT
+..
+!SORT: Add staffer, type of filing and sort key
+.formula M|select = M|select + ";bearbeit=" + 'U|xtvertnrfeld.U|xizeigen' ? U|xiz = 1
+.formula M|select = M|select + ";bestaet="  + 'U|xtvertnrfeld.U|xizeigen' ? U|xiz = 2
+.formula M|select = M|select + ";status=" + U|XTFERTIG ? U|xiz = 2
+.formula M|select = M|select + ";@ablageart=(Active)"
+..
+!HOL: Get data
+.input "is/TABLEEREN" ? M|kbsel
+.input "is/HOL.LISTE"
+.continue END    ? M|kbsel
+.continue PJLOOP ? U|xiz = 1
+.continue TTLOOP ? U|xiz = 2
+!ENDLOOP
+.formula U|xiz = 0
+.formula M|stufe = M|stufe + U|xischritt
+.continue START
+..
+!SETVERT: Set representative
+.load 0 employee 'F|formatstr("$,,;vertvon={1}", U|xtvertnrfeld.U|xizeigen)'
+.formula U|xizeigen = U|xizeigen + 1
+!ABBR
+.continue VERT ? _G|mehr
+..
+.formula U|xitmpindex = 0
+!VERGLEICH: Kontrolle, ob bereits im Array
+.continue PLUS ? U|xiindex < U|xitmpindex
+.continue NEXT ? 0|id = U|xtvertnrfeld.U|xitmpindex
+.formula U|xitmpindex = U|xitmpindex + 1
+.continue VERGLEICH
+..
+!PLUS: Array definieren, Index erhoehen, Vertretungsid merken
+.formula U|xiindex = U|xiindex + 1
+.type text xtvertnrfeld.xiindex ? _F|defined(U|xtvertnrfeld.U|xiindex)
+.formula U|xtvertnrfeld.U|xiindex = 0|id
+..
+!NEXT: Naechsten holen
+.load 0 employee
+.continue ABBR
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+.set trans +
+..
+!ERROR02
+.error -line 0 -field M|kdstart -message Ungltiger Startdatumsbereich
+.end 1
+..
+!ERROR03
+.error -line 0 -field M|kbaktionen -message Kein Vorgangstyp zur Selektion aktiviert
+.end 1

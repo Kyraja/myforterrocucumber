@@ -1,0 +1,500 @@
+..!interpreter english declaration noabbrev
+.. at 2017-06-16, 17:22
+.set trans -
+..========================================================================
+..==  Name              : IS.PRJMTPVERRECHNUNG.EV
+..==  Pfad              : allpstd
+..==  Funktion          :
+..==  Erstellungsdatum  : 17.01.2011
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allpstart/TRANS.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF"
+..====================================================
+.type text    xtsel xtcmd xttpid xt1 xykoobjekt xbuchtyp xttitel xttext1 xttext2
+.type real    xrbetrag
+.type GD      xbudat
+.type bool    xyberlaubt xbok xbtpok
+.type P86:1   xpproject
+.type integer xprocsp           ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Rechtepruefung_TPVerrechnungsanforderung -----
+.continue EL001 ? _(U|xypmrepruefkst)
+.copy U|xbok = G|FALSE
+.formula U|xykoobjekt = H|yhauptprojekt^yverantwkst^id
+.input 'U|xypmrepruefkstprog'
+.copy U|xbok   = G|TRUE         ? U|xyberlaubt
+.formula U|xykoobjekt = H|yteilprojekt^yverantwkst^id
+.input 'U|xypmrepruefkstprog'
+.copy U|xbtpok = G|TRUE         ? U|xyberlaubt
+!EL001
+.continue EL002 ? _(U|xypmrepruefktr)
+.copy U|xbok = G|FALSE
+.formula U|xykoobjekt = H|yhauptprojekt^yktr^id
+.input 'U|xypmrepruefktrprog'
+.copy U|xbok   = G|TRUE       ? U|xyberlaubt
+.formula U|xykoobjekt = H|yteilprojekt^yktr^id
+.input 'U|xypmrepruefktrprog'
+.copy U|xbtpok = G|TRUE       ? U|xyberlaubt
+!EL002
+.continue EL003 ? _(U|xypmrepruefind)
+.input 'U|xypmrepruefindprog'
+.assign U|xbok = U|xyberlaubt
+!EL003
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Rechtepruefung_Eingabe -----
+.continue EL004 ? _(U|xypmrepruefkst)
+.formula U|xykoobjekt = M|.evtvar^yverantwkst^id
+.input 'U|xypmrepruefkstprog'
+.continue EL005 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderliche Rechte fÅr dieses Projekt.
+.set TRANS -
+.formula M|.evtvar = ""
+.continue
+!EL005
+!EL004
+.continue EL006 ? _(U|xypmrepruefktr)
+.formula U|xykoobjekt = M|.evtvar^yktr^id
+.input 'U|xypmrepruefktrprog'
+.continue EL007 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderliche Rechte fÅr dieses Projekt.
+.set TRANS -
+.formula M|.evtvar  = ""
+.continue
+!EL007
+!EL006
+.continue EL008 ? _(U|xypmrepruefind)
+.input 'U|xypmrepruefindprog'
+.continue EL009 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderliche Rechte fÅr dieses Projekt.
+.set TRANS -
+.formula M|.evtvar = ""
+.continue
+!EL009
+!EL008
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Hauptprojekt_pruefen -----
+.continue EL010 ? _((_(F|empty(M|ythprojekt))) & (M|ybfreigeben))
+.copy U|xpproject = M|ythprojekt
+.input "allpstart/FOP.PRJM.UP.PROJECTCLOSINGVARS"
+.continue EL011 ? _(((M|ythprojekt^ystatusk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefvanf))) ; (((M|ythprojekt^ystatusk = "ABS") ; (M|ythprojekt^ystatusk = "08") ; (M|ythprojekt^yablage)) & (F|rec(U|xystclosingvars, ypmkabpruefvanf))))
+.set trans +
+.formula U|xttitel = "Fehler"
+.formula U|xttext1 = F|formatstr("Das Projekt {1} hat den Status {2}{3}{2}.", M|ythprojekt^such, G|dblquote, M|ythprojekt^ystatus)
+.formula U|xttext2 = "Teilprojektverrechnungen dÅrfen nicht mehr freigegeben werden!"
+.set trans -
+.box 'U|xttitel'
+'U|xttext1'
+'U|xttext2'
+.copy M|ybfreigeben = G|false
+.error
+.end 1
+!EL011
+!EL010
+.continue 'xprocst.xprocsp'
+!PROC004: ----- Buchungsdatum -----
+.continue EL012 ? _(_(F|empty(M|ytdatum)))
+.copy    U|xbudat   = M|ytdatum
+.formula U|xbuchtyp = "S"
+.input "allpstart/PRUEF.BUDAT"
+.continue EL013 ? _(_(U|xbbuchbar))
+.set TRANS +
+.box Hinweis
+Das Datum 'U|xbudat' liegt in einer abgeschlossenen Periode.
+.set TRANS -
+.copy M|ytdatum     = M|yttpanf^ydatum
+.copy M|ybfreigeben = G|FALSE
+.error
+.end 1
+!EL013
+.continue FI012
+!EL012
+.continue EL014 ? _(G|evtvar = "ybfreigeben")
+.set TRANS +
+.box Hinweis
+Vor der Freigabe bitte das Buchungsdatum eintragen.
+.set TRANS -
+.formula M|ybfreigeben = G|FALSE
+.cursor ytdatum 'M|aktzeile'
+.error
+.end 1
+!EL014
+!FI012
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskein")
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "maskende")
+.end .          ? M|ybmaskezu
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtart = "buttonvor")
+.continue BRK004 ? _(G|evtvar = "bstart")
+.make screen line --O
+.continue ESAC002
+!BRK004
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK003
+.continue BRK005 ? _(G|evtart = "buttonnach")
+.continue BRK006 ? _(G|evtvar = "bstart")
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yhauptprojekt=="           + M|yhauptprojekt^id  ? _F|empty(M|yhauptprojekt)
+.formula U|xtsel = U|xtsel + ";yhauptprojekt^yprojleit==" + M|yhprojleit^id     ? _F|empty(M|yhprojleit)
+.formula U|xtsel = U|xtsel + ";yteilprojekt=="            + M|yteilprojekt^id   ? _F|empty(M|yteilprojekt)
+.formula U|xtsel = U|xtsel + ";yteilprojekt^yprojleit=="  + M|ytprojleit^id     ? _F|empty(M|ytprojleit)
+.formula U|xtsel = U|xtsel + ";ydatum=" + 'M|yvondat' + "!" + 'M|ybisdat'       ? _F|empty(M|yvondat) ; _F|empty(M|ybisdat)
+.formula U|xtsel = U|xtsel + ";ytransaktion=`"                                  ? _M|ybabgelegt
+.formula U|xtsel = U|xtsel + ";@ablageart=(1)"
+.select group 'U|xydbgrtpverrechanf' 'U|xtsel'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.copy U|xbok = G|TRUE
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.continue EL015 ? _((U|xbok) ; (U|xbtpok))
+.make screen line +O
+.assign M|yttpanf        = H|id
+.assign M|yttpanfname    = H|namebspr
+.copy   M|ythprojekt     = H|yhauptprojekt
+.copy   M|ythprojleit    = H|yhauptprojekt^yprojleit
+.copy   M|yttprojekt     = H|yteilprojekt
+.copy   M|yttprojleit    = H|yteilprojekt^yprojleit
+.assign M|ytverrechwert  = H|ybetrag
+.assign M|ytvaeigenleist = H|yvaeigenleist
+.assign M|ytvafremdleist = H|yvafremdleist
+.assign M|ytvasonstkost  = H|yvasonstkost
+.assign M|ytvafertleist  = H|yvafertleist
+.assign M|ytgeswert      = H|yteilprojekt^ytpwert
+.copy   M|ytdatum        = H|ydatum
+.copy   M|ytfreidat      = H|yfreidat
+.assign M|ytfreidurch    = H|yfreidurch
+.copy   M|yttransaktion  = H|ytransaktion
+.protection ybfreigeben 'M|aktzeile'        ? _F|empty(H|ytransaktion) ; _U|xbok
+.protection ytdatum     'M|aktzeile'        ? _F|empty(H|ytransaktion) ; _U|xbok
+.protection yttpanfname 'M|aktzeile'        ? _F|empty(H|ytransaktion) ; _U|xbok
+.colour -BACKGROUND -1 -1 -1 'M|aktzeile'
+!EL015
+.select continue
+.continue LOOP001
+!ELOP001: ==============================
+.continue ESAC003
+!BRK006
+.continue BRK007 ? _(G|evtvar = "ybufreigeben")
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"
+.input is/ABASFARBEN.DEF
+.copy U|xbok = G|FALSE
+.select screen header
+.select screen line
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.continue EL016 ? _((_(F|empty(M|yttpanf))) & (F|empty(M|yttpanf^ytransaktion)))
+.continue EL017 ? _(M|ybfreigeben)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC003
+!RET002
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC004
+!RET003
+.formula xprocsp = xprocsp - 1
+!EL017
+.continue EL018 ? _((M|ytdatum     <> M|yttpanf^ydatum) ; (M|yttpanfname <> M|yttpanf^namebspr))
+.select lock add M|yttpanf
+.continue EL019 ? _(G|mehr)
+.assign  H|ydatum = M|ytdatum
+.formula H|name   = M|yttpanfname
+.rewrite
+.colour -BACKGROUND 'U|xabaslightgreen' 'M|aktzeile'
+!EL019
+!EL018
+!EL016
+.copy U|xbok = G|TRUE         ? M|ybfreigeben
+.select screen line
+.continue LOOP002
+!ELOP002: ==============================
+.continue EL020 ? _(U|xbok)
+.continue EL021 ? _(((F|cmdpermitted(U|xydbtrans, 12)) & (F|cmdpermitted(U|xydbtrans, 13)) & (F|cmdpermitted(U|xydbtrans, 14)) & (F|cmdpermitted(U|xydbtransdat, 12)) & (F|cmdpermitted(U|xydbtransdat, 13)) & (F|cmdpermitted(U|xydbtransdat, 14))) ; ((_(F|empty(F|sysinfo(10)^ykonfigprjm^ybatchuser))) & (F|sysinfo(10)^ykonfigprjm^ybatchuser^fremdok)))
+.set TRANS +
+.box -BUTTON yes:no -TITLE Hinweis
+Sollen alle markierten Teilprojektverrechnungen freigegeben werden?
+.set TRANS -
+.continue EL022 ? _(G|box = G|boxyes)
+.select screen header
+.select screen line
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.continue EL023 ? _((_(F|empty(M|yttpanf))) & (M|ybfreigeben))
+.load 9 add M|yttpanf
+.input allpstd/FOP.PRJM.UP.TPVERRECHANF.BUCHEN
+.load 9 add M|yttpanf
+.continue EL024 ? _(G|mehr)
+.continue EL025 ? _(_(F|empty(9|ytransaktion)))
+.copy M|yttransaktion = 9|ytransaktion
+.copy M|ybfreigeben   = G|false
+.protection ybfreigeben 'M|aktzeile'
+.protection ytdatum     'M|aktzeile'
+.protection yttpanfname 'M|aktzeile'
+.colour -background 'U|xabaslightgreen' 'M|aktzeile'
+.continue FI025
+!EL025
+.set TRANS +
+.box
+Die Teilprojektverrechnung in Zeile 'M|aktzeile'
+konnte nicht freigegeben werden.
+
+Bitte prÅfen.
+.set TRANS -
+.formula M|ybfreigeben = G|FALSE
+!FI025
+.continue FI024
+!EL024
+.set TRANS +
+.box
+Die Teilprojektverrechnung in Zeile 'M|aktzeile'
+kann nicht geladen werden.
+
+Bitte prÅfen.
+.set TRANS -
+!FI024
+!EL023
+.select screen line
+.continue LOOP003
+!ELOP003: ==============================
+!LOOP004: ==============================
+.continue ELOP004 ? _(_(F|empty(U|xttpid)))
+.formula U|xt1 = U|xttpid<<"###"
+.select lock group 'U|xydbgrprojekt' 'U|xt1'
+.continue EL026 ? _(G|mehr)
+.formula U|xrbetrag = 0
+.formula U|xtsel = "$,,yteilprojekt==" + H|id + ";@ablageart=(1)"
+.load 0 group 'U|xydbgrtpverrechanf' 'U|xtsel'
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.formula U|xrbetrag = U|xrbetrag + 0|ybetrag
+.load 0 continue
+.continue LOOP005
+!ELOP005: ==============================
+.formula H|ytpoffwert = H|ytpwert - U|xrbetrag
+.rewrite
+.continue FI026
+!EL026
+.set TRANS +
+.box
+Das Teilprojekt 'U|xt1' kann nicht bearbeitet werden.
+
+Der offene Wert kann nicht aktualisiert werden.
+.set TRANS -
+.formula M|ybfreigeben = G|FALSE
+.continue
+!FI026
+.formula U|xttpid = U|xttpid>>"###"
+.continue LOOP004
+!ELOP004: ==============================
+!EL022
+.continue FI021
+!EL021
+.set TRANS +
+.box
+Sie haben keine Berechtigung fÅr Buchungstransaktionen.
+Die Freigabe ist nicht mîglich.
+.set TRANS -
+!FI021
+!EL020
+.continue ESAC003
+!BRK007
+.continue BRK008 ? _(G|evtvar = "ytbufreirueck")
+.select add M|yttpanf
+.continue EL027 ? _(G|mehr)
+.formula U|xtcmd = "<(ProjectSuiteTransactionData)>" + H|id + "<(View)>"
+.formula U|xtcmd = U|xtcmd + "?ybukobustornoedp="
+.formula U|xtcmd = U|xtcmd + "|[invisible]=1"
+.command -WAIT 'U|xtcmd'
+.select add M|yttpanf
+.continue EL028 ? _(G|mehr)
+.copy U|xbok = G|TRUE
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC001
+!RET004
+.formula xprocsp = xprocsp - 1
+.continue EL029 ? _((U|xbok) ; (U|xbtpok))
+.assign M|yttpanf       = H|id
+.assign M|yttpanfname   = H|namebspr
+.copy   M|ythprojekt    = H|yhauptprojekt
+.copy   M|ythprojleit   = H|yhauptprojekt^yprojleit
+.copy   M|yttprojekt    = H|yteilprojekt
+.copy   M|yttprojleit   = H|yteilprojekt^yprojleit
+.assign M|ytverrechwert = H|ybetrag
+.assign M|ytgeswert     = H|yteilprojekt^ytpwert
+.copy   M|ytdatum       = H|ydatum
+.copy   M|ytfreidat     = H|yfreidat
+.assign M|ytfreidurch   = H|yfreidurch
+.assign M|yttransaktion = H|ytransaktion
+.protection -RESET ybfreigeben 'M|aktzeile'     ?  F|empty(H|ytransaktion) &  U|xbok
+.protection        ybfreigeben 'M|aktzeile'     ? _F|empty(H|ytransaktion) ; _U|xbok
+.protection -RESET ytdatum     'M|aktzeile'     ?  F|empty(H|ytransaktion) &  U|xbok
+.protection        ytdatum     'M|aktzeile'     ? _F|empty(H|ytransaktion) ; _U|xbok
+.protection -RESET yttpanfname 'M|aktzeile'     ?  F|empty(H|ytransaktion) &  U|xbok
+.protection        yttpanfname 'M|aktzeile'     ? _F|empty(H|ytransaktion) ; _U|xbok
+!EL029
+!EL028
+.continue FI027
+!EL027
+.set TRANS +
+.box Hinweis
+Die Teilprojektverrechnung konnte nicht geladen werden!
+Bitte Tabelle neu laden.
+.set TRANS -
+.error
+.end 1
+!FI027
+.continue ESAC003
+!BRK008
+.continue BRK009 ? _(G|evtvar = "ytbustorno")
+.select add M|yttpanf
+.continue EL030 ? _(G|mehr)
+.formula U|xtcmd = "<(ProjectSuiteTransactionData)>" + H|id + "<" + G|kaktname12 + ">"
+.formula U|xtcmd = U|xtcmd + "?ybustornoedp="
+.formula U|xtcmd = U|xtcmd + "|[invisible]=1"
+.command -WAIT 'U|xtcmd'
+.select add M|yttpanf
+.continue EL031 ? _(_(G|mehr))
+.input is/ABASFARBEN.DEF
+.protection -LINE 'M|aktzeile'
+.colour -BACKGROUND 'U|xabaslightgrey' 'M|aktzeile'
+!EL031
+.continue FI030
+!EL030
+.set TRANS +
+.box Hinweis
+Die Teilprojektverrechnung konnte nicht geladen werden!
+Bitte Tabelle neu laden.
+.set TRANS -
+.error
+.end 1
+!FI030
+.continue ESAC003
+!BRK009
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC001
+!BRK005
+.continue BRK010 ? _(G|evtart = "feldaus")
+.continue BRK011 ? _(G|evtvar = "yhauptprojekt")
+.continue EL032 ? _(_(F|empty(M|yhauptprojekt)))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC002
+!RET005
+.formula xprocsp = xprocsp - 1
+!EL032
+.continue EL033 ? _(_(F|empty(M|yhauptprojekt)))
+.formula M|yhprojleit = ""
+.formula M|ytprojleit = ""
+!EL033
+.continue ESAC004
+!BRK011
+.continue BRK012 ? _(G|evtvar = "yhprojleit")
+.continue EL034 ? _(_(F|empty(M|yhprojleit)))
+.formula M|yhauptprojekt  = ""
+.formula M|yteilprojekt   = ""
+!EL034
+.continue ESAC004
+!BRK012
+.continue BRK013 ? _(G|evtvar = "yteilprojekt")
+.continue EL035 ? _(_(F|empty(M|yteilprojekt)))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC002
+!RET006
+.formula xprocsp = xprocsp - 1
+!EL035
+.continue EL036 ? _(_(F|empty(M|yteilprojekt)))
+.formula M|yhprojleit = ""
+.formula M|ytprojleit = ""
+!EL036
+.continue ESAC004
+!BRK013
+.continue BRK014 ? _(G|evtvar = "ytprojleit")
+.continue EL037 ? _(_(F|empty(M|ytprojleit)))
+.formula M|yhauptprojekt  = ""
+.formula M|yteilprojekt   = ""
+!EL037
+.continue ESAC004
+!BRK014
+.continue BRK015 ? _(G|evtvar = "yvondat")
+.assign M|ybisdat = ""  ? _F|empty(M|yvondat) & M|yvondat > M|ybisdat
+.continue ESAC004
+!BRK015
+.continue BRK016 ? _(G|evtvar = "ybisdat")
+.assign M|yvondat = ""  ? _F|empty(M|ybisdat) & M|yvondat > M|ybisdat
+.continue ESAC004
+!BRK016
+.continue BRK017 ? _(G|evtvar = "ybfreigeben")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC003
+!RET007
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC004
+!RET008
+.formula xprocsp = xprocsp - 1
+.colour -BACKGROUND -1 -1 -1          'M|aktzeile'
+.continue ESAC004
+!BRK017
+.continue BRK018 ? _(G|evtvar = "ytdatum")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC004
+!RET009
+.formula xprocsp = xprocsp - 1
+.colour -BACKGROUND -1 -1 -1          'M|aktzeile'
+.continue ESAC004
+!BRK018
+.continue BRK019 ? _(G|evtvar = "yttpanfname")
+.colour -BACKGROUND -1 -1 -1          'M|aktzeile'
+.continue ESAC004
+!BRK019
+!ESAC004: =====   ENDCASE   =====
+.continue EL038 ? _(G|evtzeile = 0)
+.make screen line --O
+!EL038
+.continue ESAC001
+!BRK010
+!ESAC001: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJMTPVERRECHNUNG.EV")'  ? F|fileexists(F|foppath("IFOP.IS.PRJMTPVERRECHNUNG.EV"))
+.continue

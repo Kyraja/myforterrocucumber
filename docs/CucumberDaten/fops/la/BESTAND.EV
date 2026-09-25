@@ -1,0 +1,388 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : BESTAND.EV
+..  Datum          : 18.12.03
+..  Version        : 2021
+..  Autor          : cl
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..  Funktion       : Fuehrt je nach Ereignis und Ereignisausloeser unterschiedliche
+..                   Funktionen aus.
+..                   Feldaustritte      -> Infofelder fuellen, Tabelle leeren.
+..                   Button bstart      -> Tabelle leeren, M|select fuellen, HOL-Methode auswaehlen
+..
+..  Ablauf         : Zentrales Ereignis-EFOP des Bestandsinfosystems
+..
+..  Functionality  : Executes particular functionality according to the event and event variable.
+..                   Field exits        -> Fills information fields and clears table.
+..                   Button bstart      -> Clears Table, sets select and query database.
+..
+..  Program flow   : Central event FOP of the infosystem BESTAND.
+..
+..  includes       :
+..  include is/HOL.BESTAND
+..  include la/BESTAND.ME
+..  include la/BEHAELTER.FUSS
+..  include la/BESTAND.BEHAELTER
+..*****************************************************************************
+.. Variablen
+..*****************************************************************************
+.type bool xbartmge         ? _F|defined(U|xbartmge)
+.type bool xblgruppemge     ? _F|defined(U|xblgruppemge)
+.type bool xblagermge       ? _F|defined(U|xblagermge)
+.type bool xbplatzmge       ? _F|defined(U|xbplatzmge)
+.type bool xbplatzmgeelem   ? _F|defined(U|xbplatzmgeelem)  
+.type bool xbgebeigenschaft ? _F|defined(U|xbgebeigenschaft)    
+.type text xtcmd            ? _F|defined(U|xtcmd)  
+.type bool xbdetails        ? _F|defined(U|xbdetails)
+.set trans -
+..
+..---------------------------- Kopfteil/Header:--------------------------------
+.continue AUFZU      ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "taufzu"
+.continue BSTART     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+.continue VORGANG    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "vorgang"
+.continue PRODUCT    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "artikel"
+.continue BASIS      ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "basisartikel"
+.continue LOCATION   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "klplatz"
+.continue WAREHOUSE  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "klager"
+.continue LOT        ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "kcharge"
+.continue LGRUPPE    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "klgruppe"
+.continue CLRTAB     ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "bzuord"
+.continue NULLMGE    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "nullmge"
+.continue NURNEG     ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "nurnegativ"
+.continue BESVIEW    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "bestandssicht"
+.continue PLKARTE    ? G|evtartengl = "FIELD_EXIT"  & G|evtvar = "plankarte"
+.continue PACKM      ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "packm"
+.continue PROJEKT    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "kprojekt"
+.continue BEHAELTER  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "behaelter"
+.continue SELBEH     ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "selbehaelter"
+.continue VERD       ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "verdichten" 
+.continue KVERW      ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "kverw"   
+.continue DETAILS    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "details"  
+.continue END
+..
+!SELBEH
+.copy M|behaelter  = G|TRUE  ? _F|empty(M|selbehaelter)
+.copy M|verdichten = G|FALSE ? _F|empty(M|selbehaelter)
+.formula M|klplatz = M|selbehaelter^platz^id  ? _F|empty(M|selbehaelter)
+.protection details           ? _F|empty(M|selbehaelter) 
+.copy M|details   =  G|false  ? _F|empty(M|selbehaelter)
+.continue CLRTAB
+..
+!BEHAELTER
+.formula M|selbehaelter = "" ? _M|behaelter
+.copy M|verdichten = G|false ? M|behaelter
+.protection -reset kcharge
+.protection -reset kverw
+.protection -reset kprojekt
+.protection -reset selbehaelter
+.continue CLRTAB
+!KVERW:
+.copy M|verdichten = G|false  ? _F|empty(M|kverw) 
+.protection details           ? _F|empty(M|kverw) 
+.copy M|details   =  G|false  ? _F|empty(M|kverw)
+.continue CLRTAB
+!VERD: Kopfeld entscheidet, ob Bestand verdichtet werden soll
+.continue VERTRUE ? M|verdichten
+.continue VERFALS ? _M|verdichten
+!VERTRUE
+.formula M|behaelter = G|false 
+.formula M|kcharge = "" 
+.formula M|kexnum = "" 
+.protection kcharge
+.formula M|kverw   = "" 
+.protection kverw
+.formula M|selbehaelter = "" 
+.protection selbehaelter
+.formula M|kprojekt = ""
+.protection kprojekt
+.copy M|nurnegativ = G|false
+.continue CLRTAB
+!VERFALS
+.protection -reset kcharge
+.protection -reset kverw
+.protection -reset selbehaelter
+.protection -reset kprojekt
+.continue CLRTAB
+!NURNEG
+.copy M|verdichten = G|false ?  M|nurnegativ
+.copy M|nullmge    = G|false ?  M|nurnegativ
+.protection -reset kcharge   ?  M|nurnegativ
+.protection -reset kverw     ?  M|nurnegativ
+.protection -reset selbehaelter  ?  M|nurnegativ
+.protection -reset kprojekt      ?  M|nurnegativ
+.continue CLRTAB
+!NULLMGE
+.copy M|nurnegativ = G|false ? M|nullmge
+.continue CLRTAB
+..
+!PACKM
+.continue ERROR5 ? _F|empty(M|artikel) & M|packm & _M|artikel^packmit
+.continue CLRTAB
+..
+!PROJEKT
+.protection details           ? _F|empty(M|kprojekt) 
+.copy M|details   =  G|false  ? _F|empty(M|kprojekt)
+.continue CLRTAB
+..
+!BESVIEW
+.copy M|plankarte = G|TRUE  ? _M|bestandssicht
+.copy M|plankarte = G|FALSE ?  M|bestandssicht
+.protection -reset kcharge      ? M|bestandssicht & _M|verdichten
+.protection -reset kverw        ? M|bestandssicht & _M|verdichten
+.protection -reset kprojekt     ? M|bestandssicht & _M|verdichten
+.protection -reset selbehaelter ? M|bestandssicht & _M|verdichten
+.protection -reset verdichten   ? M|bestandssicht
+.protection -reset behaelter    ? M|bestandssicht
+.protection details
+.protection -reset details ? _F|empty(M|klplatz) ; _F|empty(M|artikel) ; _F|empty(M|basisartikel)
+.copy M|details = G|false
+.copy M|details = G|true   ? _F|empty(M|artikel) ; _F|empty(M|basisartikel)
+.continue CLRTAB
+!PLKARTE
+.copy M|bestandssicht = G|TRUE  ? _M|plankarte
+.copy M|bestandssicht = G|FALSE ? M|plankarte
+.protection details             ? M|plankarte
+.copy M|details       = G|FALSE ? M|plankarte
+.protection kcharge      ? M|plankarte
+.protection kverw        ? M|plankarte
+.protection kprojekt     ? M|plankarte
+.copy M|behaelter = G|FALSE ? M|plankarte
+.protection behaelter ? M|plankarte
+.protection selbehaelter ? M|plankarte
+.copy M|verdichten = G|FALSE ? M|plankarte
+.protection verdichten   ? M|plankarte 
+.formula M|klager  = ""
+.formula M|klplatz = ""
+.assign M|klgruppe = F|sysinfo(10)^intlgruppe ? F|empty(M|klgruppe) 
+.continue CLRTAB
+!VORGANG
+.continue END ? M|vorgang <> M|iconvorgang
+.formula U|xtcmd = "<(Object)>" + M|kopfzugvorg^id + "<(View)>"
+.command -parallel 'U|xtcmd'
+.continue END
+!AUFZU
+.continue AUFKLAP ? M|taufzu = M|iconzu
+.continue ZUKLAP  ? M|taufzu = M|iconauf
+.continue NEXTDET ? U|xbdetails
+.continue END     ? F|empty(M|taufzu)
+!AUFKLAP
+.copy U|xbplatzmge     = G|false
+.copy U|xbplatzmgeelem = G|true
+.formula M|taufzu = M|iconauf
+.continue PLELMGE ? U|xbdetails
+.continue SELEKTION
+!ZUKLAP
+.formula M|taufzu = M|iconzu
+.select screen line
+!ZUKLOOP
+.continue END ? _G|mehr
+.make screen line -o ?  F|empty(M|taufzu) &  F|empty(M|lgruppe)
+.continue ZUKLOOP    ?  F|empty(M|taufzu) &  F|empty(M|lgruppe) 
+.continue END        ? _F|empty(M|taufzu) ; _F|empty(M|lgruppe)
+!BSTART: sets select and query database
+.formula P|maskkontextfop = "BESTAND"
+.copy U|xbplatzmge = G|true
+.make screen line --  ?  M|tzeilen > 0
+..Akualisierung Lager und Lagergruppe Åber den Platz     
+.copy M|klgruppe = M|klplatz^lgruppe   ? _F|empty(M|klplatz) & F|empty(M|klager)
+.copy M|klager   = M|klplatz^lager    ? _F|empty(M|klplatz) & F|empty(M|klager)
+.continue PLCHART        ? M|plankarte
+.continue BEHVIEW        ? M|behaelter
+..
+.. bei Gebindekennzeichen Charge, Projekt, Verwendung muss direkt das Platzmengenelement selektiert werden
+.. diese Informationen sinn der Platzmenge nicht verfÅgbar
+.continue GEBEIG     ?  M|nurnegativ
+.continue GEBEIG     ? _F|empty(M|kcharge)
+.continue GEBEIG     ? _F|empty(M|kprojekt)
+.continue GEBEIG     ? _F|empty(M|kverw)
+..
+!SELEKTION: Selection of product and location
+.continue PLMGE ? U|xbplatzmge
+.continue PLELMGE ? U|xbplatzmgeelem
+!PLMGE
+.formula M|select = "$,,;@ablageart=(Active)"
+.formula M|select = M|select + ";artikel=" + M|artikel^id  ? _F|empty(M|artikel)
+.formula M|select = M|select + ";artikel^basisartikel=" + M|basisartikel^id  ? _F|empty(M|basisartikel)
+.formula M|select = M|select + ";platz=" + M|klplatz^id    ? _F|empty(M|klplatz)
+.formula M|select = M|select + ";lager=" + M|klager^id     ? _F|empty(M|klager)
+.formula M|select = M|select + ";lgruppe<>`"              ?  F|empty(M|klgruppe)
+.formula M|select = M|select + ";lgruppe=" + M|klgruppe^id ? _F|empty(M|klgruppe)
+.formula M|select = M|select + ";artikel^packmit=TRUE"     ?  M|packm
+.continue BESTAND 
+!GEBEIG: Gebindeeigenschaften wie Charge, Projekt Verwendung direkt im Platzmengenelement behandeln
+.formula P|maskkontextfop = "DETAIL"
+.copy U|xbplatzmge = G|false
+.copy U|xbplatzmgeelem = G|true
+.copy U|xbgebeigenschaft = G|true
+!PLELMGE
+.continue VERDICH ? M|verdichten 
+.formula M|select = "$,,;@ablageart=(Active)"
+.formula M|select = M|select + ";artikel=" + M|tartikel^id   ? _U|xbgebeigenschaft
+.formula M|select = M|select + ";artikel=" + M|artikel^id    ? U|xbgebeigenschaft
+.formula M|select = M|select + ";artikel^basisartikel=" + M|basisartikel^id ? U|xbgebeigenschaft & _F|empty(M|basisartikel)
+.formula M|select = M|select + ";platz=" + M|lplatz^id       ? _U|xbgebeigenschaft 
+.formula M|select = M|select + ";platz=" + M|klplatz^id      ? U|xbgebeigenschaft 
+.formula M|select = M|select + ";gebmge<0"                  ? M|nurnegativ
+.formula M|select = M|select + ";artikel^packmit=TRUE"     ?  M|packm
+.formula M|select = M|select + ";charge=" + M|kcharge^id   ? _F|empty(M|kcharge) 
+.formula M|select = M|select + ";projekt=" + M|kprojekt^id    ? _F|empty(M|kprojekt)
+.formula M|select = M|select + ";verw=" + M|kverw            ? _F|empty(M|kverw) 
+.continue BESTAND 
+!VERDICH: Verdichten von BestÑnden Åber die BehÑlterlagermengen (M|verdichten = G|true)
+!BEHVIEW
+..bei aktivierter BehÑltersicht werden die Daten aus BehÑlterlagermengen gelesen.
+.input "la/BESTAND.BEHAELTER"
+.continue NEXTDET ? U|xbdetails
+.continue HINT1           ? M|tzeilen = 0 & _F|empty(M|artikel)
+.continue END                                       
+..
+!BESTAND
+.input "is/HOL.BESTAND" 
+.continue NODET   ? G|evtvar = "taufzu"
+.continue NEXTDET ? G|evtvar = "bstart" & U|xbdetails 
+..Hier stehen alle Platzmengen zum Aufklappen in der Tabelle
+..Nachlauf um die Ordner aufzuklappen, wenn der Detail-Haken sitzt 
+..Eigene Bool-Variable xbdetails, damit das normale Aufklappen nicht gestîrt wird
+.copy U|xbdetails = M|details
+.continue NODET   ? _U|xbdetails
+.continue DETAIL  ?  U|xbdetails
+!DETAIL: automatisch aufklappen, wenn der Detail-Haken sitzt
+.select screen header
+.select screen line
+.continue ENDDET ? _G|mehr
+!DETLOOP: Schleife um Details aufzuklappen
+..Springen zur FunktionalitÑt Aufklappen
+.continue AUFZU ? U|xbdetails
+!NEXTDET: RÅckspringen aus dem Bereich Auf- und Zuklappen
+.select screen line
+.continue DETLOOP ? G|mehr
+!ENDDET: Ende der Schleife fÅr automatisches RÅckspringen
+!NODET: nicht automatisch aufklappen
+.formula M|select = "!"
+.continue HINT3           ? M|tzeilen = 0 & M|packm
+.continue HINT1           ? M|tzeilen = 0 & _F|empty(M|artikel)
+.continue HINT2           ? M|tzeilen = 0 &  F|empty(M|artikel)
+.input "la/BEHAELTER.FUSS" ? _F|empty(M|selbehaelter)
+.continue END
+!PLCHART: Plankartensicht
+.assign M|klgruppe = F|sysinfo(10)^intlgruppe ? F|empty(M|klgruppe) 
+.formula P|maskkontextfop = "PLANKARTE"
+.input "la/BESTAND.PLAN"
+.continue END
+..
+!PRODUCT: Artikel/product
+.assign M|basisartikel = M|artikel^basisartikel ? _F|empty(M|artikel)
+.copy M|behaelter = G|false ? F|empty(M|artikel)
+..Detail-Haken mit nein und Schreibschutz vorbelegen
+.protection details
+.copy M|details = G|false
+..markierter Detail-Haken macht nur in der Bestandssicht Sinn
+.continue NODET1 ? _M|bestandssicht
+..bei detaillierter Selektion ist der Detail-Haken nicht zu markieren
+.continue NODET1 ? _F|empty(M|kcharge) ; _F|empty(M|kverw) ; _F|empty(M|kprojekt) ; _F|empty(M|selbehaelter)
+.protection -reset details ? _F|empty(M|klplatz) ; _F|empty(M|artikel) ; _F|empty(M|basisartikel) 
+.copy M|details = G|true   ? _F|empty(M|artikel) ; _F|empty(M|basisartikel)
+!NODET1
+.continue NOLOT ? F|empty(M|kcharge)
+.continue ERROR3 ? M|kcharge^artikel <> M|artikel
+!NOLOT
+.continue ERROR5 ? M|packm & _F|empty(M|artikel) & _M|artikel^packmit
+.continue TABLEEREN
+!BASIS: Basisartikel
+.formula M|artikel = "" ? _F|empty(M|basisartikel)
+..Detail-Haken mit nein und Schreibschutz vorbelegen
+.protection details
+.copy M|details = G|false
+..markierter Detail-Haken macht nur in der Bestandssicht Sinn
+.continue NODET2 ? _M|bestandssicht
+..bei detaillierter Selektion ist der Detail-Haken nicht zu markieren
+.continue NODET2 ? _F|empty(M|kcharge) ; _F|empty(M|kverw) ; _F|empty(M|kprojekt) ; _F|empty(M|selbehaelter)
+.protection -reset details ? _F|empty(M|klplatz) ; _F|empty(M|artikel) ; _F|empty(M|basisartikel) 
+.copy M|details = G|true   ? _F|empty(M|artikel) ; _F|empty(M|basisartikel)
+!NODET2
+.continue TABLEEREN
+..
+!LOCATION: Lagerplatz/location
+..Detail-Haken mit nein und Schreibschutz vorbelegen
+.protection details
+.copy M|details = G|false
+..markierter Detail-Haken macht nur in der Bestandssicht Sinn
+.continue NODET3 ? _M|bestandssicht
+..bei detaillierter Selektion ist der Detail-Haken nicht zu markieren
+.continue NODET3 ? _F|empty(M|kcharge) ; _F|empty(M|kverw) ; _F|empty(M|kprojekt) ; _F|empty(M|selbehaelter)
+.protection -reset details ? _F|empty(M|klplatz) ; _F|empty(M|artikel) ; _F|empty(M|basisartikel) 
+.copy M|details = G|true   ? _F|empty(M|artikel) ; _F|empty(M|basisartikel)
+!NODET3
+.continue TABLEEREN       ? F|empty(M|klplatz)
+.copy M|klgruppe = M|klplatz^lgruppe
+.copy M|klager   = M|klplatz^lager
+.continue TABLEEREN
+..
+!WAREHOUSE: Lager/warehouse
+.continue TABLEEREN         ? F|empty(M|klager)
+.copy M|klgruppe = M|klager^lgruppe
+.continue TABLEEREN
+..
+!LOT: Charge/lot
+.formula M|kexnum = ""
+.continue TABLEEREN       ? F|empty(M|kcharge)
+.formula M|kexnum = M|kcharge^exnum
+.formula M|artikel = M|kcharge^artikel^id
+.copy M|verdichten = G|false
+.protection details           ? _F|empty(M|kcharge) 
+.copy M|details   =  G|false  ? _F|empty(M|kcharge)
+.continue TABLEEREN
+..
+!LGRUPPE: Lagergruppe/warehouse group
+.formula M|klager  = ""    ? M|klgruppe^id <> M|klager^lgruppe^id
+.formula M|klplatz = ""    ? M|klgruppe^id <> M|klplatz^lgruppe^id
+.continue TABLEEREN
+..
+!DETAILS: Detail-Haken
+.continue TABLEEREN
+..
+!TABLEEREN: clear table
+.formula M|select = "!"
+..
+!CLRTAB
+.make screen line -- ? M|tzeilen > 0
+..
+!END
+.continue
+.set trans +
+..
+!HINT1
+.box
+?Dieser Artikel hat derzeit keine LagerbestÑnde.     ? F|empty(M|kcharge)
+?Dieser Artikel mit der Charge 'M|kcharge' hat derzeit keine LagerbestÑnde. ? _F|empty(M|kcharge) & _F|empty(M|artikel)
+.continue END
+..
+!HINT2
+.box
+Es gibt keine LagerbestÑnde.
+.continue END
+..
+!HINT3
+.box
+Es gibt keine Packmittel.
+.continue END
+..
+!ERROR1
+.error -field M|artikel -message Zuweisung schlug fehl. Auswahl nicht mîglich.
+.input "la/BESTAND.ME"
+.end 1
+..
+!ERROR3
+.error -message Charge gehîrt nicht zu diesem Artikel.
+.end 1
+..
+!ERROR4
+.error -message Charge ist noch keinem Artikel zugeordnet.
+.end 1
+..
+!ERROR5
+.error -message Eingetragener Artikel ist kein Packmittel.
+.copy M|packm = G|FALSE
+.make screen line -- ? M|tzeilen > 0
+.end 1

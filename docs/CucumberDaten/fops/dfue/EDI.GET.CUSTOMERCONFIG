@@ -1,0 +1,194 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDI.GET.CUSTOMERCONFIG
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : dsch
+.. Functionality  : Get mapping model, protokoll etc. from edi config
+..                  of customer/contact for edi msg in H buffer
+..
+.. IMPORTANT only used for IMPORT when EDI-message already exists
+.. do not have to know: printing, message protocoll...etc.
+..
+..*****************************************************************************
+.set trans -
+..
+.. Required: edi message in H buffer
+.continue NOEDI ? _F|defined(H|edinachr)
+.continue NOTYPE ? F|empty(H|edinachr)
+..
+.. Return Values
+.type text xvorgang         ? _F|defined(xvorgang)
+.type text xmmvvl           ? _F|defined(xmmvvl)
+.type text xDFUEprotoTXT    ? _F|defined(xDFUEprotoTXT)
+.type integer  xDFUEproto   ? _F|defined(xDFUEproto)
+.type text xintedi          ? _F|defined(xintedi)
+.type text xextedi          ? _F|defined(xextedi)
+.type integer xidkuart      ? _F|defined(xidkuart)
+.type bool xedlabwicklung   ? _F|defined(xedlabwicklung)
+.. Return true if active
+.type bool xediaktiv        ? _F|defined(U|xediaktiv)
+.type bool xediauto         ? _F|defined(U|xediauto)
+.type bool xedimanu         ? _F|defined(U|xedimanu)
+.type text xediuebnr        ? _F|defined(U|xediuebnr)
+.type P92:1 xediabm         ? _F|defined(U|xediabm)
+.type P92:1 xediieabm       ? _F|defined(U|xediieabm)
+.. Xintedi-variations
+.type bool xbintedikopf     ? _F|defined(U|xbintedikopf)
+.type bool xbintedipos      ? _F|defined(U|xbintedipos)
+.type bool xbintedikomplett ? _F|defined(U|xbintedikomplett)
+.. local use
+.type text xtintediKP       ? _F|defined(U|xtintediKP)
+.. Invoice/shipping list recipient
+.type VPK17 xvreliempf      ? _F|defined(U|xvreliempf)
+.. Print format
+.type NT15  xedidrformat    ? _F|defined(U|xedidrformat)
+..
+.. Local variables
+.type P0     xvcustomer       ? _F|defined(xvcustomer)
+.type P0:2   xkundeistkontakt ? _F|defined(xkundeistkontakt)
+.type text   xtselPROT        ? _F|defined(xtselPROT)
+..
+.. Initialize Return Values
+.formula U|xDFUEprotoTXT = ""
+.formula U|xDFUEproto = -1
+.formula U|xintedi = ""
+.formula U|xextedi = ""
+.formula U|xidkuart = 0
+.copy U|xediaktiv = G|false
+.copy U|xediauto = G|false
+.copy U|xedimanu = G|false
+.formula U|xediuebnr = "0"
+.copy U|xedlabwicklung = G|false
+.copy U|xbintedikopf = G|false
+.copy U|xbintedipos = G|false
+.copy U|xbintedikomplett = G|false
+.formula U|xtintediKP = ""
+.formula U|xvreliempf = ""
+.formula U|xedidrformat = ""
+.formula U|xediabm = ""
+.formula U|xediieabm = ""
+.formula U|xvcustomer = ""
+..
+.continue ORDERS ? H|edinachr^nummer = "2105"
+.continue ORDERS ? H|edinachr^nummer = "2106"
+.continue ORDERS ? H|edinachr^nummer = "2114"
+..
+.. Find customer/contact for delivery schedules and edl
+.assign U|xkundeistkontakt = H|idkundeab
+.assign U|xvcustomer =  H|idkundesab    ? _F|empty(H|idkundesab)
+.assign U|xvcustomer =  H|idkundeab     ?  F|empty(U|xvcustomer) & _F|empty(U|xkundeistkontakt)
+.assign U|xvcustomer =  H|idkunderab    ?  F|empty(U|xvcustomer)
+.assign U|xvcustomer = 'F|formatstr("$,,;@gruppe=2;firma={1};werka={2}!{2};ablstellea={3}!{3}", H|idkundeab, H|werk, H|ablstelle)'  ?  F|empty(U|xvcustomer)
+.continue NOCUST  ? F|empty(U|xvcustomer)
+.continue SELECT
+..
+.. Find customer for ORDERS and ORDCHG
+!ORDERS
+.assign U|xvcustomer =  H|partner    ? _F|empty(H|partner)
+.continue NOCUST  ? F|empty(U|xvcustomer)
+.continue SELECT
+..
+!SELECT
+.. Query config for edi message
+.formula U|xtselPROT = "$,,;@gruppe=4;@zeile=(1);erlaubt=yes"
+.formula U|xtselPROT = U|xtselPROT + ";edinachr=" + H|edinachr^id
+.formula U|xtselPROT = U|xtselPROT + ";klnum="   + U|xvcustomer^id
+..
+.load 9 customer 'U|xtselPROT'
+.continue NOPROT  ? _G|mehr
+.continue NOPROT  ?  9|selzeile = 0
+.load 9 line '9|selzeile'
+.continue NOPROT  ? _G|mehr
+..
+..
+.. match / auto / manual
+.copy U|xediaktiv = G|true
+.copy U|xediauto = G|true   ?  9|vorgang / "*-A"
+.copy U|xedimanu = G|true   ?  9|vorgang / "*-M"
+.copy U|xediabm = 9|abmodell
+.copy U|xediieabm = 9|ieabmodell
+..
+.. last transmit number
+.formula U|xediuebnr = 9|uebnr
+..
+.. multi-purpose variable
+.formula U|xidkuart = 9|idkuart
+..
+.. specific parameters: external service provider for shipping
+.copy U|xedlabwicklung = G|true   ?  _F|empty(9|edlnum)  & _F|empty(9|umplatz)
+..
+.. specific parameters: invoice/shipping list recipient
+.formula U|xvreliempf = 9|reliempf^id
+..
+.. print format
+.copy U|xedidrformat = 9|drformat
+..
+.. @deprecated: sollte im Abbildungsmodell abgebildet sein
+.. 2012R1: modify xintedi/xextedi with foppath (if F|foppath does not find a valid program, the function returns the empty string)
+.formula U|xintedi  = F|foppath(9|intedi) ? _F|empty(9|intedi)
+.formula U|xextedi  = F|foppath(9|extedi) ? _F|empty(9|extedi)
+..
+.. normalize protokoll
+.formula U|xDFUEprotoTXT = -9|protokoll
+..
+.. VDA / ODETTE / EDIFACT
+.formula U|xDFUEproto = 1    ?  U|xDFUEprotoTXT = "VDA"
+.formula U|xDFUEproto = 2    ?  U|xDFUEprotoTXT = "ODETTE"
+.formula U|xDFUEproto = 3    ?  U|xDFUEprotoTXT = "EDIFACT"
+..
+.. @deprecated: sollte im Abbildungsmodell abgebildet sein
+.. xintedi-variations for invoices using edifact programs VKRE/ODETTE, VKRE/EDIFACT
+.continue EINTEDI  ?  F|empty(U|xintedi) ; 9|vorgang<>"VKRE" ; U|xDFUEproto < 2 ; U|xDFUEproto > 3
+.formula U|xtintediKP = (( xintedi <$ ("."+(xintedi>$".")) ) >>1)
+.formula U|xbintedikopf = U|xtintediKP="K"
+.formula U|xbintedipos = U|xtintediKP="P"
+.formula U|xbintedikomplett = _(U|xbintedipos;U|xbintedikopf)
+!EINTEDI
+..
+.. Customer specific settings replace settings in DFUE.IMP.INI:
+.. Must not deactivate old edi messages if "add to order" is set 
+.type bool xAutoDeactivateErrL ? _F|defined(U|xAutoDeactivateErrL)
+.type bool xAutoDeactivateOldL ? _F|defined(U|xAutoDeactivateOldL)
+.copy U|xAutoDeactivateErrL = _9|abrufakt 
+.copy U|xAutoDeactivateOldL = _9|abrufakt
+..
+.. release buffer!
+.load 9
+..
+..*****************************************************************************
+!END
+.continue
+..
+.. Errors with "end 1"
+..
+.. If get.customconfig is started for an edi messages that has no message tpye or
+.. did not complete partner identification the processing has to stop with an error.
+.. Processing of that edi message should never have happened!
+..
+.. Errors with "continue"
+..
+.. If there is no active protocoll for an edi message, even if customer and message
+.. type are set, then this is "fine".
+.. Possibly processing messages for this customer is disabled temporarily.
+.. Skipp, and continue with other messages / customers.
+..
+..
+!NOEDI
+.error  Fehler bei Ermittlung des öbertragungs-Protokolls: Keine EDI-Nachricht angegeben.
+.end 1
+..
+!NOTYPE
+.error Fehler bei Ermittlung des öbertragungs-Protokolls: Keine Vorgangsart angegeben.
+.end 1
+..
+!NOCUST
+.error Fehler bei Ermittlung des öbertragungs-Protokolls: Keine Handelspartner angegeben.
+.end 1
+..
+!NOPROT
+.note Das Protokoll fÅr Vorgangsart 'H|edinachr' konnte nicht ermittelt werden.
+.formula U|xDFUEprotoTXT = ""
+.formula U|xDFUEproto = 0
+.continue
+

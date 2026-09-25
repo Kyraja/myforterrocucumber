@@ -116,6 +116,10 @@ export function stepHasError(step: Step): boolean {
       return !a.fieldName.trim() || !a.exceptionId.trim();
     case 'dialogBeantworten':
       return !a.dialogId.trim() || !a.answer.trim();
+    case 'boxMeldung':
+      return !a.messageText.trim();
+    case 'editorOeffnenTipp':
+      return !a.tipCommand.trim();
     default:
       return false;
   }

@@ -7,8 +7,8 @@
  * supports simple `{key}` placeholder substitution.
  */
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import { translations, type Language, type Translations } from './translations';
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { translations as fallbackTranslations, type Language, type Translations } from './translations';
 
 /**
  * Translation function type.
@@ -22,16 +22,32 @@ export type TranslationFn = (key: keyof Translations, params?: Record<string, st
 interface LanguageContextValue {
   /** Currently active language code. */
   lang: Language;
-  /** Change the language and persist the choice in `localStorage`. */
-  setLang: (lang: Language) => void;
   /** Translate a key with optional placeholder substitution. */
   t: TranslationFn;
 }
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
-/** localStorage key for persisting the user's language preference. */
-const STORAGE_KEY = 'cucumbergnerator_lang';
+function normalizeGermanUmlauts(text: string): string {
+  return text
+    .replace(/\bAe/g, 'Ä')
+    .replace(/\bOe/g, 'Ö')
+    .replace(/\bUe/g, 'Ü')
+    .replace(/ae/g, 'ä')
+    .replace(/oe/g, 'ö')
+    // Avoid converting "Que..." patterns that are common in loanwords.
+    .replace(/(?<![Qq])ue/g, 'ü');
+}
+
+function detectBrowserLanguage(): Language {
+  const candidates = [...(navigator.languages ?? []), navigator.language];
+  for (const candidate of candidates) {
+    const normalized = candidate.toLowerCase();
+    if (normalized.startsWith('de')) return 'de';
+    if (normalized.startsWith('en')) return 'en';
+  }
+  return 'en';
+}
 
 /**
  * Provides language state and the `t()` translation function to the component tree.
@@ -39,32 +55,73 @@ const STORAGE_KEY = 'cucumbergnerator_lang';
  * `navigator.language` (German for `de-*` locales, English otherwise).
  */
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Language>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved === 'de' || saved === 'en') return saved;
-    return navigator.language.startsWith('de') ? 'de' : 'en';
-  });
+  const [dictionary, setDictionary] = useState<Record<Language, Translations>>(fallbackTranslations);
 
-  const setLang = useCallback((newLang: Language) => {
-    setLangState(newLang);
-    localStorage.setItem(STORAGE_KEY, newLang);
+  const [lang, setLangState] = useState<Language>(() => {
+    return detectBrowserLanguage();
+  }, []);
+
+  useEffect(() => {
+    const updateLanguage = () => setLangState(detectBrowserLanguage());
+    window.addEventListener('languagechange', updateLanguage);
+    return () => window.removeEventListener('languagechange', updateLanguage);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadJsonTranslations = async () => {
+      try {
+        const deUrl = new URL('../resources/i18n/de.json', import.meta.url).href;
+        const enUrl = new URL('../resources/i18n/en.json', import.meta.url).href;
+
+        const [deRes, enRes] = await Promise.all([
+          fetch(deUrl, { cache: 'no-store' }),
+          fetch(enUrl, { cache: 'no-store' }),
+        ]);
+        if (!deRes.ok || !enRes.ok) return;
+
+        const [deJson, enJson] = await Promise.all([
+          deRes.json() as Promise<Translations>,
+          enRes.json() as Promise<Translations>,
+        ]);
+        if (cancelled) return;
+        setDictionary({
+          de: deJson,
+          en: enJson,
+        });
+      } catch {
+        // Keep fallback translations.ts map when JSON loading fails.
+      }
+    };
+
+    void loadJsonTranslations();
+    return () => { cancelled = true; };
   }, []);
 
   const t = useCallback(
     (key: keyof Translations, params?: Record<string, string | number>): string => {
-      let text = translations[lang][key] ?? key;
+      let text =
+        dictionary[lang]?.[key]
+        ?? fallbackTranslations[lang]?.[key]
+        ?? dictionary.en?.[key]
+        ?? fallbackTranslations.en?.[key]
+        ?? key;
       if (params) {
         for (const [k, v] of Object.entries(params)) {
           text = text.replace(`{${k}}`, String(v));
         }
       }
+      if (lang === 'de') {
+        text = normalizeGermanUmlauts(text);
+      }
       return text;
     },
-    [lang],
+    [dictionary, lang],
   );
 
   return (
-    <LanguageContext.Provider value={{ lang, setLang, t }}>
+    <LanguageContext.Provider value={{ lang, t }}>
       {children}
     </LanguageContext.Provider>
   );

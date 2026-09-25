@@ -1,0 +1,90 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICEPROCESS.TAB
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  : Add 1 line from the edi message's' table  
+..                  to infosystem
+..*****************************************************************************
+.set trans -
+..
+..<META M|='ev/ELINVOICEPROCESS'>
+..<META H|='P53:0'>
+..
+.. xrow and xEDIrow handle which infosys-row (or head for "0"), the current 
+.. line of edifact should be written to
+..
+.type text xEDIrow ? _F|defined(U|xEDIrow)
+.formula U|xEDIrow = H|text1 + "." + H|text2 + "." + H|text3 ? _F|empty(H|text4)
+.formula U|xEDIrow = H|text1 ? F|empty(H|text2) ; F|empty(H|text4)
+.. 
+.. evaluate if the data from this line in the edi message should be put into 
+.. the same row in the the info system as the last line's data'
+.. > return to head for "row=0"
+.. > create a new line if there is a change 
+.. > skipp to "SHOW", if it is the same line
+.. > multiple orders / packing slips in extended: always start newline for LineID
+.continue HEAD    ? U|xEDIRow="0"
+.continue NEWLINE ? U|xEDIRow<>U|xrow
+.continue NEWLINE ? H|text4="LineID"
+.continue SHOW
+..
+!HEAD
+.select screen head
+.formula U|xrow="0"
+.continue SHOW
+..
+!NEWLINE: label new lines with their type - Product, Tax, Charge or Note
+.make screen line +O
+.formula U|xrow = U|xEDIrow
+.formula M|zeilentyp = 0 ? F|empty(H|text2) 
+.formula M|zeilentyp = 1 ? H|text2="TAX" 
+.formula M|zeilentyp = 2 ? H|text2="CHARGE" ; H|text2="ZUAB"   
+.formula M|zeilentyp = 3 ? H|text2="NOTE"
+.formula M|zeilentyptext = U|xArtikelzeile ? M|zeilentyp=0
+.formula M|zeilentyptext = U|xSteuerzeile ? M|zeilentyp=1
+.formula M|zeilentyptext = U|xZuAbschlagzeile ? M|zeilentyp=2
+.formula M|zeilentyptext = U|xTextzeile ? M|zeilentyp=3
+.. only product lines may be expanded (find packing slip rows with evkette)
+.formula M|tbaumstat = "+" ? M|zeilentyp=0
+.protection -field tauswahl 'M|aktzeile'
+.continue SHOW
+..
+..*****************************************************************************
+!SHOW: add data from edi line to info system
+..*****************************************************************************
+..
+.continue ENOTE ? M|aktzeile=0
+.continue ENOTE ? M|zeilentyp<>3
+.. for zeilentyp=3 all values are summarized in a free text field
+.. For default 4161 mapping there is only 1 line! 
+.. but when customized there might be several different lines
+.. these lines might not have fields, but only go to the free text
+.output addedto 'U|xftextAllNotes'
+'H|text5'
+.output
+.make screen line -O ? _M|btabellemitnotizen
+.continue END        ? _M|btabellemitnotizen
+..
+!ENOTE
+..
+.. fill one( field in info system from edi table
+.continue NODEF ? _F|defined(M|.H|text4)
+.formula M|.H|text4 = H|text5
+..
+.. log shown fields
+.output addedto 'U|xftextShownFields'
+Feld 'H|text4' fÅr Zeile 'H|text1' mit Wert 'H|text5'
+.output
+.continue END
+..
+!NODEF: log fields missing in info system
+.output addedto 'U|xftextMissingFields'
+Feld 'H|text4' fÅr Zeile 'U|xrow' ist im Infosystem nicht definiert.
+.output
+.continue END
+..
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,583 @@
+..!interpreter english declaration noabbrev
+.. at 2017-03-20, 17:28
+.set TRANS -
+..========================================================================
+..==  Name              : IS.PRJMTRANSDATREP.EV
+..==  Pfad              : allpstart
+..==  Funktion          : Datenpfelegetool zur Bereinigung/Korrektur
+..==                      nicht abgeschlossener Transaktionen (basierend
+..==                      auf TransaktionsdatensÑtzen)
+..==  Erstellungsdatum  : 08.10.12
+..==  Autor             : alltrotec GmbH/CP
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..==
+..========================================================================
+.input DATEI.F
+..====================================================
+.type integer   U|xprocsp U|xi01
+.type text      U|xt01 U|xsel U|xxdat U|xxedp U|xxout U|xxerr U|xhlp U|xsys
+.type bool      U|xb01 U|xb02
+..====================================================
+.formula U|xprocsp = 0
+.set demand -
+.formula U|xxdat = "rmtmp/X.IS.PRJMTRANSDATREP2DATDAT" + G|PID + ".TMP"
+.formula U|xxedp = "rmtmp/X.IS.PRJMTRANSDATREP2DATEDP" + G|PID + ".TMP"
+.formula U|xxout = "rmtmp/X.IS.PRJMTRANSDATREP2DATOUT" + G|PID + ".TMP"
+.formula U|xxerr = "rmtmp/X.IS.PRJMTRANSDATREP2DATERR" + G|PID + ".TMP"
+.continue EPROCDEF
+!PROC001: ----- gesamtstatus -----
+.select screen header
+.select screen line
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL001 ? _(_(F|empty(M|trnum)))
+.copy U|xb01 = G|true
+.copy U|xb02 = G|true
+.load 0 add M|trnum
+.load 0 line
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.continue EL002 ? _(_(0|ytrdaten^ybabl))
+.copy U|xb01 = G|false
+!EL002
+.continue EL003 ? _(_(0|ytrdaten^ystorno))
+.copy U|xb02 = G|false
+!EL003
+.load 0 line
+.continue LOOP002
+!ELOP002: ==============================
+.continue EL004 ? _(0|ybabl)
+.continue EL005 ? _(_(U|xb01))
+.select lock add M|trnum
+.formula h|ybabl    = G|false
+.formula h|yablzeit = ""
+.formula h|yabldat  = ""
+.formula h|ybezeich = G|bzeichen
+.rewrite
+.select lock
+!EL005
+.continue FI004
+!EL004
+.continue EL006 ? _(U|xb01)
+.select lock add M|trnum
+.formula h|ybabl    = G|true
+.formula h|yablzeit = "."
+.formula h|yabldat  = "."
+.formula h|ybezeich = G|bzeichen
+.rewrite
+.select lock
+!EL006
+!FI004
+.select lock add M|trnum
+.copy h|ystorno = U|xb02
+.rewrite
+.select lock
+.formula M|ystatus  = 'M|ytrnum^ytrstatus'
+!EL001
+.select screen line
+.continue LOOP001
+!ELOP001: ==============================
+.continue 'xprocst.xprocsp'
+!PROC002: ----- tabelle -----
+.make screen line +O
+.colour -BACKGROUND -1 -1 -1 'M|aktzeile'
+.formula M|ytransnum    = '0|id'
+.formula M|ytranssuch   = '0|id'
+.formula M|ytransname   = '0|name'
+.formula M|ytrstatus    = '0|ystatus'
+.formula M|ybabl        = '0|ybabl'
+.formula M|ybstorno     = '0|ystorno'
+.formula M|ysbuchung    = '0|ysbuchung'
+.formula M|ysbuchstorno = '0|ysbuchstorno'
+.formula M|yfbuchung    = '0|yfbuchung'
+.formula M|yfbuchstorno = '0|yfbuchstorno'
+.formula U|xsel = "$,,@rows=(Yes);ytrdaten==" + M|ytransnum^id
+.load 1 group 'U|xydbgrtrans' 'U|xsel'
+.continue EL007 ? _(G|mehr)
+.formula M|ytrnum   = '1|id'
+.formula M|ytrsuch  = '1|id'
+.formula M|ytrname  = '1|name'
+.formula M|ystatus  = '1|ytrstatus'
+.formula M|yausloes = '1|yausloes'
+.assign  M|yvausloes = 'M|yausloes'
+.load 1
+!EL007
+.continue 'xprocst.xprocsp'
+!PROC003: ----- edploeschen -----
+.load 0 add M|ytransnum
+.output NEW 'U|xxedp'
+#!action=DELETE
+#!EDP_LANGCODE='G|bsprache'
+#!EDP_FOPMODE=0
+#!EDP_SHOWNOTES=0
+id
+'M|ytransnum^id'
+.output NEW WERF.WEG
+.load 0
+.formula U|xsys = "edpimport.sh -p " + G|einmalpw + " " + U|xxedp + " >" + U|xxout + " 2>" + U|xxerr
+.system 'U|xsys' BACKGROUND
+.output NEW WERF.WEG
+.formula U|xsys = "test - s " + 'U|xxerr'
+.system 'U|xsys' BACKGROUND
+.continue EL008 ? _(G|mehr)
+.set TRANS +
+.output TERMINAL
+
+>> Lîschen des Transaktionsdatensatzes 'M|ytransnum' fehlerhaft >> kontrollieren!
+
+.set TRANS -
+.continue FI008
+!EL008
+.set TRANS +
+.output TERMINAL
+Transaktionsdatensatz 'M|ytransnum' gelîscht
+.set TRANS -
+.formula M|ybbearb = G|false
+.protection ybbearb 'M|aktzeile'
+.colour -BACKGROUND 0 255 64 'M|aktzeile'
+.continue EL009 ? _(_(M|ytrnum = ""))
+.select lock add M|ytrnum
+.select lock line
+.copy U|xb01 = G|mehr
+!LOOP003: ==============================
+.continue ELOP003 ? _((U|xb01) & (G|mehr))
+.continue EL010 ? _('h|ytrdaten^id' = 'M|ytransnum^id')
+.make line -
+.copy U|xb01 = G|false
+!EL010
+.select lock line
+.continue LOOP003
+!ELOP003: ==============================
+.rewrite
+.select -
+.load 0 object 'M|ytrnum^id'
+.continue EL011 ? _(0|tzeilen = 0)
+.load 0
+.output NEW 'U|xxedp'
+#!action=DELETE
+#!EDP_LANGCODE='G|bsprache'
+#!EDP_FOPMODE=0
+#!EDP_SHOWNOTES=0
+id
+'M|ytrnum^id'
+.output NEW WERF.WEG
+.formula U|xsys = "edpimport.sh -p " + G|einmalpw + " " + U|xxedp +" >" + U|xxout + " 2>" + U|xxerr
+.system 'U|xsys' BACKGROUND
+.output NEW WERF.WEG
+.formula U|xsys = "test - s " + U|xxerr
+.system 'U|xsys' BACKGROUND
+.continue EL012 ? _(G|mehr)
+.set TRANS +
+.output TERMINAL
+
+>> Lîschen der Transaktion 'M|ytrnum' fehlerhaft >> kontrollieren!
+
+.set TRANS -
+.continue FI012
+!EL012
+.set TRANS +
+.output TERMINAL
+Transaktion 'M|ytrnum' gelîscht
+.set TRANS -
+!FI012
+!EL011
+!EL009
+!FI008
+.continue 'xprocst.xprocsp'
+!PROC004: ----- loeschen -----
+.formula U|xsys = "rm -f " + U|xxerr
+.system 'U|xsys' BACKGROUND
+.formula U|xsys = "rm -f " + U|xxout
+.system 'U|xsys' BACKGROUND
+.formula U|xsys = "rm -f " + U|xxedp
+.system 'U|xsys' BACKGROUND
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.input "allpstart/TRANS.KONFIG.INI"
+.continue BRK001 ? _(evtvar = "ybuselect")
+.make screen line --
+.continue BRK002 ? _(M|ybdatei = G|true)
+.formula U|xsys = "test -s win/tmp/PRJMTRANSDATREP2DAT"
+.system 'U|xsys' BACKGROUND
+.continue EL013 ? _(G|mehr)
+.formula U|xsys = "cp -p win/tmp/PRJMTRANSDATREP2DAT " + U|xxdat
+.system 'U|xsys' BACKGROUND
+.select from 'U|xxdat' U|xhlp^
+.formula U|xhlp = U|xhlp << ";"
+.set TRANS +
+.output TERMINAL
+suche 'U|xhlp'
+.set TRANS -
+.formula U|xsel = "$,,@gruppe="+'U|xygrtransdat'+";name=`"+'U|xhlp'
+.load 0 'T|hdatname.xydbtransdat' 'U|xsel'
+.continue EL014 ? _(_(xhlp = ""))
+.copy U|xb01 = G|true
+.continue FI014
+!EL014
+.copy U|xb01 = G|false
+!FI014
+!LOOP004: ==============================
+.continue ELOP004 ? _(xb01)
+.continue EL015 ? _(G|mehr)
+.set TRANS +
+.output TERMINAL
+      ok
+.set TRANS -
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC002
+!RET001
+.formula xprocsp = xprocsp - 1
+.continue FI015
+!EL015
+.set TRANS +
+.output TERMINAL
+      n. ok
+.set TRANS -
+!FI015
+.select from 'U|xxdat' U|xhlp^
+.formula U|xhlp = U|xhlp << ";"
+.set TRANS +
+.output TERMINAL
+suche 'U|xhlp'
+.set TRANS -
+.continue EL016 ? _(F|empty(U|xhlp))
+.formula U|xsys = "rm -f " + U|xxdat
+.system 'U|xsys' BACKGROUND
+.copy U|xb01 = G|false
+.continue FI016
+!EL016
+.copy U|xb01 = G|true
+.formula U|xsel = "$,,name=`" + U|xhlp
+.load 0 group 'U|xydbgrtransdat' 'U|xsel'
+!FI016
+.continue LOOP004
+!ELOP004: ==============================
+.continue FI013
+!EL013
+.set TRANS +
+.box HINWEIS
+
+Die erforderliche Datendatei ist nicht vorhanden!
+
+.set TRANS -
+.error(0)
+.end 2
+!FI013
+.continue ESAC002
+!BRK002
+.continue BRK003 ? _(M|ybdatei = G|false)
+.formula U|xsel = "%,,.@ablageart=(Active);@bereich=(Yes);nummer=;such=;name==;erfass=;ysbuchung==;yfbuchung==;ystatus==;ybabl==;ystorno=="
+.load 0 group 'U|xydbgrtransdat' 'U|xsel'
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC002
+!RET002
+.formula xprocsp = xprocsp - 1
+.load 0 continue
+.continue LOOP005
+!ELOP005: ==============================
+.continue ESAC002
+!BRK003
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK001
+.continue BRK004 ? _(evtvar = "ybuja")
+.select screen header
+.select screen line
+!LOOP006: ==============================
+.continue ELOP006 ? _(G|mehr)
+.formula M|ybbearb = G|true
+.select screen line
+.continue LOOP006
+!ELOP006: ==============================
+.continue ESAC001
+!BRK004
+.continue BRK005 ? _(evtvar = "ybunein")
+.select screen header
+.select screen line
+!LOOP007: ==============================
+.continue ELOP007 ? _(G|mehr)
+.formula M|ybbearb = G|false
+.select screen line
+.continue LOOP007
+!ELOP007: ==============================
+.continue ESAC001
+!BRK005
+.continue BRK006 ? _(evtvar = "ybuangelegt")
+.select screen header
+.select screen line
+!LOOP008: ==============================
+.continue ELOP008 ? _(G|mehr)
+.continue EL017 ? _(M|ybbearb)
+.continue EL018 ? _((M|ysbuchung    = "") & (M|yfbuchung    = "") & (M|ysbuchstorno = "") & (M|yfbuchstorno = ""))
+.select lock add M|ytransnum
+.formula h|ystatusk  = "ANG"
+.copy    h|ybabl     = G|false
+.copy    h|ystorno   = G|false
+.formula h|ybezeich  = G|bzeichen
+.rewrite
+.select lock
+.colour -BACKGROUND 0 255 64 'M|aktzeile'
+.copy    M|ybabl      = M|ytransnum^ybabl
+.copy    M|ybstorno   = M|ytransnum^ystorno
+.copy    M|ytrstatusk = M|ytransnum^ystatusk
+.copy    M|ybbearb    = G|false
+.protection ybbearb 'M|aktzeile'
+.continue FI018
+!EL018
+.set TRANS +
+.output TERMINAL
+Zeile 'M|aktzeile' Transaktionsdatensatz 'M|ytransnum' hat bereits Buchungen
+.set TRANS -
+!FI018
+!EL017
+.select screen line
+.continue LOOP008
+!ELOP008: ==============================
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+.set TRANS +
+.box HINWEIS
+
+Status markierter TransaktionsdatensÑtze auf "angelegt" gesetzt!
+
+.set TRANS -
+.continue ESAC001
+!BRK006
+.continue BRK007 ? _(evtvar = "ybuablage")
+.select screen header
+.select screen line
+!LOOP009: ==============================
+.continue ELOP009 ? _(G|mehr)
+.continue EL019 ? _(M|ybbearb)
+.select lock add M|ytransnum
+.formula h|ybabl    = G|true
+.formula h|ybezeich = G|bzeichen
+.rewrite
+.select lock
+.colour -BACKGROUND 0 255 64 'M|aktzeile'
+.copy    M|ybabl   = M|ytransnum^ybabl
+.copy    M|ybbearb = G|false
+.protection ybbearb 'M|aktzeile'
+!EL019
+.select screen line
+.continue LOOP009
+!ELOP009: ==============================
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC001
+!RET004
+.formula xprocsp = xprocsp - 1
+.set TRANS +
+.box HINWEIS
+
+Markierte TransaktionsdatensÑtze auf "abgelegt" gesetzt!
+
+.set TRANS -
+.continue ESAC001
+!BRK007
+.continue BRK008 ? _(evtvar = "ybustorno")
+.select screen header
+.select screen line
+!LOOP010: ==============================
+.continue ELOP010 ? _(G|mehr)
+.continue EL020 ? _(M|ybbearb)
+.output NEW 'U|xxedp'
+#!database='U|xydbtransdat'
+#!group='U|xygrtransdat'
+#!action=VIEW
+#!EDP_LANGCODE='G|bsprache'
+#!charset=EKS
+#!EDP_SHOWNOTES=0
+id;ybutdstorno;
+'M|ytransnum^id';1;
+.output NEW WERF.WEG
+.formula U|xhlp = "edpimport.sh -p " + G|einmalpw + " " + U|xxedp + " >" + U|xxout + " 2>" + U|xxerr
+.system 'U|xhlp' BACKGROUND
+.formula U|xsys = "test - s " + U|xxerr
+.system 'U|xsys' BACKGROUND
+.continue EL021 ? _(G|mehr)
+.set TRANS +
+.output TERMINAL
+
+>> Stornieren des Transaktionsdatensatzes 'M|ytransnum' fehlerhaft >> kontrollieren!
+
+.set TRANS -
+.continue FI021
+!EL021
+.set TRANS +
+.output TERMINAL
+Transaktionsdatensatz 'M|ytransnum' storniert
+.set TRANS -
+.protection ybbearb 'M|aktzeile'
+.formula M|ybbearb = G|false
+.colour -BACKGROUND 0 255 64 'M|aktzeile'
+!FI021
+.load 0 add M|ytransnum
+.copy    M|ytrstatus    = 0|ystatus
+.copy    M|ybabl        = 0|ybabl
+.copy    M|ybstorno     = 0|ystorno
+.formula M|ysbuchung    = 0|ysbuchung
+.formula M|ysbuchstorno = 0|ysbuchstorno
+.formula M|yfbuchung    = 0|yfbuchung
+.formula M|yfbuchstorno = 0|yfbuchstorno
+.load 0
+!EL020
+.select screen line
+.continue LOOP010
+!ELOP010: ==============================
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC004
+!RET005
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC001
+!RET006
+.formula xprocsp = xprocsp - 1
+.set TRANS +
+.box HINWEIS
+
+Markierte DatensÑtze storniert!
+
+.set TRANS -
+.continue ESAC001
+!BRK008
+.continue BRK009 ? _(evtvar = "ybuloe")
+.select screen header
+.select screen line
+!LOOP011: ==============================
+.continue ELOP011 ? _(G|mehr)
+.continue EL022 ? _((M|ybbearb) & (F|empty(M|ytransnum^ysbuchung)) & (F|empty(M|ytransnum^ysbuchstorno)) & (F|empty(M|ytransnum^yfbuchung)) & (F|empty(M|ytransnum^yfbuchstorno)))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC003
+!RET007
+.formula xprocsp = xprocsp - 1
+!EL022
+.select screen line
+.continue LOOP011
+!ELOP011: ==============================
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC004
+!RET008
+.formula xprocsp = xprocsp - 1
+.continue ESAC001
+!BRK009
+.continue BRK010 ? _(evtvar = "ybustornloe")
+.select screen header
+.select screen line
+!LOOP012: ==============================
+.continue ELOP012 ? _(G|mehr)
+.continue EL023 ? _((M|ybbearb) & (M|ytransnum^ystorno))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC003
+!RET009
+.formula xprocsp = xprocsp - 1
+!EL023
+.select screen line
+.continue LOOP012
+!ELOP012: ==============================
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC004
+!RET010
+.formula xprocsp = xprocsp - 1
+.continue ESAC001
+!BRK010
+.continue BRK011 ? _(evtvar = "ybuaufraeum")
+.add F|sysinfo(10)^ykonfigprjm
+.continue EL024 ? _(G|mehr)
+.copy U|xb01 = G|true
+.continue EL025 ? _(_(F|empty(D|yaufraeumrecht)))
+.copy U|xb01 = G|false
+.load 0 add G|passw
+.load 0 line
+!LOOP013: ==============================
+.continue ELOP013 ? _(G|mehr)
+.continue EL026 ? _((0|rechte^id = D|yaufraeumrecht^id) & (0|erlakt))
+.fo U|xb01 = G|true
+!EL026
+.load 0 line
+.continue LOOP013
+!ELOP013: ==============================
+!EL025
+.continue EL027 ? _(U|xb01)
+.set TRANS +
+.menu Achtung
+Aktion abbrechen                                                  >>
+alle selektierten TransaktionsdatensÑtze statusunabhÑngig lîschen >>
+.set TRANS +
+.continue EL028 ? _(menu = 2)
+.select screen header
+.select screen line
+!LOOP014: ==============================
+.continue ELOP014 ? _(G|mehr)
+.continue EL029 ? _(M|ybbearb)
+.continue EL030 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC003
+!RET011
+.formula xprocsp = xprocsp - 1
+!EL030
+!EL029
+.select screen line
+.continue LOOP014
+!ELOP014: ==============================
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC004
+!RET012
+.formula xprocsp = xprocsp - 1
+!EL028
+.continue FI027
+!EL027
+.set TRANS +
+.box
+
+Sie besitzen nicht die erforderlichen Rechte, um diese Aktion auszufÅhren!
+
+.set TRANS -
+!FI027
+.continue FI024
+!EL024
+.set TRANS +
+.box
+
+ProjectSuite Konfiguration kann nicht geladen werden - Funktion nicht verfÅgbar!
+
+.set TRANS -
+!FI024
+.continue ESAC001
+!BRK011
+!ESAC001: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJMTRANSDATREP.EV")'    ? F|fileexists(F|foppath("IFOP.IS.PRJMTRANSDATREP.EV"))
+.continue

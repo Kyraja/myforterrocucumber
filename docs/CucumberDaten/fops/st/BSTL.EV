@@ -1,0 +1,94 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BSTL.EV
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Behandelt Ereignisse der Eingabeparameter sowie des Zeilen-
+.. buttons und der Zeile selbst.
+.. Functionality  : Handles events of the input parameters as well as of the
+.. row button and the row itsself.
+..*****************************************************************************
+.set trans -
+..
+..  ---------------------------------------------------------------------------
+..  Kopfteil/header
+..  ---------------------------------------------------------------------------
+.continue PART    ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "artikel"
+.continue WAREHSE ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "lgruppe"
+.continue PRODLST ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "fertliste"
+.continue TOTQTY  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "menge"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "konddat"
+.continue SETPROD ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "mitaufl"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "bmitag"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "bmitfm"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "brelevant"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "anzstufen"
+..  ---------------------------------------------------------------------------
+..  Tabellenteil/table
+..  ---------------------------------------------------------------------------
+.continue FORBIDD ? G|evtartengl = "ROW_MOVED_BEFORE"
+..  ---------------------------------------------------------------------------
+.continue END
+..
+!PART: Part has changed
+.continue CLEARED ? F|empty(M|artikel)
+.continue CLRTAB ? F|empty(M|lgruppe)
+.continue DETAILS
+..
+!WAREHSE: Warehouse group has changed
+.continue CLEARED ? F|empty(M|lgruppe)
+.continue CLRTAB ? F|empty(M|artikel)
+.continue DETAILS
+..
+!CLEARED: Part or warehouse was cleared
+.continue CLRTAB ? F|empty(M|fertliste)
+.assign M|fertliste = ""
+.continue PRODLST
+..
+!DETAILS: Get details of adapted part
+.select add M|artikel
+.. Before reading data we have to fit part to warehouse group and
+.copy H|lgruppean = M|lgruppe
+.. activate resolving of set products
+.copy H|mitaufl = M|mitaufl ? M|mitaufl
+..
+.copy M|artbsart = H|bsart
+.formula M|menge = H|minbsmge ? _F|empty(H|minbsmge)
+.formula M|menge = H|losgr    ? F|empty(H|minbsmge) & _F|empty(H|losgr)
+.copy M|gesamtle = H|le
+.formula M|flbasis = H|flbasis
+.assign M|flbasis = 1.0 ? F|empty(M|flbasis)
+.select -
+.continue LISTFIT ? G|evtvar <> "fertliste" & _F|empty(M|fertliste)
+.continue CLRTAB
+..
+!PRODLST: Production list has changed
+.continue CLRTAB ? F|empty(M|fertliste)
+.copy M|artikel = M|fertliste^artikel
+.copy M|lgruppe = M|fertliste^lgruppe
+.continue PART
+..
+!LISTFIT: If production list does not fit to part and warehouse, clear production list
+.continue CLRTAB ? M|artikel^id = M|fertliste^artikel^id & M|lgruppe^id = M|fertliste^lgruppe^id
+.assign M|fertliste = ""
+.continue PRODLST
+..
+!TOTQTY: Total quantity has changed
+.copy M|mitaufl = M|menge > 0
+.input "st/BSTL.BSTART.BV"
+.input "st/BSTL.BSTART.BN"
+.continue END
+..
+!SETPROD: Replacing set product has changed
+.formula M|menge = 0.0 ? _M|mitaufl
+.continue CLRTAB
+..
+!FORBIDD: Action not allowed
+.end 1
+..
+!CLRTAB: Clear table
+.make screen line -- ? M|tzeilen > 0
+..*****************************************************************************
+!END
+.continue

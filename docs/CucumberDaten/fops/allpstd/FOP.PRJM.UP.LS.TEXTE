@@ -1,0 +1,119 @@
+..!interpreter english noabbrev
+..*****************************************************************************
+.. Name           : allpstd/FOP.PRJM.UP.LS.TEXTE
+.. Datum/Date     : 12.01.2012
+.. Version        :
+.. Autor/Author   : alltrotec / ts
+.. Copyright      : (c) 1990 - 2015 alltrotec GmbH
+.. Beschreibung/
+.. Description    : wird aus FOP.PRJM.EKVK fÅr jede LM aufgrufen
+..                  Erstellung des Lieferscheintextes und Ausgabe nach U|xtmeldtext
+..              
+.. Puffer         : 0 - Leistungsmeldung
+..                  1 - Materialmeldung wen xttyp = "MM"
+..
+..
+...Includes       :
+..*****************************************************************************
+..
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.type text xttyp    ? _F|defined(U|xttyp)
+.type text xtname   ? _F|defined(U|xtname)
+.type text xtvtext  ? _F|defined(U|xtvtext)
+..
+..Ausgabe des Textes erfolgt nach U|xtmeldtext
+..
+..Texte fÅr Submeldungen
+.continue SUB           ?  U|xttyp = "SM"
+..nur Text fÅr LMs ausgeben
+.continue END           ? _U|xttyp = "LM"
+..
+..***************************************************************
+..Leistungsmeldungen
+..***************************************************************
+..LS Name aus Personal wenn gefÅllt, sonst Kurzname
+..!meta 0|=P147:1
+.formula U|xtname = 0|ypersonal^namebspr
+.formula U|xtname = 0|ypersonal^yprjmlsname     ? _F|empty(0|ypersonal^yprjmlsname)
+..
+..nur LS relevante
+.continue               ? _0|ylsrelev
+..
+.continue IMHAUS        ?  0|yleiortk <> "01"
+..nicht "im Haus"
+.set TRANS +
+..Name der Firma aus Betriebsdaten
+.formula U|xtvtext = " bei " + F|sysinfo(10)^knam1 + ", "
+.set TRANS -
+!IMHAUS:
+.."im Haus"
+.formula U|xtvtext = " " + '0|yleiort' + ", "
+..
+.. Ausgabe der Texte, beginnend mit Leerzeile
+..
+.set trans +
+..
+
+'U|xtname''U|xtvtext'effektive Arbeitszeit '0|yfaktzeit' h
+..
+.set trans -
+..
+..Ausgabe der Zeitpaare
+.continue ZEILEN        ? 0|ozeilen > 0
+?'0|yadatum', '0|yazeit' - '0|yezeit'                   ?  0|yadatum = 0|yedatum & (_F|empty(0|yazeit) ; _F|empty(0|yezeit))
+?'0|yadatum'                                            ?  0|yadatum = 0|yedatum &   F|empty(0|yazeit) &  F|empty(0|yezeit)
+?'0|yadatum', '0|yazeit' - '0|yedatum', '0|yezeit'      ? _0|yadatum = 0|yedatum & (_F|empty(0|yazeit) ; _F|empty(0|yezeit))
+?'0|yadatum' - '0|yedatum'                              ? _0|yadatum = 0|yedatum &   F|empty(0|yazeit) &  F|empty(0|yezeit)
+..
+.continue EXTTEXT
+..
+!ZEILEN:
+..Teilzeiten
+.load 0 line
+.continue EXTTEXT       ? _G|mehr
+.continue ZEILEN        ? _0|ytlsrelev
+..
+?'0|ytadatum', '0|ytazeit' - '0|ytezeit'                ?  0|ytadatum = 0|ytedatum & (_F|empty(0|ytazeit) ; _F|empty(0|ytezeit))
+?'0|ytadatum'                                           ?  0|ytadatum = 0|ytedatum &   F|empty(0|ytazeit) &  F|empty(0|ytezeit)
+?'0|ytadatum', '0|ytazeit' - '0|ytedatum', '0|ytezeit'  ? _0|ytadatum = 0|ytedatum & (_F|empty(0|ytazeit) ; _F|empty(0|ytezeit))
+?'0|ytadatum' - '0|ytedatum'                            ? _0|ytadatum = 0|ytedatum &   F|empty(0|ytazeit) &  F|empty(0|ytezeit)
+..
+.continue ZEILEN
+..
+..
+!EXTTEXT:
+.input -TEXT '0|ybeschext'    ? _F|empty(0|ybeschext)
+.continue END
+..
+..***************************************************************
+..Submeldungen
+..***************************************************************
+!SUB:
+.set trans +
+..
+..!meta 0|=P147:3
+.formula U|xtvtext = " bei " + F|sysinfo(10)^knam1 + ", "   ?  0|ytleiortk = "01"
+.formula U|xtvtext = " " + '0|ytleiort' + ", "              ?  0|ytleiortk = "02"
+..
+
+'0|ytsubpersname' 'U|xtvtext'effektive Arbeitszeit '0|ymge' h
+..  ?'0|ytdatum', '0|ytazeit' - '0|ytezeit'
+?'0|ytdatum', '0|ytazeit' - '0|ytezeit'                ?  (_F|empty(0|ytazeit) ; _F|empty(0|ytezeit))
+?'0|ytdatum'                                           ?    F|empty(0|ytazeit) &  F|empty(0|ytezeit)
+..
+
+?'0|ytbeschreib                                                                                         '       ? _F|empty(0|ytbeschreib)
+.input -TEXT '0|ytftbeschreib'                          ? _F|empty(0|ytftbeschreib)
+..
+.set trans -
+..
+.continue END
+..
+..
+..
+!END:
+.continue

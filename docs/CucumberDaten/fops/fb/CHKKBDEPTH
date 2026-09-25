@@ -1,0 +1,156 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : CHKKBDEPTH
+..  Datum          : 21.04.2005
+..  Version        : 1
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : FOP zur Kontrolle der Verschachtelungstiefe
+..                   von Kontenbereichen.
+..                   Das FOP kann als EFOP an der Maske von Kontenbereichen
+..                   und Kontenbereichsformularen genutzt werden.
+..                   Ferner ist die Nutzung als Unterprogramm mîglich indem
+..                   ein Puffer mit dem geladenen und zu prÅfenden Objekts angegeben
+..                   wird. Das Ergebnis der PrÅfung kann dann Åber den
+..                   Zustand der boolschen Variablen "xbdeptherr" abgefragt werden.
+..
+..  Schnittstelle (Parameter und ihre Bedeutung)
+..    verwendet Arrayparameter (arg.i)          : nein
+..    verwendet Namensparameter (xpname=wert)   : ja
+..
+..    Parameter    Bedeutung
+..    ---------------------------------------------------------
+..    xxtwrkbuff   Im nicht-EFOP-Fall wird hier der Puffername angegeben in dem
+..                 sich das zu prÅfende Objekt befindet.
+..
+..  Ablauf         :
+..
+..  Functionality  : FOP to control the depth of an account range or
+..                   an account range form. This FOP may be used as an EFOP in
+..                   the account range (form) mask(s) or as a subprogram.
+..                   If this program is used as a subprogram the buffer name which
+..                   contains the object which has to be checked has to be given
+..                   in the variable "xxtwrkbuff". If an error occurs the boolean
+..                   variable "xbdeptherr" is set to true.
+..
+..  Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : yes
+..
+..    Argument     meaning
+..    ---------------------------------------------------------
+..    xxtwrkbuff   If used as a subprogram this variable has to contain the buffer name
+..                 with the object which has to be checked.
+..
+..  Program flow  :
+... Includes      :
+..*****************************************************************************
+.type text xtsel       ? _F|defined(U|xtsel)
+.type integer  ximaxu      ? _F|defined(U|ximaxu)
+.type integer  ximaxd      ? _F|defined(U|ximaxd)
+.type integer  xidepth     ? _F|defined(U|xidepth)
+.type integer  xigrp       ? _F|defined(U|xigrp)
+.type integer  xictxgrp    ? _F|defined(U|xictxgrp)
+.type text xxtwrkbuff  ? _F|defined(U|xxtwrkbuff)
+.type text xxtpipe     ? _F|defined(U|xxtpipe)
+.type text xxtgrpfield ? _F|defined(U|xxtgrpfield)
+.type text xxtnumfield ? _F|defined(U|xxtnumfield)
+.type text xxtdach     ? _F|defined(U|xxtdach)
+.type text xxtkbfield  ? _F|defined(U|xxtkbfield)
+.type bool xbdeptherr  ? _F|defined(U|xbdeptherr)
+..*****************************************************************************
+.. constant for maximum depth
+.type integer  XIMAXDEPTH ? _F|defined(U|XIMAXDEPTH)
+..
+.formula U|XIMAXDEPTH = 5
+..
+..*****************************************************************************
+.formula U|xbdeptherr  = G|false
+.formula U|xxtpipe     = "|"
+.formula U|xxtdach     = "^"
+.formula U|xxtgrpfield = "gruppe"
+.formula U|xxtnumfield = "nummer"
+.formula U|xxtkbfield  = "kbereich"
+.formula U|xxtwrkbuff  = "M" ? +'U|xxtwrkbuff' = 0 & G|evtartengl <> "NO_EVENT"
+.formula U|xxtwrkbuff  = "H" ? +'U|xxtwrkbuff' = 0 & G|evtartengl  = "NO_EVENT"
+.formula U|xictxgrp = '.U|xxtwrkbuff.U|xxtpipe.U|xxtgrpfield'
+.formula U|xigrp    = 17  ? U|xictxgrp = 1
+.formula U|xigrp    = 19  ? U|xictxgrp = 3
+.formula U|ximaxu   = 0
+.formula U|ximaxd   = 0
+..
+.continue SEARCHDOWN ? U|xictxgrp<>1 & U|xictxgrp<>3
+..
+.set trans -
+.formula U|xtsel = "$,@ordnung=nummer;@zeilen=ja;@gruppe=" + 'U|xigrp' + ";kbereich=" + '.U|xxtwrkbuff.U|xxtpipe.U|xxtnumfield'
+.set trans +
+.load 9 accrange 'U|xtsel'
+..
+..*****************************************************************************
+!NEXTARUP
+..*****************************************************************************
+.continue SEARCHDOWN ? _G|mehr
+.continue SEARCHDOWN ? 9|selzeile <= 0
+.load 9 line '9|selzeile'
+.formula U|ximaxu = 9|stufe ? 9|stufe > U|ximaxu & 9|kbereich^nummer = '.U|xxtwrkbuff.U|xxtpipe.U|xxtnumfield'
+.load 9 accrange
+.continue NEXTARUP
+..
+..*****************************************************************************
+!SEARCHDOWN
+..*****************************************************************************
+.load 9
+.select screen header         ? U|xxtwrkbuff = "M"
+.select header               ? U|xxtwrkbuff = "H"
+.load 'U|xxtwrkbuff' header ? U|xxtwrkbuff/"(09)"
+..
+..*****************************************************************************
+!NEXTMROW
+..*****************************************************************************
+.select screen line         ? U|xxtwrkbuff = "M"
+.select line               ? U|xxtwrkbuff = "H"
+.load 'U|xxtwrkbuff' line ? U|xxtwrkbuff/"(09)"
+.continue END ? _G|mehr
+.continue NEXTMROW ? +'.U|xxtwrkbuff.U|xxtpipe.U|xxtkbfield' = 0
+.formula U|xigrp = 17 ? '.U|xxtwrkbuff.U|xxtpipe.U|xxtkbfield.U|xxtdach.U|xxtgrpfield' = "1"
+.formula U|xigrp = 19 ? '.U|xxtwrkbuff.U|xxtpipe.U|xxtkbfield.U|xxtdach.U|xxtgrpfield' = "3"
+.set trans -
+.formula U|xtsel = "$,@zeilen=ja;@gruppe=" + 'U|xigrp' + ";nummer=" + '.U|xxtwrkbuff.U|xxtpipe.U|xxtkbfield.U|xxtdach.U|xxtnumfield'
+.set trans +
+.load 9 accrange 'U|xtsel'
+.continue NEXTMROW ? _G|mehr
+..
+..*****************************************************************************
+!NEXT9ROW
+..*****************************************************************************
+.load 9 line
+.continue NEXTMROW ? _G|mehr
+.formula U|ximaxd = 9|stufe ? 9|stufe > U|ximaxd
+.formula U|xidepth = U|ximaxd + U|ximaxu
+.formula U|xidepth = U|xidepth + 1 ? U|xictxgrp=1 ; U|xictxgrp=3
+.continue ERR01 ? U|xidepth > U|XIMAXDEPTH & U|xxtwrkbuff  = "M"
+.continue ERR02 ? U|xidepth > U|XIMAXDEPTH & U|xxtwrkbuff <> "M"
+.continue NEXT9ROW
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.load 9
+.continue
+..
+..*****************************************************************************
+!ERR01: Mask context EFOP error
+..*****************************************************************************
+.box Fehler
+Kontenbereichstiefe ('U|xidepth') zu gro·
+Maximal 'U|XIMAXDEPTH' erlaubt.
+.cursor kbereich 'M|aktzeile'
+.end 1
+..
+..*****************************************************************************
+!ERR02: Any other buffer context
+..*****************************************************************************
+.formula U|xbdeptherr = G|true
+.continue
+

@@ -39,6 +39,24 @@ function parseStepAction(rawText: string): StepAction {
   const text = normalizeQuotes(rawText).trim();
   let m: RegExpMatchArray | null;
 
+  // Editor oeffnen (Menue, mit Editor-Ref): ... for record from editor "W" and menu choice "X"
+  m = text.match(/^I open an editor "([^"]*)" from table "([^"]*)" with command "([^"]*)" for record from editor "([^"]*)" and menu choice "([^"]*)"$/);
+  if (m && EDITOR_COMMANDS.has(m[3])) {
+    return { type: 'editorOeffnenMenue', editorName: m[1], tableRef: m[2], command: m[3] as EditorCommand, record: '', recordFromEditor: m[4], menuChoice: m[5] };
+  }
+
+  // Editor oeffnen (Menue): ... and menu choice "X"
+  m = text.match(/^I open an editor "([^"]*)" from table "([^"]*)" with command "([^"]*)" for record "([^"]*)" and menu choice "([^"]*)"$/);
+  if (m && EDITOR_COMMANDS.has(m[3])) {
+    return { type: 'editorOeffnenMenue', editorName: m[1], tableRef: m[2], command: m[3] as EditorCommand, record: m[4], menuChoice: m[5] };
+  }
+
+  // Editor oeffnen (Folgeschritt ueber Editor-Referenz): ... for record from editor "W"
+  m = text.match(/^I open an editor "([^"]*)" from table "([^"]*)" with command "([^"]*)" for record from editor "([^"]*)"$/);
+  if (m && EDITOR_COMMANDS.has(m[3])) {
+    return { type: 'editorOeffnen', editorName: m[1], tableRef: m[2], command: m[3] as EditorCommand, record: '', recordFromEditor: m[4] };
+  }
+
   // Editor oeffnen: I open an editor "X" from table "Y" with command "Z" for record "W"
   m = text.match(/^I open an editor "([^"]*)" from table "([^"]*)" with command "([^"]*)" for record "([^"]*)"$/);
   if (m && EDITOR_COMMANDS.has(m[3])) {
@@ -49,12 +67,6 @@ function parseStepAction(rawText: string): StepAction {
   m = text.match(/^I open an editor "([^"]*)" from table "([^"]*)" with command "([^"]*)" for search criteria "([^"]*)"$/);
   if (m && EDITOR_COMMANDS.has(m[3])) {
     return { type: 'editorOeffnenSuche', editorName: m[1], tableRef: m[2], command: m[3] as EditorCommand, searchCriteria: m[4] };
-  }
-
-  // Editor oeffnen (Menue): ... and menu choice "X"
-  m = text.match(/^I open an editor "([^"]*)" from table "([^"]*)" with command "([^"]*)" for record "([^"]*)" and menu choice "([^"]*)"$/);
-  if (m && EDITOR_COMMANDS.has(m[3])) {
-    return { type: 'editorOeffnenMenue', editorName: m[1], tableRef: m[2], command: m[3] as EditorCommand, record: m[4], menuChoice: m[5] };
   }
 
   // Zeilen anfuegen: I append rows (data table follows)
@@ -156,7 +168,12 @@ function parseStepAction(rawText: string): StepAction {
 
   // Subeditor speichern
   if (text === 'I save the current subeditor to switch back to the parent editor') {
-    return { type: 'editorSpeichern' };
+    return { type: 'subeditorSpeichern' };
+  }
+
+  // Subeditor schliessen
+  if (text === 'I close the current subeditor to switch back to the parent editor') {
+    return { type: 'subeditorSchliessen' };
   }
 
   // Start druecken
@@ -245,6 +262,18 @@ function parseStepAction(rawText: string): StepAction {
   m = text.match(/^I respond with answer "([^"]*)" to the dialog with id "([^"]*)"$/);
   if (m) {
     return { type: 'dialogBeantworten', answer: m[1], dialogId: m[2] };
+  }
+
+  // Box-Meldung pruefen: message "<text>" was displayed
+  m = text.match(/^message "([^"]*)" was displayed$/);
+  if (m) {
+    return { type: 'boxMeldung', messageText: m[1] };
+  }
+
+  // Editor oeffnen via Tippkommando: I open an editor "X" for tip command "Y" and arguments "Z"
+  m = text.match(/^I open an editor "([^"]*)" for tip command "([^"]*)" and arguments "([^"]*)"$/);
+  if (m) {
+    return { type: 'editorOeffnenTipp', editorName: m[1], tipCommand: m[2], arguments: m[3] };
   }
 
   return { type: 'freetext' };

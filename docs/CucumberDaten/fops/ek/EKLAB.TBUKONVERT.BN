@@ -1,0 +1,227 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EKLAB.TBUKONVERT.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : BestellvorschlÑge in Lieferabrufe konvertieren
+.. Functionality  : Converts purchase order suggestions to delivery forecasts
+...Includes       :
+..  include     ek/EKLAB.BSTART.BV
+..*****************************************************************************
+..<META M|='ek/EKLAB'>
+.set trans -
+..
+.. blanket order is not unique
+.continue ERRSTOP ?  M|tbstop
+..
+.. No transaction type for forcasts defined
+.continue ERRTYPE ? F|empty(M|kvorart)
+..
+.. Blanket order item NOt within valid date range
+.continue GLTERR  ? _M|tbgltstatus            
+.continue QTYERR  ? _M|tbstatusabrufbaremenge     
+..
+.. current supplier / product
+.type P1     xvlief          ?  _F|defined(xvlief)
+.type P2     xvartikel       ?  _F|defined(xvartikel)
+.type P4     xvrahmen        ?  _F|defined(xvrahmen)
+.type P4:2   item            ?  _F|defined(U|item)
+..
+.. create forecast using an edp script
+.type text   xtsystem        ?  _F|defined(xtsystem)
+.type text   xtabrufedp      ?  _F|defined(xtabrufedp)
+.type text   xtabrufedpout   ?  _F|defined(xtabrufedpout)
+.type text   xtabrufedperr   ?  _F|defined(xtabrufedperr)
+.type text   xtabrufedphinw  ?  _F|defined(xtabrufedphinw)
+..
+.. must only block lfristkurz, if it is actually useable :( 
+..  0 = block, ~ = don't change
+.type text   nolfristkurz    ?  _F|defined(U|nolfristkurz)
+..
+..
+.. There are two options to convert purchase order suggestionsinto delivery
+.. forecasts:
+..  - one forecast per product (VDA)
+..  - one forecast with all products of a supplier
+..
+.. ----------- ---------- ---------- -------------------------------------------
+.continue VDA     ?  M|kbkbvdalab
+.continue LIEF    ? _M|kbkbvdalab
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+..
+..*****************************************************************************
+..
+!VDA: one forecast per product (VDA)
+..
+.continue ERR1    ?  F|empty(M|tartikel) ; F|empty(M|tlief)
+..
+.formula U|xvlief = M|tlief^id
+.formula U|xvartikel = M|tartikel^id
+.formula U|xvrahmen = M|tprahmen^id
+..
+.file -tempname U|xtabrufedp
+.file -tempname U|xtabrufedpout
+.file -tempname U|xtabrufedperr
+.file -tempname U|xtabrufedphinw
+..
+.output new 'U|xtabrufedp'
+.input "DATEI.F"
+.. note: userowid as well as the "empty" first row are required
+..       ta add the last labnr into the forecast
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+
+?#!EDP_FOPMODE=1     ?  M|kbcfconvertpop
+?#!EDP_FOPMODE=0     ? _M|kbcfconvertpop
+
+#!action=new
+#!database=4:22
+#!dontchange=~
+#!USEROWID=1
+#!TAGFLD=tag
+
+lief;druck;tag\
+    zn;0:beleg;zrahmen;labnr;0:vorgart;verwendlfristkurz;
+
+'M|tlief^id' ; ~ ;FORECAST\
+  -* ; ~ ; ~ ; ~ ; ~ ; ~ ; \
+..
+.select screen header
+.continue ENDVDA  ? _G|mehr
+!NEXTVDA
+.select screen line
+.continue ENDVDA  ? _G|mehr
+.continue NEXTVDA ?  U|xvlief^id <> M|tlief^id  ;  U|xvartikel^id <> M|tartikel^id
+.continue NEXTVDA ?  F|empty(M|tbv)
+.continue NEXTVDA ? _M|tbgltstatus
+.continue NEXTVDA ? _M|tbstatusabrufbaremenge  
+.assign U|item = M|tbv
+.continue NEXTVDA ?  F|empty(U|item)
+.continue NEXTVDA ?  M|tbv^ablagef
+.formula U|nolfristkurz = "~"
+.formula U|nolfristkurz = "0" ? M|tprahmenpos^lfristkurz<>0
+   0 ; 'M|tbv^id' ; ~ ; ~ ; ~ ; ~ ; \
+   # ; ~          ; ~ ; 'M|tprahmenpos^labnr' ; ~ ; 'U|nolfristkurz' ; \
+.continue NEXTVDA
+!ENDVDA
+   0 ; ~ ; ~ ; ~ ; 'M|kvorart^id' ; ~ ;
+
+#!action=update
+#!database=4:22
+
+id;lief2;rahmen;werk;ablstelle;verwschl;abschlnr
+@status:ref(FORECAST)@;'U|xvrahmen^lief2^id';~;'U|xvrahmen^werk';'U|xvrahmen^ablstelle';'U|xvrahmen^verwschl';'U|xvrahmen^abschlnr'
+
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+.output
+..
+.formula U|xtsystem = "edpimport.sh -p " + 'G|einmalpw' + " -c EKS -H " + 'U|xtabrufedphinw' + " -I " + 'U|xtabrufedp' + " >> " + 'U|xtabrufedpout' + " 2>> " + 'U|xtabrufedperr'
+.system 'U|xtsystem'  background
+.continue ERROR   ?  F|filesize(U|xtabrufedperr) > 0
+..
+.continue SUCCESS
+..
+..*****************************************************************************
+..
+!LIEF: one forecast with all products of a supplier
+..
+.continue ERR1    ?  F|empty(M|tlief)
+..
+.formula U|xvlief = M|tlief^id
+.formula U|xvrahmen = M|tprahmen^id
+..
+.file -tempname U|xtabrufedp
+.file -tempname U|xtabrufedpout
+.file -tempname U|xtabrufedperr
+.file -tempname U|xtabrufedphinw
+..
+.output new 'U|xtabrufedp'
+.input "DATEI.F"
+.. note: userowid as well as the "empty" first row are required
+..       ta add the last labnr into the forecast
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+
+?#!EDP_FOPMODE=1     ?  M|kbcfconvertpop
+?#!EDP_FOPMODE=0     ? _M|kbcfconvertpop
+
+#!action=new
+#!database=4:22
+#!dontchange=~
+#!USEROWID=1
+#!TAGFLD=tag
+
+lief;druck;tag\
+    zn;0:beleg;zrahmen;labnr;0:vorgart;verwendlfristkurz;
+
+'M|tlief^id' ; ~ ;FORECAST\
+  -* ; ~ ; ~ ; ~ ; ~ ; ~ ; \
+..
+.select screen header
+.continue ENDLI   ? _G|mehr
+!NEXTLI
+.select screen line
+.continue ENDLI   ? _G|mehr
+.continue NEXTLI  ?  U|xvlief^id <> M|tlief^id
+.continue NEXTLI  ?  F|empty(M|tbv)
+.continue NEXTLI  ? _M|tbgltstatus
+.continue NEXTLI  ? _M|tbstatusabrufbaremenge  
+.assign U|item = M|tbv
+.continue NEXTLI  ?  F|empty(U|item)
+.continue NEXTLI  ?  M|tbv^ablagef
+.formula U|nolfristkurz = "~"
+.formula U|nolfristkurz = "0" ? M|tprahmenpos^lfristkurz<>0
+   # ; 'M|tbv^id' ; ~ ; 'M|tprahmenpos^labnr' ; ~ ; 'U|nolfristkurz' ; \
+.continue NEXTLI
+!ENDLI
+   0 ; ~ ; ~ ; ~ ; 'M|kvorart^id' ; ~ ;
+
+#!action=update
+#!database=4:22
+
+id;lief2
+@status:ref(FORECAST)@;'U|xvrahmen^lief2^id'
+
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+.output
+..
+.formula U|xtsystem = "edpimport.sh -p " + 'G|einmalpw' + " -c EKS -H " + 'U|xtabrufedphinw' + " -I " + 'U|xtabrufedp' + " >> " + 'U|xtabrufedpout' + " 2>> " + 'U|xtabrufedperr'
+.system 'U|xtsystem'  background
+.continue ERROR   ?  F|filesize(U|xtabrufedperr) > 0
+..
+..
+!SUCCESS
+.input "EKLAB.BSTART.BV"       ?  M|kbzeileakt
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERR1
+.error Diese Zeile ist kein Bestellvorschlag.
+.end 1
+..
+!ERROR
+.error Beim Konvertieren des Bestellvorschlags ist ein Fehler aufgetreten.
+.input -text 'U|xtabrufedperr' ? G|edp
+.input -text 'U|xtabrufedp' ? G|edp
+.editing -readonly 'U|xtabrufedperr' ? _G|edp 
+.end 1
+..
+!ERRSTOP
+.error Zu Lieferant und Artikel sind mehrere Rahmenauftragsposition vorhanden.
+.end 1
+..
+!ERRTYPE
+.error Die Vorgangsart Lieferabruf ist nicht definiert.
+.cursor kvorart 0
+.end 1
+..
+!GLTERR
+.error Das Konditionsdatum der Position liegt ausserhalb der GÅltigkeit der Rahmenauftragsposition.
+.end 1
+..
+!QTYERR
+.error Die verfÅgbare Abrufmenge wird Åberschritten.
+.end 1

@@ -1,0 +1,640 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : GKOST.TAB
+..  Autor          : male
+..  Verantwortlich : tiwe
+..  Kontrolle      : mh
+..  Funktion       : Tabellenzeig-FOP fuer das Infosystem ko/GKOST
+..  Functionality  : Table event FOP for the Infosystem ko/GKOST
+..*****************************************************************************
+..
+.set trans -
+..
+.. select string containers
+.type text xtsel1 xtsel2 ? _F|defined(U|xtsel1)
+.type text xtsel3        ? _F|defined(U|xtsel3)
+..
+.. current financial month being processed
+.type integer  ximonth       ? _F|defined(U|ximonth)
+..
+.. flag for first cost object
+.type bool xbco1         ? _F|defined(U|xbco1)
+..
+.. yearly allocation rule available
+.type bool xbyalloc      ? _F|defined(U|xbyalloc)
+..
+.. monthly allocation rule available?
+.type bool xbmalloc      ? _F|defined(U|xbmalloc)
+..
+.. individual overhead allocation rate available?
+.type bool xbiallocrate  ? _F|defined(U|xbiallocrate)
+..
+.. computed overhead allocation rate available?
+.type bool xbcallocrate  ? _F|defined(U|xbcallocrate)
+..
+.. yearly sums for types of direct costs for the current cost center
+.type real xrdcact       ? _F|defined(U|xrdcact)
+.type real xrdcplf       ? _F|defined(U|xrdcplf)
+.type real xrdcplv       ? _F|defined(U|xrdcplv)
+..
+.. flags if the direct cost values are available
+.type bool xbdc1 xbdc2   ? _F|defined(U|xbdc1)
+.type bool xbdc3         ? _F|defined(U|xbdc3)
+..
+.. flags if the cost center values are available
+.type bool xbcc1 xbcc2   ? _F|defined(U|xbcc1)
+.type bool xbcc3         ? _F|defined(U|xbcc3)
+..
+.. flag for first direct cost type
+.type bool xbfirstdct    ? _F|defined(U|xbfirstdct)
+..
+.. Pointers to relevant entries (actual and planned)
+.type P6:1 xpaentry xppentry ? _F|defined(U|xpaentry)
+.. Rows in entries
+.type integer  xiaentry xipentry    ? _F|defined(U|xiaentry)
+.. entry amounts
+.type real xrabubetr xrpfbubetr ? _F|defined(U|xrabubetr)
+.type real xrpvbubetr           ? _F|defined(U|xrpvbubetr)
+..
+.. flags for the row items which are already created
+.type bool xbccrow xbcorow      ? _F|defined(U|xbccrow)
+.type bool xbfinyrow xbmonthrow ? _F|defined(U|xbfinyrow)
+..
+.type real xrtmp                ? _F|defined(U|xrtmp)
+..
+.. pointers to distribution objects
+.type P67:6 xpmonthly           ? _F|defined(U|xpmonthly)
+.type P67:7 xpyearly            ? _F|defined(U|xpyearly)
+..
+..*****************************************************************************
+..
+.formula U|xbccrow     = G|false
+.formula U|xbcorow     = G|false
+.formula U|xbfinyrow   = G|false
+.formula U|xbmonthrow  = G|false
+..
+.formula U|xbco1    = G|true
+..
+..*****************************************************************************
+!COLOOP: Loop over cost objects
+..*****************************************************************************
+.formula U|xbcorow   = G|false
+.formula U|xbfinyrow = G|false
+.load 0 accountdata 'U|xtselktr' ?  U|xbco1
+.load 0 accountdata              ? _U|xbco1
+.continue END               ? _G|mehr
+..
+.formula U|xbco1 = G|false
+..
+.select header
+.formula U|xbfirstdct = G|true
+..
+..*****************************************************************************
+!DCTYPELOOP: Loop over defined direct cost types of cost center
+..*****************************************************************************
+.select line
+.continue CCACTCOSTS ? _G|mehr & _U|xbfirstdct
+.continue COLOOP     ? _G|mehr &  U|xbfirstdct
+.continue DCTYPELOOP ? +'H|ekbasis' = 0
+..
+.formula U|ximonth = M|vgmon
+..
+..*****************************************************************************
+!DIRECTCOSTS: Compute the direct costs (stored in local arrays)
+..*****************************************************************************
+.formula U|xtsel1 = "$,@gruppe=3;gruppe=3;einzel=1;koref=" + 'H|ekbasis^id'
+.formula U|xtsel1 = U|xtsel1 + ";gjahr=" + 'M|gjahr'
+.formula U|xtsel1 = U|xtsel1 + ";dart=(65)"
+.formula U|xtsel1 = U|xtsel1 + ";ktref=" + '0|id'
+..
+.formula U|xtsel2 = "$,@gruppe=3;gruppe=3;einzel=1;koref=" + 'H|ekbasis^id'
+.formula U|xtsel2 = U|xtsel2 + ";gjahr=" + 'M|gjahr'
+.formula U|xtsel2 = U|xtsel2 + ";dart=(67)"
+.formula U|xtsel2 = U|xtsel2 + ";ktref=" + '0|id'
+..
+.formula U|xtsel3 = "$,@gruppe=3;gruppe=3;einzel=1;koref=" + 'H|ekbasis^id'
+.formula U|xtsel3 = U|xtsel3 + ";gjahr=" + 'M|gjahr'
+.formula U|xtsel3 = U|xtsel3 + ";dart=(68)"
+.formula U|xtsel3 = U|xtsel3 + ";ktref=" + '0|id'
+..
+.. actual values
+.load 6 eds 'U|xtsel1'
+.formula U|xbdc1 = G|mehr
+..
+.. planned fix values
+.load 7 eds 'U|xtsel2'
+.formula U|xbdc2 = G|mehr
+..
+.. planned variable values
+.load 8 eds 'U|xtsel3'
+.formula U|xbdc3 = G|mehr
+..
+..*****************************************************************************
+!DCMLOOP: Monthly loop over direct costs to fill arrays
+..*****************************************************************************
+.continue DCEND ? U|ximonth > M|bgmon
+.. actual costs
+.type real xrdcact.ximonth ? _F|defined(U|xrdcact.U|ximonth)
+.. planned fix
+.type real xrdcplf.ximonth ? _F|defined(U|xrdcplf.U|ximonth)
+.. planned variable
+.type real xrdcplv.ximonth ? _F|defined(U|xrdcplv.U|ximonth)
+..
+.formula U|xrdcact.U|ximonth = 0.00 ? U|xbfirstdct
+.formula U|xrdcplf.U|ximonth = 0.00 ? U|xbfirstdct
+.formula U|xrdcplv.U|ximonth = 0.00 ? U|xbfirstdct
+..
+.continue DCINIT    ? U|ximonth = M|vgmon & U|xbfirstdct
+.continue DCCOMPUTE
+..
+..*****************************************************************************
+!DCINIT: Initialize values for first loop
+..*****************************************************************************
+.. yearly sums
+.formula U|xrdcact         = 0.00
+.formula U|xrdcplf         = 0.00
+.formula U|xrdcplv         = 0.00
+..
+..*****************************************************************************
+!DCCOMPUTE: Compute values for direct costs (planned and actual)
+..*****************************************************************************
+..
+.formula U|xrdcact.U|ximonth = U|xrdcact.U|ximonth + (6|s.U|ximonth - 6|h.U|ximonth) ? U|xbdc1
+.formula U|xrdcplf.U|ximonth = U|xrdcplf.U|ximonth + (7|s.U|ximonth - 7|h.U|ximonth) ? U|xbdc2
+.formula U|xrdcplv.U|ximonth = U|xrdcplv.U|ximonth + (8|s.U|ximonth - 8|h.U|ximonth) ? U|xbdc3
+..
+.formula U|xrdcact = U|xrdcact + (6|s.U|ximonth - 6|h.U|ximonth) ? U|xbdc1
+.formula U|xrdcplf = U|xrdcplf + (7|s.U|ximonth - 7|h.U|ximonth) ? U|xbdc2
+.formula U|xrdcplv = U|xrdcplv + (8|s.U|ximonth - 8|h.U|ximonth) ? U|xbdc3
+..
+.formula U|ximonth = U|ximonth + 1
+.continue DCMLOOP
+..
+..*****************************************************************************
+!DCEND: End of computation of direct costs for this type
+..*****************************************************************************
+.formula U|xbfirstdct = G|false
+.continue DCTYPELOOP
+..
+..*****************************************************************************
+!CCACTCOSTS: Fill arrays with the actual costs of the current center which will be distributed
+..*****************************************************************************
+.. free buffers 6,7,8
+.load 6
+.load 7
+.load 8
+..
+.select header
+..
+.formula U|xtsel1 = "$,@gruppe=3;gruppe=3;kosn=" + 'H|id'
+.formula U|xtsel1 = U|xtsel1 + ";gjahr=" + 'M|gjahr'
+.formula U|xtsel1 = U|xtsel1 + ";dart=(50)"
+..
+.formula U|xtsel2 = "$,@gruppe=3;gruppe=3;kosn=" + 'H|id'
+.formula U|xtsel2 = U|xtsel2 + ";gjahr=" + 'M|gjahr'
+.formula U|xtsel2 = U|xtsel2 + ";dart=(54)"
+..
+.formula U|xtsel3 = "$,@gruppe=3;gruppe=3;kosn=" + 'H|id'
+.formula U|xtsel3 = U|xtsel3 + ";gjahr=" + 'M|gjahr'
+.formula U|xtsel3 = U|xtsel3 + ";dart=(52)"
+..
+.. actual values
+.load 6 accountdata 'U|xtsel1'
+.formula U|xbcc1 = G|mehr
+..
+.. planned fix values
+.load 7 accountdata 'U|xtsel2'
+.formula U|xbcc2 = G|mehr
+..
+.. planned variable values
+.load 8 accountdata 'U|xtsel3'
+.formula U|xbcc3 = G|mehr
+..
+.formula U|ximonth = M|vgmon
+..
+..*****************************************************************************
+!CCAMLOOP: Monthly loop for actual costs of cost center
+..*****************************************************************************
+.continue YALLOC ? U|ximonth > M|bgmon
+.. actual costs
+.type real xrccact.ximonth ? _F|defined(U|xrccact.U|ximonth)
+.. planned fix
+.type real xrccplf.ximonth ? _F|defined(U|xrccplf.U|ximonth)
+.. planned variable
+.type real xrccplv.ximonth ? _F|defined(U|xrccplv.U|ximonth)
+..
+.formula U|xrccact.U|ximonth = 0.00
+.formula U|xrccplf.U|ximonth = 0.00
+.formula U|xrccplv.U|ximonth = 0.00
+..
+..*****************************************************************************
+!CCACOMPUTE: Compute values for cost center values (planned and actual)
+..*****************************************************************************
+..
+.formula U|xrccact.U|ximonth = U|xrccact.U|ximonth + 6|ngs.U|ximonth ? U|xbcc1
+.formula U|xrccplf.U|ximonth = U|xrccplf.U|ximonth + 7|ngs.U|ximonth ? U|xbcc2
+.formula U|xrccplv.U|ximonth = U|xrccplv.U|ximonth + 8|ngs.U|ximonth ? U|xbcc3
+..
+..fo xrccact = xrccact + xrccact.ximonth
+..fo xrccplf = xrccplf + xrccplf.ximonth
+..fo xrccplv = xrccplv + xrccplv.ximonth
+..
+.formula U|ximonth = U|ximonth + 1
+.continue CCAMLOOP
+..
+..*****************************************************************************
+!YALLOC: Get yearly allocation rule definition for cost center/cost object
+..*****************************************************************************
+.. free buffers 6,7,8
+.load 6
+.load 7
+.load 8
+..
+.formula U|ximonth  = M|vgmon
+.formula U|xbyalloc = G|false   ? _M|gekoindi
+.continue ALLOCRATES     ? _M|gekoindi
+..
+.formula U|xtsel1 = "$,@ordnung=nummer;@gruppe=7;gruppe=7;ksab=" + 'H|id'
+.formula U|xtsel1 = U|xtsel1 + ";gjahr=" + 'M|gjahr'
+..
+.load 1 assessment 'U|xtsel1'
+.. Check if a yearly distribution rule is available
+.formula U|xbyalloc = G|mehr
+.assign U|xpyearly = 1|id ? U|xbyalloc
+..
+..*****************************************************************************
+!ALLOCRATES: Get overhead allocation rates (computed and individual)
+..*****************************************************************************
+.. individual one
+.formula U|xtsel1 = "$,@gruppe=3;gruppe=3"
+.formula U|xtsel1 = U|xtsel1 + ";dart=(55)"
+.formula U|xtsel1 = U|xtsel1 + ";gjahr=" + 'M|gjahr'
+.formula U|xtsel1 = U|xtsel1 + ";kosn=" + 'H|id'
+..
+.load 3 accountdata 'U|xtsel'
+..
+.formula U|xbiallocrate = G|mehr
+..
+.. computed one
+.formula U|xtsel1 = "$,@gruppe=3;gruppe=3"
+.formula U|xtsel1 = U|xtsel1 + ";dart=(84)"
+.formula U|xtsel1 = U|xtsel1 + ";gjahr=" + 'M|gjahr'
+.formula U|xtsel1 = U|xtsel1 + ";kosn=" + 'H|id'
+..
+.load 4 accountdata 'U|xtsel'
+..
+.formula U|xbcallocrate = G|mehr
+..
+.formula U|ximonth = M|vgmon
+..
+..*****************************************************************************
+!MLOOP: Loop over months
+..*****************************************************************************
+.formula U|xbmonthrow = G|false
+.continue COLOOP       ? U|ximonth > M|bgmon
+..
+.. init entry pointers
+.assign  U|xpaentry = "(0,0,0)"
+.assign  U|xppentry = "(0,0,0)"
+.formula U|xiaentry   = 0
+.formula U|xipentry   = 0
+.formula U|xrabubetr  = 0.00
+.formula U|xrpfbubetr = 0.00
+.formula U|xrpvbubetr = 0.00
+..
+.. Get relevant posting and row
+.formula U|xtsel = "$,@gruppe=1;gruppe=1;@zeilen=ja"
+.formula U|xtsel = U|xtsel + ";ursache=(74)"
+.formula U|xtsel = U|xtsel + ";gjahr=" + 'M|gjahr'
+.formula U|xtsel = U|xtsel + ";monat=" + 'U|ximonth'
+.formula U|xtsel = U|xtsel + ";kstelle=" + 'H|id'
+..
+.load 5 acctrnsact 'U|xtsel'
+..
+..*****************************************************************************
+!ENTRYLOOP
+..*****************************************************************************
+.continue ENROWE ? _G|mehr
+..
+..*****************************************************************************
+!ENROWL: Loop over statistical entry rows
+..*****************************************************************************
+.load 5 line
+.continue NEXTENTRY ? _G|mehr
+..
+.continue ENROWL    ? '5|kstelle^id' <> '0|id'
+..
+.set reference +
+.. actual
+.assign U|xpaentry = 5|id     ? 5|vkzart = "(73)"
+.formula U|xiaentry  = 5|zn          ? 5|vkzart = "(73)"
+.formula U|xrabubetr = 5|betrag      ? 5|vkzart = "(73)" &  5|soll
+.formula U|xrabubetr = 5|betrag * -1 ? 5|vkzart = "(73)" & _5|soll
+..
+.. planned
+.assign U|xppentry = 5|id         ? 5|vkzart = "(80)"
+.formula U|xipentry   = 5|zn             ? 5|vkzart = "(80)"
+.formula U|xrpfbubetr = 5|pfixbetr       ? 5|vkzart = "(80)" &  5|soll
+.formula U|xrpvbubetr = 5|ppropbetr      ? 5|vkzart = "(80)" &  5|soll
+.formula U|xrpfbubetr = 5|pfixbetr  * -1 ? 5|vkzart = "(80)" & _5|soll
+.formula U|xrpvbubetr = 5|ppropbetr * -1 ? 5|vkzart = "(80)" & _5|soll
+.set reference -
+..
+..*****************************************************************************
+!NEXTENTRY: Get next entry if not all have been found
+..*****************************************************************************
+.continue ENROWE ? U|xiaentry > 0 & U|xipentry > 0
+.load 5 acctrnsact
+.continue ENTRYLOOP
+..
+..*****************************************************************************
+!ENROWE: End of loop
+..*****************************************************************************
+.load 5
+..
+.. if we did not find any entries for the combination of
+.. cost center, cost object and financial period we can skip
+.. this item.
+.formula U|ximonth = U|ximonth + 1 ? _M|noentry & +'U|xpaentry' = 0 & +'U|xppentry' = 0
+.continue MLOOP             ? _M|noentry & +'U|xpaentry' = 0 & +'U|xppentry' = 0
+..
+.formula U|xbmalloc = G|false   ? _M|gekoindi
+.continue COMPUTE        ? _M|gekoindi
+
+.formula U|xtsel1 = "$,@ordnung=nummer;@gruppe=6;gruppe=6;ksab=" + 'H|id'
+.formula U|xtsel1 = U|xtsel1 + ";gjahr=" + 'M|gjahr'
+.formula U|xtsel1 = U|xtsel1 + ";gmonat=" + 'U|ximonth'
+..
+.load 2 assessment 'U|xtsel1'
+..
+.formula U|xbmalloc = G|mehr
+..
+.assign U|xpmonthly = 2|id ? U|xbmalloc
+..
+.continue COMPUTE
+..
+..*****************************************************************************
+!COMPUTE:
+..*****************************************************************************
+.. conditions:
+.. buffer 0 contains the cost object
+.. buffer 1 contains the yearly allocation rule (if available -> indicated by xbyalloc)
+.. buffer 2 contains the monthly allocation rule (if available -> indicated by xbmalloc)
+.. buffer 3 contains the individual overhead allocation rates (if available -> indicated by xbiallocrate)
+.. buffer 4 contains the computed overhead allocation rates (if available -> indicated by xbcallocrate)
+.. ximonth contains the current financial month
+..
+.. skip to indiviual computation
+.continue EROWVALUES ? _U|xbyalloc & _U|xbmalloc & _U|xbiallocrate & _U|xbcallocrate
+.type real xr ? _F|defined(U|xr)
+.formula U|xr = 0.00
+.formula U|xr = 3|s.U|ximonth ? F|defined(3|s.U|ximonth)
+.continue EROWVALUES ? _U|xbyalloc & _U|xbmalloc &  U|xbiallocrate & U|xr = 0.00
+.formula U|xr = 0.00
+.formula U|xr = 4|s.U|ximonth ? F|defined(4|s.U|ximonth)
+.continue EROWVALUES ? _U|xbyalloc & _U|xbmalloc &  U|xbcallocrate & U|xr = 0.00
+..
+..*****************************************************************************
+!CCROW: Create row for cost center
+..*****************************************************************************
+.continue COROW    ? U|xbccrow
+.make screen line +O
+.formula M|tbaumstufe    = 0
+.formula M|tbaumtext     = H|grbez + " " + H|nummer
+.assign M|tkst    = H|id
+..
+.formula U|xbccrow = G|true
+..
+..*****************************************************************************
+!COROW: Create row for cost center, cost object
+..*****************************************************************************
+.continue YEARROW  ? U|xbcorow
+.make screen line +O
+.formula M|tbaumstufe    = 1
+.formula M|tbaumtext     = 0|grbez + " " + 0|nummer
+.assign M|tkst    = H|id
+.assign M|tktr    = 0|id
+..
+.formula U|xbcorow = G|true
+..
+..*****************************************************************************
+!YEARROW: Create row for cost center, cost object, financial year
+..*****************************************************************************
+.continue MONTHROW ? U|xbfinyrow
+.make screen line +O
+.formula M|tbaumstufe    = 2
+..
+.set trans +
+.formula M|tbaumtext     = F|formatstr("GJ {1} ({2} - {3})", M|gjahr, M|vgmon, M|bgmon)
+.set trans -
+.assign M|tkst    = H|id
+.assign M|tktr    = 0|id
+.formula M|tdcact = U|xrdcact
+.formula M|tdcplf = U|xrdcplf
+.formula M|tdcplv = U|xrdcplv
+..
+.formula U|xbfinyrow = G|true
+..
+..*****************************************************************************
+!MONTHROW: Create row for cost center, cost object, financial year, financial month
+..*****************************************************************************
+.. skip if only annual values
+.continue MR2 ? M|nurjw
+..
+.make screen line +O
+.formula M|tbaumstufe    = 3
+..
+.set trans +
+.formula M|tbaumtext     = "Monat" + " " + 'U|ximonth'
+.set trans -
+..
+.assign M|tkst    = H|id
+.assign M|tktr    = 0|id
+.assign M|tmonat  = U|ximonth
+.copy M|tibuch  = U|xpaentry
+.copy M|tpbuch  = U|xppentry
+.formula M|tibuzeile = U|xiaentry
+.formula M|tpbuzeile = U|xipentry
+..
+.formula M|tibubetr  = U|xrabubetr
+.formula M|tpfbubetr = U|xrpfbubetr
+.formula M|tpvbubetr = U|xrpvbubetr
+.formula M|tdcact    = U|xrdcact.U|ximonth
+.formula M|tdcplf    = U|xrdcplf.U|ximonth
+.formula M|tdcplv    = U|xrdcplv.U|ximonth
+..
+.formula U|xbmonthrow  = G|true
+..
+.continue MONTHLY
+..
+..*****************************************************************************
+!MR2: Only annual values
+..*****************************************************************************
+.formula M|tibubetr  = M|tibubetr  + U|xrabubetr
+.formula M|tpfbubetr = M|tpfbubetr + U|xrpfbubetr
+.formula M|tpvbubetr = M|tpvbubetr + U|xrpvbubetr
+..
+..*****************************************************************************
+!MONTHLY: Insert monthly allocation rule values
+..*****************************************************************************
+.continue YEARLY ? _U|xbmalloc
+..
+.assign M|tumlage = U|xpmonthly^id   ? _M|nurjw
+..
+.formula U|xtsel1 = "$,@gruppe=6;gruppe=6;@zeilen=(1);id=" + 'U|xpmonthly^id'
+.formula U|xtsel1 = U|xtsel1 + ";kszu=" + '0|id'
+..
+.. now try to get the specific row for the receiving cost object
+.load 2 assessment 'U|xtsel1'
+.load 2 line  '2|selzeile' ? G|mehr
+..
+.continue INDALLOCRATE ? _G|mehr
+.continue MOLY2        ?  M|nurjw
+..
+.formula M|tistkosten    = 2|istmowert   ? 2|istmowert  <> 0.00
+.formula M|tplfkosten    = 2|planmowert  ? 2|planmowert <> 0.00
+.continue INDALLOCRATE
+..
+..*****************************************************************************
+!MOLY2: Only annual values
+..*****************************************************************************
+.formula M|tistkosten    = M|tistkosten + 2|istmowert    ? 2|istmowert  <> 0.00
+.formula M|tplfkosten    = M|tplfkosten + 2|planmowert   ? 2|planmowert <> 0.00
+.continue INDALLOCRATE
+..
+..*****************************************************************************
+!YEARLY: Insert yearly allocation rule values
+..*****************************************************************************
+.continue INDALLOCRATE ? _U|xbyalloc
+..
+.assign M|tumlage = U|xpyearly^id   ? _M|nurjw
+..
+.. now try to get the specific row for the receiving cost object
+.formula U|xtsel1 = "$,@gruppe=7;gruppe=7;@zeilen=(1);id=" + 'U|xpyearly^id'
+.formula U|xtsel1 = U|xtsel1 + ";kszu="  + '0|id'
+..
+.load 1 assessment 'U|xtsel1'
+.load 1 line  '1|selzeile' ? G|mehr
+..
+.continue INDALLOCRATE ? _G|mehr
+.continue YLY2         ?  M|nurjw
+..
+.formula M|tistkosten    = 1|istmowert                           ? 1|istmowert <> 0.00
+.formula M|tistkosten    = 1|istmoproz / 100 * U|xrccact.U|ximonth   ? 1|istmoproz <> 0.00
+.formula M|tplfkosten    = 1|planmowert                          ? 1|planmowert <> 0.00
+.formula M|tplfkosten    = 1|planmoproz / 100 * U|xrccplf.U|ximonth  ? 1|planmoproz <> 0.00
+.formula M|tplvkosten    = 1|planmoproz / 100 * U|xrccplv.U|ximonth  ? 1|planmoproz <> 0.00
+.continue INDALLOCRATE
+..
+..*****************************************************************************
+!YLY2: Only annual values
+..*****************************************************************************
+.formula M|tistkosten    = M|tistkosten + 1|istmowert                            ? 1|istmowert <> 0.00
+.formula M|tistkosten    = M|tistkosten + (1|istmoproz / 100 * U|xrccact.U|ximonth)  ? 1|istmoproz <> 0.00
+.formula M|tplfkosten    = M|tplfkosten + 1|planmowert                           ? 1|planmowert <> 0.00
+.formula M|tplfkosten    = M|tplfkosten + (1|planmoproz / 100 * U|xrccplf.U|ximonth) ? 1|planmoproz <> 0.00
+.formula M|tplvkosten    = M|tplvkosten + 1|planmoproz / 100 * U|xrccplv.U|ximonth   ? 1|planmoproz <> 0.00
+.continue INDALLOCRATE
+..
+..*****************************************************************************
+!INDALLOCRATE: Individual allocation rate available
+..*****************************************************************************
+.type bool xbindiv    ? _F|defined(U|xbindiv)
+.formula U|xbindiv = G|false
+.continue COMALLOCRATE ? _F|defined(3|s.U|ximonth)
+.continue COMALLOCRATE ? _U|xbiallocrate ; 3|s.U|ximonth = 0.00
+.continue INDAY        ?  M|nurjw
+..
+..
+.. data in buffer 3
+..
+.formula M|tistabgesch = 3|iab.U|ximonth
+.formula M|tplabgesch  = 3|pab.U|ximonth
+.formula M|tigkzr = 3|s.U|ximonth
+.formula M|tigkzg = 3|ngs.U|ximonth
+..
+.continue COMALLOCRATE ? U|xbyalloc ; U|xbmalloc
+..
+.formula U|xbindiv    = G|true
+.formula M|tumligkz = G|true
+..
+.. direct costs are the base
+.formula M|tistkosten = 3|ngs.U|ximonth / 100 * U|xrdcact.U|ximonth ? _M|vsround
+.formula M|tistkosten = 3|s.U|ximonth   / 100 * U|xrdcact.U|ximonth ?  M|vsround
+.formula M|tplfkosten = 3|ngs.U|ximonth / 100 * U|xrdcplf.U|ximonth ? _M|vsround
+.formula M|tplfkosten = 3|s.U|ximonth   / 100 * U|xrdcplf.U|ximonth ?  M|vsround
+.formula M|tplvkosten = 3|ngs.U|ximonth / 100 * U|xrdcplv.U|ximonth ? _M|vsround
+.formula M|tplvkosten = 3|s.U|ximonth   / 100 * U|xrdcplv.U|ximonth ?  M|vsround
+.continue COMALLOCRATE
+..
+..*****************************************************************************
+!INDAY: Sum up annual values
+..*****************************************************************************
+.continue COMALLOCRATE ? U|xbyalloc ; U|xbmalloc
+.formula U|xbindiv = G|true
+.. direct costs are the base
+.formula M|tistkosten = M|tistkosten + (3|ngs.U|ximonth / 100 * U|xrdcact.U|ximonth) ? _M|vsround
+.formula M|tistkosten = M|tistkosten + (3|s.U|ximonth   / 100 * U|xrdcact.U|ximonth) ?  M|vsround
+.formula M|tplfkosten = M|tplfkosten + (3|ngs.U|ximonth / 100 * U|xrdcplf.U|ximonth) ? _M|vsround
+.formula M|tplfkosten = M|tplfkosten + (3|s.U|ximonth   / 100 * U|xrdcplf.U|ximonth) ?  M|vsround
+.formula M|tplvkosten = M|tplvkosten + (3|ngs.U|ximonth / 100 * U|xrdcplv.U|ximonth) ? _M|vsround
+.formula M|tplvkosten = M|tplvkosten + (3|s.U|ximonth   / 100 * U|xrdcplv.U|ximonth) ?  M|vsround
+.continue COMALLOCRATE
+..
+..*****************************************************************************
+!COMALLOCRATE: Computed allocation rate available
+..*****************************************************************************
+.continue EROWVALUES  ? _F|defined(4|s.U|ximonth)
+.continue EROWVALUES  ? _U|xbcallocrate ; 4|s.U|ximonth = 0.00
+.continue COMAY       ?  M|nurjw
+..
+.. data in buffer 4
+..
+.formula M|tistabgesch = 4|iab.U|ximonth
+.formula M|tplabgesch  = 4|pab.U|ximonth
+.formula M|tegkzr = 4|s.U|ximonth
+.formula M|tegkzg = 4|ngs.U|ximonth
+..
+.continue EROWVALUES ? U|xbyalloc ; U|xbmalloc ; U|xbindiv
+..
+.formula M|tumlegkz = G|true
+..
+.. direct costs are the base
+.formula M|tistkosten = 4|ngs.U|ximonth / 100 * U|xrdcact.U|ximonth ? _M|vsround
+.formula M|tistkosten = 4|s.U|ximonth   / 100 * U|xrdcact.U|ximonth ?  M|vsround
+.formula M|tplfkosten = 4|ngs.U|ximonth / 100 * U|xrdcplf.U|ximonth ? _M|vsround
+.formula M|tplfkosten = 4|s.U|ximonth   / 100 * U|xrdcplf.U|ximonth ?  M|vsround
+.formula M|tplvkosten = 4|ngs.U|ximonth / 100 * U|xrdcplv.U|ximonth ? _M|vsround
+.formula M|tplvkosten = 4|s.U|ximonth   / 100 * U|xrdcplv.U|ximonth ?  M|vsround
+.continue EROWVALUES
+..
+..*****************************************************************************
+!COMAY: Sum up annual values
+..*****************************************************************************
+.continue EROWVALUES ? U|xbyalloc ; U|xbmalloc ; U|xbindiv
+.. direct costs are the base
+.formula M|tistkosten = M|tistkosten + (4|ngs.U|ximonth / 100 * U|xrdcact.U|ximonth) ? _M|vsround
+.formula M|tistkosten = M|tistkosten + (4|s.U|ximonth   / 100 * U|xrdcact.U|ximonth) ?  M|vsround
+.formula M|tplfkosten = M|tplfkosten + (4|ngs.U|ximonth / 100 * U|xrdcplf.U|ximonth) ? _M|vsround
+.formula M|tplfkosten = M|tplfkosten + (4|s.U|ximonth   / 100 * U|xrdcplf.U|ximonth) ?  M|vsround
+.formula M|tplvkosten = M|tplvkosten + (4|ngs.U|ximonth / 100 * U|xrdcplv.U|ximonth) ? _M|vsround
+.formula M|tplvkosten = M|tplvkosten + (4|s.U|ximonth   / 100 * U|xrdcplv.U|ximonth) ?  M|vsround
+.continue EROWVALUES
+..
+..*****************************************************************************
+!EROWVALUES:
+..*****************************************************************************
+.formula U|ximonth = U|ximonth + 1
+..
+.formula M|tibudiff =  M|tibubetr - M|tistkosten                                  ? U|xbmonthrow
+.formula M|tpbudiff = (M|tpfbubetr + M|tpvbubetr) - (M|tplfkosten + M|tplvkosten) ? U|xbmonthrow
+..
+.continue MLOOP
+..
+..
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

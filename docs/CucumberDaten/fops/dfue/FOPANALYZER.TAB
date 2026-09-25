@@ -1,0 +1,140 @@
+..!interpreter english translate noabbrev
+..<META M|='dfue/FOPANALYZER' > 
+..*****************************************************************************
+.. Name           : FOPANALYZER.TAB
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : carue
+.. Functionality  : checks for each FO program if it exists as standard or customized, 
+..                  NEW (2017): checks if the FO progamms are called by other FO programs
+..*****************************************************************************
+.set trans -
+..
+.type text foprogramm ? _F|defined(U|foprogramm)
+.type text fostdpath ? _F|defined(U|fostdpath)
+.type text foindivpath ? _F|defined(U|foindivpath)
+.type text row ? _F|defined(U|row)
+.type text ftext ? _F|defined(U|ftext)
+.type text grep ? _F|defined(U|grep)
+.type text grepresult ? _F|defined(U|grepresult)
+..
+.. Required argument
+.continue END ? F|empty(U|foprogramm)
+.. 
+.. set formatting for free text fields
+.input "DATEI.F"
+..
+.. Default / usually used file paths
+.formula U|fostdpath = 'M|kstdverz' + "/" + 'U|foprogramm'
+.formula U|foindivpath = 'M|kindivverz' + "/" + 'U|foprogramm'
+.formula U|fostdpath = 'P|spr' + "/" + 'M|kstdverz' + "/" + 'U|foprogramm'  ?   P|spr<>"D"
+.formula U|foindivpath = 'P|spr' + "/" + 'M|kindivverz' + "/" + 'U|foprogramm'   ?   P|spr<>"D"
+..
+.continue REFRESH ? G|evtvar = "kbukopieren"
+.. 
+.. Check file existance
+.make screen line +O
+.formula M|tprogramm = U|foprogramm
+.formula M|tstdprogramm = U|fostdpath
+.formula M|tindprogramm = U|foindivpath
+..
+!REFRESH 
+.formula M|tbstandard = F|fileexists('U|fostdpath')
+.formula M|tbindividuell =  F|fileexists('U|foindivpath')
+.formula M|tunterprogramme = ""
+.formula M|tindarbeitsbereich = ""
+..
+.. Check other possible file locations
+.select permission 'M|karb^id'
+.continue END ?_G|mehr
+!NEXT                            
+.select line
+.continue ENDARB ?_G|mehr
+.formula U|foindivpath = 'H|verz' + "/" + 'U|foprogramm'  ?  P|spr="D"
+.formula U|foindivpath = 'P|spr' + "/" + 'H|verz' + "/" + 'U|foprogramm'  ?  P|spr<>"D"
+.continue NEXT ? _F|fileexists('U|foindivpath') 
+.continue NEXT ? H|verz=M|kstdverz
+.formula M|tindarbeitsbereich = M|tindarbeitsbereich + ", " ?  _F|empty(M|tindarbeitsbereich) 
+.formula M|tindarbeitsbereich = M|tindarbeitsbereich + 'H|verz' 
+.continue NEXT
+!ENDARB
+.select -
+..
+.. Check sub programs used in fo program
+.file -tempname U|ftext ? F|empty(U|ftext)
+.. 
+.continue NOSTD  ? _M|tbstandard
+.output new 'U|ftext'
+=== 'M|tstdprogramm' ===
+!NSTD
+.select from 'M|tstdprogramm' row^
+.continue ENDSTD  ? _G|mehr
+.continue NSTD ? F|empty(U|row)
+.continue NSTD ? _(U|row/".input *") & _(U|row/".eingabe *")
+.formula M|tunterprogramme = M|tunterprogramme + ", " ?  _F|empty(M|tunterprogramme)
+.formula M|tunterprogramme = M|tunterprogramme + 'F|regreplaceall(U|row, ".input |.eingabe ", "")'
+'U|row'
+.continue NSTD
+!ENDSTD 
+.output terminal
+.formula M|tuftext = U|ftext ? _F|empty(M|tunterprogramme)
+!NOSTD
+..
+.continue NOIND  ? _M|tbindividuell
+.output new 'U|ftext'
+=== 'M|tindprogramm' ===
+!NIND
+.select from 'M|tindprogramm' row^
+.continue ENDIND  ? _G|mehr
+.continue NIND ? F|empty(U|row)
+.continue NIND ? _(U|row/".input *") & _(U|row/".eingabe *")
+.formula M|tunterprogrammeind = M|tunterprogrammeind + ", " ?  _F|empty(M|tunterprogrammeind)
+.formula M|tunterprogrammeind = M|tunterprogrammeind + 'F|regreplaceall(U|row, ".input |.eingabe ", "")'
+'U|row'
+.continue NIND
+!ENDIND
+.output terminal
+.formula M|tuftextind = U|ftext ? _F|empty(M|tunterprogrammeind)
+!NOIND
+..
+.. 
+..
+.. Check USAGE of program
+.file -tempname U|grepresult ? F|empty(U|grepresult)
+.copy M|tbverwendung = G|false
+.output new 'U|ftext'
+.select permission 'M|karb^id'
+.continue END ?_G|mehr
+!NUSE
+.select line
+.continue EUSE ?_G|mehr
+.output new 'U|grepresult'
+.formula U|grep = F|formatstr("grep {4}input.*{5}{1}{5}{4} {2}/* -dskip -s >> {3}", U|foprogramm, H|verz, U|grepresult, G|apostroph, G|dblquote)
+.system 'U|grep' background
+.continue NUSE2 ? _G|mehr
+.copy M|tbverwendung = G|true
+.output terminal 
+.system 'F|formatstr("cat {1} >> {2}", U|grepresult, U|ftext)' background
+!NUSE2
+.output new 'U|grepresult'
+.formula U|grep = F|formatstr("grep {4}input.*/{1}{5}{4} {2}/* -dskip -s >> {3}", U|foprogramm, H|verz, U|grepresult, G|apostroph, G|dblquote)
+.system 'U|grep' background
+.continue NUSE ? _G|mehr
+.copy M|tbverwendung = G|true
+.output terminal
+.system 'F|formatstr("cat {1} >> {2}", U|grepresult, U|ftext)' background
+.continue NUSE
+!EUSE 
+.output terminal
+.formula M|tvftext = U|ftext ? M|tbverwendung
+..
+..
+..
+.. Status icons
+.formula M|tstatus = M|icostandard    ? M|tbstandard  
+.formula M|tstatus = M|icoindividuell ? M|tbindividuell
+.formula M|tstatus = M|icofehler      ? M|tindarbeitsbereich/"*,*"
+.. 
+..*****************************************************************************
+!END
+.continue

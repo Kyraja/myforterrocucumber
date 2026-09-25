@@ -1,0 +1,256 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : AENDERUNGSHISTORIE
+.. Autor          : erwo
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Anzeige der Žnderungshistorie eines Objektes
+.. Functionality  : Shows editing history of an data object.
+...Includes       :
+.. include st/AENDH.AUSLOESER.PRUEFEN.FELD
+.. include st/AENDH.AUSLOESER.PRUEFEN.KOPFFOP
+.. include st/AENDH.AUSLOESER.PRUEFEN.ZEILENAUSFOP
+.. include st/AENDH.AUSLOESER.PRUEFEN.ZEILENFOP
+.. include st/AENDH.DIFF.KOPFFELD
+.. include st/AENDH.DIFF.KOPFFOP
+.. include st/AENDH.DIFF.KOPFTITEL
+.. include st/AENDH.DIFF.ZEILEN1FELD
+.. include st/AENDH.DIFF.ZEILEN1FOP
+.. include st/AENDH.DIFF.ZEILEN2FELD
+.. include st/AENDH.DIFF.ZEILEN2FOP
+.. include st/AENDH.DIFF.ZEILENFELD
+.. include st/AENDH.DIFF.ZEILENFOP
+.. include st/AENDH.DIFF.ZEILENTITEL
+.. include st/AENDH.ERSTES.KOPFFELD
+.. include st/AENDH.ERSTES.KOPFFOP
+.. include st/AENDH.ERSTES.KOPFTITEL
+.. include st/AENDH.ERSTES.ZEILENFELD
+.. include st/AENDH.ERSTES.ZEILENFOP
+.. include st/AENDH.ERSTES.ZEILENTITEL
+.. include st/FELDTRAVERSIERUNG
+.. include st/OBJEKTEINZELNTRAVERSIEREN
+.. include st/OBJEKTTRAVERSIERUNG
+.. include st/STRINGLISTE
+..*****************************************************************************
+.set trans -
+.type ZAE1  versionn                            ? _F|defined(U|versionn)
+.type ZAE1  vversionn                           ? _F|defined(U|vversionn)
+.type bool  unterschiedefeststellen             ? _F|defined(U|unterschiedefeststellen)
+.. Fr STRINGLISTE
+.type GL    stringlistekopf                     ? _F|defined(U|stringlistekopf)
+.type GL    stringlistetrenner                  ? _F|defined(U|stringlistetrenner)
+.type GL    stringlisterest                     ? _F|defined(U|stringlisterest)
+.type GL    stringlistefop                      ? _F|defined(U|stringlistefop)
+.type GL    feldlistekopf                       ? _F|defined(U|feldlistekopf)
+.type GL    feldlistezeile                      ? _F|defined(U|feldlistezeile)
+.. Fr OBJEKTEINZELNTRAVERSIEREN und OBJEKTTRAVERSIEREN
+.type GL    objekttraversierungkopf             ? _F|defined(U|objekttraversierungkopf)
+.type GL    objekttraversierungzeile            ? _F|defined(U|objekttraversierungzeile)
+.type GL    objekttraversierungbeidezeilen      ? _F|defined(U|objekttraversierungbeidezeilen)
+.type GL    objekttraversierungzeilein1puffer   ? _F|defined(U|objekttraversierungzeilein1puffer)
+.type GL    objekttraversierungzeilein2puffer   ? _F|defined(U|objekttraversierungzeilein2puffer)
+.type bool  kopftitelerledigt                   ? _F|defined(U|kopftitelerledigt)
+.type bool  zeilentitelerledigt                 ? _F|defined(U|zeilentitelerledigt)
+.type bool  objekttitelerledigt                 ? _F|defined(U|objekttitelerledigt)
+.type bool  esgibteinetabelle                   ? _F|defined(U|esgibteinetabelle)
+.type I9    aktuellezeile                       ? _F|defined(U|aktuellezeile)
+.type GD19  itstand                             ? _F|defined(U|itstand)
+.type GL15  itzeichen                           ? _F|defined(U|itzeichen)
+.type bool  xbersetzt                           ? _F|defined(U|xbersetzt)
+.type GL    zeilenliste                         ? _F|defined(U|zeilenliste)
+.type GL    zeilenliste2                        ? _F|defined(U|zeilenliste2)
+.type bool  nurgeaenderte                       ? _F|defined(U|nurgeaenderte)
+.type GL    wertneu                             ? _F|defined(U|wertneu)
+.type GL    wertalt                             ? _F|defined(U|wertalt)
+.type bool  xkfertig                            ? _F|defined(U|xkfertig)
+.type bool  xtfertig                            ? _F|defined(U|xtfertig)
+.type bool  xsecond                             ? _F|defined(U|xsecond)
+..
+.copy U|xbersetzt = G|FALSE
+.copy M|objektleer = G|FALSE
+.copy M|objektleer = G|TRUE ? F|empty(M|kid)
+..
+!START
+.assign U|versionn = ""
+.assign U|vversionn = ""
+.copy U|unterschiedefeststellen = G|FALSE
+.copy U|objekttitelerledigt = G|FALSE
+.copy U|kopftitelerledigt = G|FALSE
+.copy U|zeilentitelerledigt = G|FALSE
+.copy U|esgibteinetabelle = G|FALSE
+.copy U|aktuellezeile = 0
+.assign U|stringlistetrenner = ","
+.copy U|zeilenliste = ""
+.copy U|zeilenliste2 = ""
+.copy U|xsecond = G|FALSE
+.copy U|nurgeaenderte = M|nurgeandtabzeil
+..
+.formula M|select="$,,@datenbank=" + 'M|kid^dnr' + ";@gruppe=" + 'M|kid^gruppe' + ";@ablageart=versioniert, beides;@noschltest=ja;id=" + 'M|kid^id' + ";"  ? _F|empty(M|kid)
+.formula M|select="$,,@datenbank=" + 'M|datnr' + ";@gruppe=" + 'M|vartabgruppe^vgr' + ";@ablageart=versioniert, beides;@noschltest=ja;"                    ?  F|empty(M|kid)
+.formula M|kselect = 'M|select' + "stand=" + 'M|von' + "!" + 'M|bis' + ";" + "zeichen=" + M|bearbeiter + ";"
+..
+.continue BEREICH ? _F|empty(M|kid)
+.load 0 group 'M|grliste' 'M|kselect'
+.continue ERROR  ? _G|mehr
+.assign M|kid = 0|id
+.formula M|select="$,,@datenbank=" + 'M|kid^dnr' + ";@gruppe=" + 'M|kid^gruppe' + ";@ablageart=versioniert, beides;id=" + 'M|kid^id' + ";"  
+.formula M|kselect = 'M|select' + "stand=" + 'M|von' + "!" + 'M|bis' + ";" + "zeichen=" + M|bearbeiter + ";"
+.copy U|xbersetzt = G|TRUE
+..
+!BEREICH: Wir versuchen den Bereich zu holen, der die gewnschten Bearbeitungsschritte enth„lt.
+.select object 'M|kselect'
+..
+.. Bei einem Objekt ohne gespeicherte Versionen sind wir schon fertig.
+.continue SELEKTION  ? _G|mehr
+..
+.. Wir merken uns die erste Version, die wir betrachten mssen.
+.copy U|versionn = H|versionn
+..
+.. Jetzt mssen wir zum aktuell geladenen Objekt die Vorg„ngerversion holen.
+.. Beim ersten Objekt kann es sein, dass diese nicht existiert (das geladene Objekt
+.. ist die „lteste Version).
+.formula M|kselect = M|select + "versionn=!!" + 'U|versionn' + ";" + "@richtung=rckw„rts;"
+.load 1 object 'M|kselect'
+..
+.. Wenn wir das erfolgreich laden konnten, mssen wir zwei Versionen vergleichen,
+.. andernfalls den Sockel ausgeben.
+.continue VERGLEI ? G|mehr
+..
+.. Die „lteste Version ben”tigt eine Sonderbehandlung. Sie wird immer gedruckt, unabh„ngig
+.. von den Ausl”sern.
+..
+.. Wir laden die „lteste Version im 1-Puffer erneut. (OBJEKTEINZELNTRAVERSIEREN erwartet
+.. den Satz um 1-Puffer.)
+.formula M|kselect = M|select + "versionn==" + 'U|versionn' + ";"
+.load 1 object 'M|kselect'
+..
+.. Wenn die auf einmal Weg ist, k”nnen wir nichts machen.
+.continue FATAL ? _G|mehr
+..
+.assign U|feldlistekopf = M|ausloeserkopf + U|stringlistetrenner + M|felderkopf ? _F|regmatch(M|ausloeserkopf, ".*,") & F|length(M|ausloeserkopf) > 0
+.assign U|feldlistekopf = M|ausloeserkopf + M|felderkopf ? F|length(M|ausloeserkopf) > 0 & F|regmatch(M|ausloeserkopf, ".*,")
+.assign U|feldlistekopf = M|felderkopf                          ? F|length(M|ausloeserkopf) = 0
+..
+.assign U|feldlistezeile = M|ausloesertabelle + U|stringlistetrenner + M|feldertabelle ? _F|regmatch(M|ausloesertabelle, ".*,") & F|length(M|ausloesertabelle) > 0
+.assign U|feldlistezeile = M|ausloesertabelle + M|feldertabelle ? F|regmatch(M|ausloesertabelle, ".*,") & F|length(M|ausloesertabelle) > 0
+.assign U|feldlistezeile = M|feldertabelle                             ? F|length(M|ausloesertabelle) = 0
+..
+.copy U|xkfertig = G|FALSE ? _F|empty(M|ausloeser2kopf)
+.copy U|xtfertig = G|FALSE ? _F|empty(M|ausloeser2tabelle)
+..
+.copy U|objekttraversierungkopf="st/AENDH.ERSTES.KOPFFOP"    
+.copy U|objekttraversierungzeile="st/AENDH.ERSTES.ZEILENFOP"
+..
+.assign U|itstand = 1|stand
+.copy U|itzeichen = 1|zeichen
+..
+.input "st/OBJEKTEINZELNTRAVERSIEREN"
+..
+.copy U|xkfertig = G|FALSE ? _F|empty(M|ausloeser2kopf)
+.copy U|xtfertig = G|FALSE ? _F|empty(M|ausloeser2tabelle)
+..
+!NAECHST: Wir laden den n„chsten Bearbeitungsschritt des entsprechenden Bearbeiters
+.select continue
+.continue END       ? _G|mehr & _U|xbersetzt
+.continue SELEKTION ? _G|mehr & U|xbersetzt
+.copy U|versionn = H|versionn
+..
+.. Jetzt mssen wir zum aktuell geladenen Objekt die Vorg„ngerversion holen.
+..
+.formula M|kselect = M|select + "versionn=!!" + 'U|versionn' + ";" + "@richtung=rckw„rts;"
+.load 1 object 'M|kselect'
+..
+.continue NAECHST ? _G|mehr
+..
+!VERGLEI
+.copy U|vversionn = 1|versionn 
+..
+!LADE2: Um den Bereich im H-Puffer nicht zu zerst”ren, laden wir die jngere Version in den Puffer 2.
+.formula M|kselect = M|select + ";versionn==" + 'U|versionn' + ";"
+.load 2 object 'M|kselect'
+..
+.continue NAECHST ? _G|mehr
+.assign U|itstand = 2|stand
+.copy U|itzeichen = 2|zeichen
+..
+.. Als erstes mssen wir entscheiden, ob ein Diff gemacht werden soll, oder nicht.
+..
+.assign U|feldlistekopf = M|ausloeserkopf + U|stringlistetrenner + M|felderkopf ? _F|regmatch(M|ausloeserkopf, ".*,") & F|length(M|ausloeserkopf) > 0
+.assign U|feldlistekopf = M|ausloeserkopf + M|felderkopf ? F|length(M|ausloeserkopf) > 0 & F|regmatch(M|ausloeserkopf, ".*,")
+.assign U|feldlistekopf = M|felderkopf                          ? F|length(M|ausloeserkopf) = 0
+..
+.assign U|feldlistezeile = M|ausloesertabelle + U|stringlistetrenner + M|feldertabelle ? _F|regmatch(M|ausloesertabelle, ".*,") & F|length(M|ausloesertabelle) > 0
+.assign U|feldlistezeile = M|ausloesertabelle + M|feldertabelle ? F|regmatch(M|ausloesertabelle, ".*,") & F|length(M|ausloesertabelle) > 0
+.assign U|feldlistezeile = M|feldertabelle                             ? F|length(M|ausloesertabelle) = 0
+..
+.copy U|objekttraversierungkopf="st/AENDH.AUSLOESER.PRUEFEN.KOPFFOP"
+.copy U|objekttraversierungbeidezeilen="st/AENDH.AUSLOESER.PRUEFEN.ZEILENFOP"
+.copy U|objekttraversierungzeilein1puffer="st/AENDH.AUSLOESER.PRUEFEN.ZEILENAUSFOP"
+.copy U|objekttraversierungzeilein2puffer="st/AENDH.AUSLOESER.PRUEFEN.ZEILENAUSFOP"
+..
+.input "st/OBJEKTTRAVERSIERUNG"
+..
+.. Damit wir es spaeter einfacher haben, haengen wir hier noch ein Komma an
+.assign U|zeilenliste = U|zeilenliste + U|stringlistetrenner
+..
+.. wann geht das auf ja???
+.continue NAECHST ? _U|unterschiedefeststellen & _M|allekopf & _M|alletabelle
+.continue NAECHST ? U|xtfertig
+..
+.copy U|xkfertig = G|FALSE ? _F|empty(M|ausloeser2kopf)
+.copy U|xtfertig = G|FALSE ? _F|empty(M|ausloeser2tabelle)
+..
+.. Hier machen wir den Diff.
+.. Dazu muessen wir beide Objekte nochmal laden, da wir in irgendeiner Zeile
+.. sitzen k”nnen und der Kopf auch schon weg sein kann.
+.. Da wir uns aber den Bereich im H-Puffer nicht zerschiessen wollen
+.. Laden wir die jngere Version in den 2-Puffer.
+..
+.formula M|kselect = M|select + ";versionn=" + 'U|vversionn' + ";"
+.load 1 object 'M|kselect'
+..
+.formula M|kselect = M|select + ";versionn=" + 'U|versionn' + ";"
+.load 2 object 'M|kselect'
+..
+.assign U|feldlistekopf = M|ausloeserkopf + U|stringlistetrenner + M|felderkopf ? _F|regmatch(M|ausloeserkopf, ".*,") &  F|length(M|ausloeserkopf) > 0
+.assign U|feldlistekopf = M|ausloeserkopf + M|felderkopf ? F|regmatch(M|ausloeserkopf, ".*,") & F|length(M|ausloeserkopf) > 0
+.assign U|feldlistekopf = M|felderkopf                          ? F|length(M|ausloeserkopf) = 0
+..
+.assign U|feldlistezeile = M|ausloesertabelle + U|stringlistetrenner + M|feldertabelle ? _F|regmatch(M|ausloesertabelle, ".*,") &  F|length(M|ausloesertabelle) > 0
+.assign U|feldlistezeile = M|ausloesertabelle + M|feldertabelle ? F|regmatch(M|ausloesertabelle, ".*,") & F|length(M|ausloesertabelle) > 0
+.assign U|feldlistezeile = M|feldertabelle                             ? F|length(M|ausloesertabelle) = 0
+..
+.copy U|objekttraversierungkopf="st/AENDH.DIFF.KOPFFOP"
+.copy U|objekttraversierungbeidezeilen="st/AENDH.DIFF.ZEILENFOP"
+.copy U|objekttraversierungzeilein1puffer="st/AENDH.DIFF.ZEILEN1FOP"
+.copy U|objekttraversierungzeilein2puffer="st/AENDH.DIFF.ZEILEN2FOP"
+..
+.copy U|objekttitelerledigt = G|FALSE
+.copy U|kopftitelerledigt = G|FALSE
+..
+.input "st/OBJEKTTRAVERSIERUNG"
+..
+.copy U|unterschiedefeststellen = G|FALSE
+.copy U|zeilenliste = ""
+.copy U|zeilenliste2 = ""
+.copy U|xsecond = G|FALSE
+.continue NAECHST
+..*****************************************************************************
+!SELEKTION
+.load 0 continue
+.continue END ? _G|mehr
+.continue SELEKTION ? M|kid^id = 0|id
+.assign M|kid = 0|id
+.continue START
+..
+!END
+.formula M|kid = "" ? U|xbersetzt
+.continue
+..
+!FATAL
+.error -number 1111
+.end 1
+..
+!ERROR: Keine Treffer vorhanden
+.error Keine Treffer vorhanden.
+.end 1

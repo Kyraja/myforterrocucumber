@@ -1,0 +1,112 @@
+..!interpreter english translate
+..*****************************************************************************
+.. FOP-Name       : DFUE.IN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : INHOUSE-Datei aus Empfangs-Verzeichnis abholen (wurde von EDI-Software dort abgelegt)
+.. Functionality  : fetch INHOUSE-file from incoming directory (3rd party edi-software puts files there)
+..*****************************************************************************
+..                  Parameter aus DFUE.<MMVVL>
+..                  --------------------------
+..                  - absolutes Verzeichnis, von wo die zu empfangenden
+..                    Dateien geholt werden sollen (xEmpfangsVerz)
+..
+..                  - <EKS-Modul><Vorgang><Vorgangstyp> (xmmvvl)
+..                  - <EKS-Modul><Vorgang><Vorgangstyp> (xmmvvlklein, Kleinbuchstaben)
+..
+..                  - Name der INHOUSE-Schnittstellendatei    (xninhouse)
+..                  - Uhrzeit der INHOUSE-Schnittstellendatei (xzinhouse)
+..                  - Datum der INHOUSE-Schnittstellendatei   (xdinhouse)
+.. Aenderungshistorie:
+..#KOR#EDI#06.11.2002#1#ok# (komplett Åbersichtlicher gestaltet)
+..#KOR#EDI#25.08.2011#1#mh# Ohne EasyCase, Ohne .sys "sleep"
+..*****************************************************************************
+.set trans -
+..
+.. define all used variables, even if passed as argument
+.type bool xprocreturn ? _F|defined(U|xprocreturn)
+.type text xninhouse ? _F|defined(U|xninhouse)
+.type text xEmpfangsVerz ? _F|defined(U|xEmpfangsVerz)
+.type text xsybefehl ? _F|defined(U|xsybefehl)
+.type gd19 xfilemtime ? _F|defined(U|xfilemtime)
+.type gd14 xgd14 ? _F|defined(U|xgd14)
+.type gd2  xdinhouse ? _F|defined(U|xdinhouse)
+.type time xzinhouse ? _F|defined(U|xzinhouse)
+.type bool writeflagfilelower ? _F|defined(U|writeflagfilelower)
+.type bool writeflagfileupper ? _F|defined(U|writeflagfileupper)
+..
+.. initialize return values
+.copy U|xprocreturn = G|false
+.formula U|xninhouse = ""
+..
+.. add file-system slash to incoming directory
+.formula U|xEmpfangsVerz = U|xEmpfangsVerz + "/" ? _U|xEmpfangsVerz/"*\/"
+..
+.. local fields
+.type text  xflagGROSS   ? _F|defined(U|xflagGROSS)
+.type text  xdataGROSS   ? _F|defined(U|xdataGROSS)
+.type text  xflagKLEIN   ? _F|defined(U|xflagKLEIN)
+.type text  xdataKLEIN   ? _F|defined(U|xdataKLEIN)
+..
+.type text  xflagfile    ? _F|defined(U|xflagfile)
+.type text  xdatafile    ? _F|defined(U|xdatafile)
+..
+.. define filenames for flag and data files
+.formula U|xflagKLEIN = xmmvvlklein + "ok"
+.formula U|xdataKLEIN = xmmvvlklein
+.formula U|xflagGROSS = xmmvvl + "OK"
+.formula U|xdataGROSS = xmmvvl
+..
+.. Test..
+.. * is INHOUSE-file fetchable (flagfile exists)?
+.. * is INHOUSE-file named with lower case or upper case letters?
+.formula U|xninhouse = U|xflagGROSS  ?  F|fileexists(U|xEmpfangsVerz+U|xflagGROSS) & F|fileexists(U|xEmpfangsVerz+U|xdataGROSS) & _U|writeflagfilelower
+.formula U|xninhouse = U|xflagKLEIN  ?  F|fileexists(U|xEmpfangsVerz+U|xflagKLEIN) & F|fileexists(U|xEmpfangsVerz+U|xdataKLEIN) & _U|writeflagfileupper
+.continue END     ? F|empty(xninhouse)
+..
+..
+.. upper case or lower case?
+.formula U|xflagfile = U|xflagKLEIN  ?  U|xninhouse=U|xflagKLEIN
+.formula U|xdatafile = U|xdataKLEIN  ?  U|xninhouse=U|xflagKLEIN
+.formula U|xflagfile = U|xflagGROSS  ?  U|xninhouse=U|xflagGROSS
+.formula U|xdatafile = U|xdataGROSS  ?  U|xninhouse=U|xflagGROSS
+..
+.. move flag file to dfue1 working directory
+.formula U|xsybefehl = "mv " + U|xEmpfangsVerz + U|xflagfile + " dfue1/"
+.system 'U|xsybefehl'
+..
+.. Ermitteln Datum und Uhrzeit der INHOUSE-Schnittstellendatei
+.. F|filemtime returns type GD19: 05.05.2014 13:01:50
+.. (ed)dinhouse and xdinhouse are type GD2: 04.04.14   <- assigning gd19 to gd2 will cut off time
+.. (ed)zinhouse and xzinhouse are type Z (time): 13:01  <- does not accept seconds, e.g. hh:mm:ss will fail!
+.formula U|xfilemtime = F|filemtime(xEmpfangsVerz + U|xdatafile)
+.formula U|xdinhouse = U|xfilemtime
+.formula U|xgd14 = U|xfilemtime
+.. use gd14 to avoid complications with user configured date formats
+.formula U|xzinhouse = 'U|xgd14'>>6<<4
+..
+.. INHOUSE-Schnittstellen-Datei wird nach dfue1 verschoben, ^Z's gelîscht (Fehler WinElke)
+.. ^Z mit Pipe Åber tr lîschen und Quelldatei lîschen
+.formula U|xsybefehl = "tr -d " + dblquote + "\032" + dblquote + " < " + U|xEmpfangsVerz + U|xdatafile + " > dfue1/" + -U|xdatafile
+.formula U|xsybefehl = U|xsybefehl + " ; rm -f " + xEmpfangsVerz + U|xdatafile
+.system 'U|xsybefehl' background
+..
+.. Ein eingegangener Vorgang wird in den S3 Zeichensatz Åbersetzt
+.. die Datei wie z.B. VKAUE wird mit ANSI-Zeichensatz geliefert
+.. das Kommando "s3_conv" setzt ANSI -> S3 Zeichensatz um
+.formula U|xsybefehl = "s3_conv 7 dfue1/" + -U|xdatafile
+.system 'U|xsybefehl'
+..
+.. Die Datei wird fÅr den Partner wieder freigegeben
+.. Flagfile wird wieder in das Verzeichnis xEmpfangsVerz verschoben
+.formula U|xsybefehl = "mv dfue1/" + U|xflagfile + " " + U|xEmpfangsVerz
+.system 'U|xsybefehl' background
+..
+.. return: inhouse file including path + "true"
+.formula U|xninhouse = "dfue1/" + -U|xdatafile
+.copy U|xprocreturn = G|true
+..
+..*****************************************************************************
+!END
+.continue

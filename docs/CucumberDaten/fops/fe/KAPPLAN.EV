@@ -1,0 +1,115 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KAPPLAN.EV
+.. Datum          : 29.11.06
+.. Version        : 2007
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Event-FOP fÅr das IS KAPPLAN
+..
+.. Ablauf         :
+..
+.. Functionality  :
+..
+.. Program flow   :
+.. Includes       :
+..*****************************************************************************
+..Variablen
+.type GP1      xzintagen     ? _F|defined(U|xzintagen)
+.type text     xtintagen     ? _F|defined(U|xtintagen)
+.type integer  xiintagen     ? _F|defined(U|xiintagen)
+.type text     xtanfdat      ? _F|defined(U|xtanfdat)      
+.type text     xtenddat      ? _F|defined(U|xtenddat)
+.type GD19     xzanfdat      ? _F|defined(U|xzanfdat)
+.type GD19     xzenddat      ? _F|defined(U|xzenddat)
+.set trans -
+.continue MGR      ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "kmgr"
+.continue ABTLG    ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "abtlg"
+.continue LGRUPPE  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "lgruppe"
+.continue ARTIKEL  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "artikel"
+.continue DATUM    ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "adatum"
+.continue DATUM    ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "edatum"
+.. Tabelle
+.continue CALL     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "abtkap"
+.continue CALL     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "abtmasch"
+.continue CALL     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "maschkap"
+.continue CALL     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "maschmasch"
+.continue
+..
+!MGR: Maschinengruppe
+.formula M|abtlg       = M|kmgr^abtlg
+.formula M|abtlgname   = M|kmgr^abtlg^sucherw
+.continue ENDE
+..
+!ABTLG: Abteilung
+.formula M|abtlgname   = M|abtlg^sucherw
+.continue FEHLER  ? 'M|abtlg' <> 'M|kmgr^abtlg' &  _F|empty(M|kmgr) & _F|empty(M|abtlg)
+.continue ENDE
+..
+!LGRUPPE: Lagergruppe
+.continue FIRMA                              ? F|empty(M|lgruppe)
+.continue ENDE
+..
+!FIRMA: interne Lagergruppe / internal warehouse group
+.assign M|lgruppe  = F|sysinfo(10)^intlgruppe
+.continue ENDE
+..
+!ARTIKEL: Artikel
+.continue ENDE
+..
+!DATUM
+.continue CHECK  ? _F|empty(M|adatum) & _F|empty(M|edatum)
+.set trans +
+.error Bitte einen Zeitraum angeben.
+.set trans -
+.cursor edatum ? F|empty(M|edatum)
+.cursor adatum ? F|empty(M|adatum)
+.end 1
+!CHECK: Anfangs- und Enddatum eingegeben - Datum prÅfen
+.continue FEHLER2 ? M|adatum > M|edatum
+..Anfangs und Endatum dÅrfen nicht mehr als 4 Jahre auseinanderliegen
+.formula U|xtanfdat = 'M|adatum' + " " + 'G|zeit'
+.assign U|xzanfdat  = U|xtanfdat
+.formula U|xtenddat = 'M|edatum' + " " + 'G|zeit'
+.assign U|xzenddat = U|xtenddat
+.formula U|xzintagen = U|xzenddat - U|xzanfdat
+.formula U|xtintagen = U|xzintagen
+.formula U|xtintagen = U|xtintagen << "D"
+.formula U|xiintagen = U|xtintagen
+.continue FEHLER3 ? U|xiintagen > 1460
+..Zeitraum ist ok
+.continue ENDE
+..
+!ENDE
+.input "is/TABLEEREN"
+.continue
+..
+!CALL
+.type ID87:9 xcallparam  ? _F|defined(U|xcallparam)
+.assign U|xcallparam = M|call1param  ? G|evtvar = "abtkap"
+.assign U|xcallparam = M|call2param  ? G|evtvar = "abtmasch"
+.assign U|xcallparam = M|call3param  ? G|evtvar = "maschkap"
+.assign U|xcallparam = M|call4param  ? G|evtvar = "maschmasch"
+.input "st/CALLPARAM.EXEC"
+.continue
+..
+!FEHLER
+.error Die Abteilung gehîrt nicht zur angegebenen Maschinengruppe.
+.continue ENDE
+!FEHLER2
+.error UngÅltiges Datum.
+.input "fe/FOP.CHART.PARA"
+.. Zeitbereich Åbernehmen wie beim Maskeneintritt
+.formula M|adatum = U|xdatumvon     
+.formula M|edatum = U|xdatumbis      
+.continue ENDE
+!FEHLER3: Zeitraum darf nicht grî·er sein als 4 Jahre, sonst Fehler bei .select matchloading
+.error Zu gro·er Zeitraum.
+.input "fe/FOP.CHART.PARA"
+.. Zeitbereich Åbernehmen wie beim Maskeneintritt
+.formula M|adatum = U|xdatumvon    
+.formula M|edatum = U|xdatumbis
+.continue ENDE
+
+

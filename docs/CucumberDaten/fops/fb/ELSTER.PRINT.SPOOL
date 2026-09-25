@@ -1,0 +1,92 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ELSTER.PRINT.SPOOL
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Spooler zur Nutzung der Elster-Schnittstelle
+.. Functionality  :
+..*****************************************************************************
+..
+.set trans -
+..
+.occupy ELSTER
+..
+.file -test "fb/ELSTER.DATAGEN"
+.continue ERR00   ? _G|mehr
+.input "fb/ELSTER.CONSTANTS"
+..
+.continue SOK ? G|framecount < U|MAXSTACK
+.. Es darf nichts mehr eingezogen werden.
+.. Unten gibt es ein .eingabe!
+.output terminal
+.set substitution
+'G|stack'
+.error Maximale Stackgroesse erreicht!
+.end 1
+..
+!SOK
+..
+.input "fb/ELSTER.DEFAULTS"
+.file -test "ELSTER.SETTINGS"
+.continue C1 ? _G|mehr
+.input "ELSTER.SETTINGS"
+!C1
+.formula P|datname = P|aktdatname ? F|empty(P|datname)
+.formula P|datname = "rmtmp/elsterprint" + 'G|aufrufernr' + 'G|zeitpunkt:14' + ".pdf" ? F|empty(P|datname)
+.. do not change P|datname if it is set by abas Rest API (Pattern is rmtmp/PRINTMW[A-Za-z0-9]{32})
+.formula P|datname = P|datname + ".pdf" ? _F|empty(P|datname) & _F|regmatch(P|datname, ".+[.][pP][dD][fF]$") & _F|regmatch(P|datname, "rmtmp/PRINTMW[A-Za-z0-9]{32}")
+.. In manchen Versionen ist P|daten nicht vorbelegt!
+.formula P|daten   = U|ausgabedatei ? F|empty(P|daten)
+.continue CHANNEL ?  P|vorschau
+.continue PRINT   ? _P|nurdaten & _P|rendern &  P|nurdruck
+.continue RENDER  ? _P|nurdaten &  P|rendern & _P|nurdruck
+.continue CHANNEL ?  P|nurdaten ;  P|rendern ;  P|nurdruck
+.continue END
+..
+..*****************************************************************************
+!CHANNEL
+..*****************************************************************************
+.input 'P|kanal^ausgen' ? _F|empty(P|kanal^ausgen)
+.. Datendatei fuer Test noch einmal kopieren
+.system 'F|formatstr("cp -f {1} {2}", P|akttmp + P|daten, F|regreplace(P|datname, "[.][pP][dD][fF]$", ".xml"))' background ? U|testenv
+.continue END    ? _P|rendern & _P|vorschau
+.continue RENDER
+..
+..*****************************************************************************
+!RENDER
+..*****************************************************************************
+.formula U|ausgabedatei =  P|akttmp + P|daten
+.formula U|senden       = _P|vorschau
+.input "fb/ELSTER.CLIENT"
+.system 'F|formatstr("mkdir -p `dirname {2}`; cp -f {1} {2}", U|pdfdateiname, P|datname)' background ?  U|senden
+.system 'F|formatstr("mkdir -p `dirname {2}`; mv -f {1} {2}", U|pdfdateiname, P|datname)' background ? _U|senden
+.continue R2 ? G|mehr
+.formula U|xmsgno     = 22
+.formula U|xmsgpcnt   = 2
+.formula U|xmsgparam1 = U|pdfdateiname
+.formula U|xmsgparam2 = P|datname
+.continue END
+!R2
+.continue END    ? _P|nurdruck & _P|vorschau
+.continue PRINT
+..
+..*****************************************************************************
+!PRINT
+..*****************************************************************************
+.input 'P|drucker^druckfop'  ? _F|empty(P|drucker^druckfop)
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.input "fb/ELSTER.MESSAGES"
+.occupy
+.continue
+..
+..*****************************************************************************
+!ERR00
+..*****************************************************************************
+.error Das Elster-Modul ist nicht installiert.
+.end 1
+

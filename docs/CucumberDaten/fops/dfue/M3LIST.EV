@@ -1,0 +1,136 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : M3LIST.EV
+.. Datum          : 02.04.03
+.. Version        :
+.. Autor          : ks/ok
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Zentrales Eventhandling fr Infosystem M3LIST
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+.. Ablauf         : Event EFOP
+..
+.. Functionality  : Central eventhandling for Infosystem M3LIST
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+.. Program flow   : Event EFOP
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.type gd19  xgd19
+.type text  xtsel
+.type text  xtargs
+.type P2    xvart
+..
+.. event evaluation
+.. ----------- ----- Kopfteil ------ -------------------------------------------
+.continue DAT     ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "datum"
+.continue DAT     ? T|evtartengl = "SCREEN_ENTER"
+.continue TABINIT ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kuart"
+.continue TABINIT ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "art"
+.continue WERK    ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "werk"
+.continue ABLADE  ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "ablstelle"
+.continue KUNDE   ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kunde"
+.continue TABINIT ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "rahmen"
+.continue TABINIT ? T|evtartengl = "BUTTON_AFTER" & T|evtvar = "buvorgang"
+.continue CHART   ? T|evtartengl = "BUTTON_BEFORE"  & T|evtvar = "plchart"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+..
+!CHART
+.chart -INIT
+.chart -PARAM -CHARTTYPE BAR
+.chart -PARAM -TITLECHART "MENGE IN PERIODEN"
+.chart -PARAM -TITLEX " Periode "
+.chart -PARAM -MARKERX "Periode 1; Periode 2; Periode 3"
+.chart -PARAM -TITLEY   "Menge \n Stck"
+.chart -PARAM -MINMAXY
+.chart -PARAM -STEPY 200 ? M|mge1>1000
+.chart -STARTVALUES "Menge"
+.chart -VALUE 'M|mge1'  -RGBCOLOR 230 0 0
+.chart -VALUE 'M|mge2'  -RGBCOLOR 255 53 53
+.chart -VALUE 'M|mge3'  -RGBCOLOR 255 187 187
+.chart -SHOW chart 1
+.continue END
+..
+..
+!DAT: Berechnung der Perioden und Datumsbereiche
+.. M|per1 (GL10) 1. Periode: M|dat  - M|dat2,  M|dat  = M|dvon
+.. M|per2 (GL10) 2. Periode: M|dat2 - M|dat3
+.. M|per3 (GL10) 3. Periode: M|dat3 - M|dat4,  M|dat4 = M|dbis
+..
+.continue DATLEER ? 'M|datum' = ""
+.. Startdatum / Periode 1
+.formula T|xgd19 = M|datum
+.formula T|xgd19 = ('T|xgd19:8' << 6) + "01"
+.formula M|per1  = 'F|month(T|xgd19)' + "/" + 'F|year(T|xgd19)'>>2
+.formula M|dat   = T|xgd19
+.formula M|dvon  = T|xgd19
+.. Periode 2
+.formula T|xgd19 = T|xgd19 + 45
+.formula T|xgd19 = ('T|xgd19:8' << 6) + "01"
+.formula M|per2  = 'F|month(T|xgd19)' + "/" + 'F|year(T|xgd19)'>>2
+.formula M|dat2  = T|xgd19
+.. Periode 3
+.formula T|xgd19 = T|xgd19 + 45
+.formula T|xgd19 = ('T|xgd19:8' << 6) + "01"
+.formula M|per3  = 'F|month(T|xgd19)' + "/" + 'F|year(T|xgd19)'>>2
+.formula M|dat3  = T|xgd19
+.. Endedatum
+.formula T|xgd19 = T|xgd19 + 45
+.formula T|xgd19 = ('T|xgd19:8' << 6) + "01"
+.formula M|dat4  = T|xgd19
+.formula M|dbis  = T|xgd19
+.continue TABINIT
+!DATLEER
+.formula M|per1 = ""
+.formula M|per2 = ""
+.formula M|per3 = ""
+.formula M|dat  = ""
+.formula M|dat2 = ""
+.formula M|dat3 = ""
+.formula M|dat4 = ""
+.formula M|dvon = ""
+.formula M|dbis = ""
+.continue END     ? T|evtartengl = "SCREEN_ENTER"
+.continue TABINIT
+..
+..
+!KUNDE
+.continue KDSACH ? M|kunde^gruppe = 2
+.formula M|werk = ""
+.formula M|ablstelle = ""
+.continue TABINIT
+..
+!WERK
+.continue TABINIT    ? M|werk=""
+.formula T|xtsel = "%,,nummer=;firma=;firma^name=;werk=" + M|werk + ";ablstelle=;@autostart=(1)"                    ? M|ablstelle=""
+.formula T|xtsel = "%,,nummer=;firma=;firma^name=;werk=" + M|werk + ";ablstelle=" + M|ablstelle + ";@autostart=(1)" ? M|ablstelle<>""
+.assign M|kunde = T|xtsel
+.continue KDSACH
+!ABLADE
+.continue TABINIT    ? M|ablstelle=""
+.formula T|xtsel = "%,,nummer=;firma=;firma^name=;werk=;ablstelle=" + M|ablstelle + ";@autostart=(1)"                  ? M|werk=""
+.formula T|xtsel = "%,,nummer=;firma=;firma^name=;werk=" + M|werk + ";ablstelle=" + M|ablstelle + ";@autostart=(1)"    ? M|werk<>""
+.assign M|kunde = T|xtsel
+!KDSACH
+.formula M|werk = M|kunde^werk
+.formula M|ablstelle = M|kunde^ablstelle
+.continue TABINIT
+..
+..
+!TABINIT: a key field was changed, or a checkbox changed, remove old rows
+.make screen line -- ? M|tzeilen > 0
+.continue END
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,320 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : CHANGECURRENCY.YBUFDBUPD.BA
+.. Date           : 12.03.15
+.. Version        : 2015r2n04
+.. Author         : si/dr
+.. Copyright      : (c) 2015 SABA International
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xttext     ? _F|defined(U|xttext)
+.type text U|xtcmd      ? _F|defined(U|xtcmd)
+.type text U|xttmp      ? _F|defined(U|xttmp)
+.type text U|xxkto      ? _F|defined(U|xxkto)
+.type text U|xtedp      ? _F|defined(U|xtedp1)
+.type text U|xtout      ? _F|defined(U|xtout1)
+.type text U|xterr      ? _F|defined(U|xterr1)
+.type text U|xtedp1     ? _F|defined(U|xtedp1)
+.type text U|xtout1     ? _F|defined(U|xtout1)
+.type text U|xterr1     ? _F|defined(U|xterr1)
+.type text U|xtedp2     ? _F|defined(U|xtedp2)
+.type text U|xtout2     ? _F|defined(U|xtout2)
+.type text U|xterr2     ? _F|defined(U|xterr2)
+.type R9.2 U|xrsbetr    ? _F|defined(U|xrsbetr)
+.type R9.2 U|xrhbetr    ? _F|defined(U|xrhbetr)
+.type R11.2 U|xrssum    ? _F|defined(U|xrssum)
+.type R11.2 U|xrhsum    ? _F|defined(U|xrhsum)
+.type bool U|xbkuli     ? _F|defined(U|xbkuli)
+.type text U|xtnum      ? _F|defined(U|xtnum)
+.type text U|xtnew      ? _F|defined(U|xtnew)
+.type text U|xtkst      ? _F|defined(U|xtkst)
+.type integer U|xiz     ? _F|defined(U|xiz)
+.type integer U|xia     ? _F|defined(U|xia)
+..
+.formula P|maskkontextfop = "CURRENCY"
+.continue NOCALC        ? M|ycalc = 0
+.make screen line --    ? M|tzeilen > 0
+..
+.file -TEMPNAME U|xtedp
+.file -TEMPNAME U|xtout 
+.file -TEMPNAME U|xterr
+..
+.file -TEMPNAME U|xtedp1
+.file -TEMPNAME U|xtout1
+.file -TEMPNAME U|xterr1
+..
+.file -TEMPNAME U|xtedp2
+.file -TEMPNAME U|xtout2
+.file -TEMPNAME U|xterr2
+..
+.note -IMMEDIATELY Kontierung in Dauerbuchungen austauschen
+..erst alle Konten kopieren
+..set trace +
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+# Konten aus Dauerbuchungen duplizieren
+#!database=5
+#!group=1
+#!action=copy
+id;nummer;bem;eg;ausland;kopustzuord;
+.formula U|xtcmd        = "$,@datei=110:0;nummer=!"
+.load 0 nolock object 'U|xtcmd'
+.continue DATA          ? _G|mehr
+.formula U|xia          = 0
+.formula U|xttmp        = ""
+.continue ZFBDAU
+!XFBDAU
+.load 0 nolock continue
+.continue NFBDAU        ? _G|mehr
+!ZFBDAU
+.load 0 nolock line
+.continue XFBDAU        ? _G|mehr
+.continue ZFBDAU        ? _0|konto^dnr = 5
+.continue ZFBDAU        ? '0|konto^kart(L="0")'="(83)"
+.formula U|xtcmd        = "continue ZFBDAU ? U|xttmp/" + G|dblquote + "*" + '0|konto' + ",*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "$,@datei=5:1;nummer=="+'0|konto'+"a"
+.select nolock account 'U|xtcmd'
+.continue ZFBDAU        ? G|mehr
+.output ADDEDTO 'U|xtedp'
+'0|konto^id';'0|konto^nummer'a;KOWEG;(0,0,0);(0,0,0);nein;
+.formula U|xttmp        = U|xttmp + '0|konto' + ","
+.formula U|xia          = U|xia + 1
+.continue ZFBDAU
+!NFBDAU
+.output
+.continue DATA          ? U|xia = 0
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Duplizieren der Konten aus Dauerbuchungen
+.set trans -
+.continue DATA          ? F|filesize(U|xterr) = 0
+.error 'U|xttext'
+.edi 'U|xterr'
+.continue END
+..
+!DATA
+.formula U|xtcmd        = "$,@datei=110:3;nummer=!"
+.load 1 nolock object 'U|xtcmd'
+.continue NODATA        ? _G|mehr
+.continue DAT2
+!DAT1
+.load 1 nolock continue
+!DAT2
+.continue DELETE        ? _G|mehr
+..
+.continue DAT1          ? 1|tzeilen = 0
+..
+.select screen line 'M|tzeilen'
+.make screen line +o
+.assign M|ytvartab      = "V-110-03"
+.formula M|ytvarbez     = M|ytvartab^namebspr
+.formula M|ytvdn        = 110
+.formula M|ytvgr        = 3
+.formula M|ytkrit       = '1|such'
+.output NEW 'U|xtedp1'
+.input DATEI.F
+...such;name;\
+...rbuchvorl;rturnus;erstbudat;letztbudat;setzbeleg;erweitext;
+id;\
+zn;rbuchvorl;
+'1|id';\
+..
+.formula U|xtnew        = ""
+.formula U|xtnum        = ""
+.formula U|xiz          = M|aktzeile
+..
+!DATZ
+.load 1 nolock line
+.continue EDP1          ? _G|mehr
+..
+.continue NEW           ? 'U|xtnum' <> '1|rbuchvorl^nummer'
+.output ADDEDTO 'U|xtedp1'
+?'1|aktzeile';'U|xtnew';\       ? 1|aktzeile <> 1|tzeilen
+?'1|aktzeile';'U|xtnew';        ? 1|aktzeile = 1|tzeilen
+.continue DATZ
+..
+!NEW
+.formula U|xtnum        = '1|rbuchvorl^nummer'
+..
+.output NEW 'U|xtedp2'
+.input DATEI.F
+.....such;budat;text;ewbu;\
+.....zn;konto;ewbetr;ewhbetr;kstelle;
+num6;budat;text;ewbu;kustart;konto;ewbetr;ewhbetr;kstelle;
+..
+.note -IMMEDIATELY Daten werden ermittelt ...
+.formula U|xtcmd        = "$,@datei=110:0;id=="+'1|rbuchvorl^id'
+.load 0 nolock object 'U|xtcmd'
+.continue NOBUCH        ? _G|mehr
+..
+.formula U|xrssum       = 0
+.formula U|xrhsum       = 0
+.formula U|xbkuli       = G|false
+.....'0|such';'0|budat';'0|text';'M|ycurr^id';\
+!BUCHZ
+.load 0 nolock line
+.continue EDP2          ? _G|mehr
+..
+.formula U|xbkuli       = G|true        ? 0|konto^dnr = 0 ; 0|konto^dnr = 1
+..
+.formula U|xrsbetr      = 0
+.formula U|xrhbetr      = 0
+.continue BUCHE         ? _0|konto^dnr = 5
+.continue BUCHZ         ? U|xbkuli & ('0|konto^kart(L="0")'="(82)" ; '0|konto^kart(L="0")'="(83)")
+..
+.formula U|xrsbetr      = 0|betrag     ?  0|soll
+.formula U|xrhbetr      = 0|betrag     ? _0|soll
+.formula U|xrsbetr      = U|xrsbetr * M|ycalc
+.formula U|xrhbetr      = U|xrhbetr * M|ycalc
+..
+.formula U|xrssum       = U|xrssum + U|xrsbetr
+.formula U|xrhsum       = U|xrhsum + U|xrhbetr
+..
+.continue BUCHE         ? U|xbkuli
+.continue BUCHE         ? 0|aktzeile <> 0|tzeilen
+..
+.continue BUCHE         ? U|xrssum = U|xrhsum
+..
+.formula U|xrsbetr      = U|xrsbetr + (U|xrhsum - U|xrssum)       ? U|xrsbetr <> 0 & U|xrhsum > U|xrssum
+.formula U|xrsbetr      = U|xrsbetr - (U|xrssum - U|xrhsum)       ? U|xrsbetr <> 0 & U|xrssum > U|xrhsum
+..
+.formula U|xrhbetr      = U|xrhbetr - (U|xrhsum - U|xrssum)       ? U|xrhbetr <> 0 & U|xrhsum > U|xrssum
+.formula U|xrhbetr      = U|xrhbetr + (U|xrssum - U|xrhsum)       ? U|xrhbetr <> 0 & U|xrssum > U|xrhsum
+..
+!BUCHE
+.formula U|xtkst        = "-"
+.formula U|xtkst        = '0|kstelle^id'        ? _F|empty(0|kstelle)     
+.formula U|xxkto        = '0|konto'
+.formula U|xxkto        = "K " + U|xxkto        ? 0|konto^dnr = 0
+.formula U|xxkto        = "L " + U|xxkto        ? 0|konto^dnr = 1
+.formula U|xxkto        = U|xxkto + "a"         ? 0|konto^dnr = 5
+.output ADDEDTO 'U|xtedp2'
+'0|nummer';'0|budat';'0|text';'M|ycurr^id';'0|kustart(L="0")';'U|xxkto';'U|xrsbetr';'U|xrhbetr';'U|xtkst';
+.continue BUCHZ
+..
+!EDP2
+.output
+..
+.select screen line 'M|tzeilen'
+.make screen line +o
+.assign M|ytvartab      = "V-110-00"
+.formula M|ytvarbez     = M|ytvartab^namebspr
+.formula M|ytvdn        = 110
+.formula M|ytvgr        = 0
+.formula M|ytkrit       = '0|nummer'
+.formula M|ytimport     = U|xtedp2
+..
+.set trans +
+.text U|xttext 'G|bspri' Finanzbuchungsvorlage wird kopiert
+.set trans -
+.note -IMMEDIATELY 'U|xttext' ...
+...edi 'U|xtedp2'
+...input
+.formula U|xtcmd        = "edpimport.sh -p abas123 -b 110:0 -Z num6:konto -r REF -n " + G|dblquote + "-" + G|dblquote + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp2
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout2 + " 2>" + U|xterr2
+.system 'U|xtcmd' background
+..
+.continue ERROR         ? F|filesize(U|xtout2) = 0
+.select from
+.select from 'U|xtout2' U|xtnew^
+.continue ERROR         ? F|empty(U|xtnew) ; 'U|xtnew' = "(0,0,0)"
+.output ADDEDTO 'U|xtedp1'
+?'1|aktzeile';'U|xtnew';\       ? 1|aktzeile <> 1|tzeilen
+?'1|aktzeile';'U|xtnew';        ? 1|aktzeile = 1|tzeilen
+.continue DATZ
+..
+!EDP1
+.output
+.select screen line 'U|xiz'
+.formula M|ytimport     = U|xtedp1
+.note -IMMEDIATELY 'U|xttext' ...
+.formula U|xtcmd        = "edpimport.sh -P -b 110:3 -a UPDATE -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp1
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout1 + " 2>" + U|xterr1
+.system 'U|xtcmd' PASSWORD background
+..
+.continue DAT1          ? F|filesize(U|xterr1) = 0
+.set trans +
+.text U|xttext 'G|bspri' Dauerbuchungsregel konnte nicht korrekt ge„ndert werden
+.set trans -
+.error 'U|xttext'
+.edi 'U|xterr1'
+.continue END
+..
+!DELETE
+.select screen line 'M|tzeilen'
+.make screen line +o
+.assign M|ytvartab      = "V-110-00"
+.formula M|ytvarbez     = M|ytvartab^namebspr
+.formula M|ytvdn        = 110
+.formula M|ytvgr        = 0
+.formula M|ytkrit       = "DELETE"
+.output NEW 'U|xterr1'
+.output NEW 'U|xtedp1'
+id;
+.formula U|xtcmd        = "$,@datei=110:0;nummer=!;ewbu==EUR"
+.load 1 nolock object 'U|xtcmd'
+.continue NODELETE      ? _G|mehr
+!DELDAT
+'0|id'
+.load 1 nolock continue
+.continue DELDAT        ? G|mehr
+.output
+.formula M|ytimport     = U|xtedp1
+.formula U|xtcmd        = "edpimport.sh -P -b 110:3 -a DELETE -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp1
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout1 + " 2>" + U|xterr1
+.system 'U|xtcmd' PASSWORD background
+..
+.continue END           ? F|filesize(U|xterr1) = 0
+.formula M|yterror      = U|xterr1
+.continue END
+..
+!ERROR
+.set trans +
+.text U|xttext 'G|bspri' Finanzbuchungsvorlage konnte nicht korrekt kopiert werden
+.set trans -
+.error 'U|xttext'
+.edi 'U|xterr2'
+.formula M|yterror      = U|xterr2
+.continue END
+..
+!NODATA
+.set trans +
+.text U|xttext 'G|bspri' Keine Dauerbuchungen vorhanden
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!NOCALC
+.set trans +
+.text U|xttext 'G|bspri' Es ist kein Umrechnungskurs vorhanden
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!NOBUCH
+.set trans +
+.text U|xttext 'G|bspri' Die Finanzbuchungsvorlage konnte nicht geladen werden
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!END
+.note -IMMEDIATELY
+.continue

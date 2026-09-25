@@ -101,16 +101,12 @@ export default function UploadPanel({
   onReloadDirectory,
   onCloseDirectory,
 }: UploadPanelProps) {
-  const { lang } = useTranslation();
+  const { lang, t } = useTranslation();
   const [dirOpening, setDirOpening] = useState(false);
 
   const handleOpenDirectory = async () => {
     if (!window.showDirectoryPicker) {
-      alert(
-        lang === 'de'
-          ? 'Ihr Browser unterstützt die Directory Picker API nicht.'
-          : 'Your browser does not support the Directory Picker API.',
-      );
+      alert(t('upload.directoryPickerUnsupported'));
       return;
     }
     try {
@@ -159,7 +155,7 @@ export default function UploadPanel({
     <aside className={styles.panel}>
       {/* Upload actions */}
       <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>{lang === 'de' ? 'FOP-Ordner' : 'FOP Folder'}</h3>
+        <h3 className={styles.sectionTitle}>{t('upload.fopFolder')}</h3>
 
         {/* Status: currently selected directory */}
         {selectedDirName ? (
@@ -172,25 +168,25 @@ export default function UploadPanel({
               </span>
             )}
             {onReloadDirectory && (
-              <button type="button" className={styles.iconBtn} onClick={onReloadDirectory} disabled={busy} title={lang === 'de' ? 'Ordner neu laden' : 'Reload folder'}>
+              <button type="button" className={styles.iconBtn} onClick={onReloadDirectory} disabled={busy} title={t('app.reload')}>
                 ⟳
               </button>
             )}
             {onCloseDirectory && (
-              <button type="button" className={styles.iconBtn} onClick={onCloseDirectory} disabled={busy} title={lang === 'de' ? 'Ordner entfernen' : 'Remove folder'}>
+              <button type="button" className={styles.iconBtn} onClick={onCloseDirectory} disabled={busy} title={t('app.removeFolder')}>
                 ✕
               </button>
             )}
           </div>
         ) : (
           <p className={styles.hint}>
-            {lang === 'de' ? 'Kein Ordner ausgewählt' : 'No folder selected'}
+            {t('upload.noFolderSelected')}
           </p>
         )}
 
         {isLoading && (
           <p className={styles.loadingHint}>
-            ⟳ {lang === 'de' ? 'FOPs werden geladen…' : 'Loading FOPs…'}
+            ⟳ {t('upload.loadingFops')}
           </p>
         )}
 
@@ -201,8 +197,8 @@ export default function UploadPanel({
           disabled={busy}
         >
           {dirOpening
-            ? (lang === 'de' ? 'Öffne…' : 'Opening…')
-            : (lang === 'de' ? 'FOP-Ordner öffnen' : 'Open FOP folder')}
+            ? t('upload.opening')
+            : t('app.openFopFolder')}
         </button>
 
         {/* Shortcut: use the already-open file explorer directory */}
@@ -212,11 +208,9 @@ export default function UploadPanel({
             className={styles.uploadBtnSecondary}
             onClick={onUseExplorerDir}
             disabled={busy}
-            title={lang === 'de'
-              ? 'Aktuell geöffneten Explorer-Ordner verwenden'
-              : 'Use currently open explorer folder'}
+            title={t('upload.useExplorerFolder')}
           >
-            {lang === 'de' ? '← Aus Explorer übernehmen' : '← Use from explorer'}
+            ← {t('upload.useFromExplorer')}
           </button>
         )}
       </section>
@@ -227,7 +221,7 @@ export default function UploadPanel({
           <div className={styles.statusRow}>
             <span className={styles.statusIcon}>✓</span>
             <span className={styles.statusText}>
-              {bindings.length} {lang === 'de' ? 'FOP-Bindungen geladen' : 'FOP bindings loaded'}
+              {t('upload.bindingsLoaded', { count: bindings.length })}
             </span>
           </div>
         </section>
@@ -242,7 +236,7 @@ export default function UploadPanel({
           onClick={() => onAnalyzeSelection(selectedBindings)}
           disabled={busy || selectedBindings.length === 0}
         >
-          {busy ? '⟳ …' : `${lang === 'de' ? 'Auswahl analysieren' : 'Analyze selection'} (~${selectionTokenEstimate}k T)`}
+          {busy ? '⟳ …' : `${t('upload.analyzeSelection')} (~${selectionTokenEstimate}k T)`}
         </button>
         <button
           type="button"
@@ -250,7 +244,7 @@ export default function UploadPanel({
           onClick={onAnalyzeAll}
           disabled={busy || bindings.length === 0}
         >
-          {busy ? '⟳ …' : (lang === 'de' ? 'Alle analysieren' : 'Analyze all')}
+          {busy ? '⟳ …' : t('upload.analyzeAll')}
         </button>
       </section>
     </aside>

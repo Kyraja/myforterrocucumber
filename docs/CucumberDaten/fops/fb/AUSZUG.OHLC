@@ -1,0 +1,220 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : AUSZUG.OHLC
+..  Datum          : 06.07.2005
+..  Version        : 1
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : FOP zur Berechnung der Open-High-Low-Close Werte
+..                   des Infosystems fb/AUSZUG
+..
+..  Schnittstelle (Parameter und ihre Bedeutung)
+..    verwendet Arrayparameter (arg.i)          : nein
+..    verwendet Namensparameter (xpname=wert)   : nein
+..
+..    Parameter    Bedeutung
+..    ---------------------------------------------------------
+..    xp...        ...
+..
+..  Ablauf         :
+..
+..  Functionality  : FOP for computation of the Open-High-Low-Close values
+..                   of the Infosystem fb/AUSZUG
+..
+..  Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    ---------------------------------------------------------
+..    xp...        ...
+..
+..  Program flow  :
+... Includes      :
+..*****************************************************************************
+.type bool xbbackward      ? _F|defined(U|xbbackward)
+..
+.type real xrmin xrmax xropen xrclose
+.type real xrlmin xrlmax xrlopen xrlclose xrlkosal
+.type integer  ximonth xilmonth ? _F|defined(U|ximonth)
+..
+..*****************************************************************************
+.set trans -
+.continue END ? M|tzeilen = 0
+..
+..
+.formula U|xbbackward = F|equals(M|richtung, "(Backwards)")
+..
+..
+..*****************************************************************************
+!Init: Init values
+..*****************************************************************************
+..
+.select screen header
+..
+.formula U|xropen   = M|anfsaldo ? _U|xbbackward
+.formula U|xrclose  = M|endsaldo ?  U|xbbackward
+.formula U|xrmin    = M|anfsaldo ? _U|xbbackward
+.formula U|xrmax    = M|anfsaldo ? _U|xbbackward
+.formula U|xrmin    = M|endsaldo ?  U|xbbackward
+.formula U|xrmax    = M|endsaldo ?  U|xbbackward
+..
+..*****************************************************************************
+!LOOP: Loop over mask rows
+..*****************************************************************************
+.continue END1    ? M|aktzeile = M|tzeilen
+.select screen line
+..
+.. set values for first row
+.formula U|xilmonth  = M|tbumonat ? M|aktzeile = 1
+..
+.continue INITFIRST ? M|aktzeile > 1
+.continue INITFIRST ? M|tbumonat = M|amonat & _U|xbbackward
+.continue INITFIRST ? M|tbumonat = M|emonat &  U|xbbackward
+..
+.formula U|ximonth   = M|amonat  ? _U|xbbackward
+.formula U|ximonth   = M|emonat  ?  U|xbbackward
+..*****************************************************************************
+!FIRSTGAPS: Generate values for months without entries (gaps)
+..*****************************************************************************
+.continue INITFIRST ? U|ximonth = M|tbumonat
+..
+.type real xrtval ? _F|defined(U|xrtval)
+..
+.formula U|xrtval = M|anfsaldo ? _U|xbbackward
+.formula U|xrtval = M|endsaldo ?  U|xbbackward
+..
+.formula M|open.U|ximonth  = U|xrtval
+.formula M|high.U|ximonth  = U|xrtval
+.formula M|low.U|ximonth   = U|xrtval
+.formula M|close.U|ximonth = U|xrtval
+..
+.formula U|ximonth = U|ximonth - 1 ?  U|xbbackward
+.formula U|ximonth = U|ximonth + 1 ? _U|xbbackward
+.continue FIRSTGAPS
+..
+..*****************************************************************************
+!INITFIRST: Init values for first record in period
+..*****************************************************************************
+.. next period?
+.formula U|xropen  = U|xrlclose   ? M|tbumonat > U|xilmonth & _U|xbbackward
+.formula U|xrclose = U|xrlopen    ? M|tbumonat < U|xilmonth &  U|xbbackward
+..
+.formula U|xrmin   = U|xropen     ? M|tbumonat > U|xilmonth & _U|xbbackward & M|tsaldo >  U|xropen
+.formula U|xrmin   = M|tsaldo   ? M|tbumonat > U|xilmonth & _U|xbbackward & M|tsaldo <= U|xropen
+..
+.formula U|xrmax   = U|xropen     ? M|tbumonat > U|xilmonth & _U|xbbackward & M|tsaldo <  U|xropen
+.formula U|xrmax   = M|tsaldo   ? M|tbumonat > U|xilmonth & _U|xbbackward & M|tsaldo >= U|xropen
+..
+.formula U|xrmin   = U|xrclose    ? M|tbumonat < U|xilmonth &  U|xbbackward & M|tsaldo >  U|xrclose
+.formula U|xrmin   = M|tsaldo   ? M|tbumonat < U|xilmonth &  U|xbbackward & M|tsaldo <= U|xrclose
+..
+.formula U|xrmax   = U|xrclose    ? M|tbumonat < U|xilmonth &  U|xbbackward & M|tsaldo <  U|xrclose
+.formula U|xrmax   = M|tsaldo   ? M|tbumonat < U|xilmonth &  U|xbbackward & M|tsaldo >= U|xrclose
+..
+.formula M|open.U|xilmonth  = U|xrlopen     ? M|tbumonat > U|xilmonth & _U|xbbackward
+.formula M|high.U|xilmonth  = U|xrlmax      ? M|tbumonat > U|xilmonth & _U|xbbackward
+.formula M|low.U|xilmonth   = U|xrlmin      ? M|tbumonat > U|xilmonth & _U|xbbackward
+.formula M|close.U|xilmonth = U|xrlclose    ? M|tbumonat > U|xilmonth & _U|xbbackward
+..
+.formula M|open.U|xilmonth  = U|xrlclose    ? M|tbumonat < U|xilmonth &  U|xbbackward
+.formula M|high.U|xilmonth  = U|xrlmax      ? M|tbumonat < U|xilmonth &  U|xbbackward
+.formula M|low.U|xilmonth   = U|xrlmin      ? M|tbumonat < U|xilmonth &  U|xbbackward
+.formula M|close.U|xilmonth = U|xrlopen     ? M|tbumonat < U|xilmonth &  U|xbbackward
+..
+.. init end
+..
+.continue MINMAX ?  M|tbumonat = U|xilmonth
+.continue MINMAX ? (M|tbumonat = U|xilmonth + 1) & _U|xbbackward
+.continue MINMAX ? (M|tbumonat = U|xilmonth - 1) &  U|xbbackward
+..
+.formula U|ximonth   = U|xilmonth + 1 ? _U|xbbackward
+.formula U|ximonth   = U|xilmonth - 1 ?  U|xbbackward
+..*****************************************************************************
+!GAPS: Generate values for months without entries (gaps)
+..*****************************************************************************
+.continue MINMAX ? U|ximonth = M|tbumonat ; U|ximonth > 15 ; U|ximonth < 1
+..
+.formula M|open.U|ximonth  = U|xrlclose ? _U|xbbackward
+.formula M|high.U|ximonth  = U|xrlclose ? _U|xbbackward
+.formula M|low.U|ximonth   = U|xrlclose ? _U|xbbackward
+.formula M|close.U|ximonth = U|xrlclose ? _U|xbbackward
+..
+.formula M|open.U|ximonth  = U|xrlopen  ?  U|xbbackward
+.formula M|high.U|ximonth  = U|xrlopen  ?  U|xbbackward
+.formula M|low.U|ximonth   = U|xrlopen  ?  U|xbbackward
+.formula M|close.U|ximonth = U|xrlopen  ?  U|xbbackward
+..
+.formula U|ximonth = U|ximonth - 1 ?  U|xbbackward
+.formula U|ximonth = U|ximonth + 1 ? _U|xbbackward
+.continue GAPS
+..
+..*****************************************************************************
+!MINMAX
+..*****************************************************************************
+.formula U|xrmin   = M|tsaldo ? M|tsaldo < U|xrmin & _U|xbbackward & M|tbumonat = U|xilmonth
+.formula U|xrmax   = M|tsaldo ? M|tsaldo > U|xrmax & _U|xbbackward & M|tbumonat = U|xilmonth
+..
+.formula U|xilmonth = M|tbumonat
+.formula U|xrlmin   = U|xrmin
+.formula U|xrlmax   = U|xrmax
+.formula U|xrlclose = M|tsaldo   ? _U|xbbackward
+.formula U|xrlclose = U|xrclose    ?  U|xbbackward
+.formula U|xrlopen  = M|tsaldo   ?  U|xbbackward
+.formula U|xrlopen  = U|xropen     ? _U|xbbackward
+..
+.continue LOOP
+..
+..*****************************************************************************
+!END1: End. Set last values.
+..*****************************************************************************
+.formula U|xrlmin   = U|xrmin
+.formula U|xrlmax   = U|xrmax
+.formula U|xrlclose = M|tsaldo  ? _U|xbbackward
+.formula U|xrlclose = U|xrclose   ?  U|xbbackward
+.formula U|xrlopen  = M|tsaldo  ?  U|xbbackward
+.formula U|xrlopen  = U|xropen    ? _U|xbbackward
+..
+..*****************************************************************************
+!LAST: Generate last values
+..*****************************************************************************
+.formula M|open.U|xilmonth  = U|xrlopen   ? _U|xbbackward
+.formula M|high.U|xilmonth  = U|xrlmax    ? _U|xbbackward
+.formula M|low.U|xilmonth   = U|xrlmin    ? _U|xbbackward
+.formula M|close.U|xilmonth = U|xrlclose  ? _U|xbbackward
+..
+.formula M|open.U|xilmonth  = U|xrlclose  ?  U|xbbackward
+.formula M|high.U|xilmonth  = U|xrlmax    ?  U|xbbackward
+.formula M|low.U|xilmonth   = U|xrlmin    ?  U|xbbackward
+.formula M|close.U|xilmonth = U|xrlopen   ?  U|xbbackward
+..
+.continue END ? U|xilmonth = M|emonat & _U|xbbackward
+.continue END ? U|xilmonth = M|amonat &  U|xbbackward
+..
+.formula U|ximonth   = U|xilmonth + 1 ? _U|xbbackward
+.formula U|ximonth   = U|xilmonth - 1 ?  U|xbbackward
+..*****************************************************************************
+!LASTGAPS: Generate values for months without entries (gaps)
+..*****************************************************************************
+.continue END ? U|ximonth > M|emonat & _U|xbbackward
+.continue END ? U|ximonth < M|amonat &  U|xbbackward
+..
+.formula M|open.U|ximonth  = U|xrlclose ? _U|xbbackward
+.formula M|high.U|ximonth  = U|xrlclose ? _U|xbbackward
+.formula M|low.U|ximonth   = U|xrlclose ? _U|xbbackward
+.formula M|close.U|ximonth = U|xrlclose ? _U|xbbackward
+..
+.formula M|open.U|ximonth  = U|xrlopen  ?  U|xbbackward
+.formula M|high.U|ximonth  = U|xrlopen  ?  U|xbbackward
+.formula M|low.U|ximonth   = U|xrlopen  ?  U|xbbackward
+.formula M|close.U|ximonth = U|xrlopen  ?  U|xbbackward
+..
+.formula U|ximonth = U|ximonth - 1 ?  U|xbbackward
+.formula U|ximonth = U|ximonth + 1 ? _U|xbbackward
+.continue LASTGAPS
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

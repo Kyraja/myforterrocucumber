@@ -1,0 +1,233 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..
+..  FOP-Name       : kr/KONSEXPORT
+..  Datum          : 22.09.2003
+..  Version        :
+..  Autor          : tf
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..
+..
+..*****************************************************************************
+..  Transformation von Konsolidierungsdaten fÅr Datenaustausch zwischen ERP-Systemen
+..  --------------------------------------------------------------------------------
+..
+..  1. Aus dem Export-Datenobjekt wird ein Import-Datenobjekt
+..  2. Die Kontenidentnummer des zu buchenden Objekts (ktoobj)
+..     ist die Konzernidentnummer, falls diese nicht gefÅllt ist
+..     die Identnummer aus dem Einzelmandanten
+..
+..  Schnittstelle (Parameter und ihre Bedeutung)
+..    verwendet Arrayparameter  (arg.i)         : nein
+..    verwendet Namensparameter (xpname=wert)   : nein
+....
+..  Ablauf         :
+..*****************************************************************************
+..  Transform data of consolidation for data exchange between different abas ERP-Systems
+..
+..  interface (argument with meaning)
+..    used array argument (arg.i)          : no
+..    used name argument  (xpname=value)   : no
+..
+..  program flow  :
+..  includes      :
+..
+..*****************************************************************************
+.set trans -
+.continue START ? (evtartengl="BUTTON_AFTER" & evtvar = "dastart" )
+.end 1
+..
+!START
+..
+.continue ERR03 ? _F|fileexists('E|TMP')
+..
+.input "ARB"
+..
+.. use fix settings of numerical representation
+.set thoussep ""
+.set decpoint  ","
+.. -----------------------------------------------------
+.. variable declaration
+.. name of export fi
+.type text xexpdatei
+..
+.. local variable of mapping between ident numbers
+.type text xkontonr
+..
+.. message
+.type text xmeldung
+..
+.. internal representation of booleans
+.type text xnbmon:1 xbkunde:1 xbliefer:1 xbkonto:1 xbmitarb:1 xustsep:1 xnullwert:1 xsoll:1
+..
+.. typ of currency of balanca sheet accounts
+.type text xbacurr
+..
+.. typ of currency of profit and loss accounts
+.type text xplcurr
+..
+.. local variable for time
+.type text xtime
+..
+.. local variable of T|mandant without spaces.
+.type NT100 xmandant
+..
+.. group accounting number of group company
+.type text xkonzfa
+..
+.. group accounting numer of consoldiation group
+.type text xkkreis
+..
+.. scp error file
+.type text xscperr
+.formula xscperr='E|TMP'+"/KONSSCP.ERR"
+..
+.. scp output file
+.type text xscpout
+.formula xscpout='E|TMP'+"/KONSSCP.OUT"
+.. -----------------------------------------------------
+.. program initialisation
+.. explicit setting of separator for 1000s
+.set thoussep   ""
+..
+.. explicit setting of separator for decimals
+.set decpoint "."
+..
+.. export file is in temp dir
+.formula xtime='zeit' << ":" + 'zeit' >> ":"
+..
+.type text xtchar ? _defined(xtchar)
+.type text xtrest ? _defined(xtrest)
+.. mandant in upper case
+.formula xtrest=-T|mandant
+!NEXTLETTER
+.. cut next character
+.formula xtchar = xtrest<<1
+.. string without first character
+.formula xtrest = xtrest<<-1
+.. append letter, if it is a letter
+.formula xmandant = xmandant + xtchar ? xtchar / "/ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/"
+.continue NEXTLETTER ? +xtrest > 0
+.formula xexpdatei = "rmtmp/KONZEXP" + 'datum:8' + "T" + 'xtime' + 'xmandant' + 'pid' + ".IMP"
+..
+.. redirect output stream in file
+.output new 'xexpdatei'
+.input "DATEI.F"
+..
+########################################################################
+#          import file for group accounting data exchange              #
+#                                                                      #
+#  client              : 'mandant            '                         #
+#  file generated at   : 'datum     '  file generated on:  'zeit     ' #
+#  file generated from : 'extuser                                    ' #
+########################################################################
+#                                                                      #
+#  exchanged variables                                                 #
+########################################################################
+.. variable to import in destination abas ERP-system
+#!report=ref
+#!action=new
+#!database=89
+#!group=1
+#!EDP_LANG='T|bspr'
+#!EDP_ENUMMODE=CODE
+#!EDP_DATEMODE=SORT
+#!EDP_BOOLMODE=NUM
+#!dontchange=-
+#!flddelimiter=;
+#!recordidfld=such
+#!firsttabfld=ktoobj
+..
+such;daustyp;kkreis;konzfa;konzhist;mdkenn;bukreis;adatum;edatum;bilkart;guvkart;nbmon;bkunde;bliefer;bkonto;bmitarb;ustsep;nullwert;bezzp;impdat;ktoobj;ezmandnr;ustpos;ursbetr;urhbetr;dasbetr;dahbetr;twaehr;tkurs;periode;peranf;perend;tbudat;soll
+..
+.. use internal data representation to ensure language independency
+.set reference +
+.formula xnbmon   = M|nbmon
+.formula xbkunde  = M|bkunde
+.formula xbliefer = M|bliefer
+.formula xbkonto  = M|bkunde
+.formula xbmitarb = M|bmitarb
+.formula xbacurr  = M|bilkart
+.formula xplcurr  = M|guvkart
+.formula xustsep  = M|ustsep
+.formula xnullwert= M|nullwert
+.set reference -
+..
+.formula xkonzfa = M|konzfa
+.formula xkkreis = M|kkreis
+.. Map numbers of consolidation group an group company to group accounting numbers
+.continue GETROW ? M|glabb = ""
+.load 0 consolidation 'M|glabb'
+!KRNUMBER
+.load 0 line
+.continue GETROW ? _mehr
+.formula xkkreis = 0|konznr ? M|kkreis^id = 0|ktoobj^id
+.formula xkonzfa = 0|konznr ? M|konzfa^id = 0|ktoobj^id
+.continue KRNUMBER
+..
+.. loop over the export object
+!GETROW
+.select screen line
+..quit program if no further rows available
+.continue XMESSAGE1 ? _mehr
+.formula xkontonr = 'M|ktoobj'
+.formula xkontonr = 'M|ktoobj^dnr' + " " + 'M|konznr' ? _(M|konznr = "")
+.set reference +
+.formula xsoll = M|soll
+.set reference -
+..
+'M|such';(105);'xkkreis';'xkonzfa';'M|konzhist';'M|mdkenn';'M|bukreis';'M|adatum:8';'M|edatum:8';'xbacurr';'xplcurr';'xnbmon';'xbkunde';'xbliefer';'xbkonto';'xbmitarb';'xustsep';'xnullwert';'M|bezzp:8';'xexpdatei';'xkontonr';'M|ktoobj';'M|ustpos';'M|dasbetr';'M|dahbetr';'M|dasbetr';'M|dahbetr';'M|twaehr';1.00;'M|periode';'M|peranf:8';'M|perend:8';'M|perend:8';'xsoll';
+..Set next row
+.continue GETROW
+..
+!XMESSAGE1
+.. test if path for export file is defined
+.continue XCOPY2CONS ? _F|empty(M|pfadkmand)
+.continue END ? G|edp
+..
+.. copy import file from client tempdir to win client tempdir
+.output terminal
+.pc.copy -PC 'xexpdatei' 'xexpdatei'
+.continue COPYERROR ? _mehr
+.box
+Erzeugte Exportdatei: 'xexpdatei'
+.continue END
+..
+!XCOPY2CONS
+.. copy import file from client tempdir to win/tmp of consolidation client
+.output terminal
+.type text xsys ? _defined(xsys)
+.type text xscppath ? _defined(xscppath)
+.continue ERRO2 ? _F|fileexists(xexpdatei)
+.formula xscppath = 'M|pfadkmand'
+.formula xsys =  "scp " + 'xexpdatei' + " " + 'xscppath' + " >" + 'xscpout' + " 2>" +'xscperr'
+.system 'xsys'
+.continue ERR01 ? F|filesize('xscperr') > 0
+.set trans +
+.formula xmeldung = F|formatstr("Exportdatei: {1} nach {2} kopiert.", xexpdatei, xscppath)
+.set trans -
+.box
+'xmeldung'
+.continue END
+..
+!COPYERROR
+.error Exportdatei konnte nicht auf Clientrechner kopiert werden.
+.end
+..
+!ERR01
+.error Fehler beim Kopieren.
+.editing -readonly 'xscperr'
+.end
+..
+!ERR02
+.error Exportdatei 'xexpdateix' existiert nicht.
+.end
+..
+!ERR03
+.error Kein TMP-Verzeichnis definiert.
+.end
+..
+!END
+.end
+

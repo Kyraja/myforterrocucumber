@@ -1,0 +1,499 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..
+..  FOP-Name       : PLAN.TAB
+..  Datum          : 04.08.2001
+..  Version        :
+..  Autor          : cl
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..
+..  Funktion       : Infosystem, Plankarte, Tabellenzeigfop
+..
+..  Ablauf         :
+.. A79
+.. 66;Fremdbeschaffung;B;(66);ExternalProcurement;(ExternalProcurement);
+.. 69;Eigenfertigung;E;(69);InhouseProduction;(InhouseProduction);
+.. 85;Umlagern;U;(85);Relocation;(Relocation);
+.. 76;Lohnfertigung;L;(76);Subcontracting;(Subcontracting);
+.. 83;Umbauen;S;(83);Restructure;(Restructure);
+..
+..*****************************************************************************
+.set trans -
+.type real0 xmge    ? _F|defined(U|xmge)
+.type text  xsel    ? _F|defined(U|xsel)
+.type text  xlagid  ? _F|defined(xlagid)
+.type text  xftext  ? _F|defined(U|xftext)
+..
+.continue FIRSTLINE ? M|tzeilen = 0 & H|dnr <> 40
+.continue SELECT
+..
+!FIRSTLINE:  erste Zeile soll eine Lagermengenzeile sein
+.make screen line +O
+.. L
+.assign M|vart = "(Warehouse)"
+.formula M|vorgang = ""
+.formula M|verfueg = 0
+.formula M|fix = G|TRUE
+.formula M|ampelz = G|icoukrit
+..
+!SELECT
+.continue WR         ? H|dnr=121
+.continue LM         ? H|dnr=40
+.. Alle limgen <= 0.0 ueberspringen
+.continue            ? H|limge=0.0 ; (H|limge<0.0 & H|typ<>G|RESERV)
+.. Reservierungen kînnen nur negative offene Mengen haben, wenn mehr Material entnommen wurde als geplant
+.. diese Zeilen nicht anzeigen
+.continue            ? H|limge<=0.0 & H|typ=G|RESERV
+..
+.make screen line +O
+.. Felder initialisieren, die fuer alle BS und RES gleich sind
+.formula M|tterm = H|tterm
+.copy M|iconinbfristz = M|iinbfrist       ? 'M|tterm:8' <= 'M|badatum:8'
+.formula M|woche = H|tterm             ? F|defined(M|woche)
+.formula M|twterm = H|twterm
+.formula M|fterm = H|fterm
+.formula M|tfterm = H|tfterm
+.formula M|planmge = H|planmge
+.formula M|aumge = H|aumge
+.copy M|lffert = H|lffert
+.formula M|verw = H|verw
+.formula M|verwerbtxt = H|verwerbtxt
+.assign M|projekt = H|projekt
+.formula M|vorgang = H|id                         
+.formula M|besresz = M|zbesres
+.formula M|besresb = M|bbesres
+.formula M|resid = H|id
+.formula M|ddispo = H|dispo
+.formula M|ddispoa = H|dispoa
+.assign M|ddispoa = "(MinimumStockLevelRelated)"   ? F|equals(H|dispoa, "(MinimumStockLevelRelatedNone)")
+.assign M|ddispoa = "(RemainingQuantitiesRelated)" ? F|equals(H|dispoa, "(RemainingQuantityRelatedNone)")
+.assign M|krit = F|value(H|krit, "AS305")
+.formula M|ampelz = G|icokrit   ? F|equals(H|krit, "(ProcessIsCritical)")
+.formula M|ampelz = G|icovkrit  ? F|equals(H|krit, "(PathIsCritical)")
+.formula M|ampelz = G|icoukrit  ? F|equals(H|krit, "(Uncritical)")
+.formula M|buvstatus = M|vstatus   ? F|equals(M|vorgang^bsresa, "(Procurement)")
+.formula M|fix = H|fix
+.reserve
+..
+!E3INKAUF
+.file -tempname U|xftext
+.output new 'U|xftext'
+.select add M|vorgang^id
+.continue TYP   ? _G|mehr
+.reserve application
+.type ID40 xmerkid ? _F|defined(U|xmerkid)
+.type integer xi   ? _F|defined(U|xi)
+.formula U|xmerkid = ""
+.formula U|xi = 0 
+..
+!H3OLVERW: 1. LF-RES holen
+.select application
+.continue E3ND  ? _G|mehr
+.continue E3ND  ?  G|bvkenn=""
+.continue E3ND  ?  G|bvkenn="S"
+.. bvkenn = R oder B oder L oder W
+.formula M|wrzid = ""       ? F|empty(M|wresid)
+.formula M|bvkenn = G|bvkenn
+.continue T3EXT ? _F|defined(H|id)
+.continue H3OLVERW ? 'U|xmerkid' = 'H|id' & H|dnr = 40
+.formula U|xmerkid = ""   ? H|dnr <> 40
+.formula U|xi = 0         ? H|dnr <> 40
+..
+!T3EXT
+.output addedto 'U|xftext'
+.input "DATEI.F"
+?'H|id'  ? _F|defined(H|zid)
+?'H|zid' ?  H|tzeilen > 0 & F|defined(H|zid)
+.output
+.formula M|freitext = U|xftext
+..
+.continue H3OLVERW ? _F|defined(H|id)
+.formula U|xmerkid = H|id ? H|dnr = 40
+.continue H3OLVERW
+..
+!E3ND
+.select
+..
+!TYP: Typspezifische Felder initialisieren
+.continue RES    ? H|typ=G|RESERV
+..
+.. Beschaffungen
+.formula M|planmge = H|planmge
+.formula M|aumge = H|aumge
+.assign M|bshinw = H|bshinw
+.copy M|bshinwsymz = M|gesbestz  ? F|equals(M|bshinw, "(TotalRequirements)")
+.copy M|bshinwsymz = M|mindbestz ? F|equals(M|bshinw, "(MinimumStock)")
+.continue FV     ? H|typ=G|FEVOR
+..
+.. Bestell-/Umlagerungsvorschlaege, Bestell-/Umlagerungspositionen
+.formula M|tsterm = H|tsterm
+.formula U|xmge = H|netlimge
+.formula M|zugang = U|xmge
+.copy M|budispo = M|attdispo ? H|dispofehler <> 0
+.. Umlagern
+.continue UML    ? F|equals(H|bsart, "(Relocation)")
+.continue LOHNF  ? F|equals(H|bsart, "(Subcontracting)")
+.. B: Bestellvorschlaege, Bestellpositionen
+.assign M|vart = "(ExternalProcurement)"
+..
+!BKOPF
+.add kopf
+..Bestelltermin fÅr BestellvorschlÑge
+.formula M|sterm = H|wtsterm ? _G|mehr
+.continue ENDTYP ? _G|mehr
+.continue BESTELL ? F|empty(H|verw)
+.continue BESTELL ? M|vart <> "(SalesOrder)"
+.continue BESTELL ? D|dnr <> 3
+.copy M|tplanrelz = M|notplanrelz ? _H|vor^planrel 
+.copy M|tplanrelz = M|planrelz    ?  H|vor^planrel
+..
+!BESTELL: Bestellpositionen, Umlagerungspositionen
+.formula M|vkopf = D|id
+.formula M|geschaeftspartner = D|kunde^id  ? D|dnr = 3
+.formula M|geschaeftspartner = D|lief^id   ? D|dnr = 4
+.formula M|freig = U|xmge
+.formula M|tsterm = D|vom
+.copy M|abda = G|FALSE
+.copy M|abda = G|TRUE ? D|dnr = 4 & D|typ = 3 & _F|empty(M|vorgang^abnrpo)
+.copy M|abda = G|TRUE ? D|dnr = 3 & D|typ = 3 & _D|druck
+.copy M|budispo = M|attdispo ? H|dispofehler <> 0
+.continue ENDTYP
+..
+!UML: U: Umlagerungsvorschlaege, Umlagerungspositionen
+.formula M|lgruppe = H|ablgruppe^id
+.assign M|vart = "(Relocation)"
+.continue BKOPF
+..
+!LOHNF: Lohnfertigungsvorschlag, Lohnfertigungsposition
+.assign M|vart = "(Subcontracting)"
+.continue BKOPF
+..
+!FV: F: Fertigungsvorschlaege
+.formula M|tsterm = H|tsterm
+.formula U|xmge = H|netlimge
+.formula M|zugang = U|xmge
+.assign M|vart = "(InhouseProduction)"
+.copy M|budispo = M|attdispo ? H|dispofehler <> 0
+..
+.reserve
+..
+!E2INKAUF
+.file -tempname U|xftext
+.output new 'U|xftext'
+.select add M|vorgang^id
+.continue FKOPF  ? _G|mehr
+.reserve application
+..
+!H2OLVERW: 1. LF-RES holen
+.select application
+.continue E2ND   ? _G|mehr
+.continue E2ND   ?  G|bvkenn=""
+.continue E2ND   ?  G|bvkenn="S"
+.. bvkenn = R oder B oder W
+.formula M|bvkenn = G|bvkenn
+..
+.output addedto 'U|xftext'
+.input "DATEI.F"
+?'H|id'  ? _F|defined(H|zid)
+?'H|zid' ?  H|tzeilen > 0 & F|defined(H|zid)
+.output
+.formula M|freitext = U|xftext
+..
+.continue H2OLVERW
+..
+!E2ND
+.select
+..
+!FKOPF
+.add ba
+..
+.continue ENDTYP ? _G|mehr 
+..
+.formula M|vkopf = D|id
+.formula M|freig = D|mge
+.continue ENDTYP
+..
+!RES: Reservierungen
+.formula M|kompeig = H|kompeig
+.formula M|fbsterm = H|fbsterm
+.formula M|einplanterm = H|einplanterm
+.continue KOPPEL ? F|equals(H|kompeig, "(Coproduct)") ; F|equals(H|kompeig, "(ConversionProduct)")
+..
+.formula U|xmge = -(H|limge) ? H|limge >= 0.0
+.formula M|abgang = H|limge  ? H|limge >= 0.0
+.formula M|zugang = U|xmge   ? H|limge <  0.0
+.continue KOPPELPROD
+..
+!KOPPEL
+.formula U|xmge = H|limge
+.formula M|abgang = ""
+.formula M|zugang = U|xmge
+.copy M|kompeig = H|kompeig
+..
+!KOPPELPROD
+.. K: Zugang aus Koppelproduktion
+.assign M|vart = "(CombinedProduction)"
+.add H|vor
+.continue ENDTYP ? _G|mehr
+.copy M|fix = G|TRUE ? D|fix
+.assign M|art = D|art
+.continue RESFV  ? D|typ=G|FEVOR
+..
+.. reserviert fuer Auftrags-/Bestell-/Umlagerungsposition oder -vorschlag
+.assign M|vart = "(ExternalProcurement)" ? F|equals(H|bsart, "(ExternalProcurement)")
+.assign M|vart = "(Relocation)"          ? F|equals(H|bsart, "(Relocation)")
+.formula M|lgruppe = 'D|lgruppe^id'      ? F|equals(H|bsart, "(Relocation)")
+.formula M|vart = "(Subcontracting)"     ? F|equals(H|bsart, "(Subcontracting)")
+.formula M|tsterm = H|tsterm             ? F|equals(H|bsart, "(Subcontracting)")
+.. A: Auftrag
+.assign M|vart = "(SalesOrder)"          ? F|empty(H|bsart)
+.continue BKOPF
+..
+!RESFV: F: Fertigungsvorschlag
+.continue FKOPF ? _F|empty(M|vart) & (F|equals(H|kompeig, "(Coproduct)") ; F|equals(H|kompeig, "(ConversionProduct)"))
+.assign M|vart = "(InhouseProduction)"
+.continue FKOPF
+..
+!ENDTYP
+.formula M|lverfueg = M|lverfueg + U|xmge
+.formula M|verfueg  = M|lverfueg
+.select             ?  M|vorgang^dnr = 121
+.continue EST       ?  H|dnr<>4 & H|dnr<>40
+..
+.. Stîpselzeilen
+.formula M|select = "$,,artikel=" + 'M|kart^id' + ";lgruppe=" + 'M|klgruppe^id' 
+.formula M|select = M|select + ";aktiv=j"
+.formula M|select = M|select + ";bs="+'M|lresid'+";reserv=`;"       ?  H|dnr=40
+.formula M|select = M|select + ";bs=="     + H|id     ?  H|gruppe <> 4  & H|dnr <> 40
+.formula M|select = M|select + ";reserv==" + H|id     ?  H|gruppe  = 4  & H|dnr <> 40
+.formula M|select = M|select + ";bis>=" + 'G|datum' 
+.formula M|select = M|select + ";@ablageart=(Both)"
+.load 0 mallocation 'M|select'
+..
+!BST
+.continue EST    ? _G|mehr
+.make screen line +O
+.formula M|twterm = 0|bis
+.formula M|abgang = 0|lzuomge  ? H|gruppe <> 4
+.formula M|zugang = 0|lzuomge  ? H|gruppe  = 4
+.formula M|verw = 0|zeich
+.assign M|projekt = 0|projekt
+.formula M|lverfueg = M|lverfueg + M|zugang - M|abgang
+.formula M|verfueg = M|lverfueg
+.formula M|bshinwsymz = M|stoepsel          ? F|defined(M|stoepsel)
+.load 0 mallocation
+.continue BST
+..
+!EST: Ende Stîpsel
+.continue
+..
+!WR:  rollierende Planwerte
+.continue            ? H|mgeabweich <=0.0
+..
+.make screen line +O
+.. Felder initialisieren, die fuer alle BS und RES gleich sind
+.formula M|einplanterm = H|einplanterm
+.formula M|tterm = H|vondat
+.formula M|woche = H|vondat             ? F|defined(M|woche)
+.formula M|twterm = ""
+.formula M|fterm = ""
+.set trans +
+.formula M|verw = "Planwert" + "_" + 'H|aktzeile' ?  F|empty(H|rahmenpos)
+.set trans -
+.formula M|vkopf = H|rahmenpos^kopf^id             ? _F|empty(H|rahmenpos) 
+.formula M|geschaeftspartner = M|vkopf^lief^id     ? _F|empty(H|rahmenpos)  & H|rahmenpos^dnr = 4
+.formula M|geschaeftspartner = M|vkopf^kunde^id    ? _F|empty(H|rahmenpos)  & H|rahmenpos^dnr = 3
+.formula M|plannr = 'H|aktzeile'
+.formula M|vorgang = H|id
+.formula M|wresid = H|id
+.formula M|wzid = H|zid
+.formula M|wrzid = (M|wzid<<")")>>",0,"
+.formula M|besresz = M|zbesres
+.formula M|besresb = M|bbesres
+.. Normale Wertereihe: Planbedarf, Wertereihe aus Rahmenauftrag: Rahmenauftrag
+.formula M|vart = "(PlannedRequirement)"
+.formula M|vart = "(BlanketOrder)"   ? _F|empty(H|rahmenpos)
+.formula M|ddispo = "B"
+.. bedarfsbezogen
+.assign M|ddispoa = "(RequirementRelated)"
+.set trans -
+.assign M|krit = F|value(H|krit, "AS305")
+.formula M|ampelz = G|icokrit   ? F|equals(H|krit, "(ProcessIsCritical)")
+.formula M|ampelz = G|icovkrit  ? F|equals(H|krit, "(PathIsCritical)")
+.formula M|ampelz = G|icoukrit  ? F|equals(H|krit, "(Uncritical)")
+.copy M|fix = G|TRUE
+.formula U|xmge = -(H|mgeabweich)
+.formula M|abgang = H|mgeabweich
+.. Planwerte fÅr EK-RahmenauftrÑge sind ZugÑnge
+.formula M|abgang = ""             ? _F|empty(H|rahmenpos) & H|rahmenpos^dnr = 4
+.formula U|xmge =   H|mgeabweich   ? _F|empty(H|rahmenpos) & H|rahmenpos^dnr = 4
+.formula M|zugang = H|mgeabweich   ? _F|empty(H|rahmenpos) & H|rahmenpos^dnr = 4 
+.. Bestelltermin aus Wertereihe fÅr EK-RahmenauftrÑge holen
+.formula M|sterm = H|sterm ? _F|empty(H|rahmenpos) & H|rahmenpos^dnr = 4    
+.assign M|art = H|artber
+..
+.reserve
+..
+!LGRELEM: Lagergruppenelemente
+.file -tempname U|xftext
+.output new 'U|xftext'
+.formula U|xsel = "$,,artikel=" + 'M|kart^id' + ";lgruppe=" + 'M|klgruppe^id'
+.select group "40:6" 'U|xsel'
+.continue LMZ         ? _G|mehr
+..
+!LGRLOOP: Schleife Åber Lagergruppenelemente
+.continue SELSQ ? _G|mehr
+.formula U|xlagid = H|id
+.continue AUSGABE
+..
+!SELSQ
+.select squantity
+.continue LMZ         ? _G|mehr
+.continue LGRLOOP 
+..
+!AUSGABE
+.reserve application
+..
+!SELAP
+.select application
+.continue SELSQ  ? _G|mehr
+.continue SELAP  ? G|bvkenn <> "W"
+.continue SELAP  ? 'H|id' <> 'M|wzid'
+..
+.output addedto 'U|xftext'
+.input "DATEI.F"
+'U|xlagid'
+.output
+.formula M|freitext = U|xftext
+..
+.formula U|xlagid = ""
+.continue LGRLOOP
+..
+!LMZ
+.reserve
+.formula U|xsel = "$,,artikel=" + 'M|kart^id' + ";lgruppe=" + 'M|klgruppe^id'
+.formula U|xsel = U|xsel + ";aktiv=j"
+.formula U|xsel = U|xsel + ";bs<>`"
+.formula U|xsel = U|xsel + ";bs^id="
+.formula U|xsel = U|xsel + ";reserv^id="+'M|wzid'
+.formula U|xsel = U|xsel + ";reszid="+'M|plannr'
+.formula U|xsel = U|xsel + ";lzuomge="
+.formula U|xsel = U|xsel + ";@ablageart=(Both)"
+.load 0 mallocation 'U|xsel'
+.continue ENDTYP      ? _G|mehr
+..
+!WSELLINE
+.output addedto 'U|xftext'
+.input "DATEI.F"
+'0|bs^id'
+.output
+.load 0 mallocation
+.formula M|freitext = U|xftext
+..
+.continue ENDTYP      ? _G|mehr
+.continue WSELLINE
+..
+!LM:  Lagermengen
+.make screen line +O
+.. Felder initialisieren, die fuer alle BS und RES gleich sind
+.formula M|tterm = ""
+.formula M|woche = ""
+.formula M|twterm = ""
+.formula M|fterm = ""
+.set trans +
+.formula M|verw = H|verw
+.assign  M|projekt = H|projekt
+.formula M|vorgang = H|id                         
+.formula M|besresz = M|zbesres
+.. L
+.assign M|vart = "(Warehouse)"
+.copy M|ddispoa = M|dispoa ? F|empty(H|verw)
+.formula M|ddispoa = "(ExtendedRequirementRelated)" ? _F|empty(H|verw) &  F|equals(M|dispoa, "(ExtendedRequirementRelated)")
+.formula M|ddispoa = "(SalesOrderRelated)"          ? _F|empty(H|verw) & _F|equals(M|dispoa, "(ExtendedRequirementRelated)")
+.assign M|ddispo = F|value(M|dispoa, "AK134")     ?  F|empty(H|verw)
+.formula M|ddispo = "E"                            ? _F|empty(H|verw) &  F|equals(M|dispoa, "(ExtendedRequirementRelated)")
+.formula M|ddispo = "A"                            ? _F|empty(H|verw) & _F|equals(M|dispoa, "(ExtendedRequirementRelated)")
+.set trans -
+.assign M|krit = F|value(H|krit, "AS305")
+.formula M|ampelz = G|icokrit   ? F|equals(H|krit, "(ProcessIsCritical)")
+.formula M|ampelz = G|icovkrit  ? F|equals(H|krit, "(PathIsCritical)")
+.formula M|ampelz = G|icoukrit  ? F|equals(H|krit, "(Uncritical)")
+.copy M|fix = G|TRUE
+.formula U|xmge = H|dlemge
+.formula M|zugang =  H|dlemge        ? U|xmge>0
+.formula M|abgang = (H|dlemge  * -1) ? U|xmge<0
+.reserve
+.. Wird der Lagerbestand, durch eine sofort abrufbare Menge aus einem VK-Rahmen reserviert
+.formula M|select = "$,,artikel=" + 'M|kart^id' + ";lgruppe=" + 'M|klgruppe^id' 
+.formula M|select = M|select + ";einplan=j"
+.formula M|select = M|select + ";bs=" + 'H|id'
+.formula M|select = M|select + ";fix=j" 
+.load 0 mallocation 'M|select'
+.continue ENDABMGE ? _G|mehr
+!ABMGE
+.formula M|fixmz      = M|abrmge ? G|mehr
+.load 0 mallocation 
+.continue ABMGE ? G|mehr
+!ENDABMGE
+.. 2 = Negativer Bestand, 4 = öberdeckung
+.formula M|select = "$,,;bearbtyp==D 11;prio=2"  ? _F|empty(M|abgang)
+.formula M|select = "$,,;bearbtyp==D 11;prio=4"  ? _F|empty(M|zugang)
+.continue ENDTYP                                 ? F|empty(M|abgang) & F|empty(M|zugang)
+.formula M|select = M|select + ";vorgang="+M|kart^id+";bezobj="+M|klgruppe^id
+.formula M|grliste = "64:2"
+.select group 'M|grliste' 'M|select'
+.copy M|budispo =  M|attdispo ? G|mehr
+..
+.select -
+.select 
+.reserve
+..
+!LEMGE
+.select squantity 'M|vorgang^id'
+.continue ENDTYP ? _G|mehr
+.formula M|lresid = H|id
+.file -tempname U|xftext
+.output new 'U|xftext'
+..
+.reserve application
+.continue HOLVERW
+..
+!HOLVERW: 1. LF-RES holen
+.select application
+.continue END  ? _G|mehr
+.continue END  ?  G|bvkenn=""
+.continue END  ?  G|bvkenn="S"
+.type ID4 xekmerkid ? _F|defined(U|xekmerkid)   
+.type ID3 xvkmerkid ? _F|defined(U|xvkmerkid)
+.formula U|xekmerkid = ""
+.formula U|xvkmerkid = ""
+.. bvkenn = R oder B oder W
+.formula M|bvkenn = G|bvkenn
+.continue EK ? H|dnr = 4
+.continue VK ? H|dnr = 3
+.continue TEXT 
+..
+!EK
+.continue HOLVERW ? U|xekmerkid = H|id
+.continue TEXT
+..
+!VK
+.continue HOLVERW ? U|xvkmerkid = H|id
+..
+!TEXT
+.formula U|xekmerkid = H|id  ? H|dnr = 4
+.formula U|xvkmerkid = H|id  ? H|dnr = 3
+..
+.output addedto 'U|xftext'
+.input "DATEI.F"
+?'H|id'  ? _F|defined(H|zid)
+?'H|zid' ?  F|defined(H|zid)
+.output
+.formula M|freitext = U|xftext
+.continue HOLVERW
+..
+!END
+.select -
+.select
+.continue ENDTYP

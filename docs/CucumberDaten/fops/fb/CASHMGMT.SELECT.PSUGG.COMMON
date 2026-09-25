@@ -1,0 +1,86 @@
+..!interpreter english translate noabbrev
+.continue START ? F|defined(U|xbaeob)
+..*****************************************************************************
+.. FOP-Name       : CASHMGMT.SELECT.PSUGG.COMMON
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Selektion und Ausgabe von Einkaufsvorschlaegen (Positionen) im Rahmen
+..                  der Liquiditaetsplanung (d.h. Bestellvorschlaege, Lohnfertigungsvorschlaege)
+.. Functionality  :
+.. include fb/CASHMGMT.SELECT.WRITE
+.. include fb/CASHMGMT.SELECT.PS.VALUES
+.. include fb/CASHMGMT.ZTERM
+.. include fb/CASHMGMT.DUEDATE.WRKDAY
+.. include fb/CASHMGMT.DATE2TAXPERIODDUEDATE
+.. include fb/CASHMGMT.CHECK.ACCOUNT.EXCLUDED
+..*****************************************************************************
+..
+.set trans -
+..
+.type bool xbaeob  ? _F|defined(U|xbaeob)
+.. down payment
+.type bool xbdownp ? _F|defined(U|xbdownp)
+..
+..*****************************************************************************
+!START
+..*****************************************************************************
+.continue END ? 0|typ=G|supos ; 0|typ=G|stpos ; 0|typ=G|espos ; 0|typ=G|zspos ; 0|typ=G|sipos ; 0|alternativpos
+..
+.load 1
+.continue OK ? F|empty(0|lief) ; 0|lief^gruppe <> 1
+.load 1 add 0|lief
+.input "fb/CASHMGMT.CHECK.ACCOUNT.EXCLUDED"
+.continue END ? _U|xbok
+..
+..*****************************************************************************
+!OK
+..*****************************************************************************
+.. Karenztage ermitteln (aus Konfiguration, Kunde bzw. Lieferant)
+.formula   U|xikarenztage = F|condexpr(U|xpszenario^liignorieren ; _F|defined(1|id), U|xpszenario^eklsrektage, F|condexpr(1|lqparamaktiv, 1|lsrektage, U|xpszenario^eklsrektage))
+.. Disponierter Termin
+.copy U|xddate = 0|tterm
+.. Karenztage aufaddieren
+.. TODO: ACHTUNG! tterm kann leer erscheinen, ist es aber nicht, weil es den Wert "GD_Abruf" hat (++-1). F|empty liefert dann FALSE. Deshalb nicht so pruefen!
+.formula   U|xddate = U|xddate + U|xikarenztage ? 'U|xddate' <> ""
+.copy U|xddate = G|datum ? U|xddate < G|datum & U|xpszenario^ekredataktdat
+.copy U|xddocdate = U|xddate
+.copy U|xdvaldate = U|xddocdate
+.. due date manually set? (Faelligkeit manuell fixiert?)
+.copy U|xbmterm = G|FALSE
+.assign U|xpzbed = F|condexpr(F|defined(1|id), 1|zbed, "")
+.assign U|xpzbedschl = F|condexpr(F|defined(1|id), 1|zbedschl, "")
+.copy U|xrexratefixed = 1.0
+.copy U|xbexratefixed = G|FALSE
+.input "fb/CASHMGMT.SELECT.PS.VALUES"
+.continue END ? U|xrpwert = 0
+.formula   U|xeinout = "(OutgoingPayment)"
+.formula   U|xeinout = "(IncomingPayment)" ? (U|xrpwert >= 0 & U|xepurchsales = "(Sales)") ; (U|xrpwert < 0 & U|xepurchsales = "(Purchasing)")
+.input "fb/CASHMGMT.ZTERM"
+.copy U|xddate = U|xdzterm
+.input "fb/CASHMGMT.DUEDATE.WRKDAY"
+.formula   U|xttype = ""
+.formula   U|xttype = "(PurchaseOrderSuggestions)" ? F|equals(0|bsart, "(ExternalProcurement)")
+.formula   U|xttype = "(SubcontractingSuggestions)"    ? F|equals(0|bsart, "(Subcontracting)")
+.copy U|xrvalue = U|xrpwert
+.copy U|xrdiscount = (U|xrvalue * U|xrdiscrate / 100)
+.copy U|xrvalue = U|xrvalue - U|xrdiscount
+.input "fb/CASHMGMT.SELECT.WRITE"
+.continue END ? U|xrstwert = 0
+..
+.. Sollbesteuerung: Faelligkeit der Steuer (Berechnung der Zahllast) auf Belegdatum beziehen
+.input "fb/CASHMGMT.DATE2TAXPERIODDUEDATE"
+.copy U|xddate = U|xdvatterm
+.formula   U|xttype = "(AmountOfVATPayableFromOutstandingItems)"
+.copy U|xrvalue = U|xrstwert
+.copy U|xrdiscount = (U|xrvalue * U|xrdiscrate / 100)
+.copy U|xrvalue = U|xrvalue - U|xrdiscount
+.input "fb/CASHMGMT.SELECT.WRITE"
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.load 1
+.continue
+

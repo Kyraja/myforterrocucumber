@@ -1,0 +1,433 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PLAN.EV
+.. Autor/Author   : es
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       :
+.. Ablauf         : Ereignisbehandlung fuer Infosystem PLANKARTE
+..
+.. Functionality  :
+.. Program flow   : Event handling for PLANCHART
+...Includes             :
+.. include is/HOL.PLAN
+.. include la/PLAN.KOPFINIT
+.. include la/WPLAN.BFUSS
+.. include la/WPLAN.BKOPF
+.. include la/WPLAN.TAB
+..*****************************************************************************
+.set trans -
+.type text    xselect     ? _F|defined(U|xselect)
+.type bool    xbool       ? _F|defined(U|xbool)
+.type text    xtext       ? _F|defined(U|xtext)
+.type GL30    xlzid       ? _F|defined(U|xlzid)
+.type GL30    xwzid       ? _F|defined(U|xwzid)
+.type bool    xbzuord     ? _F|defined(U|xbzuord)
+.type text    xtext1      ? _F|defined(U|xtext1)
+.type integer xwrzid      ? _F|defined(U|xwrzid)
+.type bool    xbkenner    ? _F|defined(U|xbkenner)
+.type ARTR51002 xmge      ? _F|defined(U|xmge)
+.type ID4     xresid      ? _F|defined(U|xresid)
+.type ID40    xlresid     ? _F|defined(U|xlresid)
+.type ID121   xwresid     ? _F|defined(U|xwresid)
+.type integer ximerk      ? _F|defined(U|ximerk)
+.type bool    xlager      ? _F|defined(U|xlager)
+.type integer xbszid      ? _F|defined(U|xbszid)
+.type integer xplannr     ? _F|defined(U|xplannr)
+.type A310    xvart       ? _F|defined(U|xvart)
+.type text    xmerkvkopf  ? _F|defined(U|xmerkvkopf)
+.type bool    xbinlager   ? _F|defined(U|xbinlager)
+.type text    xtcmd       ? _F|defined(U|xtcmd)
+.type TN4     xfreitext   ? _F|defined(U|xfreitext)
+..
+..
+.copy U|xbinlager = G|FALSE
+.formula U|xmerkvkopf = ""
+.formula U|xplannr = 0
+..---------------------------- Kopfteil/Header:--------------------------------
+.continue BSTART      ? G|evtvar = "bstart"
+.continue KOPFINIT    ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kart"
+.continue KOPFINIT    ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "klgruppe"
+.continue BWOCHWEP    ? G|evtartengl = "FIELD_VALIDATION"  & G|evtvar = "bwoche"
+.continue BESCHRES    ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "buresbesch"
+.continue LEEREN      ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "buresbesch"
+.continue ZEIGEN      ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "besresz"
+.continue BEARBEITEN  ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "besresb"
+.continue SCHEDREPORT ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "budispo"
+.continue VSTATUS     ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "buvstatus"
+.continue DISPO       ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bdispo"
+.continue BSTART      ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "bdispo"
+.continue FIXMZ       ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "fixmz"
+..=============================================================================
+.continue END
+..
+!DISPO
+.formula U|xtcmd = "(Scheduling)"
+.end 0 'U|xtcmd' 
+..
+!MINDEST: Materialzuordnung fÅr Mindestbestand
+.copy U|xlager = G|FALSE
+.select screen line 'U|ximerk'
+.continue END ? _G|mehr
+.continue END ? M|buresbesch = M|reservz   
+.. 
+.continue ERROR2 ? M|resid^gruppe = 4        & _F|empty(M|hinweis)
+.continue END    ? M|resid^gruppe = 4        & F|empty(M|freitext)
+.continue END    ? F|equals(M|vart, "(BlanketOrder)") & F|empty(M|freitext) 
+..
+.formula M|select = "$,,artikel=" + 'M|kart^id' + ";lgruppe=" + 'M|klgruppe^id'
+.formula M|select = M|select + ";aktiv<>`"
+.formula M|select = M|select + ";einplan=j"
+.formula M|select = M|select + ";bs==" + 'M|resid'
+.. Abfrage auf F|equals(M|vart, "(Warehouse)")  eingebaut: Wichtig fuer die zugeordn. Menge bei Lagermengen
+.. sonst wird ein Lagerbestand, der mehrere Auftraege bedient nicht in der zugeordn. Menge unterteilt  
+.formula M|select = M|select + ";bs=" + 'M|lresid'          ?  F|equals(M|vart, "(Warehouse)") 
+.formula M|select = M|select + ";lpnum=`"
+.formula M|select = M|select + ";@gruppe=0"
+.formula M|select = M|select + ";@ablageart=(Active)"
+.load 0 mallocation 'M|select'
+.continue END ? _G|mehr
+.formula U|xresid = M|resid
+.formula M|buresbesch = M|beschaffz
+.formula M|zuomge = 0|lzuomge
+.formula M|mzart = 0|mzart
+.copy U|xlager = G|TRUE ? F|equals(0|mzart, "(MaterialAllocationForMinimumStock)")
+..
+!NEU2
+.load 0 mallocation
+.continue END    ? _G|mehr & F|empty(M|freitext) & _U|xlager
+.continue HEADER ? _G|mehr
+.formula M|zuomge = M|zuomge + 0|lzuomge
+.formula M|mzart = 0|mzart
+.copy U|xlager = G|TRUE ? F|equals(0|mzart, "(MaterialAllocationForMinimumStock)")
+.continue NEU2 
+..
+!HEADER
+.select screen header
+..
+!SCREENLINE
+.select screen line
+..
+.continue END          ? _G|mehr
+.continue SCREENLINE   ?  M|zn = U|ximerk
+.continue SCREENLINE   ?  F|empty(M|buresbesch) & _F|equals(M|vart, "(Warehouse)")
+.continue SCREENLINE   ? _U|xlager & F|equals(M|vart, "(Warehouse)")
+.continue SCREENLINE   ? _F|empty(M|buresbesch) & _F|empty(M|zuomge)
+.continue NOWAREHOUSE  ? _F|equals(M|vart, "(Warehouse)")
+.continue SCREENLINE   ? _(F|empty(M|verw) & F|empty(M|projekt))
+..
+.formula M|select = "$,,artikel=" + 'M|kart^id' + ";lgruppe=" + 'M|klgruppe^id'
+.formula M|select = M|select + ";aktiv<>`"
+.formula M|select = M|select + ";einplan=j"
+.formula M|select = M|select + ";bs=" +'U|xresid'
+.formula M|select = M|select + ";lpnum=`"
+.. Materialzuordnung fÅr Mindestbestand
+.formula M|select = M|select + ";mzart==(MaterialAllocationForMinimumStock)"
+.formula M|select = M|select + ";@gruppe=0"
+.formula M|select = M|select + ";@ablageart=(Active)"
+.load 0 mallocation 'M|select'
+..
+.continue SCREENLINE ? _G|mehr
+..
+.formula M|buresbesch = M|reservz
+.formula M|zuomge = 0|lzuomge
+.copy M|mzart = 0|mzart
+..
+!S2CREEN
+.load 0 mallocation
+.continue SCREENLINE ? _G|mehr
+.formula M|zuomge = M|zuomge + 0|lzuomge
+.copy M|mzart = 0|mzart
+.continue S2CREEN
+..
+!NOWAREHOUS
+.formula M|select = "$,,artikel=" + 'M|kart^id' + ";lgruppe=" + 'M|klgruppe^id'
+.formula M|select = M|select + ";aktiv<>`"
+.formula M|select = M|select + ";einplan=j"
+.. Materialzuordnung fÅr Bedarf
+.formula M|select = M|select + ";bs<>`"                  ? F|equals(M|mzart, "(Undefined)") ; F|equals(M|mzart, "(MaterialAllocationForRequirement)")
+.formula M|select = M|select + ";bs==" + 'U|xresid'    ? F|equals(M|mzart, "(Undefined)") ; F|equals(M|mzart, "(MaterialAllocationForRequirement)")
+.formula M|select = M|select + ";reserv==" + 'M|resid' ? F|equals(M|mzart, "(Undefined)") ; F|equals(M|mzart, "(MaterialAllocationForRequirement)")
+.formula M|select = M|select + ";lpnum=`"
+.formula M|select = M|select + ";@gruppe=0"
+.formula M|select = M|select + ";@ablageart=(Active)"
+.load 0 mallocation 'M|select'
+..
+.continue SCREENLINE ? _G|mehr
+..
+.formula M|zuomge = 0|lzuomge
+.copy M|mzart = 0|mzart
+..
+!N2OWAREHOUSE
+.load 0 mallocation
+.continue SCREENLINE ? _G|mehr
+.formula M|zuomge = M|zuomge + 0|lzuomge
+.copy M|mzart = 0|mzart
+.continue N2OWAREHOUSE
+..
+!VSTATUS
+.continue END ? F|empty(M|buvstatus)
+.command -parallel 'F|formatstr("<(Infosystem)>{1}<(Call)> ? select={2}|letzte=1|buvstatus=", "10055", M|vorgang^id)'
+.continue END
+!FIXMZ: fixierte Materialzuordnungen anzeigen
+.continue END ? F|empty(M|fixmz)
+.command -parallel 'F|formatstr("<(Infosystem)>{1}<(Call)> ? artikel={2}|lgruppe={3}|bslager={4}|bstart=1", "10581", M|kart^id, M|klgruppe^id, M|lresid)'
+.continue END
+..
+!SCHEDREPORT
+.continue END ? F|empty(M|budispo)
+.command -parallel 'F|formatstr("<(Infosystem)>{1}<(Call)> ? artikel={2}|lgruppe={3}|bstart=", "10430", M|kart^id, M|klgruppe^id)'
+.continue END
+..
+!ZEIGEN: Vorgang zeigen
+.continue END ? F|empty(M|besresz)
+.command -parallel 'F|formatstr("<(StorageQuantity)>{1}<(View)>", M|vorgang^id)' ? F|equals(M|vart, "(Warehouse)")
+.command -parallel 'F|formatstr("<(ValueSequence)>{1}<(View)>", M|wzid)' ? F|equals(M|vart, "(PlannedRequirement)") ; F|equals(M|vart, "(BlanketOrder)")
+.command -parallel 'F|formatstr("<(Purchasing)>{1}<(View)>", M|vorgang^id)' ? _F|equals(M|vart, "(Warehouse)") & _F|equals(M|vart, "(PlannedRequirement)") & _F|equals(M|vart, "(BlanketOrder)")
+.continue END
+..
+!BEARBEITEN: Vorgang Ñndern
+.continue END ? F|empty(M|besresb)
+.formula U|xtext = 'F|formatstr("<(ValueSequence)>{1}<(Edit)>", M|wzid)' + " ? [autoclose] = 1"   ?   F|equals(M|vart, "(PlannedRequirement)") ; F|equals(M|vart, "(BlanketOrder)")
+.formula U|xtext = 'F|formatstr("<(Purchasing)>{1}<(Edit)>", M|vorgang^id)'  + " ? [autoclose] = 1"     ?  _F|equals(M|vart, "(PlannedRequirement)") & _F|equals(M|vart, "(BlanketOrder)")
+.command -parallel 'U|xtext'
+.continue END
+..
+!BESCHRES: find procurements and reservations
+.formula U|xfreitext = M|freitext
+.formula U|ximerk = M|zn
+.formula U|xbszid = 0
+.continue END     ? F|empty(M|vorgang)
+.continue MINDEST ? F|empty(U|xfreitext)
+.formula U|xvart = ""
+.formula U|xvart = M|vart ?  F|equals(M|vart, "(ExternalProcurement)")
+.formula U|xresid = ""
+.formula M|zuomge = "" ? F|empty(M|buresbesch)
+.formula U|xlresid = M|lresid   ? M|vorgang^dnr = 40
+.formula U|xwrzid   = M|wrzid
+.continue ICONLAG   ? 'M|vorgang^dnr' = "40"
+.continue ICONWERT  ? 'M|vorgang^dnr' = "121"
+..
+!ICONEIN: Festlegen des Icons fÅr "Einkauf *"
+.copy U|xmge = M|zugang 
+.formula U|xresid = M|resid
+.formula M|buresbesch  = M|reservz    ? F|equals(M|vorgang^bsresa, "(Reservation)")
+.formula M|buresbesch  = M|beschaffz  ? F|equals(M|vorgang^bsresa, "(Procurement)")
+.. Sonderbehandlung Koppelprodukt
+.formula M|buresbesch = M|beschaffz ? F|equals(M|vorgang^bsresa, "(Reservation)")  & F|equals(M|vart,"(CombinedProduction)")
+.formula U|xmerkvkopf = M|vkopf ? F|equals(M|vorgang^bsresa, "(Procurement)") & F|equals(M|vart, "(InhouseProduction)")
+.formula M|zuomge = M|zugang ? M|buresbesch = 'M|beschaffz'
+.formula M|zuomge = M|abgang ? M|buresbesch = 'M|reservz'
+.formula M|zuomge = M|zugang ? M|buresbesch = 'M|reservz' & F|equals(M|vart,"(CombinedProduction)")
+.formula U|xbool = G|TRUE    ? M|buresbesch = 'M|reservz'
+.continue SCHNEIDEN
+..
+!ICONWERT: Festlegen des Icons fÅr "Wertereihe *"
+.formula M|buresbesch = M|reservz
+.formula M|zuomge = M|abgang 
+.formula U|xbool = G|TRUE 
+.formula U|xplannr = M|plannr
+.continue SCHNEIDEN
+..
+!ICONLAG: Festlegen des Icons fÅr "Lmenge * "
+.formula M|buresbesch = M|beschaffz  ? M|bvkenn="R"
+.formula M|buresbesch = M|reservz    ? M|bvkenn="B"
+.formula M|buresbesch = M|beschaffz  ? M|bvkenn="W"
+.copy U|xbinlager = G|TRUE 
+.formula M|zuomge = M|zugang         ? M|buresbesch = 'M|beschaffz'
+.formula M|zuomge = M|abgang         ? M|buresbesch = 'M|reservz'
+.formula U|xbool = G|TRUE            ? M|buresbesch = 'M|reservz'
+.continue SCHNEIDEN
+..
+!SCHNEIDEN
+.select from 'U|xfreitext' U|xtext
+.continue MINDEST  ? _G|mehr         
+.copy U|xbkenner = G|TRUE ?  F|regmatch('U|xtext', ".*,4,.*")
+.continue KENNER  ? U|xbkenner
+.continue KENNER ? F|equals(M|aktzeile,0)
+.formula U|xwresid  = M|wresid  ? F|empty(U|xwresid) & _F|empty(M|wresid) & M|vorgang^dnr = 121
+.formula U|xlzid    = U|xtext   ? M|vorgang^dnr = 40
+.formula U|xwzid    = U|xtext   ? M|vorgang^dnr = 121
+.continue KENNER
+..
+!KENNER
+.select screen header
+..
+!LOOPLINE
+..Durch die Maske laufen und die entsprechenden Paare ueber die ID finden
+.select screen line
+.continue ZAEHL    ? _G|mehr
+.continue LOOPLINE ? _F|empty(M|buresbesch)
+..
+.formula M|buresbesch = M|reservz   ? _U|xbool  & 'M|resid' = 'U|xtext'
+.formula M|buresbesch = M|beschaffz ?  U|xbool  & 'M|resid' = 'U|xtext'
+.formula M|buresbesch = M|reservz   ? _U|xbool  & 'M|lresid'  = 'U|xlzid'    & _U|xbkenner & _F|empty(M|lresid)
+.formula M|buresbesch = M|beschaffz ?  U|xbool  & 'M|lresid'  = 'U|xlzid'    & _U|xbkenner & _F|empty(M|lresid)
+.formula M|buresbesch = M|reservz   ? _U|xbool  & 'M|lresid'  = 'U|xtext' 
+.formula M|buresbesch = M|beschaffz ?  U|xbool  & 'M|lresid'  = 'U|xtext'
+.formula M|buresbesch = M|reservz   ? _U|xbool  & 'M|wzid'  = 'U|xtext' & _F|empty(M|wzid)
+.formula M|buresbesch = M|beschaffz ?  U|xbool  & 'M|wzid'  = 'U|xtext' & _F|empty(M|wzid)
+.continue LOOPLINE ? F|empty(M|buresbesch)
+..
+!STOEPSEL: lzuomge bestimmen
+.continue MZWR              ? M|vorgang^dnr = 121
+.assign M|zuomge = M|abgang ? M|vorgang^dnr = 40 & F|equals(U|xvart, "(ExternalProcurement)")
+..
+.continue XBKENNER          ? M|vorgang^dnr = 40 & F|equals(U|xvart, "(ExternalProcurement)")
+..
+.formula M|select = "$,,artikel=" + 'M|kart^id' + ";lgruppe=" + 'M|klgruppe^id'
+.formula M|select = M|select + ";aktiv<>`"
+.formula M|select = M|select + ";einplan=j"
+.formula M|select = M|select + ";bs<>`"                               ? _U|xbinlager & _F|empty(M|vkopf)
+.formula M|select = M|select + ";bs="+'M|lresid'+";reserv=`;"          ? M|vorgang^dnr = 40 & F|empty(U|xresid) & F|empty(U|xwrzid)
+.formula M|select = M|select + ";bs="+'M|lresid'+";"                  ? M|vorgang^dnr = 40 & F|empty(U|xresid) & _F|empty(U|xwrzid)
+.formula M|select = M|select + ";bs="+'M|lresid'+";reserv<>`;"        ? M|vorgang^dnr = 40 & _F|empty(M|abgang) & _F|empty(U|xresid) 
+.formula M|select = M|select + ";bs="+'M|lresid'+";"                      ? _F|empty(M|zugang) & U|xresid^gruppe = 5 &  M|vorgang^dnr = 40 & _F|empty(U|xresid)
+.formula M|select = M|select + ";bs="+'M|lresid'+";reserv="+'U|xresid'+""  ? _F|empty(M|zugang) & U|xresid^gruppe <> 5 & M|vorgang^dnr = 40 & _F|empty(U|xresid)
+.formula M|select = M|select + ";bs==" + M|vorgang^id        ?  M|vorgang^gruppe <> 4 & M|vorgang^dnr <> 40 & _M|vorgang^dnr = 121 & M|vorgang^gruppe <> 5
+.formula M|select = M|select + ";reserv==" + M|vorgang^id ?  M|vorgang^gruppe  = 4 & M|vorgang^dnr <> 40 & _F|equals(M|vart,"(CombinedProduction)")
+.formula M|select = M|select + ";reserv==" + 'U|xresid'   ?  M|vorgang^gruppe  = 4 & M|vorgang^dnr = 4   & F|equals(M|vart,"(CombinedProduction)") & _F|empty(U|xresid)
+.formula M|select = M|select + ";reserv==" + 'U|xresid'   ?  M|vorgang^gruppe <> 4 & M|vorgang^dnr <> 40 & _F|empty(U|xresid)
+.formula M|select = M|select + ";bs^mge=="+ 'U|xmge'         ?  F|empty(M|verw) & _F|equals(M|ddispoa, "(SalesOrderRelated)")
+.formula M|select = M|select + ";reszid==" + 'U|xbszid'      ? _F|empty(U|xbszid) & M|vorgang^dnr <> 121 & _F|empty(M|zugang)
+.formula M|select = M|select + ";reserv==" + 'M|wresid'      ? M|vorgang^dnr = 121 & _F|empty(M|wresid)
+.formula M|select = M|select + ";reszid=" + 'U|xplannr'      ? U|xplannr <> 0
+.formula M|select = M|select + ";bs^ba==" + U|xmerkvkopf     ? _F|empty(U|xmerkvkopf)
+.formula M|select = M|select + ";bs=" + U|xlresid            ? U|xbinlager & _F|empty(M|abgang)
+.formula M|select = M|select + ";bs<>`"                     ? U|xbinlager & _F|empty(M|zugang)
+.formula M|select = M|select + ";bs^verw==" + 'M|verw'       ? M|vorgang^dnr <> 40 & _F|empty(M|verw) & _F|empty(M|zugang)
+.formula M|select = M|select + ";reserv^verw==" + 'M|verw'   ? M|vorgang^dnr <> 40 & _F|empty(M|verw) & F|empty(M|zugang) & M|buresbesch = M|reservz 
+.formula M|select = M|select + ";bs^id=" + 'M|vorgang^id'    ? M|vorgang^dnr <> 40 & _F|empty(M|vorgang) & _F|empty(M|zugang)
+.formula M|select = M|select + ";bs^ba=`"                    ?  _F|empty(M|vkopf) & M|vkopf^dnr <> 9 & M|buresbesch = M|reservz
+.formula M|select = M|select + ";bs^ba==" + 'M|vkopf'        ?  _F|empty(M|vkopf) & F|empty(abgang) & M|vkopf^dnr = 9 & _F|equals(M|vart,"(CombinedProduction)")
+.formula M|select = M|select + ";res^vor^ba==" + 'M|vkopf'   ?  _F|empty(M|vkopf) & F|empty(zugang) & M|vkopf^dnr = 9
+.formula M|select = M|select + ";beschaffung^id=="+'U|xresid' ? M|vorgang^dnr <> 40 & M|buresbesch = M|reservz & _F|empty(U|xresid)
+.formula M|select = M|select + ";reserv=="+'U|xwresid'        ? M|vorgang^dnr = 40 & _F|empty(U|xwresid)
+.formula M|select = M|select + ";@ablageart=(Both);@richtung=(Backwards)"
+.load 0 mallocation 'M|select'
+..
+.copy M|zuomge = 0|lzuomge ? G|mehr
+.copy M|zuomge = M|abgang ? _G|mehr & M|vorgang^dnr = 40
+.continue XBKENNER        ? _G|mehr & M|vorgang^dnr = 40
+.copy M|mzart = 0|mzart   ? G|mehr
+..
+!MORELOAD
+.load 0 mallocation
+.formula M|zuomge = M|zuomge + 0|lzuomge ? G|mehr
+.continue MORELOAD ? G|mehr
+..
+.continue XBKENNER ? _G|mehr
+.continue XBKENNER ?  M|vorgang^dnr = 40
+.continue XBKENNER ? _F|equals(M|ddispoa, "(SalesOrderRelated)")
+.continue XBKENNER ?  F|empty(M|verw)
+..
+!MZWR
+.formula M|select = "$,,artikel=" + 'M|kart^id' + ";lgruppe=" + 'M|klgruppe^id'
+.formula M|select = M|select + ";aktiv<>`"
+.formula M|select = M|select + ";einplan=j"
+.formula M|select = M|select + ";reserv==" + 'M|resid'  ? M|vorgang^dnr <> 121
+.formula M|select = M|select + ";reserv==" + 'M|wresid' ? M|vorgang^dnr = 121
+.formula M|select = M|select + ";verw=`;"
+.formula M|select = M|select + ";reszid==" + 'M|plannr'    ? M|vorgang^dnr = 121
+.formula M|select = M|select + ";bs==" + 'U|xresid'  ? F|empty(U|xlresid)
+.formula M|select = M|select + ";bs==" + 'U|xlresid' ? F|empty(U|xresid)
+.load 0 mallocation 'M|select'
+..
+.copy M|zuomge = 0|lzuomge ? G|mehr
+.copy M|mzart = 0|mzart    ? G|mehr
+..
+!XBKENNER
+.copy U|xbkenner = G|FALSE
+.continue ZAEHL ? M|vorgang^dnr <> 121
+..
+!MOREMALLO
+.load 0 mallocation
+.continue ZAEHL ? _G|mehr
+.formula M|zuomge = M|zuomge + 0|lzuomge ? G|mehr
+.continue MOREMALLO ? G|mehr
+..
+!ZAEHL
+..auch wenn Tabelle komplett durchlaufen wurde, auf weitere IDs pruefen
+.continue SCHNEIDEN
+..
+!LEEREN
+.select screen header
+..
+!LLINE
+.select screen line
+.continue END  ? _G|mehr
+.formula M|buresbesch = ""
+.formula M|zuomge = "" ? F|empty(M|buresbesch)
+.continue LLINE
+..
+!BSTART:  Tabelle leeren und neu laden. Kopfteil wird in BFUSS re-initialisert
+.input "is/TABLEEREN"
+.. 1 = Standardansicht, 2 = Wochenansicht
+.formula M|layoutnum = 1 ? _M|bwoche
+.formula M|layoutnum = 2 ?  M|bwoche
+.input "la/PLAN.KOPFINIT"
+.formula P|maskkontextfop = "Weekly" ?  M|bwoche
+.formula P|maskkontextfop = ""       ? _M|bwoche
+.formula M|foprefix       = "W"      ?  M|bwoche
+.formula M|foprefix       = ""       ? _M|bwoche
+.formula M|badatum        = "" 
+.continue HOLPLAN ? M|bindung = 0
+..
+.. Disporeport-Warteschlange
+.formula U|xselect = "$,,"
+.formula U|xselect = U|xselect + ";bearbtyp==D 11;prio=0;vorgang="+M|kart^id+";bezobj="+M|klgruppe^id
+.formula U|xselect = U|xselect + ";@richtung=rueckwaerts"
+.load 1 group "64:2" 'U|xselect'
+.continue HOLPLAN ?  _G|mehr
+.formula M|badatum = 1|badatum
+..
+!HOLPLAN
+.input "is/HOL.PLAN"
+.continue END
+..
+!KOPFINIT: Kopf nach Artikel-/Lagergruppeneinttrag komplettieren
+.input "is/TABLEEREN"
+.continue KOPFLEEREN ? F|empty(M|kart)
+.input "la/PLAN.KOPFINIT"
+.continue END
+..
+!KOPFLEEREN
+.formula M|lein          = ""
+.formula M|dispo         = ""
+.formula M|dispoa        = ""
+.formula M|bsart         = ""
+.formula M|eart          = ""
+.formula M|gbest         = ""
+.formula M|mind          = ""
+.formula M|minbsmge      = ""
+.formula M|maxbsmge      = ""
+.formula M|losgr         = ""
+.formula M|losbi         = ""
+.formula M|hinweis       = ""
+.formula M|bfrist        = ""
+.formula M|kbfrist       = ""
+.formula M|badatum       = ""
+.formula M|vorgnachficon = ""
+.formula M|zlgbestand    = 0
+.formula M|zfixlgbestand = 0
+.continue END
+..
+!BWOCHWEP: Bei Aenderung der Ansicht (Woche/Einzel) Tabelle leeren
+.input "is/TABLEEREN"
+.continue END
+..
+!ERROR: Part is missing                          
+.error -field M|kart -message Bitte zuerst Artikel eintragen!
+.end 1
+..
+!ERROR2: Dispohinweis
+.error Bitte beachten Sie den Dispositionshinweis und starten Sie zuerst die Disposition.
+.end 1
+..
+!END
+.continue
+..
+!FATAL
+.error(1111)
+.end 1
+

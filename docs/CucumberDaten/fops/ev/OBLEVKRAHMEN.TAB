@@ -1,0 +1,301 @@
+..!interpreter english translate noabbrev
+.. ****************************************************************************
+.. Name           : OBLEVKRAHMEN.TAB
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Erzeugt eine Tabellenzeile.
+.. Ablauf         : Tabellen-EFOP
+..
+.. Functionality  : Creates a table row.
+.. Program flow   : Table efop
+...Includes       :
+.. include ev/OBLEVK.CALC.EVPOS
+.. include vk/SCHED.MONITOR
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type bool  xdisponiert   ? _F|defined(U|xdisponiert)
+.type ARTR51000  xlimge   ? _F|defined(U|xlimge)
+.type ARTR51000  xremge   ? _F|defined(U|xremge)
+.type real  xrpwert       ? _F|defined(U|xrpwert)
+.type real  xrnwert       ? _F|defined(U|xrnwert)
+.type text  xtsel         ? _F|defined(U|xtsel)
+.type integer xproz       ? _F|defined(U|xproz)
+..
+.. kein Gltigkeitsbereich: alle anzeigen
+.continue CONTINUE ? F|empty(M|datef) & F|empty(M|datet)
+.. Belegdatum ist ausschlaggegbend 
+.continue KOVOM    ?  F|empty(H|zgltvon) & F|empty(H|zgltbis)
+.. Gltigkeitsbereich IS liegt vor oder nach Gltigkeitsbereich RAU
+.continue END      ? _F|empty(H|zgltvon) & _F|empty(M|datet) & 'H|zgltvon:8' > 'M|datet:8'
+.continue END      ? _F|empty(H|zgltbis) & _F|empty(M|datef) & 'H|zgltbis:8' < 'M|datef:8'
+.. 
+.. Gltigkeitsbereich IS hat nur von besetzt
+.continue VON  ? _F|empty(M|datef) &  F|empty(M|datet)
+.. Gltigkeitsbereich IS hat nur bis besetzt
+.continue BIS  ?  F|empty(M|datef) & _F|empty(M|datet)
+.. Kompletter Gltigkeitsbereich gesetzt
+.continue GUELTIG ? _F|empty(M|datef) & _F|empty(M|datet)
+..
+!VON
+.continue CONTINUE ? _F|empty(H|zgltvon) & 'H|zgltvon:8' <= 'M|datef:8'
+.continue CONTINUE ?  F|empty(H|zgltvon) & 'M|datef:8' <= 'H|zgltbis:8'
+.continue END
+..
+!BIS
+.continue CONTINUE ? _F|empty(H|zgltbis) & 'H|zgltbis:8' >= 'M|datet:8'
+.continue CONTINUE ?  F|empty(H|zgltbis) & 'M|datet:8' >= 'H|zgltvon:8'
+.continue END
+..
+!GUELTIG
+.continue BEIDES ? _F|empty(H|zgltvon) & _F|empty(H|zgltbis) 
+.continue GLTVON ?  F|empty(H|zgltbis)
+.continue GLTBIS ?  F|empty(H|zgltvon)
+..
+!GLTVON
+.continue CONTINUE ? 'M|datef:8' <= 'H|zgltvon:8' & 'M|datet:8' >= 'H|zgltvon:8'
+.continue CONTINUE ? 'M|datef:8' >= 'H|zgltvon:8'
+.continue END
+..
+!GLTBIS
+.continue CONTINUE ? 'M|datef:8' <= 'H|zgltbis:8' & 'M|datet:8' >= 'H|zgltbis:8'
+.continue CONTINUE ? 'M|datet:8' <= 'H|zgltbis:8'
+.continue END
+..
+!BEIDES: Gltigkeitsbereich im Rahmen gefllt
+.continue CONTINUE ? 'M|datef:8' <= 'H|zgltvon:8' & 'M|datet:8' >= 'H|zgltvon:8'
+.continue CONTINUE ? 'M|datef:8' >= 'H|zgltvon:8' & 'M|datef:8' <= 'H|zgltbis:8'
+.continue CONTINUE ? 'M|datef:8' <= 'H|zgltbis:8' & 'M|datet:8' >= 'H|zgltbis:8'
+.continue END
+..
+!KOVOM: Belegdatum
+.continue CONTINUE ? F|empty(M|datef) & F|empty(M|datet)
+.continue CONTINUE ? F|empty(H|kovom)
+.. kovom bercksichtigen
+.continue END      ? 'H|kovom:8' >= 'M|datet:8' & _F|empty(M|datef) & _F|empty(M|datet)
+.continue END      ? 'H|kovom:8' >= 'M|datet:8' &  F|empty(M|datef) & _F|empty(M|datet)
+.continue CONTINUE 
+..
+!CONTINUE 
+.continue INKL
+..
+!INKL
+.formula M|inkl =  M|inkllsre ? M|inkl
+..
+.. Never irrelevant types of item
+.continue END    ? _(H|typ = G|ARPOS ; H|typ = G|ZUPOS)
+.. Never allocated supplementary items
+.continue END    ? H|typ = G|ZUPOS & H|nwert = 0.0 & H|pwert <> 0.0
+.continue END    ? _F|empty(M|artikel) & M|artikel^id <> H|art^id
+.continue END    ? _F|empty(M|projekt) & M|projekt^id <> H|projekt^id
+.continue ALL
+..
+!ALL: All but outstanding invoices
+.continue END    ? _F|empty(H|status)
+.continue END    ?  0|typa <> M|kotyp ; 0|abob
+.continue DARSTELLEN
+..
+!DARSTELLEN: Zeilen fuellen, 0 = Kopf, H = Position
+.. No positions without value or outstanding quantities
+.continue INCL ? M|inkl
+.formula U|xlimge = H|limge
+.formula U|xremge = H|remge
+.continue CALCLTE ? H|kotyp <> G|ABKO
+.continue CALCLTE ? F|empty(H|kopf^fktaplan)
+.continue CALCLTE ? _F|equals(H|kategorie,"(Downpayment)")
+.formula U|xremge = H|fktaplanpos^anzpwert ?  F|empty(H|fktaplanpos^sumfakturiert) &  F|empty(H|fktaplanpos^sumgebucht) 
+.formula U|xremge = ""                     ?  F|empty(H|fktaplanpos^sumfakturiert) & _F|empty(H|fktaplanpos^sumgebucht)
+.formula U|xremge = H|remge - H|refrg      ? _F|empty(H|fktaplanpos^sumfakturiert)
+.continue CALCLTE
+..
+!INCL: With regard to unbooked documents
+.formula U|xlimge = H|limge - H|lifrg
+.formula U|xremge = H|remge - H|refrg
+.formula U|xremge = H|remge - H|limge - H|refrg + H|lifrg ? M|reo & H|rerelev & H|kotyp = G|ABKO
+..
+!CALCLTE: Calculate items
+.input "ev/OBLEVK.CALC.EVPOS"
+.continue NEXT ? F|equals(H|kategorie,"(Downpayment)") & _F|empty(H|kopf^fktaplan)
+.continue END ? U|xlimge = 0.0 & U|xremge = 0.0 & U|xrnwert = 0.0 
+..
+!NEXT
+.type text    xkopf  ? _F|defined(U|xkopf)
+.type integer xikopf ? _F|defined(U|xikopf)
+.type real    xsum   ? _F|defined(U|xsum)
+..
+.continue END ? _F|empty(M|basisartikel) & 'M|basisartikel^id' <> 'H|art^basisartikel^id'
+.make screen line +O
+..
+.. Sales
+.continue EK ? H|dnr = 4
+.assign M|tkuli2   = 0|reempf
+.assign M|tvertret = 0|vertret
+.continue SONST
+..
+!EK: Purchasing
+.assign M|tkuli2 = 0|resteller
+.copy M|tausschr = 0|ausschr ? F|defined(M|tausschr)
+..
+!SONST: Sales and purchasing
+.assign M|tkuli      = 0|kl
+.assign  M|kopf      = 0|id
+.assign  M|tzrahmen  = 0|id   ? 0|typ = 1
+.assign  M|ttypa     = 0|typa
+.formula M|vorgart   = M|ttypa
+.formula M|abnrpo    = H|abnrpo ? M|aubeo & _F|empty(H|abnrpo)
+.formula U|xikopf    = U|xikopf + 1       ? U|xkopf <> M|kopf
+.formula U|xsum      = U|xrnwert          ? U|xkopf <> M|kopf
+.formula M|sumnwert  = U|xrnwert          ? M|anafo & U|xkopf <> M|kopf
+.formula U|xsum      = U|xsum + U|xrnwert ? U|xkopf = M|kopf
+.formula M|sumnwert  = U|xsum             ? M|anafo & U|xkopf =  M|kopf
+.formula U|xkopf     = M|kopf
+.formula M|ikopf     = U|xikopf
+.assign M|evpos      = H|id
+.copy M|icoattdispo = H|icoattdispo ? M|kotyps = "(PurchaseOrder)"
+.assign M|lgruppe = H|lgruppe
+.formula M|tzeich    = 0|zeich
+.formula M|vom       = H|kovom
+.formula M|pnum      = H|pnum
+.copy M|alternativpos = H|alternativpos
+.assign M|tbasisartikel = H|art^basisartikel
+.assign M|art     = H|art
+.formula M|mge       = H|mge
+.copy M|vhe     = H|he
+.copy M|vpe     = H|pe
+.formula M|tterm     = H|tterm
+.copy M|tprojekt = H|projekt
+.formula M|limge     = U|xlimge
+.formula M|remge     = U|xremge
+..
+.. Outstanding deliveries does not report prices
+.copy M|land    = 0|land
+.formula M|proz     = H|proz
+.continue VALUE     ? _F|equals(H|kategorie,"(Downpayment)")
+..
+.formula M|vorgrate = F|fxrate(M|auswaehr, G|datum, H|kopf^fktaplan^waehr)
+.formula M|remge    = F|round(M|vorgrate * M|remge, M|ausnkst)
+.continue VALUE ?   F|empty(H|fktaplanpos)
+.continue VALUE ? _(F|empty(H|fktaplanpos^faktico) & F|empty(H|fktaplanpos^gebuchtico) & F|empty(H|fktaplanpos^bezahltico))
+.formula U|xrpwert  = H|fktaplanpos^anzpwert
+.formula U|xrpwert  = F|round(M|vorgrate * U|xrpwert, M|ausnkst)
+.formula U|xrnwert  = H|fktaplanpos^anzpwert
+.formula U|xrnwert  = F|round(M|vorgrate * U|xrnwert, M|ausnkst)
+..
+!VALUE
+.formula M|pwert    = U|xrpwert
+.formula M|nwert    = U|xrnwert
+.formula M|preis    = H|preis
+.copy M|tauswaeh = M|auswaehr
+..
+.continue TOTAL   ? _H|alternativpos ; _F|defined(M|summealtpos)
+.. in outstanding offers/requests additionally keep sum of alternative items
+.formula M|summealtpos = M|summealtpos + M|nwert
+.continue SONDER
+..
+!TOTAL
+.continue NOFAKTURA  ? F|empty(H|fktaplanpos)
+.continue WITHOUT ? M|aubeo & F|equals(H|kategorie,"(Downpayment)") & F|empty(H|fktaplanpos^faktico) & F|empty(H|fktaplanpos^gebuchtico) & F|empty(H|fktaplanpos^bezahltico)
+..
+!NOFAKTURA
+.formula M|summe = M|summe + M|nwert
+.continue SONDER ? _F|defined(M|summeohne)
+.continue SONDER ?  H|typ = G|ZUPOS & F|equals(H|art^kategorie, "(Downpayment)")
+..
+.. in outstanding orders additionally keep old sum without downpayments
+.formula M|summeohne = M|summeohne + M|nwert
+.continue SONDER
+..
+!WITHOUT
+.formula M|summe = M|summe - M|nwert
+.continue SONDER
+..
+!SONDER: More special cases
+.formula M|twvdat    = 0|tterm 
+.formula M|fzahl     = H|fzahl
+.formula M|mgefzahl  = H|mge - H|fzahl
+.formula M|maxabrufmge = H|maxabrufmge
+.formula M|ofverfuegbmge = H|ofverfuegbmge
+.formula M|fzahlgeliefert = H|fzahlgeliefert
+.formula M|fzahlabgerufen = H|fzahlabgerufen
+.formula M|fzahlabrufoffen = H|fzahlabrufoffen                  
+.formula M|lzeit = H|lzeit
+.formula U|xproz = 0
+.formula U|xproz =  M|fzahlabgerufen * 100 / M|maxabrufmge ? M|maxabrufmge <> 0
+.formula M|pmax  = U|xproz
+.formula U|xproz = 0
+.formula U|xproz =  M|fzahlabgerufen * 100 / M|mge   ? M|mge <> 0
+.formula M|pmenge = U|xproz
+..
+.formula M|prozmgez = M|rotz
+.formula M|prozmaxz = M|rotz
+.continue EKPROZ ? F|defined(M|rauoe)
+..
+!VKPROZ
+.formula M|prozmgez = M|gruenz   ? M|pmenge <= M|posgruenvk
+.formula M|prozmgez = M|gelbz    ? M|pmenge > M|posgruenvk & M|pmenge <= M|posrotvk
+.formula M|prozmaxz = M|gruenz   ? M|pmax <= M|posgruenvk
+.formula M|prozmaxz = M|gelbz    ? M|pmax > M|posgruenvk& M|pmax <= M|posrotvk
+.continue GLT
+..
+!EKPROZ
+.formula M|prozmgez = M|gruenz   ? M|pmenge <= M|posgruenek
+.formula M|prozmgez = M|gelbz    ? M|pmenge > M|posgruenek & M|pmenge <= M|posrotek
+.formula M|prozmaxz = M|gruenz   ? M|pmax <= M|posgruenek
+.formula M|prozmaxz = M|gelbz    ? M|pmax > M|posgruenek & M|pmax <= M|posrotek 
+..
+!GLT
+.formula M|prozmgez = ""         ? M|mge = 0
+.formula M|prozmaxz = ""         ? M|maxabrufmge = 0
+.continue DELETE ? M|prozmgez = M|gruenz & _M|zgruen
+.continue DELETE ? M|prozmgez = M|gelbz & _M|zgelb
+.continue DELETE ? M|prozmgez = M|rotz & _M|zrot
+.formula M|zgltvon = H|zgltvon
+.formula M|zgltbis = H|zgltbis
+.formula M|kovom = H|kovom
+.formula M|gltz = M|rotz ? _F|empty(M|zgltbis)
+.continue ZRAHMEN        ?  F|empty(M|zgltbis)
+.formula M|gltz = M|ungueltigz ? 'G|datum:8' > 'M|zgltbis:8'
+.continue ZRAHMEN              ? 'G|datum:8' > 'M|zgltbis:8'
+.formula M|atage = F|numworkdays("" , F|sysinfo(10)^intlgruppe, G|datum, M|zgltbis)
+.continue EKGLT  ? F|defined(M|rauoe)
+..
+!VKGLT
+.formula M|gltz = M|gelbz   ?  M|atage >= M|gltgelbb
+.formula M|gltz = M|gruenz  ?  M|atage >= M|gltgruenvk
+.continue ZRAHMEN
+..
+!EKGLT
+.formula M|gltz = M|gelbz   ?  M|atage >= M|gltgelbb
+.formula M|gltz = M|gruenz  ?  M|atage >= M|gltgruenek
+..
+!ZRAHMEN
+.continue DELETE ? M|gltz = M|gruenz & _M|zgltgruen
+.continue DELETE ? M|gltz = M|gelbz & _M|zgltgelb
+.continue DELETE ? M|gltz = M|rotz & _M|zgltrot
+.continue DELETE ? M|gltz = M|ungueltigz & _M|zgueltig
+.continue DELETE ? F|empty(M|zgltbis) & M|zgueltig & _M|zgltgruen & _M|zgltgelb &  _M|zgltrot
+.assign M|tzrahmenpos = H|id            ? 0|typ = 1
+.assign M|tzrahmenpos = H|zrahmenpos    ? 0|typ <> 1
+.continue PRUEFZRAHMEN  ? F|empty(H|mge)
+.formula M|pwfzahl = ((M|nwert * H|fzahlgeliefert) / H|mge):2
+.continue PRUEFZRAHMEN  ? H|fzahl > H|mge
+.formula M|offwert = M|nwert - M|pwfzahl
+..
+!PRUEFZRAHMEN: gibt es Vorg„nge mit diesem Rahmenauftrag
+.formula U|xtsel = "$,,;@gruppe=2;zrahmen=="+M|tzrahmen^id+";zrahmenpos=="+M|tzrahmenpos^id+";artex="+M|art^id+";kotyp<>(BlanketOrder);@ablageart=(Both)"
+.load 1 sales 'U|xtsel'       ? F|defined(M|rauov)
+.load 1 purchasing 'U|xtsel'  ? F|defined(M|rauoe)
+.formula M|tdetail = "icon:folder_closed"   ?  G|mehr
+.formula M|tdetail = ""                     ? _G|mehr
+.continue END
+..
+!DELETE
+.formula M|summe = M|summe - M|nwert
+.make screen line -o 
+.continue END
+..
+..*****************************************************************************
+!END
+.continue

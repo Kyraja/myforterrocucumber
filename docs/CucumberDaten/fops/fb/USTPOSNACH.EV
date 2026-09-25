@@ -1,0 +1,126 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : USTPOSNACH.EV
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Allgemeines Event-FOP der Infosysteme fb/USTPOSKONACH und fb/USTPOSBUNACH
+.. Functionality  :
+..*****************************************************************************
+..
+.. include fb/USTPOSNACH.INIT
+..
+..*****************************************************************************
+..
+.set trans -
+.type ID54 xposnum   ? _F|defined(U|xposnum)
+.type text xselect   ? _F|defined(U|xselect)
+.type bool xmehr     ? _F|defined(U|xmehr)
+..
+.continue START  ? G|evtvar = "bstart"
+.continue PERIOD ? G|evtvar = "ajahr"  ; G|evtvar = "ejahr"
+.continue PERIOD ? G|evtvar = "amonat" ; G|evtvar = "emonat"
+.continue PERIOD ? G|evtvar = "adatum" ; G|evtvar = "edatum"
+.continue CUR    ? G|evtvar = "waehr"
+.continue SOFB   ? G|evtvar = "bukreis"
+.continue POS    ? G|evtvar = "posnum"
+.continue END
+..
+..*****************************************************************************
+!POS: position altered
+..*****************************************************************************
+.formula M|posname = M|posnum^name
+.input "fb/USTPOSNACH.INIT"
+.continue END
+..
+..*****************************************************************************
+!CUR: Currency altered
+..*****************************************************************************
+.formula M|kontowaehr2 = _(F|equals(M|waehr, G|inland) ; F|equals(M|waehr, G|ainland) ; F|equals(M|waehr, G|ninland))
+.continue ERRCUR ? M|waehr <> G|inland & M|waehr <> G|ainland & M|waehr <> G|ninland & M|waehr <> M|posnum^w2ist
+.input "fb/USTPOSNACH.INIT"
+.continue END
+..
+..*****************************************************************************
+!SOFB: Set of books altered
+..*****************************************************************************
+.copy M|bukreis = G|bukreis ? F|empty(M|bukreis)
+.input "fb/USTPOSNACH.INIT"
+.continue END
+..
+..*****************************************************************************
+!PERIOD
+..*****************************************************************************
+.type text xxtsmon xxtemon xxtsyear xxteyear xxtfromd xxttod
+.formula U|xxtsmon  = "amonat"
+.formula U|xxtemon  = "emonat"
+.formula U|xxtsyear = "ajahr"
+.formula U|xxteyear = "ejahr"
+.formula U|xxtfromd = "adatum"
+.formula U|xxttod   = "edatum"
+.input "fb/IS.SETPERIOD"
+.input "fb/USTPOSNACH.INIT"
+.continue END
+..
+..*****************************************************************************
+!START
+..*****************************************************************************
+.continue ERR0 ? F|empty(M|posnum)
+.input "fb/USTPOSNACH.INIT"
+.assign U|xposnum = M|posnum^id
+.continue GRUPPE1 ? M|posnum^gruppe = 1
+..
+!GRUPPE4: Sammelpositionen
+.copy U|xmehr = G|TRUE
+.formula U|xselect = "$,,@gruppe=5;gruppe=5;@zeilen=(1)"
+.formula U|xselect = U|xselect + ";id=" + M|posnum^id ? _F|empty(M|posnum)
+..
+.load 0 evaluation 'U|xselect'
+.continue LOADLINE
+..
+!LOAD0
+.load 0 evaluation 
+.continue END           ? _G|mehr
+.formula U|xpaccount = ""              
+..
+!LOADLINE
+.load 0 line '0|selzeile'
+.copy U|xmehr = G|FALSE ? _G|mehr
+.continue END           ? _G|mehr
+.assign U|xposnum = 0|ustpos
+..
+!GRUPPE1
+.formula M|select = "$,@gruppe=0;gruppe=0;@zeilen=(1)"
+.formula M|select = M|select + ";ustva=" + U|xposnum ? _F|empty(M|posnum)
+.continue SY ? M|ajahr  = M|ejahr
+.continue S2 ? M|ajahr <> M|ejahr
+..
+!SY: Single fiscal year
+.formula M|select = M|select + ";gjahr=" + 'M|ajahr'
+.formula M|select = M|select + ";monat=" + 'M|amonat' + "!" + 'M|emonat'
+.continue S2
+..
+!S2
+.formula M|select = M|select + ";budat=" + 'M|adatum:8' + "!" + 'M|edatum:8'
+.formula M|select = M|select + ";inbukreis" + 'M|bukreis^bknr' + "=1"
+.formula M|select = M|select + ";konto=" + 'M|konto^id' ? _F|empty(M|konto)
+.formula M|select = M|select + ";@ordnung=konto" ? F|empty(M|konto)
+.input "is/HOL.LISTE"
+.continue LOAD0    ? U|xmehr
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue
+..
+..*****************************************************************************
+!ERR0
+..*****************************************************************************
+.error -field posnum -message Bitte eintragen. 
+.end 1
+..*****************************************************************************
+!ERRCUR
+..*****************************************************************************
+.error -field waehr -message WÑhrung fÅr UStVA-Position 'M|posnum^nummer' falsch, mîgliche WÑhrung: 'G|inland' 'M|posnum^w2ist'
+.end 1

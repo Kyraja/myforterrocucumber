@@ -1,0 +1,77 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LIQPLANDETAILS.TAB
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       :
+.. Functionality  :
+.. include fb/LIQPLANDETAILS.SET.DOCNAME
+..*****************************************************************************
+..
+.set trans -
+..
+.. for summing up we have to negate the values
+.copy U|xrvalue = U|xrvalue * -1 ? M|tpositions = "(AmountOfVATPayableFromOutstandingItems)" & F|empty(M|position)
+.copy U|xrvalue = U|xrvalue * -1 ? M|tpositions = "(PostedAmountOfVATPayable)" & F|empty(M|position)
+.. Umsatzsteuerzahllast aus Obligos
+.copy U|xrdiscount = U|xrdiscount * -1 ? M|tpositions = "(AmountOfVATPayableFromOutstandingItems)" & F|empty(M|position)
+.. Gebuchte Umsatzsteuerzahllast
+.copy U|xrdiscount = U|xrdiscount * -1 ? M|tpositions = "(PostedAmountOfVATPayable)" & F|empty(M|position)
+.copy      M|tkategorie = U|xcategory
+.formula   M|tzabetr = U|xrvalue
+.. Rechnungsobligo mit Zahlbetrag < 0 und Anzahlung
+.copy U|xrdiscount = U|xrdiscount * -1  ? M|tzabetr < 0 & M|tpositions = "(OutstandingInvoices)" & F|equals(M|tbeleg^kategorie, "(Downpayment)")
+.formula   M|tskonto = U|xrdiscount
+.copy U|xrsum = U|xrsum + U|xrvalue
+.formula   M|tfaelltage = F|max(0, F|expr(G|datum - M|tterm))
+.formula   M|teinauszahl = F|condexpr(U|xrvalue < 0, "(OutgoingPayment)", "(IncomingPayment)")
+.formula   M|zuab = F|condexpr(U|xrvalue < 0, "icon:transfer_minus", "icon:transfer_plus")
+.input "fb/LIQPLANDETAILS.SET.DOCNAME"
+.. TODO, BUG: .kopieren geht nicht. Fehlermeldung bspw. : "Ein Wert der Art P3:1 laesst sich nicht an eine Variable der Art VPB99 zuweisen"
+.assign M|tbelegkopf = M|tbeleg^kopf ? F|defined(M|tbeleg^kopf)
+.formula M|betreff = M|tbelegkopf^betreff ?  F|defined(M|tbelegkopf^betreff)
+.continue PS     ? M|tbeleg^dnr = 3
+.continue PS     ? M|tbeleg^dnr = 4
+.continue SGLPAY ? M|tbeleg^dnr = 141
+.continue OI     ? M|tbeleg^dnr = 100
+.continue END
+..
+..*****************************************************************************
+!PS: Sales/Purchasing
+..*****************************************************************************
+.continue PSHEAD ? M|tbeleg^gruppe = 1
+.continue PSITEM ? M|tbeleg^gruppe = 2
+.continue END
+..
+..*****************************************************************************
+!PSHEAD
+..*****************************************************************************
+.assign M|tbelegkopf = M|tbeleg
+.continue END
+..
+..*****************************************************************************
+!PSITEM: Sales/Purchasing item
+..*****************************************************************************
+.assign M|tbelegkopf = M|tbeleg^kopf
+.formula M|betreff = M|tbelegkopf^betreff 
+.formula   M|tbeschreibung = M|tbeleg^tename
+.continue END
+..
+..*****************************************************************************
+!SGLPAY
+..*****************************************************************************
+.formula   M|tbeschreibung = M|tbeleg^name
+.continue END
+..
+..*****************************************************************************
+!OI
+..*****************************************************************************
+.assign M|tbelegkopf = M|tbeleg^ophist
+.formula   M|tbeschreibung = M|tbeleg^beleg
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

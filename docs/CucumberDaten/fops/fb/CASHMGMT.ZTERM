@@ -1,0 +1,195 @@
+..!interpreter english translate noabbrev
+.continue OUTPUT
+..*****************************************************************************
+.. FOP-Name       : CASHMGMT.ZTERM
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Berechnung des Zahlungstermins und des Skontobetrags
+.. Functionality  : Computes the expected payment date and discount
+.. This script does calculate xdzterm = xdvaldate + zbed
+..*****************************************************************************
+..
+.set trans -
+..
+..*****************************************************************************
+.. INPUT:
+..*****************************************************************************
+.. purchase / sales
+..art AS7   xepurchsales
+.. terms of payment (Zahlungsbedingung)
+..art P12:8 xpzbed
+.. terms of payment code (Zahlungsbedingungsschluessel)
+..art P66:4 xpzbedschl
+.. due date manually set? (Faelligkeit manuell fixiert?)
+..art bool  xbmterm
+.. due date (Faelligkeitsdatum)
+..art GD    xddate
+.. value date (Valutadatum)
+..art GD    xdvaldate
+..*****************************************************************************
+!OUTPUT:
+..*****************************************************************************
+.type bool xbnoresetdiscrate ? _F|defined(U|xbnoresetdiscrate)
+.. expected payment date (erwartetes Zahlungsdatum)
+.type GD    xdzterm ? _F|defined(U|xdzterm)
+.. cash discount in % (Skonto in %)
+.type real  xrdiscrate ? _F|defined(U|xrdiscrate)
+..*****************************************************************************
+.formula   U|xdzterm = ""
+.formula   U|xrdiscrate = 0 ? _U|xbnoresetdiscrate
+..
+.type AS276 xeopfaell ? _F|defined(U|xeopfaell)
+..
+.formula   U|xeopfaell = ""
+.continue SCENE ? _F|defined(1|dnr)
+.continue SCENE ?  1|dnr<>0 & 1|dnr<>1
+.continue STAT  ?  F|condexpr(1|dnr = 0 & U|xpszenario^vkstatzave, _1|lqstatign & 1|statzd > 0, G|FALSE)
+.continue SCENE ? _F|defined(1|lqparamaktiv)
+.continue SCENE ? _1|lqparamaktiv
+.continue SCENE ?  1|dnr = 0 & U|xpszenario^kuignorieren
+.continue SCENE ?  1|dnr = 1 & U|xpszenario^liignorieren
+.copy U|xeopfaell = 1|opfaell ? F|defined(1|opfaell)
+.continue SCENE ?  F|empty(U|xeopfaell)
+.continue CHOOSE
+..
+..*****************************************************************************
+!STAT
+..*****************************************************************************
+.formula   U|xdzterm    = U|xddate + 1|statzd
+.copy U|xrdiscrate = 1|statskonto
+.continue END2
+..
+..*****************************************************************************
+!SCENE
+..*****************************************************************************
+.copy U|xeopfaell = F|condexpr(U|xepurchsales="(Sales)", U|xpszenario^vkfaell, U|xpszenario^ekfaell)
+.continue CHOOSE
+..
+..*****************************************************************************
+!CHOOSE
+..*****************************************************************************
+.continue Z1   ? _F|empty(U|xpzbed)
+.continue Z2   ? _F|empty(U|xpzbedschl)
+.continue Z3
+..*****************************************************************************
+!Z1
+..*****************************************************************************
+.load 9 add U|xpzbed
+.continue Z1D ? _G|mehr
+.. .kopieren tut nicht, weil GD2 inkompatibel zu GD8
+.assign 9|vdat = U|xdvaldate
+.continue ERR02 ? _G|mehr
+.formula   9|skktage = U|xppayconfig^skktagekure  ? U|xepurchsales="(Sales)" & U|xeinout = "(IncomingPayment)"
+.formula   9|skktage = U|xppayconfig^skktagekugut ? U|xepurchsales="(Sales)" & U|xeinout = "(OutgoingPayment)"
+.formula   9|skktage = U|xppayconfig^skktagelire  ? U|xepurchsales="(Purchasing)" & U|xeinout = "(OutgoingPayment)"
+.formula   9|skktage = U|xppayconfig^skktageligut ? U|xepurchsales="(Purchasing)" & U|xeinout = "(IncomingPayment)"
+.continue Z1D ? 9|tzeilen = 0
+.. 3 cases:
+..           a) Use currently last valid due date (Weiterspringen bis zu aktuell letzter gueltiger Faelligkeit)
+..           b) Always first due date (Immer erste Faelligkeit)
+..           c) Always last due date (Immer letzte Faelligkeit)
+.continue Z1MANUA ? U|xbmterm
+.continue Z1SALES ? U|xepurchsales = "(Sales)"
+.continue Z1PURCH
+..
+..*****************************************************************************
+!Z1SALES
+..*****************************************************************************
+.continue Z1A ? U|xeopfaell = "(DueDateNext)"
+.continue Z1B ? U|xeopfaell = "(DueDateFirst)"
+.continue Z1C ? U|xeopfaell = "(DueDateLast)" ; F|empty(U|xeopfaell)
+.error Unerwarteter Fall: 'U|xeopfaell'!
+.end 1
+..
+..*****************************************************************************
+!Z1PURCH
+..*****************************************************************************
+.continue Z1A ? U|xeopfaell = "(DueDateNext)"
+.continue Z1B ? U|xeopfaell = "(DueDateFirst)" ; F|empty(U|xeopfaell)
+.continue Z1C ? U|xeopfaell = "(DueDateLast)"
+.error Unerwarteter Fall: 'U|xeopfaell'!
+.end 1
+..
+..*****************************************************************************
+!Z1A: Use currently last valid due date (Weiterspringen bis zu aktuell letzter gueltiger Faelligkeit)
+..*****************************************************************************
+.load 9 line
+.continue END ? _G|mehr
+.copy 9|datum = 9|termbis
+.copy U|xdzterm = 9|termbis
+.continue Z1A ? 9|termbis < U|xdstartdate
+.copy U|xrdiscrate = 9|skonton
+.continue END
+..*****************************************************************************
+!Z1B: Always first due date (Immer erste Faelligkeit)
+..*****************************************************************************
+.load 9 line 1
+.copy 9|datum = 9|termbis
+.copy U|xdzterm = 9|termbis
+.copy U|xrdiscrate = 9|skonton
+.continue END
+..*****************************************************************************
+!Z1C: Always last due date (Immer letzte Faelligkeit)
+..*****************************************************************************
+.load 9 line '9|tzeilen'
+.copy 9|datum = 9|termbis
+.copy U|xdzterm = 9|termbis
+.copy U|xrdiscrate = 9|skonton
+.continue END
+..*****************************************************************************
+!Z1D: No rows
+..*****************************************************************************
+.copy U|xdzterm = U|xddate
+.continue END
+..*****************************************************************************
+!Z1MANUA: Manually fixed due date
+..*****************************************************************************
+.assign 9|datum = U|xddate
+.continue ERR01 ? _G|mehr
+.copy U|xrdiscrate = 9|skonton
+.copy U|xdzterm = U|xddate
+.continue END
+..*****************************************************************************
+!Z2
+..*****************************************************************************
+.load 9 add U|xpzbedschl
+.continue END ? _G|mehr
+!Z2L
+.load 9 line
+.continue END ? _G|mehr
+.copy U|xpzbed = 9|zbed ? F|day(U|xddate) >= 9|retagab & F|day(U|xddate) <= 9|retagbis
+.continue Z1 ? _F|empty(U|xpzbed)
+.continue Z2L
+..
+..*****************************************************************************
+!Z3
+..*****************************************************************************
+.copy U|xdzterm = U|xddate
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.load 9
+.copy U|xdzterm = U|xddate ? F|empty(U|xdzterm)
+.formula   U|xdzterm = U|xdzterm + F|condexpr(U|xepurchsales="(Sales)", U|xpszenario^vkzhorizont, U|xpszenario^ekzhorizont)
+.continue
+..
+..*****************************************************************************
+!ERR01
+..*****************************************************************************
+.error -message 'F|formatstr("Die Zuweisung von {1} an ein Feld vom Typ {2} ist gescheitert.", U|xddate, F|typeof(9|datum))'
+.end 1
+..
+..*****************************************************************************
+!ERR02
+..*****************************************************************************
+.error -message 'F|formatstr("Die Zuweisung von {1} an ein Feld vom Typ {2} ist gescheitert.", U|xdvaldate, F|typeof(9|vdat))'
+.end 1
+..
+..*****************************************************************************
+!END2
+..*****************************************************************************
+.continue
+

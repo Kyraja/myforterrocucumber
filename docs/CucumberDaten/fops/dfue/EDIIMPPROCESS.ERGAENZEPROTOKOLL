@@ -1,0 +1,78 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDIIMPPROCESS.ERGAENZEPROTOKOLL
+.. Autor          : ok
+.. Verantwortlich : mh
+.. Kontrolle      : carue
+.. Funktion       : Permanentes Protokoll erg„nzen  (Legacy-Code)
+.. Functionality  : Append to perisitent protokoll.
+..*****************************************************************************
+.set trans -
+..
+.. Default Return value
+.copy U|xprocreturn = G|true
+..
+.continue FEHL            ? xnfprotokoll = ""
+..
+.output addedto 'xnfprotokoll'
+.length 1
+.right 299
+.tablerecord
+.output new WERF.WEG
+..
+.continue VKAUV ? xmmvvl = "VKAUV"
+.continue VKAUE ? xmmvvl = "VKAUE"
+.continue VKGAV ? xmmvvl = "VKGAV"
+.continue
+..
+!VKAUV
+..>> Ermitteln, ob (mindestens) ein neuer Lieferabruf eingetragen oder verarbeitet
+.formula xsybefehl = "grep -s -E 'eingehender Lieferabruf VDA/ODETT/EDIFACT$' " + xneprotokollerw + " > ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+.continue MEHR2          ? mehr
+.formula xsybefehl = "grep -s -E 'eingehender Feinabruf VDA/ODETT/EDIFACT$' " + xneprotokollerw + " > ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+.continue MEHR2          ? mehr
+.formula xsybefehl = "grep -s -E 'eingehender Feinabruf (Mais-Pick-Up-Sheet)$' " + xneprotokollerw + " > ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+.continue FEHL           ? _mehr
+.continue MEHR2
+..
+!VKAUE
+.formula xsybefehl = "grep -s -E '.*eingehender Auftrag$' " + xneprotokollerw + " > ${DEVNULL:-/dev/null}"
+.system 'xsybefehl' background
+.continue FEHL           ? _mehr
+.continue MEHR2
+..
+!VKGAV
+.formula xsybefehl = "grep -s -E '.*eingehende Gutschrift$' " + xneprotokollerw + " > ${DEVNULL:-/dev/null}"
+.system 'xsybefehl' background
+.continue FEHL           ? _mehr
+.continue MEHR2
+..
+!MEHR2
+.formula xsybefehl = "head -3 " + 'xneprotokollerw' + " >> " + 'xnfprotokoll' + " 2> ${DEVNULL:-/dev/null}"
+.system 'xsybefehl' background
+..>> Sortieren: Datum + Uhrzeit, EDI-Satznummer, Status / Fehler
+.formula xsybefehl = "awk '{ if(NR > 3) print $0 }' " + 'xneprotokollerw' + " | sort -k 1,1 -k 2n,2n -k 6n,6n " + " >> " + 'xnfprotokoll' + " 2> ${DEVNULL:-/dev/null}"
+.system 'xsybefehl' background
+..
+.continue FEHL        ? _xistfproterw
+.formula xsybefehl = "head -3 " + 'xnfprotokollerw' + " >> " + 'xnfprotokoll' + " 2> ${DEVNULL:-/dev/null}"
+.system 'xsybefehl' background
+..>> Sortieren: Datum + Uhrzeit, EDI-Satznummer, Status / Fehler
+.formula xsybefehl = "awk '{ if(NR > 3) print $0 }' " + 'xnfprotokollerw' + " | sort -k 1,1 -k 2n,2n -k 6n,6n " + " >> " + 'xnfprotokoll' + " 2> ${DEVNULL:-/dev/null}"
+.system 'xsybefehl' background
+..
+.output new WERF.WEG
+..
+!FEHL
+.formula xsybefehl = "rm -f " + xneprotokollerw + " 1> ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+.formula xsybefehl = "rm -f " + xnfprotokollerw + " 1> ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+.continue
+..
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,98 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : BATCHTRACE.BSTART.BN
+.. Autor          : fwester
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Baut ausgehend von der Anfangscharge den Chargenbaum samt
+..                  Buchungen auf. Dabei wird die Tabelle zeilenweise durchlaufen
+..                  und jede neue Stufe aufgeklappt, sobald sie angetroffen wird.
+.. Ablauf         : Button-nach-EFOP
+..
+.. Functionality  : Based on the starting lot this builds the whole tree of batches
+..                  and their bookings. Thereby the table will be passed through line by
+..                  line and each new level will be opened as soon as it is meet.
+.. Program flow   : After button efop
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type integer  xstufeauf  ? _F|defined(U|xstufeauf)
+.type integer  xtzeilen   ? _F|defined(U|xtzeilen)
+..
+.. Initializations
+.formula M|knotenauf = G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tbaumaufzu"
+..
+.continue ROOT ? _M|knotenauf
+.copy M|aufloeszeile = G|evtzeile
+.copy U|xstufeauf = M|tbaumstufe
+.continue NEXT1
+..
+!ROOT: Show root batch
+.make screen line +O
+.copy M|tbaumstufe = M|stufe
+.copy M|ttyp = M|typcharge
+.copy M|tistwurzel = M|istwurzel
+.formula M|tbaumicon = M|kbaumicon
+.formula M|tbauminfo = M|kbauminfo
+.formula M|tbaumtext = M|charge^nummer + ": " + 'M|charge^artikel^such'
+.copy M|tvcharge = M|vchargeauf
+.copy M|tncharge = M|nchargeauf
+.formula M|tbuchung = ""
+..
+.copy M|ktyp = M|typcharge
+.input 'M|beforeresolv' ? M|beforeresolv <> ""
+.select journal 'M|select'
+.continue NOCHILD ? _G|mehr
+.assign M|tbuchung = H|id
+.formula M|tbaumstat = "+"
+..
+.. Resolving the levels of batches
+.copy M|istwurzel = G|FALSE
+.select screen header
+.select screen line
+.continue RESOLVE
+..
+!NOCHILD: root has no children
+.formula M|tbaumstat = "="
+.continue END
+..
+!NEXT1
+.select screen line 'M|aufloeszeile'
+..
+!RESOLVE: Only batches will be resolved
+.continue END ? _G|mehr
+.continue END ? M|knotenauf & M|aktzeile <> G|evtzeile & M|tbaumstufe <= U|xstufeauf
+.continue ITERAT1 ?  M|knotenauf & M|tbaumstat <> "-"
+.continue ITERAT1 ? _M|knotenauf & M|tbaumstat <> "+"
+.formula U|xtzeilen = M|tzeilen
+.formula M|stufe = M|tbaumstufe + 1
+.continue ITERAT1 ? _M|knotenauf & M|stufe > M|anzstufen
+.formula M|kbauminfo = G|hdatname59
+.copy M|aufloeszeile = M|aktzeile
+.copy M|fuellzeile = M|aufloeszeile
+.copy M|vchargeauf = M|tvcharge
+.copy M|nchargeauf = M|tncharge
+.copy M|ktyp = M|typcharge
+.input 'M|beforeresolv' ? M|beforeresolv <> ""
+.input 'M|resolve' ? M|resolve <> ""
+.continue ISOPEN ? _M|mitbuchungen
+..
+.. Show outflow or inflow of this batch
+.formula M|ktyp = M|typbuchung
+.formula M|kbauminfo = G|hdatname10
+.input 'M|beforeresolv' ? M|beforeresolv <> ""
+.input 'M|resolve' ? M|resolve <> ""
+..
+!ISOPEN: Sign resolved batch as an open one or as childless
+.select screen line 'M|aufloeszeile'
+.formula M|tbaumstat = "-" ? U|xtzeilen < M|tzeilen
+.formula M|tbaumstat = "=" ? U|xtzeilen = M|tzeilen
+..
+!ITERAT1
+.formula M|aufloeszeile = M|aufloeszeile + 1
+.continue END ? M|aufloeszeile > M|tzeilen
+.continue NEXT1
+..*****************************************************************************
+!END
+.continue

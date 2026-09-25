@@ -1,0 +1,275 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ARTIKELPRUEFUNG
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : carue
+.. Funktion       : Versucht einen Artikel anhand Identnummer, GTIN, oder
+..                  Kundenartikelnummer+Kunde zu identifizieren.
+.. Functionality  : Attempts to id a product using id no, search word, gtin
+..                  or  customer product number with customer
+..
+..   Argument       meaning
+..   ---------------------------------------------------------
+..   xapkunde       customer
+..   xapnummer      identity number or search word for product in abas
+..   xapkuartnr     customer product number
+..   xapgtin        global trade item number
+..
+..   Return value   meaning
+..   ---------------------------------------------------------
+..   buffer 5       product
+..   xapfcode       error code, zero if product was found
+..   xaptext1       error message part 1
+..   xaptext2       error message part 2
+..
+..*****************************************************************************
+.set trans -
+..
+.. Arguments
+.type P0         xapkunde        ? _F|defined(T|xapkunde)
+.type text       xapnummer       ? _F|defined(T|xapnummer)
+.type BT128      xapkuartnr      ? _F|defined(T|xapkuartnr)
+.type text       xapgtin         ? _F|defined(T|xapgtin)
+..
+.. Optional arguments for error handling
+.type text       xaktsatz        ? _F|defined(T|xaktsatz)
+.type text       xaktzeile       ? _F|defined(T|xaktzeile)
+..
+.. Error code / message
+.type integer    xapfcode        ? _F|defined(T|xapfcode)
+.type text       xaptext1        ? _F|defined(T|xaptext1)
+.type text       xaptext2        ? _F|defined(T|xaptext2)
+..
+.. Local fields
+.type text   xtsel       ? _F|defined(T|xtsel)
+.type text   xt1         ? _F|defined(T|xt1)
+.type P0     xvkunde     ? _F|defined(U|xvkunde)
+.type P0     xvkunde2    ? _F|defined(U|xvkunde2)
+.. should be .type SW2 and .type N2
+.type text   xapartsw2   ? _F|defined(U|xapartsw2)
+.type text   xapartn2    ? _F|defined(U|xapartn2)
+..
+.. Translate error messages
+.type text       xSatzZeileFehler ? _F|defined(T|xSatzZeileFehler)
+.set trans +
+.formula T|xSatzZeileFehler = "Satzart: {1} Zeile: {2} Fehlercode: {3}"
+.set trans -
+..
+.. Initialize
+.formula U|xvkunde = ""
+.formula U|xvkunde2 = ""
+.formula U|xapartsw2 = ""
+.formula U|xapartn2 = ""
+..
+.. Initialize error code / text
+.formula U|xapfcode = 0
+.formula U|xaptext1 = ""
+.formula U|xaptext2 = ""
+..
+.. Remove possibly illegal characters in product number
+.. abas ERP allows all symbols except ! and ? as part of product identity numbers
+.. .formel U|xapnummer = F|regreplaceall(U|xapnummer, "[\.\$\&\'\(\)\*\+\=\/\;\:\<\>\?\`\^\ \-]", "")
+.formula U|xapnummer = F|regreplaceall(U|xapnummer, "[\!\?]", "")
+..
+.. Idno or search word?
+.formula U|xapartsw2 = U|xapnummer  ?  F|isvalue('U|xapnummer', "SW2")
+.formula U|xapartn2  = U|xapnummer  ?  F|isvalue('U|xapnummer', "N2")
+..
+.. Need at least some information about the product
+.. Need customer to search with customer product number
+.continue ERRARGS ?  F|empty(U|xapartsw2)  &  F|empty(U|xapartn2)  &  F|empty(T|xapgtin)  &  (F|empty(T|xapkuartnr) ; F|empty(T|xapkunde))
+..
+.. Customer is group 1 (main customer) or 2 (loading point)?
+.. Note: xvkunde queries blanketOrder^kunde, xvkunde2 queries blanketOrder^kunde2;
+..       if xapkunde is group 1, it might be kunde or kunde2 in a blanket order
+.formula U|xvkunde = ""
+.formula U|xvkunde = U|xapkunde^id
+.formula U|xvkunde2 = ""
+.formula U|xvkunde2 = U|xapkunde^firma^id  ? U|xapkunde^gruppe=2
+.formula U|xvkunde2 = U|xapkunde^id  ? U|xapkunde^gruppe=1
+..
+..
+.. Identify product
+.. ----------- ---------- ---------- -------------------------------------------
+..
+.. Information for error messages
+.formula T|xaktsatz  = H|text1    ? F|empty(T|xaktsatz)
+.formula T|xaktzeile = H|aktzeile ? F|empty(T|xaktzeile)
+..
+.continue IDGTIN   ? _F|empty(U|xapgtin)
+.continue IDNUMSU  ? _F|empty(U|xapartsw2)  ; _F|empty(U|xapartn2)
+.continue IDKUART  ? _F|empty(U|xapkuartnr) & _F|empty(U|xapkunde)
+.. ----------- ---------- ---------- -------------------------------------------
+.continue ERRARGS
+..
+..
+!IDGTIN
+.formula U|xtsel = "$,,;@gruppe=1;gtin=="   + U|xapgtin
+.formula U|xtsel = "$,,;@gruppe=1;nummer==" + U|xapartn2   ? _F|empty(U|xapartn2)
+.formula U|xtsel = "$,,;@gruppe=1;such=="   + U|xapartsw2  ? _F|empty(U|xapartsw2)
+.load 4 parts 'U|xtsel'
+.. if no success, try kuartnr
+.continue IDKUART ? _G|mehr  & _F|empty(U|xapkuartnr) & _F|empty(U|xapkunde)
+.continue ERRPROD ? _G|mehr
+.. remember product
+.load 5 parts '4|id'
+.. check if product is unique
+.load 4 parts
+.continue ARTOK   ? _G|mehr
+.. duplicates: maybe kuartnr is precise, or error message
+.continue IDKUART ? _F|empty(U|xapkuartnr) & _F|empty(U|xapkunde)
+.continue ERRDUP
+..
+..
+!IDNUMSU
+.formula U|xtsel = "$,,;@gruppe=1"
+.formula U|xtsel = "$,,;@gruppe=1;nummer==" + U|xapartn2   ? _F|empty(U|xapartn2)
+.formula U|xtsel = "$,,;@gruppe=1;such=="   + U|xapartsw2  ? _F|empty(U|xapartsw2)
+.load 4 parts 'U|xtsel'
+.. if no success, try kuartnr
+.continue IDKUART ? _G|mehr  & _F|empty(U|xapkuartnr) & _F|empty(U|xapkunde)
+.continue ERRPROD ? _G|mehr
+.. remember product
+.load 5 parts '4|id'
+.. check if product is unique
+.load 4 parts
+.continue ARTOK   ? _G|mehr
+.. duplicates: maybe kuartnr is precise, or error message
+.continue IDKUART ? _F|empty(U|xapkuartnr) & _F|empty(U|xapkunde)
+.continue ERRDUP
+..
+..
+!IDKUART
+..
+.. 1st: try to id examining customer product numbers in blanket order row
+.. 2nd: try to id examining customer product numbers in customer product table in parts master file
+..
+!RAHKO
+.continue RAHFI   ?  F|empty(U|xvkunde)
+.formula U|xtsel = "$,,;@gruppe=2;kotyp=(BlanketOrder);ablagef=no;status=`;kopf^kunde=" + U|xvkunde^id + ";zkuartnr=" + U|xapkuartnr
+.load 4 nolock sales 'U|xtsel'
+.continue RAHFI   ? _G|mehr
+.load 5 parts '4|artex^id'
+.continue ARTOK   ?  G|mehr
+..
+!RAHFI
+.continue KUAKO  ?  F|empty(U|xvkunde2)
+.formula U|xtsel = "$,,;@gruppe=2;kotyp=(BlanketOrder);ablagef=no;status=`;kopf^kunde2=" + U|xvkunde2^id + ";zkuartnr=" + U|xapkuartnr
+.load 4 nolock sales 'U|xtsel'
+.continue KUAKO   ? _G|mehr
+.load 5 parts '4|artex^id'
+.continue ARTOK   ?  G|mehr
+..
+!KUAKO
+.continue KUAFI   ?  F|empty(U|xvkunde)
+.formula U|xtsel = "$,,;@gruppe=6;kl=" + 'U|xvkunde^id' + ";kuartnr==" + U|xapkuartnr
+.load 4 parts 'U|xtsel'
+.continue KUAFI   ? _G|mehr
+.. remember product-customer-property
+.load 5 parts '4|art^id'
+.. check if product is unique
+.load 4 parts
+.continue ARTOK   ? _G|mehr
+.continue ERRDUP
+..
+!KUAFI
+.continue KUAREST  ?  F|empty(U|xvkunde2)
+.formula U|xtsel = "$,,;@gruppe=6;kl=" + 'U|xvkunde2^id' + ";kuartnr==" + U|xapkuartnr
+.load 4 parts 'U|xtsel'
+.continue KUAREST ? _G|mehr
+.. remember product-customer-property
+.load 5 parts '4|art^id'
+.. check if product is unique
+.load 4 parts
+.continue ARTOK   ? _G|mehr
+.continue ERRDUP
+..
+!KUAREST
+.formula U|xtsel = "$,,;@gruppe=6;kuartnr==" + U|xapkuartnr
+.load 4 parts 'U|xtsel'
+.continue ERRPROD ? _G|mehr
+.. remember product-customer-property
+.load 5 parts '4|art^id'
+.. check if product is unique
+.load 4 parts
+.continue ARTOK   ? _G|mehr
+.continue ERRDUP
+..
+..
+..*****************************************************************************
+..
+!ARTOK
+.continue ERRGRU  ?   5|gruppe<>1
+..
+.. fill return values
+.formula U|xapnummer = 5|id
+.formula U|xapgtin = 5|gtin
+..
+.. clean up
+.load 4 ? F|defined(4|id)
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERRPROD
+.. no product was identified,
+.. search priorizing was gtin, product number, customer product number
+.formula U|xapfcode = 26         ? _F|empty(U|xapkuartnr)
+.formula U|xapfcode = 27         ? _F|empty(U|xapnummer)
+.formula U|xapfcode = 25         ? _F|empty(U|xapgtin)
+.. different error codes and text for loading devices (Packmittel)
+.formula U|xapfcode = 32         ? _F|empty(U|xapkuartnr)  &  -T|xaktsatz = "PAC1"
+.formula U|xapfcode = 33         ? _F|empty(U|xapnummer)   &  -T|xaktsatz = "PAC1"
+.set trans +
+.formula T|xt1 = "Kundenartikelnummer {1} nicht gefunden!"                   ?  U|xapfcode = 26
+.formula T|xt1 = "Lieferantenartikelnummer {1} nicht gefunden!"              ?  U|xapfcode = 27
+.formula T|xt1 = "GTIN {1} nicht gefunden!"                                  ?  U|xapfcode = 25
+.formula T|xt1 = "Packmittel zu Kundenartikelnummer {1} nicht gefunden!"     ?  U|xapfcode = 32
+.formula T|xt1 = "Packmittel zu Lieferantenartikelnummer {1} nicht gefunden!" ? U|xapfcode = 33
+.set trans -
+.formula U|xaptext1 = F|formatstr('T|xt1', 'U|xapkuartnr')                   ?  U|xapfcode = 26  ;  U|xapfcode = 32
+.formula U|xaptext1 = F|formatstr('T|xt1', 'U|xapnummer')                    ?  U|xapfcode = 27  ;  U|xapfcode = 33
+.formula U|xaptext1 = F|formatstr('T|xt1', 'U|xapgtin')                      ?  U|xapfcode = 25
+.formula U|xaptext2 = F|formatstr('T|xSatzZeileFehler', 'T|xaktsatz', 'T|xaktzeile', 'U|xapfcode')
+.continue
+..
+!ERRDUP
+.. serveral / duplicate products were found,
+.. may only happen when searching with gtin or customer product number
+.formula U|xapfcode = 29         ? _F|empty(U|xapkuartnr)
+.formula U|xapfcode = 35         ? _F|empty(U|xapkuartnr)  &  -T|xaktsatz = "PAC1"
+.formula U|xapfcode = 28         ? _F|empty(U|xapgtin)
+.set trans +
+.formula T|xt1 = "Mehrere Artikel zu Kundenartikelnummer {1} gefunden!"      ?  U|xapfcode = 29
+.formula T|xt1 = "Mehrere Artikel zu GTIN {1} gefunden!"                     ?  U|xapfcode = 28
+.formula T|xt1 = "Mehrere Packmittel zu Kundenartikelnummer {1} gefunden!"   ?  U|xapfcode = 35
+.set trans -
+.formula U|xaptext1 = F|formatstr('T|xt1', 'U|xapkuartnr')                   ?  U|xapfcode = 29  ;  U|xapfcode = 35
+.formula U|xaptext1 = F|formatstr('T|xt1', 'U|xapgtin')                      ?  U|xapfcode = 28
+.formula U|xaptext2 = F|formatstr('T|xSatzZeileFehler', 'T|xaktsatz', 'T|xaktzeile', 'U|xapfcode')
+..
+..Release buffer to trigger error message
+.load 5
+.continue
+..
+!ERRARGS
+.formula U|xapfcode = 24
+.formula U|xapfcode = 30         ?  -T|xaktsatz = "PAC1"
+.set trans +
+.formula T|xt1 = "Keine gÅltigen Artikel-Informationen gefunden!"        ?  U|xapfcode = 24
+.formula T|xt1 = "Keine gÅltigen Packmittel-Informationen gefunden!"     ?  U|xapfcode = 30
+.set trans -
+.formula U|xaptext1 = T|xt1
+.formula U|xaptext2 = F|formatstr('T|xSatzZeileFehler', 'T|xaktsatz', 'T|xaktzeile', 'U|xapfcode')
+.continue
+..
+!ERRGRU
+.formula U|xapfcode = 33
+.set trans +
+.formula T|xt1 = "Der mit Identnummer {1} gefundene Datensatz ist kein Artikel!"
+.set trans -
+.formula U|xaptext1 = F|formatstr('T|xt1', 'U|xapnummer')
+.formula U|xaptext2 = F|formatstr('T|xSatzZeileFehler', 'T|xaktsatz', 'T|xaktzeile', 'U|xapfcode')
+.continue

@@ -1,0 +1,138 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ENTSPERREN.EV
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  : Handles events of the infosystem "Cancel document blocks"
+..*****************************************************************************
+.type text    xtmpfile      ? _F|defined(U|xtmpfile)
+.type text    xtout         ? _F|defined(U|xtout)
+.type text    xterr         ? _F|defined(U|xterr)
+..
+.set trans -
+..------------------------------- Header:  -------------------------------------
+.continue MARK    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "selall"
+.continue UNMARK  ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "deselall"
+.continue ENTSPER ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "buentsperren"
+.continue DIVISON ? G|evtartengl = "FIELD_FILL" & G|evtvar = "bereich"
+.continue DIVISON ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "bereich"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "vkvorgang"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "ekvorgang"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL" & G|evtvar = "kfaktura"
+..==============================================================================
+.continue END
+..******************************************************************************
+!ENTSPER: Unblock documents
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+.select screen header
+..
+!NEXT
+.select screen line
+!CHECK
+.continue END  ? _G|mehr
+.continue NEXT ? _M|tmark
+..
+.. Check priority as permission
+.add M|tbeleg
+.continue NEXT ? _G|mehr
+.continue ERROR1 ? F|varprioedit(D|vsperre) > F|cmdprio(M|tbeleg^dnr, 13,, M|tbeleg^gruppe)
+.add
+..
+!WRITE
+.select modificationlock nowait object 'M|tbeleg^id'
+.copy M|rmaktzeile = _G|mehr
+.continue DELETE ?  M|rmaktzeile
+.continue DEMARK ? _G|gesperrt
+.select
+..
+.output new 'U|xtmpfile'
+.input DATEI.F
+..
+#!database='M|grliste'
+#!action=modify 
+#!charset=eks
+?num3;vsperre      ? F|equals(M|bereich, "(Sales)")
+?num4;vsperre      ? F|equals(M|bereich, "(Purchasing)")
+?'M|tbeleg^nummer';true  ? _M|tvsperre
+?'M|tbeleg^nummer';false ?  M|tvsperre
+..
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.copy M|rmaktzeile = G|TRUE
+.continue ERROR2 ? _G|mehr
+..
+!DEMARK: Mark row
+.select modificationlock nowait object 'M|tbeleg^id'
+.copy M|tmark = H|vsperre
+.copy M|tvsperre = H|vsperre
+.select release
+.continue DELETE ? M|rmaktzeile
+.continue NEXT
+..
+!DELETE: Remove unmarked row
+.make screen line -O
+.continue END ? M|aktzeile <= 0
+.select screen line 'M|aktzeile'
+.continue CHECK
+..******************************************************************************
+!MARK: Mark all rows
+.assign M|mark = "(SelectAll)"
+.input 'M|tabmark' ? _F|empty(M|tabmark)
+.continue END
+..******************************************************************************
+!UNMARK: Unark all rows
+.assign M|mark = "(DeselectAll)"
+.input 'M|tabmark' ? _F|empty(M|tabmark)
+.continue END
+..******************************************************************************
+!DIVISON: handle evants for field "division"
+.continue DIVEXIT ? G|evtartengl = "FIELD_EXIT"
+..
+.. handle field fill event
+.continue OLDDIV ? F|empty(G|evtfeldneu)
+.copy M|neuerbereich = ('G|evtfeldneu' <> 'M|bereich')
+.continue END
+..
+!OLDDIV: reset to old value while new value is empty
+.assign G|evtfeldneu = M|bereich
+.copy M|neuerbereich = G|FALSE
+.continue END
+..
+!DIVEXIT: handle field exit event
+.assign M|dn = 'M|bereich'
+.continue END ? _M|neuerbereich
+.copy M|verkauf = (M|datnr = 3)
+.continue SALES ? M|verkauf
+.continue PURCHAS
+..******************************************************************************
+!PURCHAS: protect sales-only and unprotect purchasing-only
+.protection vkvorgang 0
+.protection -reset ekvorgang 0
+.continue CLRTAB
+..******************************************************************************
+!SALES: protect purchasing-only and unprotect sales-only
+.protection ekvorgang 0
+.protection -reset vkvorgang 0
+.continue CLRTAB
+..*****************************************************************************
+!CLRTAB: clear table
+.make screen line -- ? M|tzeilen > 0
+.continue END
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1: Priority fails!
+.error -message Das Entsperren ist wegen einer unzureichenden Priorit„t nicht erlaubt!
+.end 1
+..
+!ERROR2 
+.input 'U|xterr'
+.error Das Entsperren ist gescheitert!
+.end 1
+

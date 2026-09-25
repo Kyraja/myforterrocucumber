@@ -1,0 +1,88 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDI.UNITS
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : dsch
+.. Functionality  : transfer from internal units to ISO and VDA units (and back)
+..
+..  IMPORANT        internal (abas) units must be passed as textual representation
+..                  of their internal value:
+..       --->       .formula U|xposphe = 'H|he(L=":")'
+..                  Stck (piece) in default installations will be "(20)"
+..
+..*****************************************************************************
+.set trans -
+..
+.. query argument
+.type text    xposphe     ? _F|defined(U|xposphe)
+.type text    xtunitzeile ? _F|defined(U|xtunitzeile)
+.type text    xtuniterr   ? _F|defined(U|xtuniterr)
+.type integer xapfcode    ? _F|defined(U|xapfcode)
+.type text    xaptext1    ? _F|defined(U|xaptext1)
+..
+.. return values
+.type TAZ1 etaz ? _F|defined(U|etaz)
+.type NT3  eiso ? _F|defined(U|eiso)
+.type NT2  evda ? _F|defined(U|evda)
+..
+.. clear previous results
+.assign U|etaz = ""
+.assign U|eiso = ""
+.assign U|evda = ""
+..
+.. Parts return (0) for empty TAZ-fields, but (0) is not a valid query parameterfor the unit table
+.. -> return empty results
+.continue ? U|xposphe="(0)"
+..
+.. evaluate argument
+.. * CODE: abas internal codes have (brackets)
+.. * VDA/ISO: ISO usually has length 3, VDA is max length 2
+.. * VDA/ISO: normalized (uppercase, ™->OE) patter must match argument: (U|xposphe=-U|xposphe)
+.continue CODE ?  U|xposphe/"\(*\)"
+.continue VDA  ? +U|xposphe<3 & (U|xposphe=-U|xposphe)
+.continue ISO  ? +U|xposphe=3 & (U|xposphe=-U|xposphe)
+.continue TEXT
+..
+..
+!CODE
+.load 9 unit 'F|formatstr("$,,;@gruppe=1;gruppe=1;id=={1}", U|xposphe)'
+.continue RETURN ? G|mehr
+.continue ERRUNIT
+..
+!VDA
+.load 9 unit 'F|formatstr("$,,;@gruppe=1;gruppe=1;evda=={1}", U|xposphe)'
+.continue RETURN ? G|mehr
+.. continue with iso (few iso units with size<3)
+..
+!ISO
+.load 9 unit 'F|formatstr("$,,;@gruppe=1;gruppe=1;eiso=={1}", U|xposphe)'
+.continue RETURN ? G|mehr
+.continue TEXT
+..
+!TEXT
+.load 9 unit 'F|formatstr("$,,;@gruppe=1;gruppe=1;einheitbspr=={1};eiso<>`", U|xposphe)'
+.continue RETURN ? G|mehr
+.continue ERRUNIT
+..
+..
+!RETURN
+.copy U|eiso = 9|eiso
+.copy U|evda = 9|evda
+.. cannot use .copy U|etaz = 9|code, as 9|code is fo protected :(
+.assign U|etaz = 9|einheitbspr
+..
+.. release buffer 9
+.load 9
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERRUNIT
+..
+.set trans +
+.formula U|xapfcode = 56
+.formula U|xtuniterr = "Einheit aus Zeile {1} nicht gefunden!"
+.formula U|xaptext1 = F|formatstr('U|xtuniterr', 'U|xtunitzeile')
+.continue

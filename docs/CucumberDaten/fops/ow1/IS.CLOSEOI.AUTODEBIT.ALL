@@ -1,0 +1,95 @@
+..!interpreter german translate noabbrev
+..*****************************************************************************
+.. Name           : ow1/IS.CLOSEOI.AUTODEBIT.ALL
+.. Date           : 23.01.14
+.. Version        : 2012r4n05
+.. Author         : chbo/abas AG
+.. Copyright      : (c) 2014 abas AG
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   : Clear list and reload using ow1/IS.CLOSEOI.START and loop
+..                  through entries creating an EDP import file of debit entries
+..                  for all items in the list.  Import the EDP file in the
+..                  background using .system
+...Includes       : None
+..*****************************************************************************
+..
+.art text xtfile                  ? F|defined( U|xtfile )      = G|False
+.art text xtcommand               ? F|defined( U|xtcommand )   = G|False
+.art text xtdelete                ? F|defined( U|xtdelete )    = G|False
+.art int  xicount                 ? F|defined( U|xicount )     = G|False
+.art datum xdbudat                ? F|defined( U|xdbudat )     = G|False
+..
+.formel U|xtfile = "ow1/DEBOI.EDP"
+.formel U|xtcommand = "edpimport.sh -p " + 'G|einmalpw' + " -I " + 'U|xtfile'
+.formel U|xtdelete = "rm " + 'U|xtfile'
+.formel U|xicount = 0
+..
+.. Make certain that table is populated
+.eingabe is/TABLEEREN
+.eingabe ow1/IS.CLOSEOI.START
+..
+.weiter NOLINES ? M|tzeilen = 0
+..
+.. Create EDP file
+.eingabe DATEI.F
+.ausgabe auf 'U|xtfile'
+..
+!LINES
+.. Set control commands for the entry
+# -----------------------------------------------------------
+#!EDP_LANG=D
+#!database=4:3
+#!action=PAYMENT
+#!recordidfld=id
+#!menuchoice=offene Posten ausbuchen
+#!charset=eks
+#!FIRSTTABFLD=tabnr
+#!dontchange=-
+id;beleg;beldat;budat;gkonto;tabnr;tophist;sksatz;skbetr;0:kladen;bubetr
+.. Add the import lines to the file
+.formel U|xicount = U|xicount + 1
+.hole maske zeile 'U|xicount'
+.formel U|xdbudat = M|budat + 20
+.. .formel U|xdbudat = G|datum
+;DSIMPORT;'M|vom';'U|xdbudat';18100;+1;'M|opid';0;0;;'M|rebetr'
+.weiter LINES ? U|xicount < M|tzeilen
+..
+.. Close file
+.ausgabe auf WERF.WEG
+.eingabe BILD.F
+.ausgabe BILDSCHIRM
+..
+.. Execute edpimport.sh with the created file
+.. Delete the EDP file when import completes
+.system 'U|xtcommand' HINTER
+.weiter ERRORCMD ? G|mehr = G|False
+.system 'U|xtdelete' HINTER
+.weiter ERRORFILE ? G|mehr = G|False
+.hinweis -sofort One open item successfully debited.            ? U|xicount = 1
+.hinweis -sofort 'U|xicount' open item successfully debited.    ? U|xicount > 1
+.weiter
+..
+!ERRORCMD
+.. Message if the EDP command did not complete successfully
+.hinweis -sofort Error executing EDP command.
+.system 'U|xtdelete' HINTER
+.weiter ERRORFILE ? G|mehr = G|False
+.weiter
+..
+!ERRORFILE
+.. Message if the temporary EDP file could not be deleted
+.hinweis -sofort Error deleting temporary EDP file 'U|xtfile'.
+.weiter
+..
+!NOLINES
+.. Message if there are no lines in the table (i.e. there are no negative quantities)
+.hinweis -sofort There are no items to be debited!
+.weiter

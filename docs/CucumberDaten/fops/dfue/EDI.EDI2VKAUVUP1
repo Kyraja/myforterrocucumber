@@ -1,0 +1,121 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDI.EDI2VKAUVUP1
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : carue
+.. Funktion       : Abruf-Verarbeitung, UP1
+.. Functionality  : Forecast processing, sub routine (process status 3 messages)
+..                  Called from Infosystem EDIIMPVER -> FOP EDIIMPVER.VERARBEITEN -> EDI.EDI2VKAUV
+..
+..   Argument       Meaning
+..   ---------------------------------------------------------
+..   xidkundeabe    number of customer (key account)
+..
+..*****************************************************************************
+.set trans -
+..
+.set demand -
+..
+.. Query edi messages
+.type text xtselediidentifiziert ? _F|defined(U|xtselediidentifiziert)
+.type text xtseledivorgaenger    ? _F|defined(U|xtseledivorgaenger)
+.type text xtselediautoinaktiv   ? _F|defined(U|xtselediautoinaktiv)
+..
+.. Edi messages
+.type P53  xvedivorgaenger   ? _F|defined(U|xvedivorgaenger)
+.type P53  xvedineu          ? _F|defined(U|xvedineu)
+..
+.. Query edi messages with status 3
+.formula U|xtselediidentifiziert = 'F|formatstr("$,,;@gruppe=0;edinachr=2101!2102;vorart<>0;abmodell<>`;idkundeab={1};imex=IM;fcode=0;status=3;@ordnung=nummer", U|xidkundeabe)'
+..
+!NEXTEDI
+.select edifact 'U|xtselediidentifiziert'
+.continue END ? _G|mehr
+.continue PROCESS
+..
+!SKIPP
+.select edifact
+.continue END ? _G|mehr
+..
+!PROCESS
+.continue SKIPP ?  H|id = U|xvedineu^id
+.assign U|xvedineu = H|id
+..
+.. Missing required data in edi message
+.continue F47 ? F|empty(H|idkundesab) ; F|empty(H|ideksart) ; F|empty(H|ideksrah)
+..
+.. Read ediinfo data from customer of edi message
+.input "EDI.GET.CUSTOMERCONFIG"
+.. No mapping model -> old forecast, do nothing here
+.continue SKIPP ? F|empty(U|xediabm)
+..
+.. Test predecessor / previous message for same blanket order / product
+.continue EAUTO2 ? _U|xAutoDeactivateErrL
+.formula U|xtseledivorgaenger = 'F|formatstr("$,,;@gruppe=0;edinachr={4};vorart<>0;abmodell<>`;idkundeab={1};ideksrah={2};ideksart={3};imex=IM;fcode=1!99;status=1!99;@ordnung=nummer", U|xvedineu^idkundeab, U|xvedineu^ideksrah, U|xvedineu^ideksart, U|xvedineu^edinachr^id)'
+.select edifact 'U|xtseledivorgaenger'
+.continue EAUTO2 ? _G|mehr
+!NAUTO
+.assign U|xvedivorgaenger = H|id
+.reserve
+.select lock edifact 'U|xvedivorgaenger'
+.formula H|status = H|status - 12
+.rewrite
+.select
+.select edifact
+.continue NAUTO ? G|mehr
+!EAUTO
+.select lock edifact 'U|xvedineu^id'
+.formula H|ideksedier = U|xvedivorgaenger^nummer
+.rewrite
+!EAUTO2
+..
+..
+.. Deacticate forecast in buffer h if a newer one for same customer/product exists.
+.. Do not check for even more forecats for same customer/product: every snigle forecast has to be pass predecesser-check (see above)
+.continue EAUTO3 ? _U|xAutoDeactivateOldL
+.formula U|xtselediautoinaktiv = 'F|formatstr("$,,;@gruppe=0;edinachr={4};vorart<>0;abmodell<>`;idkundeab={1};ideksrah={2};ideksart={3};imex=IM;fcode=0;status=3;@ordnung=nummer.(Backwards)", U|xvedineu^idkundeab, U|xvedineu^ideksrah, U|xvedineu^ideksart, U|xvedineu^edinachr^id)'
+.select edifact 'U|xtselediautoinaktiv'
+.continue DEACTI ? U|xvedineu^nummer < H|nummer
+!EAUTO3
+..
+..
+.. Release possible locks on edi message
+.select -
+..
+.output terminal
+.set trans +
+Verarbeite Abruf <'U|xvedineu^nummer'>.
+.set trans -
+..
+.input de.abas.edi.JEdi.java -id 'U|xediabm^nummer' -edidbid 'U|xvedineu^nummer'
+.continue F99 ? G|status <> 0
+.continue NEXTEDI
+..
+..
+.. Auto deactivate forecasts for same customer/product if newer one exists
+!DEACTI
+.select lock edifact 'U|xvedineu^id'
+.formula status = status - 12
+.rewrite
+.continue NEXTEDI
+..
+.. C-core reported error
+!F99
+.select lock edifact 'U|xvedineu^id'
+.formula H|status = 4
+.formula H|fcode = 99
+.rewrite
+.continue NEXTEDI
+..
+.. Mandatory fields are empty
+!F47
+.select lock edifact 'U|xvedineu^id'
+.formula H|status = 4
+.formula H|fcode = 47
+.rewrite
+.continue NEXTEDI
+..
+..*****************************************************************************
+!END
+.continue

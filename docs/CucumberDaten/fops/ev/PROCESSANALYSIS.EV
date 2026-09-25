@@ -1,0 +1,104 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PROCESSANALYSIS.EV
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Je Ereigniseintritten an bestimmten Eingabefeldern wird
+.. Funktionalitaet verteilt:
+.. Maskeneintritt          -> Maskengrundeinstellung
+.. Feldaustritt Vorgang    -> Maske leeren und Info
+.. Feldaustritt Richtgung  -> Verfolgungsrichtung fixieren
+.. Buttonnach Startbutton  -> Berichtserstellung
+.. Buttonnach Selektieren  -> Vorgang/Position selektieren und neu starten.
+..
+.. Ablauf         : Zentrales EFOP
+...Includes       :
+.. include ev/PROCESSANALYSIS.BSTART.BN
+..*****************************************************************************
+.set trans -
+..---------------------------- Mask: ------------------------------------------
+.continue ENTER   ? G|evtartengl = "SCREEN_ENTER"
+..---------------------------- Header: ----------------------------------------
+.continue START   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+.continue DETAILS ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "vorgang"
+.continue ENTER   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "mitstorno"
+..---------------------------- Table: -----------------------------------------
+.continue NEWDOCU ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "buneustart"
+..=============================================================================
+.continue END
+..
+!ENTER: Initialize mask buffer while entering screen
+.formula P|maskkontextfop = ""
+.formula M|sumbestellung = 0
+.formula M|sumlieferschein = 0
+.formula M|sumrechnung = 0
+.formula M|sumrueckls = 0
+.formula M|sumgutschrift = 0
+.formula M|sumkundenls = 0
+.formula M|sumkonto = 0
+..
+.copy M|inlwaehr = G|inland
+.continue CLRTAB
+..
+!DETAILS: Details of document or item
+.continue CLRHEAD ? F|empty(M|vorgang)
+.continue ERROR04 ? M|vorgang^gruppe <> 1 & M|vorgang^gruppe <> 2
+.continue ONLY ? (M|vorgang^kopf^typ = 3 ; M|vorgang^kopf^typ = 34) & G|evtvar = "buposstart"
+.continue ONLY ? M|vorgang^typ = 3 ; M|vorgang^typ = 34
+.continue ERROR03
+..
+!ONLY
+.formula P|maskkontextfop = "" ? M|vorgang^dnr = 3
+.formula P|maskkontextfop = "Purchasing" ? M|vorgang^dnr = 4
+.formula M|vorgart = M|vorgang^typa
+.formula M|kerfass = M|vorgang^vom
+.formula M|kerfass = M|vorgang^erfass ? F|empty(M|kerfass)
+.assign M|ksuch = M|vorgang^kl ? F|defined(M|vorgang^kl)
+.continue ENTER
+..
+!CLRHEAD: Clear header
+.formula P|maskkontextfop = ""
+.input "is/KOPFLEEREN"
+.copy M|inlwaehr = G|inland
+.continue CLRTAB
+..
+!CLRTAB: Clear table
+.input "is/TABLEEREN"
+.continue END
+..
+!START: Start report
+.continue ERROR01 ? F|empty(M|vorgang)
+.assign M|select = M|vorgang^id
+.input "ev/PROCESSANALYSIS.BSTART.BN"
+.continue END
+..
+!NEWDOCU: Select document from table row
+.continue ERROR02 ? F|empty(M|tvorgang)
+.copy M|vorgang = M|tvorgang
+.continue DETAILS
+..
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR01: Missing input!
+.error -line 0 -field M|vorgang -message Die Auswahl ist unvollstÑndig. Bitte ergÑnzen!
+.end 1
+..
+!ERROR02: Selection failed!
+.error -message Auswahl konnte nicht durchgefÅhrt werden!
+.end 1
+..
+!ERROR03: Wrong selection!
+.error -line 0 -field M|vorgang -message Infosystem kann nur mit Bestellung/Auftrag gestartet werden!
+.formula M|vorgang = ""
+.cursor vorgang 0
+.continue CLRHEAD
+..
+!ERROR04: Illegal input!
+.error -line 0 -field M|vorgang -message Auswahl ist nicht zulÑssig!
+.formula M|vorgang = ""
+.cursor vorgang 0
+.end 1
+

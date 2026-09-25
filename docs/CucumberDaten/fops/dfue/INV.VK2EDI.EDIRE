@@ -1,0 +1,2921 @@
+..!interpreter english
+..@@BEGINHEAD
+..========================================================================
+..==
+..==  Name              : INV.VK2EDI.EDIRE
+..==
+..==  Pfad              : dfue
+..==
+..==  Projekt           : dfue
+..==
+..==  Funktion          : unterprogramm von DFUE.VK2EDI fÅr
+..==                      rechnungen, die mit edifact gesendet werden
+..==
+..==  Erstellungsdatum  : 13.07.99
+..==
+..==  Autor             : Hagen Schulze
+..==  Verantwortlich    : mh
+..==  Menuepunkte       :
+..==
+..==  Maskenprioritaet
+..==  bei EFOP          :
+..==
+..==  Besonderheiten    : alle variablen sind in DFUE.VK2EDI definiert
+..==
+..========================================================================
+..@@ENDHEAD
+..
+.input ARB
+..
+.. variable definitions
+..@@BEGINVARDEFS
+..====================================================
+.set trans -
+..**ok,14.05.2004 (Neu xUrland, xUrsp, xHandPr)
+.type text   xUrland xUrsp xHandPr
+..
+.type bool   xbaktiv
+.type bool   xbEdiFehler
+.type integer    xbuart
+.type integer    xPosNummer
+.type real4  xrSKBBETR xrSKONTO
+.type real   xrSkontoBetrag
+.type text   xPosReMenge
+.type text   xPosMgeEinheit
+.type text   xPosPnum
+.type text   xPosPwert
+.type text   xPosPreis
+..
+..**ok,14.04.2003 (Neu xMReBetragNetto, xMStBetragG, xMReBetragBrutto
+.type text   xMReBetragNetto xMStBetragG xMReBetragBrutto
+.type text   xMStSatz xMStBetrag xMZuschlag xMAbschlag xMZuschlagG xMAbschlagG xMWarenWert xMStBetragG xMWarenWertG
+..
+..**ok,10.02.2003 (Variable xLBed1 und xLBed2 NEU)
+.type text   xLBed1 xLBed2
+..**ok,10.02.2003 (Variable xSpedNr und xSpedName NEU)
+.type text   xSpedNr xSpedName
+..**ok,10.02.2003 (Variable xVersandCode NEU)
+.type text   xVersandCode
+..**ok,10.02.2003 (Variable xFtext1, xFText2, xFtext3, xFtext4 NEU)
+.type text   xFtext1 xFText2 xFtext3 xFtext4
+..**ok,10.02.2003 (Variable xWGruppe und xWGrpQ NEU)
+.type text   xWGruppe xWGrpQ
+..**ok,10.02.2003 (Variable xBesDLQ, xBesDL NEU)
+.type text   xBesDLQ xBesDL
+..**ok,10.02.2003 (Variable xDatRabat NEU)
+.type text   xDatRabat
+..
+..**ok,13.02.2003 (Variable xLBedQ, xWBeteil, xWBeteilQ NEU)
+.type text   xLBedQ
+.type text   xWBeteil xWBeteilQ ? _F|defined(U|xWBeteil)
+..
+..**ok,18.12.2002 (jetzt xPosProz text --> real)
+.type real   xPosProz
+.type text   xPosNwert
+..
+..**ok,18.12.2002 (xPosWGPreis ist NEU)
+.type real   xPosWGPreis
+.type real   xReBetragNetto
+.type real   xReBetragBrutto
+.type real   xSummeZuschlag
+.type real   xSummeAbschlag
+..
+..**ok,14.04.2003 (xGeldBetr1 und xGeldBetr1 definiert)
+.type real xGeldBetr1
+.type real xGeldBetr2
+..
+..**hs,28.07.2000 (neu xAuNrP, xLsNrP)
+..zugehîrige Auftragsnummer+Datum der Position
+.type text   xAuNrP
+.type text   xAuDatumP
+..
+..zugehîrige Lieferscheinnummer+Datum der Position
+.type text   xLsNrP
+.type text   xLsDatumP
+..
+..Variablen zur Bestimmung ob Sammel-RE
+.type bool   xBSammelRe
+.type text   xposokopfLS
+.type text   xposokopfAU
+..
+..**hs,01.08.2000, Variable xWEmpfAbtlg
+.type text   xWEmpfAbtlg
+..
+..**ok,10.05.2001 (xPosPreisEinheit, xPosPreisBasis)
+.type text   xPosPreisEinheit
+.type integer    xPosPreisBasis
+..
+..**ok,05.06.2001 (xRELiGLN wurde definiert)
+.type text  xRELiGLN
+..
+..**ok,24.10.2002 (jetzt die Variable xGruppe NEU)
+.type text  xGruppe
+..
+..**ok,21.05.2003 (jetzt die xCnt-Variablen fÅr Satzarten definiert)
+.type integer xCnt111 xCnt112
+..
+..**ok,01.12.2003 (neue Variable xDatum)
+.type date xDatum
+..
+..**mh, 20.09.2010: ist die eigene Firma in der EU?
+.type bool xobeuland
+.type PS97:1 xInland
+..
+.. 16.12.2013: plant and unloading point for global invoice automotive
+.type text xWEmpfwPlant
+.type text xWEmpfwUPoint
+..
+..
+..XXXTEST
+..====================================================
+..@@ENDVARDEFS
+..
+.. alle variablen mÅssen definiert sein, sonst bricht das programm ab
+.set demand -
+.. procedure stack pointer ist im hauptprogramm definiert
+..
+.. ----------------------------------------
+.continue EPROCDEF
+.. procedure definitions
+..
+!PROC001: ----- FEHLER -----
+.formula xbfehler = true
+..
+.output addedto 'xdfehler'
+..box Fehler
+?'xtxt1' ? +xtxt1 > 0
+?'xtxt2' ? +xtxt2 > 0
+..
+.. wieder auf alte datei schreiben
+.output addedto 'xgeraet'
+..
+..**ok,06.12.2004 (wenn vom Infosystem aufgerufen wird)
+..
+..
+.continue EL001 ? _(xbinfo)
+.. IF001
+.formula M|fehltext = xtxt1 + ";" + xtxt2
+..
+!EL001
+.. FI001
+..
+.continue 'xprocst.xprocsp'
+..
+..
+!PROC002: ----- SENDE.POST -----
+.set trans +
+.formula xPostBetreff = "Fehler beim öbernehmen von Rechnungen in EDI-Datenbank"
+.formula xPostStichw1 = "DFö-Fehler"
+.set trans -
+..fo xPostFtext   = xdfehler
+.formula xPostEmpf    = xIdDfueExVerteil
+..
+.input 'xdPostSenden' ? xPostEmpf<>""
+..
+.continue 'xprocst.xprocsp'
+..
+!EPROCDEF: ----- end procedure definitions -----
+.. ----------------------------------------
+..
+.. programm ist unterprogramm von DFUE.VK2EDI
+.end . ? txname / "*INV.VK2EDI.EDIRE"
+..
+.. khuelskaemper 2024 Ob das Land des Mandanten in der EU ist
+.. istInEU = (euKennung != '') AND (austritt='' OR (austritt > heute))
+.formula U|xInland = F|sysinfo(10)^staat
+.formula U|xobeuland = (U|xInland^egkenn <> "") & (('U|xInland^egbis:8' = "") ; ('U|xInland^egbis:8' > 'G|datum:8'))
+..
+.. Kunden-GLN fÅr EmpfÑnger ermitteln
+.. ----------------------------------------
+.reserve lifo
+.formula U|xKundeGLN = ""
+..
+.select add kunde2
+..
+..
+.continue EL002 ? _(mehr)
+.. IF002
+.. get xbintedi/kopf/pos and reliempf^GLN
+.input "DFUE.GET.PROTOK"
+..
+.. xKundeGLN and xRELiGLN are both used in edi message!
+.formula U|xKundeGLN = H|gln
+.formula U|xKundeGLN = U|xvreliempf^gln  ? _F|empty(U|xvreliempf)
+.formula U|xRELiGLN  = U|xKundeGLN
+..
+!EL002
+.. FI002
+..
+.select lifo
+.. ----------------------------------------
+..
+.. nur beim ersten durchlauf, einmal pro Nachricht
+.. daten fÅr Satz 000
+..
+.continue EL003 ? _(xbfirstime)
+.. IF003
+.. daten fÅr satz 000 in datei
+..EintrÑge edifact
+..
+.output new 'xDatRechAll'
+.input DATEI.F
+000 # 01 # EDIFACT # VKRE # 380 # 'xBetrGLN' # # #'xRELiGLN'# # #'datum:8'# 'zeit' # # # # # # # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt000 = xCnt000 + 1
+..
+.formula xbfirstime = false
+..
+!EL003
+.. FI003
+..
+..alle Zahlen erstmal mit dez="." damit kann bei Export noch gerechnet werden
+.set decpoint .
+..**ok,05.11.2003 (.setz tsd --> .setz tsdtrenn)
+.set thoussep
+..
+.. zur Rechnung gehîrende LS-Nr und AU-Nr
+.formula xLsNr = ""
+.formula xAuNr = ""
+.formula xAuDatum = ""
+.formula xLsDatum = ""
+..
+.formula xgeraet     = xDatRech
+..
+..**ok,10.02.2003 (hier die Datei xDatRabat NEU)
+..
+.formula xDatRabat =  "X.RARE." + pid + ".TMP"
+..
+.output new 'xDatRabat'
+.input DATEI.F
+..
+.. KOPFDATEN
+.. Sammeln der Rechnungs-Kopfdaten
+.. jetzt werden die daten der rechnung erst mal gesammelt
+..**mh, 13.03.2007: AuNr = Bestellnummer Kunde, jetzt direkt aus der Rechnung
+.formula T|xAuNr         = H|frzeich
+.formula xReNr               = h|num
+.formula xReDatum            = h|vom:8
+.formula xbuart              = h|buart
+.formula xKundeNr            = h|kunde
+.formula xKunde2Nr           = h|kunde2
+.formula xVersandArt         = H|vart
+..
+..**ok,04.12.2003 (ValutaDatum, xZahlungZum nicht 8-stellig genommen)
+.formula xZahlungZum         = h|tterm
+.formula xValutaDatum        = h|vdat
+..
+.formula xBudat              = h|budat:8
+.formula xZahlungsart        = h|zaform
+.formula xLand               = h|land
+.formula xSkontoBezugsBetrag = 'h|skbbetr'
+.formula xrSKBBETR           =  h|skbbetr
+..
+... rechnungsendwert inkl. mwst
+.formula xReEndwert          = h|rebetr
+..**ok,21.05.2003 (untere Zeile auskommentiert)
+..      .fo xReBetragBrutto     = h|rebetr
+....ohne mwst
+.formula xReEntgelt = xReEndwert - xStBetrag
+..
+..**ok,10.02.2003 (Lieferbedingung in SA107, Pos. 17 NEU)
+.add lbed
+..
+..
+.continue EL004 ? _(mehr)
+.. IF004
+.formula xLBed1 = D|sucherw << ";"
+.formula xLBed2 = D|sucherw >> ";"
+..**ok,13.02.2003 (xLBedQ SA107, Pos. 19 ist NEU)
+.formula xLBedQ = D|schl
+.add
+..
+!EL004
+.. FI004
+..
+..**ok,10.02.2003 (Versandcode in SA107, Pos. 05 NEU)
+.add versand
+..
+..
+.continue EL005 ? _(mehr)
+.. IF005
+.formula xVersandCode = D|schl
+.formula xVersandArt  = D|sucherw
+.add
+..
+!EL005
+.. FI005
+..
+..**ok,10.02.2003 (Spediteur in SA107, Pos. 09, Pos. 10 NEU)
+.add spediteur
+..
+..
+.continue EL006 ? _(mehr)
+.. IF006
+.formula xSpedNr   = D|num
+.formula xSpedName = D|sucherw
+.add
+..
+!EL006
+.. FI006
+..
+..**ok,10.02.2003 (Freitexte aus dem Betreff NEU)
+.formula xFText1 = betreff << ";"
+.formula xFText2 = (betreff >> ";" ) << ";"
+.formula xFText3 = (betreff >> ";" ) >> ";"
+.formula xFText4 = ((betreff >> ";" ) >> ";" ) >> ";"
+..
+.. TABELLENDATEN
+.. Info
+.. ZuschlÑge + AbschlÑge werden je MWST-Satz ermittelt dabei ist folgendes zu beachten:
+.. Warenwert ist immer mge*preis weil:
+.. pwert wird durch proz ( Zu- oder Abschlag ) verÑndert
+.. nwert wird durch Positionen mit -umlegen="ja"- verÑndert
+..
+..Zu-/AbschlÑge werden in positive BetrÑge umgerechnet
+..
+..xReBetragBrutto = rebetr
+..xReBetragNetto  = rebetr - (alle mîglichen Steuerpositionen)
+..
+.. Variablen="0" setzen
+.formula xStBetragG= 0.00
+..**ok,21.05.2003 (xStBetrag nicht initialisiert)
+..      .fo xStBetrag = 0.00
+.formula xStBetrag0= 0.00
+.formula xStBetrag1= 0.00
+.formula xStBetrag2= 0.00
+.formula xStBetrag3= 0.00
+.formula xStBetrag4= 0.00
+.formula xStBetrag5= 0.00
+.formula xStBetrag6= 0.00
+.formula xStBetrag7= 0.00
+.formula xStBetrag8= 0.00
+.formula xStBetrag9= 0.00
+..
+..**ok,21.05.2003 (xStBasis hier NEU)
+.formula xStBasisG= 0.00
+.formula xStBasis = 0.00
+.formula xStBasis0= 0.00
+.formula xStBasis1= 0.00
+.formula xStBasis2= 0.00
+.formula xStBasis3= 0.00
+.formula xStBasis4= 0.00
+.formula xStBasis5= 0.00
+.formula xStBasis6= 0.00
+.formula xStBasis7= 0.00
+.formula xStBasis8= 0.00
+.formula xStBasis9= 0.00
+..
+..**ok,21.05.2003 (xReBetragNetto hier NEU)
+.formula xReBetragNetto= 0.00
+.formula xReBetragNetto0= 0.00
+.formula xReBetragNetto1= 0.00
+.formula xReBetragNetto2= 0.00
+.formula xReBetragNetto3= 0.00
+.formula xReBetragNetto4= 0.00
+.formula xReBetragNetto5= 0.00
+.formula xReBetragNetto6= 0.00
+.formula xReBetragNetto7= 0.00
+.formula xReBetragNetto8= 0.00
+.formula xReBetragNetto9= 0.00
+..
+..**ok,21.05.2003 (xReBetragBrutto hier NEU)
+.formula xReBetragBrutto= 0.00
+.formula xReBetragBrutto0= 0.00
+.formula xReBetragBrutto1= 0.00
+.formula xReBetragBrutto2= 0.00
+.formula xReBetragBrutto3= 0.00
+.formula xReBetragBrutto4= 0.00
+.formula xReBetragBrutto5= 0.00
+.formula xReBetragBrutto6= 0.00
+.formula xReBetragBrutto7= 0.00
+.formula xReBetragBrutto8= 0.00
+.formula xReBetragBrutto9= 0.00
+..
+..**ok,21.05.2003 (Initialisieren von xStSatz-Variablen auskommentiert)
+..fo xStSatz   = 0.00
+..fo xStSatz0  = 0.00
+..fo xStSatz1  = 0.00
+..fo xStSatz2  = 0.00
+..fo xStSatz3  = 0.00
+..fo xStSatz4  = 0.00
+..fo xStSatz5  = 0.00
+..fo xStSatz6  = 0.00
+..fo xStSatz7  = 0.00
+..fo xStSatz8  = 0.00
+..fo xStSatz9  = 0.00
+..
+.formula xZuschlagG = 0
+.formula xZuschlag  = 0
+.formula xZuschlag0 = 0
+.formula xZuschlag1 = 0
+.formula xZuschlag2 = 0
+.formula xZuschlag3 = 0
+.formula xZuschlag4 = 0
+.formula xZuschlag5 = 0
+.formula xZuschlag6 = 0
+.formula xZuschlag7 = 0
+.formula xZuschlag8 = 0
+.formula xZuschlag9 = 0
+..
+.formula xAbschlagG = 0
+.formula xAbschlag  = 0
+.formula xAbschlag0 = 0
+.formula xAbschlag1 = 0
+.formula xAbschlag2 = 0
+.formula xAbschlag3 = 0
+.formula xAbschlag4 = 0
+.formula xAbschlag5 = 0
+.formula xAbschlag6 = 0
+.formula xAbschlag7 = 0
+.formula xAbschlag8 = 0
+.formula xAbschlag9 = 0
+..
+.formula xWarenWertG = 0
+.formula xWarenWert  = 0
+.formula xWarenWert0 = 0
+.formula xWarenWert1 = 0
+.formula xWarenWert2 = 0
+.formula xWarenWert3 = 0
+.formula xWarenWert4 = 0
+.formula xWarenWert5 = 0
+.formula xWarenWert6 = 0
+.formula xWarenWert7 = 0
+.formula xWarenWert8 = 0
+.formula xWarenWert9 = 0
+..
+.formula xReBetragBrutto= h|rebetr
+..**ok,21.05.2003 (xReBetragNetto als "h|rebetr" wurde von hier nicht entfernt)
+..
+.. mh, 05.01.2009: Auftragsbezug ohne Sammelrechung, jetzt: xBSammelRe=true
+.. mh, 06.09.2010: Wieder xBSammelRe=false, PrÅfung auf gleichen Ursprung (Bestellung) verbessert
+.formula xBSammelRe = false
+.formula U|xposokopfLS = ""
+.formula U|xposokopfAU = ""
+..
+.select line
+..
+..
+!LOOP001: ==============================
+.continue ELOP001 ? _(mehr)
+.type P58 taxcode ? _F|defined(U|taxcode)
+.copy U|taxcode = H|steuer
+.input "TAXRATES.INDEX"
+..
+.. stpos
+..
+.continue EL007 ? _(h|typ = stpos)
+.. IF007
+.formula xStBetrag.itax = xStBetrag.itax + h|pwert
+..**ok,21.05.2003 (jetzt Steuerbasis fÅr unterschiedliche MwSt.SÑtze gebildet)
+.formula xStBasis.itax  = xStBasis.itax + h|preis
+.formula xStBetragG       = xStBetragG       + h|pwert
+.formula xStSatz.itax   = h|proz
+..
+..**ok,21.05.2003 (jetzt xReBetragNetto auch nach Steuer getrennt)
+..**ok,21.05.2003 (xReBetragNetto.steuer aus "H|preis" bei stpos berechnet)
+.formula xReBetragNetto.itax = xReBetragNetto.itax + h|preis
+..
+!EL007
+.. FI007
+..
+.. prpos
+..
+.continue EL008 ? _(h|typ = prpos)
+.. IF008
+..**ok,16.06.2005 (statt pwert ==> proz)
+..
+.. mh, 24.07.2015 - "Gesamtrechnungsrabatt"
+.formula U|xWarenWert.itax = U|xWarenWert.itax + H|pwert
+.formula U|xWarenWertG = U|xWarenWertG + H|pwert
+..
+..
+.continue EL009 ? _(h|proz>0)
+.. IF009
+.formula xZuschlag.itax = xZuschlag.itax + h|pwert
+.formula xZuschlagG       = xZuschlagG       + h|pwert
+..
+.continue FI009
+!EL009
+.formula xAbschlag.itax = xAbschlag.itax + (h|pwert * -1)
+.formula xAbschlagG       = xAbschlagG       + (h|pwert * -1)
+..
+.. Rabatte
+..**ok,10.02.2003 (Hier Objekt-, HÑndler- und Leistungsrabatt NEU)
+..
+..
+.continue EL010 ? _(('art^such' / xRabObj) ; ('art^such' / xRabHaend) ; ('art^such' / xRabLeist))
+.. IF010
+.formula xBesDLQ = "OBA"     ?      'art^such' / xRabObj
+.formula xBesDLQ = "TD"      ?      'art^such' / xRabHaend
+.formula xBesDLQ = ""        ?      'art^such' / xRabLeist
+..
+.formula xBesDL  = 'h|art^vbez'
+..
+.. RABATT
+.formula xPosZAQ  = "H"
+.formula xProzQ   = "1"
+..
+..**ok,23.12.2003 (jetzt das Minus-Zeichen geprÅft und nicht ausgegeben)
+..
+..
+.continue EL011 ? _('h|proz'<<1 = "-")
+.. IF011
+.formula xPosProz = -h|proz
+..
+.continue FI011
+!EL011
+.formula xPosProz = h|proz
+..
+!FI011
+..
+..**ok,23.12.2003 (jetzt das Minus-Zeichen geprÅft und nicht ausgegeben)
+..
+..
+.continue EL012 ? _('h|pwert'<<1 = "-")
+.. IF012
+.formula xGeldBetr1 = -h|pwert
+..
+.continue FI012
+!EL012
+.formula xGeldBetr1 = h|pwert
+..
+!FI012
+..
+.formula xGeldBetrQ = "131"
+..
+..**ok,13.02.2003 (zwischen xGeldBetrQ, xGeldBetr1 jetzt in Pos. 13, 14)
+.output addedto 'xDatRabat'
+..
+110 # 01 #  'xPosZAQ' # # # # # 'xBesDLQ' # 'xBesDL' # 'xProzQ' # 'xPosProz' # # 'xGeldBetrQ' # 'xGeldBetr1' # # # # # # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt110 = xCnt110 + 1
+..
+!EL010
+.. FI010
+..
+!FI009
+..
+!EL008
+.. FI008
+..
+.. mipos
+..
+.continue EL013 ? _(h|typ = mipos)
+.. IF013
+..
+.continue EL014 ? _(h|pwert>0)
+.. IF014
+.formula xZuschlag.itax = xZuschlag.itax + h|pwert
+.formula xZuschlagG       = xZuschlagG       + h|pwert
+..
+.continue FI014
+!EL014
+.formula xAbschlag.itax = xAbschlag.itax + (h|pwert * -1)
+.formula xAbschlagG       = xAbschlagG       + (h|pwert * -1)
+..
+!FI014
+..
+!EL013
+.. FI013
+..
+.. zupos
+..
+.continue EL015 ? _(h|typ = zupos)
+.. IF015
+..
+.continue EL016 ? _(('art^such' / xSwVersand) ; ('art^such' / xSwVerpackung))
+.. IF016
+..
+.continue EL017 ? _(h|pwert>0)
+.. IF017
+.formula xZuschlag.itax = xZuschlag.itax + h|pwert
+.formula xZuschlagG       = xZuschlagG       + h|pwert
+..
+..**ok,15.07.2002 (jetzt Versand- und Verpackungskosten werden beim Warenwert berÅcksichtigt)
+..**ok,07.08.2003 (Versand-/Verpackungsosten aus Warenwert rausgenommen)
+..
+..**ok,04.07.2003 (untere Block komplett NEU fÅr Versand und Verpackungskosten im Kopf)
+.formula xArtikelVbez1  = 'h|art^vbez'
+.formula xGeldBetr1 = h|pwert
+.output addedto 'xDatRabat'
+..
+..
+.continue EL018 ? _('art^such' / xSwVersand)
+.. IF018
+.. Satzart 110 fÅr Versandkosten
+.. Pos.  3 ( M: Zuschlag )
+.. Pos.  4 ( Verkaufsbezeichnung aus der Zusatzposition )
+.. Pos.  8 ( Besondere Dienstleistungen, codiert.   FC: Freight Charge (Frachtkosten)
+.. Pos. .12 ( Geldbetrags-Qualifier,  64: Freight charge/Frachkosten )
+..**ok,05.08.2003 (jetzt die Beschreibung statt Pos. 4 in Pos.9 Åbertragen)
+..
+110 # 01 # M # # # # # FC # 'xArtikelVbez1' # # # # 64 # 'xGeldBetr1' # # # # # # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt110 = xCnt110 + 1
+..
+.continue FI018
+!EL018
+.. Satzart 110 fÅr Verpackungskosten
+.. Pos.  3 ( M: Zuschlag )
+.. Pos.  4 ( Verkaufsbezeichnung aus der Zusatzposition )
+.. Pos.  8 ( Besondere Dienstleistungen, codiert.   PC: Packing Charge (Verpackung)
+.. Pos. 12 ( Geldbetrags-Qualifier,  106: Packing cost/Verpackungskosten )
+..**ok,05.08.2003 (jetzt die Beschreibung statt Pos. 4 in Pos.9 Åbertragen)
+..
+110 # 01 # M # # # # # PC # 'xArtikelVbez1' # # # # 106 # 'xGeldBetr1' # # # # # # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt110 = xCnt110 + 1
+..
+!FI018
+..
+!EL017
+.. FI017
+..
+!EL016
+.. FI016
+..
+!EL015
+.. FI015
+..
+.. arpos
+..
+.continue EL019 ? _(h|typ = arpos)
+.. IF019
+..
+.continue EL020 ? _(h|proz<>0)
+.. IF020
+..
+.continue EL021 ? _(h|proz>0)
+.. IF021
+.. Zuschlag
+..**ok,18.12.2002 (fehlende h|pehe wurde hinzugefÅgt)
+.formula xZuschlag.itax = xZuschlag.itax + h|pwert - ( h|mge * h|preis * h|pehe )
+.formula xZuschlagG       = xZuschlagG       + h|pwert - ( h|mge * h|preis * h|pehe )
+..
+.continue FI021
+!EL021
+.. Abschlag
+..**ok,18.12.2002 (fehlende h|pehe wurde hinzugefÅgt)
+.formula xAbschlag.itax = xAbschlag.itax + ( h|mge * h|preis * h|pehe ) - h|pwert
+.formula xAbschlagG       = xAbschlagG       + ( h|mge * h|preis * h|pehe ) - h|pwert
+..
+!FI021
+..
+!EL020
+.. FI020
+..
+..  .fo xWarenWertG       = xWarenWertG       + (h|mge * h|preis * h|pehe )
+..  .fo xWarenWert.steuer = xWarenWert.steuer + (h|mge * h|preis * h|pehe )
+..**ok,25.08.2003 (xWarenWert jetzt mit pwert berechnet)
+.formula xWarenWertG       = xWarenWertG       + h|pwert
+.formula xWarenWert.itax = xWarenWert.itax + h|pwert
+..
+.. Bin ich eine Sammelrechnung
+..**hs,28.07.2000 Vergleichen der Variable okopf aller Positionen
+..gibt es unterschiedliche "okîpfe" ist diese RE eine Sammel-RE
+..wenn es versch. okîpfe gibt, wird die Variable xBSammelRe auf true gesetzt
+.. mh, 06.09.2010: PrÅfung auf gleichen Ursprung (Bestellung) verbessert
+..                 Achtung: Packmittel haben keine Bestellung/Auftrag!
+..
+.formula U|xposokopfLS = H|orig^kopf^nummer        ? F|empty(U|xposokopfLS)
+.formula U|xposokopfAU = H|orig^orig^kopf^nummer   ? F|empty(U|xposokopfAU)
+..
+.formula xBSammelRe = true   ?  _F|empty(H|orig^orig) & U|xposokopfAU <> H|orig^orig^kopf^nummer
+.formula xBSammelRe = true   ?  _F|empty(H|orig)      & U|xposokopfLS <> H|orig^kopf^nummer
+..
+..**ok,01.12.2003 (wenn nicht Sammelrechnung --> Auftrags-/Lieferschein-Nr im Kopf ausgegeben)
+..
+..
+.continue EL022 ? _(xBSammelRe)
+.. IF022
+.continue FI022
+!EL022
+.. xAuNr und xLsNr bei arpos ermitteln
+.formula xAuNr    = ""
+.formula xLsNr    = ""
+.formula xAuDatum = ""
+.formula xLsDatum = ""
+..**mh, 13.03.2007: Bestellnummer Kunde zuerst aus der Rechnung
+.formula T|xAuNr = H|kopf^frzeich
+..
+.add H|okopf
+..
+..
+.continue EL023 ? _(mehr)
+.. IF023
+..
+.continue EL024 ? _(D|typ=liko)
+.. IF024
+.formula xLsNr    = D|num
+.formula xLsDatum = 'D|vom:8'
+..
+..Kundenauftragsnummer, nicht meine AU-Nr
+..**mh, 13.03.2007: Nur dann Bestellnummer Kunde aus Lieferschein verwenden, wenn keine in der Rechnung (s.o.) gefunden worden ist
+.formula T|xAuNr = D|frzeich   ? T|xAuNr = ""
+..
+..**ok,01.12.2003 (navom Åber ein Datumsvariable in 8-stellige umgewandelt)
+.assign T|xDatum = D|navom
+..
+..
+.continue EL025 ? _(mehr)
+.. IF025
+.formula xAuDatum = 'T|xDatum:8'
+..
+!EL025
+.. FI025
+..
+!EL024
+.. FI024
+..
+..
+.continue EL026 ? _(D|typ=abko)
+.. IF026
+..Kundenauftragsnummer, nicht meine AU-Nr
+..**mh, 13.03.2007: Nur dann Bestellnummer Kunde aus Lieferschein verwenden, wenn keine in der Rechnung (s.o.) gefunden worden ist
+.formula T|xAuNr = D|frzeich   ? T|xAuNr = ""
+..
+..unser "vom" muss nicht mit Kundenauftragsdatum
+..Åbereinstimmen
+..**ok,01.12.2003 (navom Åber ein Datumsvariable in 8-stellige umgewandelt)
+.assign T|xDatum = D|navom
+..
+..
+.continue EL027 ? _(mehr)
+.. IF027
+.formula xAuDatum = 'T|xDatum:8'
+..
+!EL027
+.. FI027
+..
+!EL026
+.. FI026
+..
+.add
+..
+!EL023
+.. FI023
+..
+!FI022
+..
+!EL019
+.. FI019
+..
+.select line
+..
+.continue LOOP001
+!ELOP001: ==============================
+..
+..**ok,21.05.2003 ("Gesamtsummen bilden" wurde von hier entfernT)
+..
+..**ok,10.02.2003 (hier WERF.WEG Neu)
+.output new WERF.WEG
+..
+.select lock header
+..
+.. Daten ermitteln + prÅfen, ich,Buyer,WarenempfÑnger
+.. ..eigenes konto prÅfen
+.. ist das Geldtransitkonto/Bankkonto xIdDfueExKonto  gefÅllt
+..
+.reserve
+..
+..
+.continue EL028 ? _(xIdDfueExKonto<>"")
+.. IF028
+.. Konto ( Geld-Transitkonto ) eingetragen ( Rechnungen edifact )
+.. (sh. DFUE.EXP.INI xIdDfueExKonto = 'xIdDfueExKonto')
+..
+.. Konto prÅfen
+.select account 'xIdDfueExKonto'
+..
+..
+.continue EL029 ? _(mehr)
+.. IF029
+..**mh, 01.02.2007: PrÅfen ob im Geldtransitkonto/Bankkonto eine vollstÑndige Bankverbindung (H|bverb) vorhanden ist
+.type bool xbfehlerbankverb
+.formula T|xbfehlerbankverb = false
+.formula T|xbfehlerbankverb = true ? H|bverb = ""
+.formula T|xbfehlerbankverb = true ? H|bverb^bname = "" ; H|bverb^konum = "" ; H|bverb^nident = ""
+..
+..
+.continue EL030 ? _(T|xbfehlerbankverb)
+.. IF030
+.set trans +
+.formula T|xtxt1 = 'F|formatstr("Die Angaben zur Bankverbindung fÅr das Geldtransitkonto/Bankkonto {1} sind unvollstÑndig.", T|xiddfueexkonto)'
+.formula T|xtxt2 = "PrÅfen Sie bitte die Felder Bankname, Nationale Bankidentifikation und Bankkontonummer."
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+..
+.continue FI030
+!EL030
+.. Die Felder xkontoblz, xkontonr, xkontobankname werden
+.. in die EDI-Nachricht geschrieben
+.formula T|xkontoblz = H|bverb^nident
+.formula T|xkontonr = H|bverb^konum
+.formula T|xkontobankname = H|bverb^bname
+.formula T|xBetrIBAN = H|bverb^iban
+.formula T|xBetrBIC = H|bverb^iident
+..
+!FI030
+..
+.continue FI029
+!EL029
+.. Fehler:falscher Eintrag
+.set trans +
+.formula xtxt1 = "Konto "+xIdDfueExKonto+" nicht gefunden"
+.formula xtxt2 = "Variable xIdDfueExKonto in DFUE.EXP.INI pflegen"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+..
+!FI029
+..
+.continue FI028
+!EL028
+.. Fehler:kein Eintrag
+.set trans +
+.formula xtxt1 = "Konto nicht eingetragen (Geld-Transitkonto)"
+.formula xtxt2 = "Variable xIdDfueExKonto in DFUE.EXP.INI pflegen"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+..
+!FI028
+..
+.select
+..
+.. RechnungsempfÑnger-Daten ( kunde2 )
+.add kunde2
+..
+.formula xKundeUstId     = d|ustid
+..
+..**ok,11.04.2000 (ygln, yiban --> gln, iban)
+..** hier wird xKundeGLN Åberschrieben
+.formula xKundeGLN       = d|gln
+..
+.. Bankverbindung KÑufer
+.formula xKundeKonum     = bverb^konum
+.formula xKundeBLZ       = bverb^nident
+.formula xKundeBank      = bverb^bname
+.formula xKundelabank    = bverb^staat^iso2
+.formula xKundewbank     = bverb^kowaehr^iso3a
+.formula xKundeIBAN      = bverb^iban
+.formula xKundeBIC       = bverb^iident
+..
+.add
+..
+..**ok,11.01.2002 (jetzt Anschrift direkt aus der Rechnungsmaske)
+.formula xKundeName1     = ans<<";"
+.formula xKundeName2     = ans>>";"
+.formula xKundeName3     = xKundeName2>>";"
+.formula xKundeName2     = xKundeName2<<";"
+.formula xKundeLand        = staat^iso2
+.formula xKundePLZ          = plz
+.formula xKundeStrasse    = str
+.formula xKundeOrtZeile1  = nort<<";"
+.formula xKundeOrtZeile2  = nort>>";"
+..
+.. Anschrift + UstId Kunde2
+..
+.continue EL031 ? _(xBmitAdressen = true)
+.. IF031
+..
+.continue EL032 ? _(xKundeName1="")
+.. IF032
+.set trans +
+.formula xtxt1 = "In Kunde: "+ xKunde2Nr + " 1.Zeile von Anschrift pflegen"
+.formula xtxt2 = "Diese Angabe wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC001
+!RET004
+.formula xprocsp = xprocsp - 1
+..
+!EL032
+.. FI032
+..
+..
+.continue EL033 ? _(xKundePLZ="")
+.. IF033
+.set trans +
+.formula xtxt1 = "In Kunde: "+ xKunde2Nr + " die Postleitzahl pflegen"
+.formula xtxt2 = "Diese Angabe wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC001
+!RET005
+.formula xprocsp = xprocsp - 1
+..
+!EL033
+.. FI033
+..
+..
+.continue EL034 ? _(xKundeStrasse="")
+.. IF034
+.set trans +
+.formula xtxt1 = "In Kunde: "+ xKunde2Nr + " die Stra·e pflegen"
+.formula xtxt2 = "Diese Angabe wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC001
+!RET006
+.formula xprocsp = xprocsp - 1
+..
+!EL034
+.. FI034
+..
+..
+.continue EL035 ? _(xKundeOrtZeile1="")
+.. IF035
+.set trans +
+.formula xtxt1 = "In Kunde: "+ xKunde2Nr + " den Ort pflegen"
+.formula xtxt2 = "Diese Angabe wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC001
+!RET007
+.formula xprocsp = xprocsp - 1
+..
+!EL035
+.. FI035
+..
+.continue FI031
+!EL031
+..
+..
+!FI031
+..
+..**ok,03.08.2000 (UStID nur prÅfen, wenn Kunde in EU-Land ist)
+..**ok,11.01.2002 (UStID nur fÅr WarenempfÑnger geprÅft)
+..
+..**ok,16.06.2005 (Bankverbindung des Kunden wird nicht mehr geprÅft)
+..
+.. WarenempfÑnger-Daten (kunde oder kunde3)
+..
+.continue EL036 ? _((kunde3<>"") & (kunde<>kunde3))
+.. IF036
+.add kunde3
+..
+.continue FI036
+!EL036
+.add kunde
+..
+!FI036
+..
+..**ok,02.08.2000  (gruppe wird geprÅft fÅr ans oder ans2)
+..
+..**hs,01.08.2000, xWEmpfAbtlg neu
+.formula xWEmpfAbtlg     = D|funktion
+.formula xWEmpfUstId     = d|ustid
+..
+..**ok,11.04.2000 (ygln, yiban --> gln, iban)
+.formula xWEmpfGLN       = d|gln
+..
+..
+.continue EL037 ? _(d|gruppe=1)
+.. IF037
+..
+.continue EL038 ? _(true)
+.. IF038
+.. Bankverbindung KÑufer
+.formula xWEmpfKonum     = bverb^konum
+.formula xWEmpfBLZ       = bverb^nident
+.formula xWEmpfBank      = bverb^bank
+.formula xWEmpflabank    = bverb^staat^iso2
+.formula xWEmpfwbank     = bverb^kowaehr^iso3a
+..
+!EL038
+.. FI038
+..
+.continue FI037
+!EL037
+.. Bankverbindung KÑufer
+.formula xWEmpfKonum  = xKundeKonum
+.formula xWEmpfBLZ    = xKundeBLZ
+.formula xWEmpfBank   = xKundeBank
+.formula xWEmpflabank = xKundelabank
+.formula xWEmpfwbank  = xKundewbank
+.. 16.12.2013: global invoice automotive
+.formula U|xWEmpfwPlant  = D|werk
+.formula U|xWEmpfwUPoint = D|ablstelle
+..
+!FI037
+..
+.add
+..
+..**ok,11.01.2002 (jetzt Anschrift direkt aus dem Vorgang bzw. Rechnung)
+.formula xWEmpfNr        = kunde3
+..
+.formula xWEmpfName1     = ans2<<";"
+.formula xWEmpfName2     = ans2>>";"
+.formula xWEmpfName3     = xWEmpfName2>>";"
+.formula xWEmpfName2     = xWEmpfName2<<";"
+.formula xWEmpfLand      = staat^iso2
+.formula xWEmpfPLZ       = plz2
+.formula xWEmpfStrasse   = str2
+.formula xWEmpfOrtZeile1 = nort2<<";"
+.formula xWEmpfOrtZeile2 = nort2>>";"
+..
+..**ok,18.07.2003 (jetzt wenn ans2 leer ans)
+..
+..
+.continue EL039 ? _(ans2 = "")
+.. IF039
+.formula xWEmpfName1     = ans<<";"
+.formula xWEmpfName2     = ans>>";"
+.formula xWEmpfName3     = xWEmpfName2>>";"
+.formula xWEmpfName2     = xWEmpfName2<<";"
+.formula xWEmpfLand      = staat^iso2
+.formula xWEmpfPLZ       = plz
+.formula xWEmpfStrasse   = str
+.formula xWEmpfOrtZeile1 = nort<<";"
+.formula xWEmpfOrtZeile2 = nort>>";"
+..
+!EL039
+.. FI039
+..
+..**ok,03.08.2000 (Fehlermeldungen korrigiert xKunde2Nr --> XWEmpfNr)
+..
+.. Anschrift + UstId WarenempfÑnger ( kunde )
+..
+.continue EL040 ? _(xBmitAdressen = true)
+.. IF040
+..
+.continue EL041 ? _(xWEmpfName1="")
+.. IF041
+.set trans +
+.formula xtxt1 = "WarenempfÑnger ("+ xWEmpfNr + ")Anschrift 1.Zeile pflegen"
+.formula xtxt2 = "Anschrift Zeile1 + Zeile2 werden weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC001
+!RET008
+.formula xprocsp = xprocsp - 1
+..
+!EL041
+.. FI041
+..
+..
+.continue EL042 ? _(xWEmpfPLZ="")
+.. IF042
+.set trans +
+.formula xtxt1 = "WarenempfÑnger ("+ xWEmpfNr + ") PLZ pflegen"
+.formula xtxt2 = "PLZ wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC001
+!RET009
+.formula xprocsp = xprocsp - 1
+..
+!EL042
+.. FI042
+..
+..
+.continue EL043 ? _(xWEmpfStrasse="")
+.. IF043
+.set trans +
+.formula xtxt1 = "WarenempfÑnger ("+ xWEmpfNr + ") Stra·e pflegen"
+.formula xtxt2 = "Stra·e wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC001
+!RET010
+.formula xprocsp = xprocsp - 1
+..
+!EL043
+.. FI043
+..
+..
+.continue EL044 ? _(xWEmpfOrtZeile1="")
+.. IF044
+.set trans +
+.formula xtxt1 = "WarenempfÑnger ("+ xWEmpfNr + ") Ort pflegen"
+.formula xtxt2 = "Ort Zeile1  wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC001
+!RET011
+.formula xprocsp = xprocsp - 1
+..
+!EL044
+.. FI044
+..
+!EL040
+.. FI040
+..
+..**ok,03.08.2000 (UStID nur prÅfen, wenn WarenempfÑnger in EU-Land ist)
+..**ok,11.01.2002 (jetzt zusÑtzlich geprÅft, ob steuerfrei "true" ist)
+..**ok,10.02.2004 (steuer wurde als steuerfrei korrigiert)
+..**mh, 18.08.2010: ist die eigene Firma in der EU? (xobeuland)
+..
+..
+.continue EL045 ? _((xWEmpfLand = "E") & (U|xMwStfrei) & (U|xobeuland))
+.. IF045
+.. WarenempfÑnger UstId (kunde oder kunde3)
+..
+.continue EL046 ? _(xWEmpfUstId="")
+.. IF046
+.set trans +
+.formula xtxt1 = "In WarenempfÑnger: "+ xWEmpfNr + " Umsatzsteuer-Identifikationsnummer pflegen"
+.formula xtxt2 = "Diese Angabe wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC001
+!RET012
+.formula xprocsp = xprocsp - 1
+..
+!EL046
+.. FI046
+..
+!EL045
+.. FI045
+..
+.. Besteller-Daten (BUYER) (kunde)
+.. ----------------------------------------
+.add kunde
+..**ok,07.01.2004 (jetzt immer ans)
+..
+.formula xBuyerNr        = d|num
+.formula xBuyerName1     = d|ans<<";"
+.formula xBuyerName2     = d|ans>>";"
+.formula xBuyerName3     = xBuyerName2>>";"
+.formula xBuyerName2     = xBuyerName2<<";"
+.formula xBuyerLand      = d|staat^iso2
+.formula xBuyerPLZ       = d|plz
+.formula xBuyerStrasse   = d|str
+.formula xBuyerOrtZeile1 = d|nort<<";"
+.formula xBuyerOrtZeile2 = d|nort>>";"
+..
+.add
+.. ----------------------------------------
+..
+..**ok,28.02.2002 (wenn Kunde/Buyer gleich REmpf oder WEmpf ist, die Adresse aus dem Vorgang)
+..
+..
+.continue EL047 ? _(kunde = kunde2)
+.. IF047
+.formula xBuyerName1     = xKundeName1
+.formula xBuyerName2     = xKundeName2
+.formula xBuyerName3     = xKundeName3
+.formula xBuyerLand        = xKundeLand
+.formula xBuyerPLZ         = xKundePLZ
+.formula xBuyerStrasse   = xKundeStrasse
+.formula xBuyerOrtZeile1 = xKundeOrtZeile1
+.formula xBuyerOrtZeile2 = xKundeOrtZeile2
+..
+.continue FI047
+!EL047
+..**ok,18.06.2003 (untere Block wurde entfernt)
+..
+!FI047
+..
+.. ----------------------------------------
+.add kunde
+.formula xBuyerUstId     = d|ustid
+.formula xBuyerAbtlg     = D|funktion
+.formula xBuyerGLN       = d|gln
+..
+..
+.continue EL048 ? _(d|gruppe=1)
+.. IF048
+..
+.continue EL049 ? _(true)
+.. IF049
+.. Bankverbindung KÑufer
+.formula xBuyerKonum     = bverb^konum
+.formula xBuyerBLZ       = bverb^nident
+.formula xBuyerBank      = bverb^bank
+.formula xBuyerlabank    = bverb^staat^iso2
+.formula xBuyerwbank     = bverb^kowaehr^iso3a
+..
+!EL049
+.. FI049
+..
+.continue FI048
+!EL048
+.. Bankverbindung KÑufer
+.formula xBuyerKonum  = xKundeKonum
+.formula xBuyerBLZ    = xKundeBLZ
+.formula xBuyerBank   = xKundeBank
+.formula xBuyerlabank = xKundelabank
+.formula xBuyerwbank  = xKundewbank
+..
+!FI048
+..
+.add
+.. ----------------------------------------
+..
+.. Anschrift vom Besteller ( kunde )
+..
+.continue EL050 ? _(xBmitAdressen = true)
+.. IF050
+..
+.continue EL051 ? _(xBuyerName1="")
+.. IF051
+.set trans +
+.formula xtxt1 = "Besteller ("+ xBuyerNr + ")Anschrift 1.Zeile pflegen"
+.formula xtxt2 = "Anschrift Zeile1 + Zeile2 werden weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET013" 
+.continue PROC001
+!RET013
+.formula xprocsp = xprocsp - 1
+..
+!EL051
+.. FI051
+..
+..
+.continue EL052 ? _(xBuyerPLZ="")
+.. IF052
+.set trans +
+.formula xtxt1 = "Besteller ("+ xBuyerNr + ") PLZ pflegen"
+.formula xtxt2 = "PLZ wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET014" 
+.continue PROC001
+!RET014
+.formula xprocsp = xprocsp - 1
+..
+!EL052
+.. FI052
+..
+..
+.continue EL053 ? _(xBuyerStrasse="")
+.. IF053
+.set trans +
+.formula xtxt1 = "Besteller ("+ xBuyerNr + ") Stra·e pflegen"
+.formula xtxt2 = "Stra·e wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET015" 
+.continue PROC001
+!RET015
+.formula xprocsp = xprocsp - 1
+..
+!EL053
+.. FI053
+..
+..
+.continue EL054 ? _(xBuyerOrtZeile1="")
+.. IF054
+.set trans +
+.formula xtxt1 = "Besteller ("+ xBuyerNr + ") Ort pflegen"
+.formula xtxt2 = "Ort Zeile1  wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET016" 
+.continue PROC001
+!RET016
+.formula xprocsp = xprocsp - 1
+..
+!EL054
+.. FI054
+..
+!EL050
+.. FI050
+..
+..**ok,13.02.2003 (Weitere Beteiligter NEU)
+..
+.. Weitere Beteiligter
+..**ok,13.02.2003 (aus DFUE.IMP.INI den Variablennamen fÅr den weiteren Beteiligter 'xWBeteil' lesen)
+..
+..
+.continue EL055 ? _(xWBeteil <> "")
+.. IF055
+.. ----------------------------------------
+.add 'xWBeteil'
+..
+.continue EL056 ? _(mehr)
+.. IF056
+..
+.continue EL057 ? _(d|gruppe=2)
+.. IF057
+.formula xPartyNr        = d|num
+.formula xPartyGLN       = d|gln
+.formula xPartyName1     = d|ans<<";"
+.formula xPartyName2     = d|ans>>";"
+.formula xPartyName3     = xPartyName2>>";"
+.formula xPartyName2     = xPartyName2<<";"
+.formula xPartyLand      = d|staat^iso2
+.formula xPartyPLZ       = d|plz
+.formula xPartyStrasse   = d|str
+.formula xPartyOrtZeile1 = d|nort<<";"
+.formula xPartyOrtZeile2 = d|nort>>";"
+.formula xPartyCode      = 'xWBeteilQ'
+.formula xPartyUstId     = d|ustid
+..
+.continue FI057
+!EL057
+.formula xPartyNr        = d|num
+.formula xPartyGLN       = d|gln
+.formula xPartyName1     = d|ans2<<";"
+.formula xPartyName2     = d|ans2>>";"
+.formula xPartyName3     = xPartyName2>>";"
+.formula xPartyName2     = xPartyName2<<";"
+.formula xPartyLand      = d|staat^iso2
+.formula xPartyPLZ       = d|plz2
+.formula xPartyStrasse   = d|str2
+.formula xPartyOrtZeile1 = d|nort2<<";"
+.formula xPartyOrtZeile2 = d|nort2>>";"
+.formula xPartyCode      = 'xWBeteilQ'
+.formula xPartyUstId     = d|ustid
+..
+!FI057
+..
+.. Anschrift vom Beteiligter
+..
+.continue EL058 ? _(xBmitAdressen = true)
+.. IF058
+..
+.continue EL059 ? _(xPartyName1="")
+.. IF059
+.set trans +
+.formula xtxt1 = "Beteiligter ("+ xPartyNr + ") Anschrift 1.Zeile pflegen"
+.formula xtxt2 = "Anschrift Zeile1 + Zeile2 werden weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET017" 
+.continue PROC001
+!RET017
+.formula xprocsp = xprocsp - 1
+..
+!EL059
+.. FI059
+..
+..
+.continue EL060 ? _(xPartyPLZ="")
+.. IF060
+.set trans +
+.formula xtxt1 = "Beteiligter ("+ xPartyNr + ") PLZ pflegen"
+.formula xtxt2 = "PLZ wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET018" 
+.continue PROC001
+!RET018
+.formula xprocsp = xprocsp - 1
+..
+!EL060
+.. FI060
+..
+..
+.continue EL061 ? _(xPartyStrasse="")
+.. IF061
+.set trans +
+.formula xtxt1 = "Beteiligter ("+ xPartyNr + ") Stra·e pflegen"
+.formula xtxt2 = "Stra·e wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET019" 
+.continue PROC001
+!RET019
+.formula xprocsp = xprocsp - 1
+..
+!EL061
+.. FI061
+..
+..
+.continue EL062 ? _(xPartyOrtZeile1="")
+.. IF062
+.set trans +
+.formula xtxt1 = "Beteiligter ("+ xPartyNr + ") Ort pflegen"
+.formula xtxt2 = "Ort Zeile1  wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET020" 
+.continue PROC001
+!RET020
+.formula xprocsp = xprocsp - 1
+..
+!EL062
+.. FI062
+..
+!EL058
+.. FI058
+..
+.continue FI056
+!EL056
+.formula xPartyGLN  = 'xWBeteil'
+.formula xPartyCode = 'xWBeteilQ'
+..
+.formula xPartyNr    = ""
+.formula xPartyName1 = ""
+.formula xPartyName2 = ""
+.formula xPartyName3 = ""
+.formula xPartyLand  = ""
+.formula xPartyPLZ   = ""
+.formula xPartyOrtZeile1 = ""
+.formula xPartyOrtZeile2 = ""
+.formula xPartyStrasse   = ""
+..
+!FI056
+..
+.add
+.. ----------------------------------------
+..
+!EL055
+.. FI055
+..
+.. EintrÑge aus <Firma> BETR prÅfen
+..
+.continue EL063 ? _(xLiefNr="")
+.. IF063
+.set trans +
+.formula xtxt1 = "In Kunde: "+ d|num + " die Lieferanten-Nummer pflegen"
+.formula xtxt2 = "Diese Angabe wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET021" 
+.continue PROC001
+!RET021
+.formula xprocsp = xprocsp - 1
+..
+!EL063
+.. FI063
+..
+.. eigene Anschrift + UstId
+..
+.continue EL064 ? _(xBmitAdressen = true)
+.. IF064
+..
+.continue EL065 ? _(xBetrAnsZeile1="")
+.. IF065
+.set trans +
+.formula xtxt1 = "Im Betriebsdatensatz die 1.Zeile im Anschriftsfeld pflegen"
+.formula xtxt2 = "Diese Angabe wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET022" 
+.continue PROC001
+!RET022
+.formula xprocsp = xprocsp - 1
+..
+!EL065
+.. FI065
+..
+..
+.continue EL066 ? _(xBetrPLZ="")
+.. IF066
+.set trans +
+.formula xtxt1 = "Im Betriebsdatensatz die Postleitzahl pflegen"
+.formula xtxt2 = "Diese Angabe wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET023" 
+.continue PROC001
+!RET023
+.formula xprocsp = xprocsp - 1
+..
+!EL066
+.. FI066
+..
+.. Strasse
+..
+.continue EL067 ? _(xBetrStrasse="")
+.. IF067
+.set trans +
+.formula xtxt1 = "Im Betriebsdatensatz die Stra·e pflegen"
+.formula xtxt2 = "Diese Angabe wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET024" 
+.continue PROC001
+!RET024
+.formula xprocsp = xprocsp - 1
+..
+!EL067
+.. FI067
+..
+.. Ort Zeile1
+..
+.continue EL068 ? _(xBetrOrtZeile1="")
+.. IF068
+.set trans +
+.formula xtxt1 = "Im Betriebsdatensatz den Ort pflegen"
+.formula xtxt2 = "Diese Angabe wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET025" 
+.continue PROC001
+!RET025
+.formula xprocsp = xprocsp - 1
+..
+!EL068
+.. FI068
+..
+!EL064
+.. FI064
+..
+..**mh, 18.08.2010: ist die eigene Firma in der EU? (xobeuland)
+..
+..
+.continue EL069 ? _((xBetrUstId="") & (U|xobeuland))
+.. IF069
+.set trans +
+.formula xtxt1 = "Im Betriebsdatensatz die Umsatzsteuer-Identifikationsnummer pflegen"
+.formula xtxt2 = "Diese Angabe wird weitergegeben"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET026" 
+.continue PROC001
+!RET026
+.formula xprocsp = xprocsp - 1
+..
+!EL069
+.. FI069
+..
+.output new 'xDatRech'
+.input DATEI.F
+..
+.. SÑtze ausgeben
+..
+.continue EL070 ? _(U|xbintedikomplett)
+.. IF070
+.input 'U|xintedi'
+..
+.continue FI070
+!EL070
+..
+.continue EL071 ? _(U|xbintedikopf)
+.. IF071
+.input 'U|xintedi'
+..
+.continue FI071
+!EL071
+.. Daten fÅr SÑtze 101 bis 112 ( Kopf )
+.. daten fÅr satz 100 in datei
+.. belegart abhaengig von buart, erstmal immer eine Rechnung
+.formula xBelegArt = "380"
+.formula xBelegArt = "380" ? xbuart=0
+.formula xBelegart = "381" ? xbuart=1
+..
+.formula xRefNr = ""
+..
+..
+.continue EL072 ? _(xBSammelRe = true)
+.. IF072
+.formula xAuNr    = ""
+.formula xLsNr    = ""
+.formula xAuDatum = ""
+.formula xLsDatum = ""
+..
+!EL072
+.. FI072
+..
+.. zeile raus
+.output addedto 'xDatRech'
+100 # 01 # 'xReNr' # INVOIC # D96A # 'xBelegArt' # UN # 'xRefNr' # 9 #  # 'xAuNr' #'xAuDatum'# 'xLsNr' #'xLsDatum'# # # # # # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt100 = xCnt100 + 1
+..
+.. daten fÅr satz 101 in datei
+.. ValutaTage ist Differenz aus Valutadatum und Erstellungsdatum
+.formula xValTage = H|vdat - H|vom
+..
+.. zeile raus
+.output addedto 'xDatRech'
+101 # 01 # 'xReDatum:8' # # # # # # # 'xValTage' # 'H|vdat:8' #'xLand'# # # # # # # # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt101 = xCnt101 + 1
+..
+.. DATEN fÅr satz 102 in datei ( Lieferant )
+.add kunde2
+..
+.formula xLiefNr = D|frbez
+.add
+..
+..
+.continue EL073 ? _(xBmitAdressen = true)
+.. IF073
+.continue FI073
+!EL073
+.formula xBetrAnsZeile1 = ""
+.formula xBetrAnsZeile2 = ""
+.formula xBetrAnsZeile3 = ""
+.formula xLiefLand      = ""
+.formula xBetrPLZ       = ""
+.formula xBetrOrtZeile1 = ""
+.formula xBetrOrtZeile2 = ""
+.formula xBetrStrasse   = ""
+..
+!FI073
+..
+.. Zeile raus ( 102 )
+.output addedto 'xDatRech'
+102 #01#'xBetrGLN'#'xLiefNr'#'xBetrAnsZeile1'#'xBetrAnsZeile2'#'xBetrAnsZeile3'#'xLiefLand'#'xBetrPLZ'#'xBetrOrtZeile1'#'xBetrOrtZeile2'#'xBetrStrasse'#'xBetrUstId'# # # # # # # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt102 = xCnt102 + 1
+..
+.. satz R02(Lieferant-Reserve)
+..**ok,04.12.2003 (jetzt in SA R02 Steuernummer von Lieferant Åbertragen)
+.output addedto 'xDatRech'
+R02 #01#'xBetrSteuerNr' # # # # # # # # # # # # # # # # # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr = xLfdNr + 1
+..fo xCnt203 = xCnt203 + 1
+..
+.. DATEN fÅr satz 103 in datei ( KÑufer/Buyer )
+..
+.continue EL074 ? _(xBmitAdressen = true)
+.. IF074
+.continue FI074
+!EL074
+..fo xBuyerName1 = ""
+.formula xBuyerName2 = ""
+.formula xBuyerName3 = ""
+.formula xBuyerLand  = ""
+.formula xBuyerPLZ   = ""
+.formula xBuyerOrtZeile1 = ""
+.formula xBuyerOrtZeile2 = ""
+.formula xBuyerStrasse   = ""
+..
+!FI074
+..
+.. zeile raus
+.output addedto 'xDatRech'
+103 #01#'xBuyerGLN'#'xBuyerNr'#'xBuyerName1'#'xBuyerName2'#'xBuyerName3'#'xBuyerLand'#'xBuyerPLZ'#'xBuyerOrtZeile1'#'xBuyerOrtZeile2'#'xBuyerStrasse'#'xBuyerUstId'# # # # # # # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr = xLfdNr + 1
+.formula xCnt103 = xCnt103 + 1
+..
+.. satz R03(KÑufer-Reserve)
+.output addedto 'xDatRech'
+..R03 #01# # # # # # # # # # # # # # # # # # # # # # # 'xLfdNr' #
+..
+..fo xLfdNr = xLfdNr + 1
+..fo xCnt205 = xCnt205 + 1
+..
+.. DATEN fÅr satz 104 in datei ( WarenempfÑnger )
+..
+.continue EL075 ? _(xBmitAdressen = true)
+.. IF075
+.continue FI075
+!EL075
+..**ok,23.01.2001 (WarenempfÑngername wird weitergegeben)
+..fo xWEmpfName1 = ""
+.formula xWEmpfName2 = ""
+.formula xWEmpfName3 = ""
+.formula xWEmpfLand  = ""
+.formula xWEmpfPLZ   = ""
+.formula xWEmpfOrtZeile1 = ""
+.formula xWEmpfOrtZeile2 = ""
+.formula xWEmpfStrasse   = ""
+..
+!FI075
+..
+.. zeile raus
+.output addedto 'xDatRech'
+104 #01#'xWEmpfGLN'#'xWEmpfNr'#'xWEmpfName1'#'xWEmpfName2'#'xWEmpfName3'#'xWEmpfLand'#'xWEmpfPLZ'#'xWEmpfOrtZeile1'#'xWEmpfOrtZeile2'#'xWEmpfStrasse'#'xWEmpfUstId'#'xWEmpfAbtlg'#'xWEmpfwPlant'#'xWEmpfwUPoint'# # # # # # # # #'xLfdNr'#
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt104 = xCnt104 + 1
+..
+.. satz R04(WarenempfÑnger-Reserve)
+.output addedto 'xDatRech'
+..R04 #01# # # # # # # # # # # # # # # # # # # # # # # 'xLfdNr' #
+..
+..fo xLfdNr = xLfdNr + 1
+..fo xCnt207 = xCnt207 + 1
+..
+.. DATEN fÅr satz 105 in datei ( RechnungsempfÑnger )
+..
+.continue EL076 ? _(xBmitAdressen = true)
+.. IF076
+.continue FI076
+!EL076
+..fo xKundeName1 = ""
+.formula xKundeName2 = ""
+.formula xKundeName3 = ""
+.formula xKundeLand  = ""
+.formula xKundePLZ   = ""
+.formula xKundeOrtZeile1 = ""
+.formula xKundeOrtZeile2 = ""
+.formula xKundeStrasse   = ""
+..
+!FI076
+..
+.. zeile raus
+.output addedto 'xDatRech'
+105 #01#'xKundeGLN'#'xKunde2Nr'#'xKundeName1'#'xKundeName2'#'xKundeName3'#'xKundeLand'#'xKundePLZ'#'xKundeOrtZeile1'#'xKundeOrtZeile2'#'xKundeStrasse'#'xKundeUstId'# # # # # # # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr = xLfdNr + 1
+.formula xCnt105 = xCnt105 + 1
+..
+.. satz R05 (RechnungsempfÑnger-Reserve)
+.output addedto 'xDatRech'
+..R05 #01# # # # # # # # # # # # # # # # # # # # # # # 'xLfdNr' #
+..
+..fo xLfdNr = xLfdNr + 1
+..fo xCnt205 = xCnt205 + 1
+..
+.. daten fÅr satz 107 (Transporteinzelheiten)
+..**ok,10.02.2003 (xLBed1, xLBed2, xVersandCode sind NEU)
+..**ok,10.02.2003 (xLBedQ ist NEU)
+.output addedto 'xDatRech'
+107 # 01 # # # 'xVersandCode' # 'xVersandArt' # # # 'xSpedNr' # 'xSpedName' # # # # # # # 'xLBed1' # 'xLBed2' # 'xLBedQ' # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt107 = xCnt107 + 1
+..
+..**ok,10.02.2003 (Initialisieren fÅr dei nÑchste Rechnung)
+.formula xVersandCode = ""
+.formula xVersandArt     = ""
+.formula xSpedNr          = ""
+.formula xSpedName    = ""
+.formula xLBed1           = ""
+.formula xLBed2           = ""
+..
+.. daten fÅr satz 108 (zbed)
+..Zahlungsmethode
+.. Zahlungsmethode ( Wo stehen Informationen ? )
+.. Zahlungsmethode 7 = Bankeinzug
+.. Zahlungsmethode 10 = Bankgarantie
+..
+..>> ich belege mit 7 vor
+.formula xZahlungsMethode = 7
+..
+..
+.. Info zur Zahlungsart
+..Zahlungsart
+..      Gutschrift                     entspr. Kennzeichen G
+..      Belastung                      entspr. Kennzeichen B
+..      FremdwÑhrung                   entspr. Kennzeichen F
+..      Scheck                         entspr. Kennzeichen S
+..      Lastschrift                    entspr. Kennzeichen L
+..      Gutschrift                     entspr. Kennzeichen U
+..      Verrechnen                     entspr. Kennzeichen V
+..      Wechsel                        entspr. Kennzeichen W
+..      Andere                         entspr. Kennzeichen X
+..      erlaubt negative BetrÑge       entspr. Kennzeichen N
+..      Kundenwechsel                  entspr. Kennzeichen K
+..      - leer -                       keines dieser Kennzeichen
+..
+.. WÑhrungseinheit nach ISO 4217
+.formula xWEinheit = ""
+..
+..**ok,16.06.2005 (jetzt die WÑhrung aus dem WÑhrungsdatensatz holen)
+.load 1 currency 'H|land'
+..
+..
+.continue EL077 ? _(mehr)
+.. IF077
+.. Numerische WÑhrungscode nach ISO 4217
+.formula xWEinheit = 1|iso3n
+..
+!EL077
+.. FI077
+..
+..
+.continue EL078 ? _(+xWEinheit = 0)
+.. IF078
+.. fehler
+.set trans +
+.formula xtxt1 = "SchlÅssel fÅr WÑhrungseinheit " + 'H|land'
+.formula xtxt2 = "fehlt!"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET027" 
+.continue PROC001
+!RET027
+.formula xprocsp = xprocsp - 1
+..
+!EL078
+.. FI078
+..
+.. Frist/Skonto + Zahlungsbedingung + Zeile 108
+...Frist und Prozentsatz aus Zahlungsbedingung holen
+...die erste Zeile wird genommen
+...hîchste % , kÅrzeste frist
+..
+.reserve
+..
+..**ok,04.12.2003 (weil jetzt xZahlFrist als IP3 definiert ist, wird auf 0 initialisiert)
+.formula xZahlFrist = 0
+.formula xZahlSkonto= ""
+.formula xZbedNr    = ""
+..
+..
+.continue EL079 ? _(h|zbed<>"")
+.. IF079
+.select add h|zbed
+.formula xZbedNr = h|num
+.formula vdat   = 'U|xValutaDatum'
+.formula betrag = 'U|xReEndwert'
+.select line
+..
+..
+!LOOP002: ==============================
+.continue ELOP002 ? _(mehr=true)
+.. .fo xZahlFrist = h|frist
+.formula xZahlSkonto= h|skonto
+.formula xrSKONTO   = h|skonto
+..
+..Skonto-Betrag berechnen
+.formula xrSkontoBetrag = xrSKBBETR * xrSKONTO / 100
+.formula xSkontoBetrag = 'xrSkontoBetrag'
+..
+..**ok,04.12.2003 (xZahlungZum wird berechnet)
+..
+.. .fo xZahlungZum = xValutaDatum + xZahlFrist
+.formula xZahlungZum = 'termbis'
+..
+.. zeile raus
+..**ok,04.12.2003 (jetzt xZahlungZum, xValutaDatum hier in 8-stellige Format umgewandelt)
+.output addedto 'xDatRech'
+108 # 01 #'xZahlungsMethode'#'xZahlungZum:8'#'xValutaDatum:8'#'xBudat'#'xZahlungsart'#'xZahlFrist'#'xZahlSkonto'#'xZbedNr'#'xland'#'xWeinheit'#'xSkontoBezugsBetrag'#'xSkontoBetrag'# # # # # # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt108 = xCnt108 + 1
+..
+.select line
+..
+.continue LOOP002
+!ELOP002: ==============================
+..
+.continue FI079
+!EL079
+..wenn zbed = "", muss eine Zeile ausgegeben
+..werden, damit beim Export Satz 108 ankommt und
+.. Zahlung zum : xx.xx.xxxx "netto" ausgegeben wird
+..
+.. zeile raus
+..**ok,04.12.2003 (jetzt xZahlungZum, xValutaDatum hier in 8-stellige Format umgewandelt)
+.output addedto 'xDatRech'
+108 # 01 #'xZahlungsMethode'#'xZahlungZum:8'#'xValutaDatum:8'#'xBudat'#'xZahlungsart'#'xZahlFrist'#'xZahlSkonto'#'xZbedNr'#'xland'#'xWeinheit'#'xSkontoBezugsBetrag'#'xSkontoBetrag'# # # # # # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt108 = xCnt108 + 1
+..
+!FI079
+..
+.select
+..
+.. daten fÅr satz 109 (Kreditinstitut)
+.. Bankverbindung VerkÑufer
+..art text  xKontoNr
+..art text  xKontoBLZ
+..art text  xKontoBankName
+.. 2.Zeile des Bemerkungsfeldes des Geld-Transitkontos
+..
+.. Bankverbindung KÑufer
+.. wird bereits bei Daten KÑufer ermittelt
+..art text  xKundeKonum
+..art text  xKundeBLZ
+..art text  xKundeBank
+..art text  xKundelabank
+..art text  xKundewbank
+..
+.. zeile raus
+..art text  xKundeKonum
+..art text  xKundeBLZ
+..art text  xKundeBank
+..art text  xKundelabank
+..art text  xKundewbank
+..
+.output addedto 'xDatRech'
+109 # 01 # RH #'xKontoNr'#'xKontoBLZ'#'xKontoBankName'# # # BI #'xKundeKonum'#'xKundeBLZ'#'xKundeBank'#'xKundelabank'#'xKundewbank'#'xBetrIBAN'#'xKundeIBAN'#'xWEmpfIBAN'#'xBetrBIC'#'xKundeBIC'#'xWEmpfBIC'# # # # # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt109 = xCnt109 + 1
+..
+.. daten fÅr Satz 110 (Rabatte)
+.. die Rabatte dieser Rechnung
+.formula xsys = "cat " + xDatRabat + " >> " + xDatRech
+.system 'xsys' background
+..
+.formula xsys = "rm -f " + xDatRabat
+..**ok,06.12.2004 (fehlende hinter bei ".sys"-Befehl wurde ergÑnzt)
+.system 'xsys' background
+..
+.. daten fÅr satz 111 (Freitexte)
+..**ok,10.02.2003 (Satzart 11 fÅr Freitexte ist NEU)
+.. ZZZ: Mutually defined --> definiert zwischen Handelspartner
+.formula xFTextQ = "ZZZ"
+..
+.output addedto 'xDatRech'
+111 # 01 # 'xFTextQ' # # # # # 'xFText1' #  'xFText2' # 'xFText3' #  'xFText4' # # # # # # # # # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt111 = xCnt111 + 1
+..
+.. Initialiesiren der Freitexte
+.formula xFText1  = ""
+.formula xFText2  = ""
+.formula xFText3  = ""
+.formula xFText4  = ""
+..
+..
+.continue EL080 ? _(xWBeteil <> "")
+.. IF080
+.. DATEN fÅr satz 112 (weitere Beteiligter)
+..
+.continue EL081 ? _(xBmitAdressen = true)
+.. IF081
+.continue FI081
+!EL081
+..fo xPartyName1 = ""
+.formula xPartyName2 = ""
+.formula xPartyName3 = ""
+.formula xPartyLand  = ""
+.formula xPartyPLZ   = ""
+.formula xPartyOrtZeile1 = ""
+.formula xPartyOrtZeile2 = ""
+.formula xPartyStrasse   = ""
+..
+!FI081
+..
+.. zeile raus
+.output addedto 'xDatRech'
+112 #01#'xPartyGLN'#'xPartyNr'#'xPartyName1'#'xPartyName2'#'xPartyName3'#'xPartyLand'#'xPartyPLZ'#'xPartyOrtZeile1'#'xPartyOrtZeile2'#'xPartyStrasse'#'xPartyUstId'#'xPartyCode'# # # # # # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr = xLfdNr + 1
+.formula xCnt112 = xCnt112 + 1
+..
+!EL080
+.. FI080
+..
+!FI071
+..
+..
+.continue EL082 ? _(U|xbintedipos)
+.. IF082
+.input 'U|xintedi'
+..
+.continue FI082
+!EL082
+.. Daten fÅr SÑtze ab 220 ( Positionen )
+.formula xPosNummer = 0
+.select line
+..
+..
+!LOOP003: ==============================
+.continue ELOP003 ? _(mehr)
+.formula xPosNummer = xPosNummer + 1
+..
+..**ok,01.10.2002 (neue Schalter "xbSendePWert0" fÅr RE-Positionen mit pwert=0)
+..
+..
+.continue EL083 ? _((xbSendePWert0=false) & (H|pwert=0))
+.. IF083
+.continue FI083
+!EL083
+.. Positionsdaten ausgeben
+.. dazu art
+.add art
+..
+.formula xArtikelNrEKS  = d|num
+..
+..**ok,25.04.2002 (jetzt auch die Kunden-Artikel-nr mit Åbertragen, NEU: xKuArtNr)
+.formula xKuArtNr          = ""
+..
+.formula xArtikelNrGTIN = ""
+.formula xArtikelVbez1  = ""
+.formula xArtikelVbez2  = ""
+.formula xArtikelVbez2  = ""
+..**ok,10.05.2001 (statt xPosMgeEinheit --> xPosPreisEinheit)
+.formula xPosPreisEinheit = ""
+..
+..**ok,24.10.2002 (jetzt die Variable xGruppe NEU)
+.formula xGruppe = d|gruppe
+..
+..
+.continue EL084 ? _((d|gruppe = 1) ; (d|gruppe = 4))
+.. IF084
+.formula xArtikelVbez1  = d|vbez<<";"
+.formula xArtikelVbez2  = d|vbez>>";"
+.formula xArtikelVbez2  = xArtikelVbez2<<";"
+..
+..
+.continue EL085 ? _(d|gruppe = 1)
+.. IF085
+.formula xArtikelNrGTIN = d|gtin
+..**ok,10.05.2001 (statt xPosMgeEinheit --> xPosPreisEinheit)
+.formula xPosPreisEinheit = d|vpe
+..
+.. Kundenartikelnummer aus VK-Positino!
+.formula T|xkuartnr = H|zkuartnr
+..
+..**ok,10.02.2003 (jetzt die Warengruppe auch Åbertragen)
+.formula xWGruppe = d|wgruppe
+.. GN: Warengruppe des Lieferanten
+.formula xWGrpQ = "GN"    ? xWGruppe<>""
+..
+..
+.continue EL086 ? _(+xUrland > 0)
+.. IF086
+.formula xUrsp = ""
+.load 0 regions 'd|urland'
+..
+..
+.continue EL087 ? _(mehr)
+.. IF087
+.formula xUrland = 0|kenn
+.formula xUrsp   = 0|ischl
+..
+.. HandelsprÑferenz bzw. PrÑferenzstatus
+.. HandelsprÑferenz gemÑ· VDA, 4913, Anlage 10, Pos. 08)
+.. Frankreich: 001, Belgien/Luxemburg: 002, Niederlande: 003, Deutschland: 004, Italien: 005
+.. England: 006, Irland: 007, DÑnemark: 008, Griechenland: 009, Portugal: 010,
+.. Spanien: 011, Schweden: 030, Finnland: 032, ôsterreich: 038,
+.. Schweiz: 036, Norwegen: 028, Liechtenstein: 037, Island: 024,
+.. Seit 1995 umfasst die EFTA nur: Island, Liechtenstein, Norwegen und die Schweiz.
+..
+..
+.continue EL088 ? _((xUrsp = "001") ; (xUrsp = "002") ; (xUrsp = "003") ; (xUrsp = "004") ; (xUrsp = "005") ; (xUrsp = "006") ; (xUrsp = "007") ; (xUrsp = "008") ; (xUrsp = "009") ; (xUrsp = "010") ; (xUrsp = "011") ; (xUrsp = "030") ; (xUrsp = "032") ; (xUrsp = "038"))
+.. IF088
+.. G fÅr EU-LÑnder
+.formula xHandPr = "G"
+..
+..
+.. =====   CASE001   =====
+.continue BRK001 ? _(xUrsp = "032")
+.. F fÅr Finnland
+.formula xHandPr = "F"
+..
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(xUrsp = "030")
+.. F fÅr Schweden
+.formula xHandPr = "S"
+..
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(xUrsp = "038")
+.. O fÅr ôsterreich
+.formula xHandPr = "O"
+..
+.continue ESAC001
+!BRK003
+!ESAC001: =====   ENDCASE   =====
+..
+.continue FI088
+!EL088
+..
+.continue EL089 ? _((xUrsp = "036") ; (xUrsp = "037") ; (xUrsp = "028") ; (xUrsp = "024"))
+.. IF089
+.. W fÅr EFTA-LÑnder
+.formula xHandPr = "W"
+..
+..
+.. =====   CASE002   =====
+.continue BRK004 ? _(xUrsp = "036")
+.. C fÅr Schweiz
+.formula xHandPr = "C"
+..
+.continue ESAC002
+!BRK004
+.continue BRK005 ? _(xUrsp = "024")
+.. I fÅr Island
+.formula xHandPr = "I"
+..
+.continue ESAC002
+!BRK005
+.continue BRK006 ? _(xUrsp = "028")
+.. N fÅr Norwegen
+.formula xHandPr = "N"
+..
+.continue ESAC002
+!BRK006
+!ESAC002: =====   ENDCASE   =====
+..
+.continue FI089
+!EL089
+.. X: noch nicht ÅberprÅft, keine Ursprungsware
+.formula xHandPr = "X"
+..
+!FI089
+..
+!FI088
+..
+!EL087
+.. FI087
+..
+.continue FI086
+!EL086
+.formula xUrsp = ""
+..
+!FI086
+..
+!EL085
+.. FI085
+..
+!EL084
+.. FI084
+..
+..
+.continue EL090 ? _(xArtikelVbez1="")
+.. IF090
+.formula xArtikelVbez1 = D|sucherw
+..
+!EL090
+.. FI090
+..
+..
+.continue EL091 ? _(xArtikelVbez1="")
+.. IF091
+.formula xArtikelVbez1 = d|such
+..
+!EL091
+.. FI091
+..
+.add
+..
+.. Verkaufspreiseinheit (H|artikel^vpe): Nur Einheiten nach ISO 7372 sind erlaubt
+..
+.continue EL092 ? _(H|typ = arpos)
+.. IF092
+.formula U|xposphe = H|artikel^vpe
+.input "EDI.UNITS"
+..
+..
+.continue EL093 ? _(F|empty(U|eiso))
+.. IF093
+.. Fehler: Preiseinheit im Artikel/Artikelposition hat kein ISO 7372-Pendant
+.set trans +
+.formula xtxt1 = "Falsche Verkaufs-Preiseinheit " + xPosPreisEinheit + " im Artikel!"
+.formula xtxt2 = "Erlaubt sind Einheiten nach ISO 7372 wie z.B. kg/KGM m/MTR StÅck/PCE Paar/NPR"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET028" 
+.continue PROC001
+!RET028
+.formula xprocsp = xprocsp - 1
+..
+.continue FI093
+!EL093
+.formula U|xPosPreisEinheit = U|eiso
+..
+!FI093
+..
+!EL092
+.. FI092
+..
+..**ok,10.05.2001 (xPosPreisBasis --> NEU!)
+..**ok,07.05.2004 (jetzt wird xPosPreisBasis aus dem pehe-Faktor berechnet)
+..      .fo xPosPreisBasis = 1
+.formula xPosPreisBasis = 1 / H|pehe
+..
+..**ok,01.12.2003 (Auftrags- und Lieferschein-Nr in Position nur bei Sammelrechnung ausgegeben)
+..
+..
+.continue EL094 ? _(xBSammelRe)
+.. IF094
+.. xAuNrP und xLsNrP bei arpos ermitteln
+.. xAuNrP und xLsNrP bei arpos ermitteln
+.formula T|xAuNrP    = ""
+.formula T|xLsNrP    = ""
+.formula T|xAuDatumP = ""
+.formula T|xLsDatumP = ""
+..
+..
+.continue EL095 ? _(H|typ=arpos)
+.. IF095
+.. mh, 2009.01.05: Auftragsbezug ohne Sammelrechung, hier: .dazu H|orig statt H|okopf
+..  anschlie·end .dazu D|kopf
+.add H|orig
+..
+..
+.continue EL096 ? _(mehr)
+.. IF096
+.add D|kopf
+..
+..
+.continue EL097 ? _(mehr)
+.. IF097
+..
+.continue EL098 ? _(D|typ=liko)
+.. IF098
+.. Lieferscheinnummer und Datum
+.formula T|xLsNrP    = D|nummer
+.formula T|xLsDatumP = 'D|vom:8'
+..
+!EL098
+.. FI098
+..
+..
+.continue EL099 ? _(D|typ=liko ; D|typ=abko)
+.. IF099
+..Kundenauftragsnummer, nicht meine AU-Nr
+.formula T|xAuNrP    = D|frzeich
+..
+.. Unser "vom" muss nicht mit Kundenauftragsdatum Åbereinstimmen
+.. Auftragsdatum vom navom
+.. (navom Åber ein Datumsvariable in 8-stellige umgewandelt)
+.assign T|xDatum = D|navom
+.formula T|xAuDatumP = 'T|xDatum:8'  ?  T|mehr
+..
+!EL099
+.. FI099
+..
+.add
+..
+!EL097
+.. FI097
+..
+.add
+..
+!EL096
+.. FI096
+..
+!EL095
+.. FI095
+..
+!EL094
+.. FI094
+..
+..Werte der Position merken
+..
+.type P58 taxcode ? _F|defined(U|taxcode)
+.copy U|taxcode = H|steuer
+.input "TAXRATES.INDEX"
+..
+.formula xPosReMenge = 'h|mge'
+.formula xPosPnum    = h|pnum
+.formula xPosPwert   = h|pwert
+.formula xPosPreis   = h|preis
+.formula xPosProz    = h|proz
+.formula xPosNwert   = h|nwert
+.formula xPosSteuer  = h|steuer
+.formula xPosStSatz  = xSteuerSatz.itax
+.formula xPosTyp     = h|typ
+..
+.. Rechnungsmengeneinheit (H|he): Nur Einheiten nach ISO 7372 sind erlaubt
+..
+.continue EL100 ? _(H|typ = arpos)
+.. IF100
+.formula U|xposphe = H|he
+.input "EDI.UNITS"
+..
+..
+.continue EL101 ? _(F|empty(U|eiso))
+.. IF101
+.. Fehler: Rechnungsmengeneinheit hat kein ISO-Pendant.
+.set trans +
+.formula xtxt1 = "Falsche Verkaufs-Mengeneinheit " + xPosMgeEinheit + " im Artikel!"
+.formula xtxt2 = "Erlaubt sind Einheiten nach ISO 7372 wie z.B. kg/KGM m/MTR StÅck/PCE Paar/NPR"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET029" 
+.continue PROC001
+!RET029
+.formula xprocsp = xprocsp - 1
+..
+.continue FI101
+!EL101
+.formula xPosMgeEinheit = U|eiso
+..
+!FI101
+..
+!EL100
+.. FI100
+..
+.. arpos+prpos+mipos
+..
+..
+.continue EL102 ? _((h|typ = arpos) ; (h|typ = prpos) ; (h|typ = mipos) ; (h|typ = zupos))
+.. IF102
+..**ok, 15.07.2002 ( jetzt werden auch die Zusatzpositionen fÅr Verpackung- und Versandkosten berÅcksichtigt )
+..
+..
+.continue EL103 ? _(h|typ = zupos)
+.. IF103
+.. Block entfernt
+..**ok,04.07.2003 (Vers. u. Verp.kosten jetzt nur noch im Kopf in SA110 Åbertragen)
+.. 1-   wenn Versand- und Verpackungskosten als AU/BE-Position angelegt wird, werden Sie
+..      aber trotzdem als Artikelposition in Position Åbertragen
+.. 2-   wenn Sie wie in der Anleitung als normale Zusatzposition angelegt wird, dann im Kopf Åbertragen
+..
+.continue FI103
+!EL103
+..**ok, 18.12.2002 (die Prozentpositionen separat behandelt )
+..
+..
+.continue EL104 ? _(h|typ = prpos)
+.. IF104
+.continue FI104
+!EL104
+.. Zeile raus 220
+..**ok,25.04.2002 (jetzt auch die Kunden-Artikel-nr mit Åbertragen, NEU: xKuArtNr)
+..**ok,18.12.2002 (jetzt statt xPosPwert --> xPosNwert)
+..**ok,14.04.2003 (jetzt statt xPosPwert --> xPosPwert)
+.formula xBelegart = "381" ? xbuart=1
+..
+..**ok,14.04.2003 (bei Gutschriften xBelegart = "381" werden bei BetrÑgen und Mengen kein Minus-Zeichen verwendet)
+.formula xPosPwert = xPosPwert << -1  ? xBelegart = "381" & (xPosPwert << 1) = "-"
+..
+.output addedto 'xDatRech'
+220 # 01 # #'xPosNummer'#'xArtikelNrGTIN'# #'xKuArtNr'#'xArtikelNrEKS'# # # # # # #'xArtikelVbez1'#'xArtikelVbez2'# #203#'xPosPwert'# # # #'xPosTyp'# # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt220 = xCnt220 + 1
+..
+.. Zeile raus 221
+.. Sammel-RE-Behandlung
+..**hs,28.07.2000, wenn keine SammelRechnung, werden in der Position keine Ls/Au-Nr ausgegeben
+..**ok,23.04.2002  (weil im Kopf keine LS-Nr, AU-Nr mehr ausgegeben wird, wird auch bei nicht Sammel-Rech Ausgabe in Pos.)
+..
+..
+.continue EL105 ? _(xBSammelRe = true)
+.. IF105
+.continue FI105
+!EL105
+..      .fo xLsNrP    = ""
+..      .fo xLsDatumP = ""
+..      .fo xAuNrP    = ""
+..
+!FI105
+..
+..**ok,14.04.2003 (bei Gutschriften xBelegart = "381" werden bei BetrÑgen und Mengen kein Minus-Zeichen verwendet)
+.formula xPosReMenge = xPosReMenge << -1  ? xBelegart = "381" & (xPosReMenge << 1) = "-"
+..
+..**ok,10.02.2003 (jetzt auch Augtragsdatum -xAuDatumP- Åbertragen)
+..
+..**ok,14.05.2004 (jetzt in der Pos. 15 HandelsprÑferenz Åbertragen)
+..
+.output addedto 'xDatRech'
+221#01# # #'xPosReMenge'#'xPosMgeEinheit'# # # # # #'xLsNrP'#'xLsDatumP'# #'xHandPr'#'xAuNrP'#'xPosPnum'# # 'xAuDatumP' # # # # # #'xLfdNr'#
+..
+.formula xHandPr = ""
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt221 = xCnt221 + 1
+..
+.. Zeile raus 222
+..**ok,10.02.2003 (jetzt Warengruppe wird Åbertragen)
+.output addedto 'xDatRech'
+222 # 01 # # # # # # # # # # # #'xPosSteuer'#'xPosStSatz'# 'xWGruppe' # 'xWGrpQ' # # # # # # # # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt222 = xCnt222 + 1
+..
+.. Initialisieren der Warengruppe und Qualifier
+.formula xWGruppe = ""
+.formula xWGrpQ    = ""
+..
+.. Zeile raus 223
+.output addedto 'xDatRech'
+..**ok,10.05.2001  (xPosPreisEinheit und xPosPreisBasis NEU!)
+..**ok,18.12.2002 (xPosWGpreis NEU, in SA 223 statt xPosNwert jetzt xPosWGPreis Åbertragen)
+.formula xPosWGPreis = h|mge * h|preis * h|pehe
+..**ok,18.12.2002 (xPosZAQ und xProzQ  sind NEU, in SA 223 in Pos. 14 bzw. Pos. 19 Åbertragen)
+..**ok,18.12.2002 (xGeldBetr1, xGeldBetr2 und xGeldBetrQ sind NEU, in SA 223 in Pos. 22 bzw. Pos. 23 Åbertragen)
+..
+..
+.continue EL106 ? _(h|proz < 0)
+.. IF106
+.. ABSCHLAG
+.formula xPosZAQ = "H"
+.formula xProzQ = "1"
+..
+.formula xGeldBetr1 = ( h|mge * h|preis * h|pehe ) - h|pwert
+.formula xGeldBetr2 = 'xGeldBetr1'
+.formula xGeldBetrQ = "131"
+..
+.continue FI106
+!EL106
+..
+.continue EL107 ? _(h|proz > 0)
+.. IF107
+.. ZUSCHLAG
+.formula xPosZAQ = "M"
+.formula xProzQ = "2"
+..
+.formula xGeldBetr1 = h|pwert - ( h|mge * h|preis * h|pehe )
+.formula xGeldBetr2 = 'xGeldBetr1'
+.formula xGeldBetrQ = "131"
+..
+.continue FI107
+!EL107
+.formula xPosZAQ = ""
+.formula xProzQ = ""
+.formula xGeldBetrQ = ""
+.formula xGeldBetr2 = ""
+..
+!FI107
+..
+!FI106
+..
+.. Satzart 223
+..**ok,14.04.2003 (bei Gutschriften xBelegart = "381" werden bei BetrÑgen und Mengen kein Minus-Zeichen verwendet)
+..**ok,21.06.2005 (xGeldBetrQ, xGeldBetr2 Pos. 21, 22 korrigiert als Pos. 22, 23 gemÑ· IHSS)
+.formula xPosWGPreis = 'xPosWGPreis' << -1  ? xBelegart = "381" & ('xPosWGPreis' << 1) = "-"
+..
+.formula xGeldBetr2  = 'xGeldBetr2'  << -1  ? xBelegart = "381" & ('xGeldBetr2' << 1) = "-"
+..
+223 # 01 # #'xPosPreis'# # #'xPosPreisBasis'#'xPosPreisEinheit'# # # #'xPosWGPreis'# # 'xPosZAQ' # # # # # 'xProzQ' #'xPosProz'# #'xGeldBetrQ' # 'xGeldBetr2' # # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt223 = xCnt223 + 1
+..
+..**ok,18.12.2002 (Vergleich von pwert und nwert und weitere Ausgabe von SA 223 NEU)
+..
+..
+.continue EL108 ? _(h|pwert <> h|nwert)
+.. IF108
+..
+.continue EL109 ? _(h|pwert > h|nwert)
+.. IF109
+.. ABSCHLAG
+.formula xPosZAQ = "H"
+..
+.formula xGeldBetr1 = h|pwert - h|nwert
+.formula xGeldBetr2 = 'xGeldBetr1'
+.formula xGeldBetrQ = "131"
+..
+.continue FI109
+!EL109
+..
+.continue EL110 ? _(h|pwert < h|nwert)
+.. IF110
+.. ZUSCHLAG
+.formula xPosZAQ = "M"
+..
+.formula xGeldBetr1 = h|nwert - h|pwert
+.formula xGeldBetr2 = 'xGeldBetr1'
+.formula xGeldBetrQ = "131"
+..
+!EL110
+.. FI110
+..
+!FI109
+..
+.. Satzart 223
+..**ok,14.04.2003 (bei Gutschriften xBelegart = "381" werden bei BetrÑgen und Mengen kein Minus-Zeichen verwendet)
+..**ok,21.06.2005 (xGeldBetrQ, xGeldBetr2 Pos. 21, 22 korrigiert als Pos. 22, 23 gemÑ· IHSS)
+.formula xPosWGPreis = 'xPosWGPreis' << -1  ? xBelegart = "381" & ('xPosWGPreis' << 1) = "-"
+..
+.formula xGeldBetr2  = 'xGeldBetr2'  << -1  ? xBelegart = "381" & ('xGeldBetr2' << 1) = "-"
+..
+223 # 01 # # # # # # # # # #'xPosWGPreis'# # 'xPosZAQ' # # # # # # # # 'xGeldBetrQ' # 'xGeldBetr2' # # 'xLfdNr' #
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt223 = xCnt223 + 1
+..
+!EL108
+.. FI108
+..
+..**ok,18.12.2002 (Initialisieren)
+.formula xPosWGPreis = 0
+.formula xGeldBetr1 = 0
+.formula xGeldBetr2 = ""
+.formula xGeldBetrQ = ""
+.formula xPosZAQ = ""
+.formula xProzQ = ""
+..
+!FI104
+..
+!FI103
+..
+!EL102
+.. FI102
+..
+.. Unbehandelte Positionen
+..zspos bleibt unbehandelt
+...Zwischensummen kînnen nicht eindeutig
+...MWSt.-Satz oder Produktgruppen zugeordnet werden
+..
+..supos unbehandelt
+........BetrÑge werden Åber rebetr und stpos ermittelt
+........Warenwerte immer mge * preis
+........ZuschlÑge/AbschlÑge werden separat summiert
+..
+..stpos bleibt HIER unbehandelt
+...SteuerbetrÑge werden im Abschnitt
+...    "Steuerbetrag/-satz + Zu-/AbschlÑge + netto/brutto"
+...behandelt und in den 300-er SÑtzen ausgegeben
+..
+..zupos bleibt HIER vorerst unbehandelt
+........hier muss eine genaue Definition erfolgen
+..
+..delpos HIER vorerst unbehandelt
+........hier muss eine genaue Definition erfolgen
+........DEL-Zuschlags-Position
+..........einfach Zuschlag ? oder Extra Qualifier ?
+..
+..trpos unbehandelt
+........wirkt sich nicht auf BetrÑge aus
+..
+..espos unbehandelt
+........BetrÑge werden Åber rebetr und stpos ermittelt
+........Warenwerte immer mge * preis
+........ZuschlÑge/AbschlÑge werden separat summiert
+..
+!FI083
+..
+.select line
+..
+.continue LOOP003
+!ELOP003: ==============================
+..
+.. und wieder zurÅck, wo ich herkomme
+.select lock header
+..
+.. Daten fÅr SÑtze 300 ( BetrÑge+Steuer )
+..Variablen definition Satz 300
+...xReBetragBrutto = rebetr
+...xStBetragG      = Summe aller SteuerbetrÑge pro MWST-Satz
+...xReBetragNetto  = xReBetragBrutto - alles SteuerbetrÑge - alle AbschlÑge + alle ZuschlÑge
+..
+.type integer xIndSt
+.formula U|xIndSt = 0
+..
+.. mh, 08.12.2011: clearn xStBetrag (will be summed later if there are any taxes)
+.formula U|xStBetrag = 0.0
+..
+..
+.continue EL111 ? _(_(xMwStfrei))
+.. IF111
+..
+!LOOP004: ==============================
+.continue ELOP004 ? _(xIndSt<10)
+..
+.continue EL112 ? _(xReBetragNetto.xIndSt<>0)
+.. IF112
+.. Ausgabe 300
+...GesamtWerte je Steuersatz bilden
+.formula xGSt.xIndSt = xGSt.xIndSt + xStBetrag.xIndSt
+.formula xGWW.xIndSt = xGWW.xIndSt + xWarenWert.xIndSt
+..**ok,21.05.2003 (Gesamtbrutto auch je Steuersatz)
+.formula xReBetragBrutto.xIndSt = xReBetragNetto.xIndSt + xStBetrag.xIndSt
+..
+.output addedto 'xDatRech'
+..
+..
+.continue EL113 ? _(xBelegArt = "380")
+.. IF113
+.. xBelegArt = "380"
+..**ok,21.05.2003 (jetzt xReBetragNetto als xReBetragNetto.xIndSt und auch xStBasis.xIndSt Pos. 14 ausgegeben)
+300 # 01 #'xReBetragNetto.xIndSt'#'xReBetragBrutto.xIndSt'#'xStSatz.xIndSt'#'xStBetrag.xIndSt'#'xZuschlag.xIndSt'#'xAbschlag.xIndSt'#'xZuschlagG:2'#'xAbschlagG:2'#'xWarenWert.xIndSt'#'xStBetragG:2'#'xWarenWertG:2'#'xStBasis.xIndSt'# # # # # # # # # # # 'xLfdNr' #
+..
+.continue FI113
+!EL113
+.. xBelegArt = "381"
+..**ok,14.04.2003 (bei Gutschriften xBelegart = "381" werden bei BetrÑgen und Mengen kein Minus-Zeichen verwendet)
+..**ok,21.05.2003 (jetzt ??ReBetragNetto als ??ReBetragNetto.xIndSt)
+.formula xMReBetragNetto.xIndSt   = 'xReBetragNetto.xIndSt'
+.formula xMReBetragBrutto.xIndSt  = 'xReBetragBrutto.xIndSt'
+.formula xMStSatz.xIndSt   = 'xStSatz.xIndSt'
+.formula xMStBetrag.xIndSt = 'xStBetrag.xIndSt'
+.formula xMZuschlag.xIndSt = 'xZuschlag.xIndSt'
+.formula xMAbschlag.xIndSt = 'xAbschlag.xIndSt'
+.formula xMZuschlagG       = 'xZuschlagG'
+.formula xMAbschlagG       = 'xAbschlagG'
+.formula xMWarenWert.xIndSt= 'xWarenWert.xIndSt'
+.formula xMStBetragG       = 'xStBetragG'
+..
+..**ok,21.05.2003 (auch bei xStBasis.xIndSt wird "-"-Zeichen geschnitten)
+.formula xMStBasis.xIndSt  = 'xStBasis.xIndSt'
+.formula xMStBasis.xIndSt  = 'xStBasis.xIndSt'   << -1  ? xBelegart = "381" & ('xStBasis.xIndSt' << 1) = "-"
+..
+.formula xMWarenWertG      = 'xWarenWertG'
+..**ok,21.05.2003 (jetzt xMReBetragNetto als xMReBetragNetto.xIndSt)
+.formula xMReBetragNetto.xIndSt  = 'xReBetragNetto.xIndSt'  << -1  ? xBelegart = "381" & ('xReBetragNetto.xIndSt'  << 1) = "-"
+.formula xMReBetragBrutto.xIndSt = 'xReBetragBrutto.xIndSt' << -1  ? xBelegart = "381" & ('xReBetragBrutto.xIndSt' << 1) = "-"
+.formula xMStSatz.xIndSt   = 'xStSatz.xIndSt'    << -1  ? xBelegart = "381" & ('xStSatz.xIndSt' << 1) = "-"
+.formula xMStBetrag.xIndSt = 'xStBetrag.xIndSt'  << -1  ? xBelegart = "381" & ('xStBetrag.xIndSt' << 1) = "-"
+.formula xMZuschlag.xIndSt = 'xZuschlag.xIndSt'  << -1  ? xBelegart = "381" & ('xZuschlag.xIndSt' << 1) = "-"
+.formula xMAbschlag.xIndSt = 'xAbschlag.xIndSt'  << -1  ? xBelegart = "381" & ('xAbschlag.xIndSt' << 1) = "-"
+.formula xMZuschlagG       = 'xZuschlagG'        << -1  ? xBelegart = "381" & ('xZuschlagG' << 1) = "-"
+.formula xMAbschlagG       = 'xAbschlagG'        << -1  ? xBelegart = "381" & ('xAbschlagG' << 1) = "-"
+.formula xMWarenWert.xIndSt= 'xWarenWert.xIndSt' << -1  ? xBelegart = "381" & ('xWarenWert.xIndSt' << 1) = "-"
+.formula xMStBetragG       = 'xStBetragG'        << -1  ? xBelegart = "381" & ('xStBetragG' << 1) = "-"
+.formula xMWarenWertG      = 'xWarenWertG'       << -1  ? xBelegart = "381" & ('xWarenWertG' << 1) = "-"
+..
+..**ok,21.05.2003 (jetzt auch xStBasis.xIndSt Pos. 14 ausgegeben)
+..**ok,21.05.2003 (jetzt xMReBetragNetto als xMReBetragNetto.xIndSt ausgegeben)
+300 # 01 #'xMReBetragNetto.xIndSt'#'xMReBetragBrutto.xIndSt'#'xMStSatz.xIndSt'#'xMStBetrag.xIndSt'#'xMZuschlag.xIndSt'#'xMAbschlag.xIndSt'#'xMZuschlagG'#'xMAbschlagG'#'xMWarenWert.xIndSt'#'xMStBetragG'#'xMWarenWertG'#'xStBasis.xIndSt'# # # # # # # # # # # 'xLfdNr' #
+..
+!FI113
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt300 = xCnt300 + 1
+..
+!EL112
+.. FI112
+..
+.formula xIndSt = xIndSt + 1
+..
+.continue LOOP004
+!ELOP004: ==============================
+..
+..**ok,04.07.2003 (fÅr Null-Rechnungen)
+..
+..
+.continue EL114 ? _(xReBetragBrutto = 0)
+.. IF114
+.. Ausgabe 300
+.output addedto 'xDatRech'
+..
+..
+.continue EL115 ? _(xBelegArt = "380")
+.. IF115
+.. xBelegArt = "380"
+300 # 01 #'xReBetragNetto:2'#'xReBetragBrutto:2'#'xStSatz:2'#'xStBetrag:2'#'xZuschlag:2'#'xAbschlag:2'#'xZuschlagG:2'#'xAbschlagG:2'#'xWarenWert:2'#'xStBetragG:2'#'xWarenWertG:2'#'xStBasis:2'# # # # # # # # # # # 'xLfdNr' #
+..
+.continue FI115
+!EL115
+.. xBelegArt = "381"
+..**ok,14.04.2003 (bei Gutschriften xBelegart = "381" werden bei BetrÑgen und Mengen kein Minus-Zeichen verwendet)
+..**ok,21.05.2003 (jetzt ??ReBetragNetto als ??ReBetragNetto)
+.formula xMReBetragNetto   = 'xReBetragNetto'
+.formula xMReBetragBrutto  = 'xReBetragBrutto'
+.formula xMStSatz          = 'xStSatz'
+.formula xMStBetrag        = 'xStBetrag'
+.formula xMZuschlag        = 'xZuschlag'
+.formula xMAbschlag        = 'xAbschlag'
+.formula xMZuschlagG       = 'xZuschlagG'
+.formula xMAbschlagG       = 'xAbschlagG'
+.formula xMWarenWert       = 'xWarenWert'
+.formula xMStBetragG       = 'xStBetragG'
+..
+.formula xMStBasis         = 'xStBasis'
+..
+.formula xMWarenWertG      = 'xWarenWertG'
+..
+300 # 01 #'xMReBetragNetto'#'xMReBetragBrutto'#'xMStSatz'#'xMStBetrag'#'xMZuschlag'#'xMAbschlag'#'xMZuschlagG'#'xMAbschlagG'#'xMWarenWert'#'xMStBetragG'#'xMWarenWertG'#'xStBasis:2'# # # # # # # # # # # 'xLfdNr' #
+..
+!FI115
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt300 = xCnt300 + 1
+..
+!EL114
+.. FI114
+..
+.continue FI111
+!EL111
+..**ok,18.06.2001 (jetzt auch wenn MwSt = 0 ist)
+..
+.. Ausgabe 300
+...GesamtWerte ausgeben
+..
+.output addedto 'xDatRech'
+..
+..
+.continue EL116 ? _(xBelegArt="380")
+.. IF116
+.. xBelegArt="380"
+..**ok,21.05.2003 (jetzt untere Zeile neu)
+.formula xReBetragNetto = xReBetragBrutto
+300 # 01 #'xReBetragNetto:2'#'xReBetragBrutto:2'# # # # #'xZuschlagG:2'#'xAbschlagG:2'# #'xStBetragG:2'#'xWarenWertG:2'# # # # # # # # # # # # 'xLfdNr' #
+..
+.continue FI116
+!EL116
+.. xBelegArt="381"
+..**ok,14.04.2003 (bei Gutschriften xBelegart = "381" werden bei BetrÑgen und Mengen kein Minus-Zeichen verwendet)
+..**ok,21.05.2003 (jetzt untere Zeile neu)
+.formula xReBetragNetto = xReBetragBrutto
+.formula xMZuschlagG       = 'xZuschlagG'
+.formula xMAbschlagG       = 'xAbschlagG'
+.formula xMStBetragG       = 'xStBetragG'
+.formula xMWarenWertG      = 'xWarenWertG'
+.formula xMReBetragNetto   = 'xReBetragNetto'    << -1  ? xBelegart = "381" & ('xReBetragNetto'  << 1) = "-"
+.formula xMReBetragBrutto  = 'xReBetragBrutto'   << -1  ? xBelegart = "381" & ('xReBetragBrutto' << 1) = "-"
+.formula xMZuschlagG       = 'xZuschlagG'        << -1  ? xBelegart = "381" & ('xZuschlagG' << 1) = "-"
+.formula xMAbschlagG       = 'xAbschlagG'        << -1  ? xBelegart = "381" & ('xAbschlagG' << 1) = "-"
+.formula xMStBetragG       = 'xStBetragG'        << -1  ? xBelegart = "381" & ('xStBetragG' << 1) = "-"
+.formula xMWarenWertG      = 'xWarenWertG'       << -1  ? xBelegart = "381" & ('xWarenWertG' << 1) = "-"
+..
+..**ok,21.05.2003 (jetzt xMReBetragNetto als xMReBetragNetto.xIndSt ausgegeben)
+300 # 01 #'xMReBetragNetto'#'xMReBetragBrutto'# # # # #'xMZuschlagG'#'xMAbschlagG'# #'xMStBetragG'#'xMWarenWertG'# # # # # # # # # # # # 'xLfdNr' #
+..
+!FI116
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt300 = xCnt300 + 1
+..
+!FI111
+..
+.. Daten fÅr Satz 350 ( Abschluss )
+..Variablen definition Satz 350
+..
+..Variablen definition Satz 350
+...xReBetragBrutto = rebetr
+...xStBetragG      = Summe aller SteuerbetrÑge pro MWST-Satz
+...xReBetragNetto  = xReBetragBrutto - alles SteuerbetrÑge - alle AbschlÑge + alle ZuschlÑge
+..
+..**ok,21.05.2003 (jetzt xReBetragNetto Åber alle SteuersÑtze gebildet)
+..
+.type integer xIndSt
+.formula xIndSt = 0
+..
+..
+.continue EL117 ? _(_(xMwStfrei))
+.. IF117
+..**ok,10.07.2003 (hier wird xReBetragBrutto auf = initialisiert)
+.formula xReBetragBrutto = 0
+..
+..
+!LOOP005: ==============================
+.continue ELOP005 ? _(xIndSt<10)
+..
+.continue EL118 ? _(xReBetragNetto.xIndSt<>0)
+.. IF118
+.. Gesamtwerte bilden
+.formula xReBetragNetto  = xReBetragNetto  + xReBetragNetto.xIndSt
+.formula xReBetragBrutto = xReBetragBrutto + xReBetragBrutto.xIndSt
+.formula xStBetrag       = xStBetrag  + xStBetrag.xIndSt
+..**ok,07.08.2003 (auch xWarenWert berechnet)
+.formula xWarenWert      = xWarenWert + xWarenWert.xIndSt
+..
+!EL118
+.. FI118
+..
+.formula xIndSt = xIndSt + 1
+..
+.continue LOOP005
+!ELOP005: ==============================
+..
+.. Ausgabe 350
+.output addedto 'xDatRech'
+..
+..
+.continue EL119 ? _(xBelegart = "380")
+.. IF119
+.. wenn xBelegart = 380
+..**ok,07.08.2003 (auch xWarenWert in Pos. 10 ausgegeben)
+350 # 01 #'xReNr'#'xBetrGLN'#'xKundeGLN'#'xWEmpfGLN'#'xReBetragNetto'#'xStBetragG'#'xReBetragBrutto'#'xWarenWert'# # # # # # # # # # # # # # # 'xLfdNr' #
+..
+.continue FI119
+!EL119
+.. wenn xBelegart = 381
+..**ok,14.04.2003 (bei Gutschriften xBelegart = "381" werden bei BetrÑgen und Mengen kein Minus-Zeichen verwendet)
+.formula xMReBetragNetto  = 'xReBetragNetto'  << -1  ? xBelegart = "381" & ('xReBetragNetto' << 1) = "-"
+.formula xMStBetragG      = 'xStBetragG'      << -1  ? xBelegart = "381" & ('xStBetragG' << 1) = "-"
+.formula xMReBetragBrutto = 'xReBetragBrutto' << -1  ? xBelegart = "381" & ('xReBetragBrutto' << 1) = "-"
+..**ok,07.08.2003 (auch xMWarenWert in Pos. 10 ausgegeben)
+.formula xMWarenWert      = 'xWarenWert'      << -1  ? xBelegart = "381" & ('xWarenWert' << 1) = "-"
+..
+350 # 01 #'xReNr'#'xBetrGLN'#'xKundeGLN'#'xWEmpfGLN'#'xMReBetragNetto'#'xMStBetragG'#'xMReBetragBrutto'#'xMWarenWert'# # # # # # # # # # # # # # # 'xLfdNr' #
+..
+!FI119
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt350 = xCnt350 + 1
+..
+.continue FI117
+!EL117
+.. Ausgabe 350
+.output addedto 'xDatRech'
+..
+..
+.continue EL120 ? _(xBelegart = "380")
+.. IF120
+.. wenn xBelegart = 380
+..**ok,07.08.2003 (auch xWarenWertG in Pos. 10 ausgegeben)
+350 # 01 #'xReNr'#'xBetrGLN'#'xKundeGLN'#'xWEmpfGLN'#'xReBetragNetto'#'xStBetragG'#'xReBetragBrutto'#'xWarenWertG'# # # # # # # # # # # # # # # 'xLfdNr' #
+..
+.continue FI120
+!EL120
+.. wenn xBelegart = 381
+..**ok,14.04.2003 (bei Gutschriften xBelegart = "381" werden bei BetrÑgen und Mengen kein Minus-Zeichen verwendet)
+.formula xMReBetragNetto  = 'xReBetragNetto'  << -1  ? xBelegart = "381" & ('xReBetragNetto' << 1) = "-"
+.formula xMStBetragG      = 'xStBetragG'      << -1  ? xBelegart = "381" & ('xStBetragG' << 1) = "-"
+.formula xMReBetragBrutto = 'xReBetragBrutto' << -1  ? xBelegart = "381" & ('xReBetragBrutto' << 1) = "-"
+..**ok,07.08.2003 (auch xMWarenWertG in Pos. 10 ausgegeben)
+.formula xMWarenWertG     = 'xWarenWertG'     << -1  ? xBelegart = "381" & ('xWarenWertG' << 1) = "-"
+..
+350 # 01 #'xReNr'#'xBetrGLN'#'xKundeGLN'#'xWEmpfGLN'#'xMReBetragNetto'#'xMStBetragG'#'xMReBetragBrutto'#'xMWarenWertG'# # # # # # # # # # # # # # # 'xLfdNr' #
+..
+!FI120
+..
+.formula xLfdNr  = xLfdNr  + 1
+.formula xCnt350 = xCnt350 + 1
+..
+!FI117
+..
+!FI082
+..
+!FI070
+..
+..
+.continue EL121 ? _(xbfehler)
+.. IF121
+.. abschlu·text fÅr fehlerdatei
+.output addedto 'xdfehler'
+..
+.set trans +
+Das waren die Fehler der Rechnung 'xReNr'.
+##########################################################################
+.set trans -
+.output new WERF.WEG
+.formula xgeraet = xdfehler
+..
+..**ok,06.12.2004 (jetzt wenn Fehler vorhanden, Rechnung markiert)
+.formula H|ident = "ERROR"
+..
+.continue FI121
+!EL121
+..**ok,06.12.2004 (jetzt wenn kein Fehler vorhanden, Markierung entfernt)
+..**mh, 09.10.2009: Rechnung(en) als in Arbeit kennzeichnen
+.formula H|ident = U|xSENDE
+..
+!FI121
+..
+.. rechnung ok?, abschlie·ende aktionen
+.. die daten dieser rechnung kann ich also an die gesamtdatei anhÑngen
+.. erst mal die datei schliessen
+.output new WERF.WEG
+.formula xsys = "cat " + xDatRech + " >> " + xDatRechAll
+.system 'xsys' background
+..
+.. die satzcounter aktualisieren
+.formula xCnt500g = xCnt500g + xCnt500
+.formula xCnt525g = xCnt525g + xCnt525
+.formula xCnt550g = xCnt550g + xCnt550
+..
+.. summen fÅr den kunden rechnungsendwert inkl. mwst
+.formula xReEndwertg = xReEndwertg + xReEndwert
+.. ohne mwst
+.formula xReEntgeltg = xReEntgeltg + xReEntgelt
+.. nur die mwst
+..fo xStBetragG = xStBetragG + xStBetrag
+..
+.. zum schlu· wird dfuesenden zurÅckgesetzt. Mu· man tun, um endlosschleife zu verhindern
+.formula h|dfuesenden = false
+..

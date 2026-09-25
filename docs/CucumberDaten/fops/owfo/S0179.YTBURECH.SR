@@ -1,0 +1,148 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : S0179.YTBURECH.SR
+.. Date           : 02/12/2015
+.. Version        : 1.0
+.. Author         : RASC
+.. Copyright      :
+.. Functionality  : Sup-FOP of S0179.YTBURECH.BA
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xttext     ? _F|defined(U|xttext)
+.type text U|xtcmd      ? _F|defined(U|xtcmd)
+.type text U|xtedp      ? _F|defined(U|xtedp)
+.type text U|xtout      ? _F|defined(U|xtout)
+.type text U|xterr      ? _F|defined(U|xterr)
+.type text U|xtref      ? _F|defined(U|xtref)
+.type text U|xtpos      ? _F|defined(U|xtpos)
+.type bool U|xbfakt     ? _F|defined(U|xbfakt)
+.type integer U|xiz     ? _F|defined(U|xiz)
+..
+.file -TEMPNAME U|xtedp
+.file -TEMPNAME U|xtout
+.file -TEMPNAME U|xterr
+..
+.formula U|xiz          = G|evtzeile
+.continue VORGPOS       ? _F|empty(M|yvorgpos)
+..
+..ersten Lieferschein ermitteln und <fakt> prÅfen
+.load 0 nolock object 'M|yvorgang^id'
+.continue ERRVORG       ? _G|mehr
+.load 0 nolock line
+.continue ERRVORG       ? _G|mehr
+..
+.formula U|xtpos        = '0|id'
+..
+.set trans +
+.text U|xttext 'G|bspri' "Die erste Position wurde noch nicht vollstÑndig geliefert, wollen Sie dennoch die Schlussrechnung erstellen?" ? 0|limge <> 0|mge
+.text U|xttext 'G|bspri' "Der Auftrag wurde noch nicht geliefert, wollen Sie dennoch die Schlussrechnung erstellen?"                    ? 0|limge = 0|mge
+.set trans -
+.box -button yes:no
+'U|xttext'
+.continue END           ? G|box = G|boxno
+..
+..es wurde ein Lieferschein fÅr Position 1 erstellt
+.continue LSCHEIN       ? 0|limge <> 0|mge
+..
+..es wurde kein Lieferschein erstellt, direkt fakturieren
+.formula U|xtcmd        = "<(Sales)>" + 'M|yvorgang^id' + "<(Invoice)> "        ? M|yvorgang^dnr = 3
+.formula U|xtcmd        = "<(Purchasing)>" + 'M|yvorgang^id' + "<(Invoice)> "   ? M|yvorgang^dnr = 4
+.command -WAIT 'U|xtcmd'
+.continue PRUEFEN
+..
+!LSCHEIN
+.formula U|xtpos        = 0|id
+.load 0
+.continue VPFAKT
+..
+!VORGPOS
+..prÅfen, ob die Vorgangsposition geliefert wurde
+.formula U|xtpos        = 'M|yvorgpos^id'
+.continue VPFAKT        ? M|yvorgpos^limge = 0
+.set trans +
+.text U|xttext 'G|bspri' "Die Position wurde noch nicht vollstÑndig geliefert, wollen Sie dennoch die Schlussrechnung erstellen="
+.set trans -
+.box -button yes:no
+'U|xttext'
+.continue END           ? G|box = G|boxno
+..
+!VPFAKT
+.formula U|xtcmd        = "$,@database="+'M|yvorgang^dnr'+";@group=2;orig=="+'U|xtpos'
+.load 0 nolock object 'U|xtcmd'
+.continue VPSCHLUSS     ? G|mehr
+.set trans +
+.text U|xttext 'G|bspri' "Der Lieferschein konnte nicht ermittelt werden - bitte prÅfen!"
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!VPSCHLUSS
+.formula U|xbfakt       = 0|kopf^fakt
+.formula U|xtref        = '0|kopf^id'
+.load 0
+.formula U|xtref        = 'M|yvorgang^id'       ? _U|xbfakt
+..
+.formula U|xtcmd        = "<(Sales)>" + 'U|xtref' + "<(Invoice)> ? zbed=" + 'M|ytzbed^id'       ? M|yvorgang^dnr = 3
+.formula U|xtcmd        = "<(Purchasing)>" + 'U|xtref' + "<(Invoice)> ? zbed=" + 'M|ytzbed^id'  ? M|yvorgang^dnr = 4
+.formula U|xtcmd        = U|xtcmd + "|0:stdatneu=|0:beleg=" + 'M|yvorgang^id' + "|1:bkalk="     ? U|xbfakt
+.output TERMINAL 
+'U|xtcmd'
+.command -WAIT 'U|xtcmd'
+.input
+..
+!PRUEFEN
+.formula U|xtcmd        = "$,@database="+'M|yvorgang^dnr'+";@group=2;orig==" + U|xtpos
+.load 0 nolock object 'U|xtcmd'
+.continue SCHLUSSRE     ? G|mehr
+.set trans +
+.text U|xttext 'G|bspri' "Es wurde keine Schlussrechnung zum Fakturaplan gefunden!"
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!SCHLUSSRE
+.formula U|xtref        = '0|kopf^id'
+.load 0
+..
+.select lock object 'M|id'
+.continue ERROR         ? _G|mehr
+.continue ERROR         ? _G|gesperrt
+.continue ERROR         ? U|xiz = 0
+.select lock line 'U|xiz'
+.formula H|ytrepid      = 'U|xtref'
+.rewrite
+.select-
+..
+.select screen line 'U|xiz'
+.assign M|ytrechn      = 'U|xtref'
+.continue END           ? _F|empty(M|ytrechn)
+..
+!ERROR
+.set trans +
+.text U|xttext 'G|bspri' "Die Schlussrechnung konnte nicht in den Fakturaplan zurÅckgeschrieben werden!"
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!ERRVORG
+.set trans +
+.text U|xttext 'G|bspri' "Der Auftrag konnte nicht zur Erzeugung der Schlussrechnung geladen werden"
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+
+..
+!END
+.continue

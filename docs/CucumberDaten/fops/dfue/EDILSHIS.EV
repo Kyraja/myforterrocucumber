@@ -1,0 +1,97 @@
+..!interpreter english translate
+..*****************************************************************************
+.. FOP-Name       : EDILSHIS.EV
+.. Datum          : 26.08.2004
+.. Version        : 2004r4n00
+.. Autor          : ok
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Allgemeines Eventhandling
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+.. Ablauf         :
+..
+.. Functionality  : central eventhandling
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..#KOR#EDI-MODUL#DATUM#éNDERUNGS-INDEX#MitarbeiterkÅrzel#
+..#KOR#LAB#26.08.2004#1#ok#
+..#KOR#LAB#13.01.2006#2#ok#
+..#KOR#EDI#01.06.2007#3#mh# reset table when value in header changes
+..*****************************************************************************
+.set trans -
+..
+.. ----------- ----- Events -------- -------------------------------------------
+.continue RAH     ? T|evtartengl="FIELD_EXIT"    & T|evtvar = "rahmen"
+.continue ART     ? T|evtartengl="FIELD_EXIT"    & T|evtvar = "kart"
+.continue ARTALLE ? T|evtartengl="FIELD_EXIT"    & T|evtvar = "kballe"
+.continue DATE    ? T|evtartengl="BUTTON_AFTER" & T|evtvar = "aktjahr"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue TABINIT ? T|evtartengl="FIELD_EXIT"    & T|evtvar = "kvom"
+.continue TABINIT ? T|evtartengl="FIELD_EXIT"    & T|evtvar = "kbis"
+.continue TABINIT ? T|evtartengl="FIELD_EXIT"    & T|evtvar = "archiv"
+.. ----------- ---------- ---------- -------------------------------------------
+.. ----------- ---------- ---------- -------------------------------------------
+.continue
+..
+!RAH: blanket order was changed, extract customer, plant, unloading point, and try to guess item
+.formula   M|kkunde = ""
+.formula   M|werk   = ""
+.formula   M|ablade = ""
+.formula   M|kart   = ""
+.formula   M|kkuartnr = ""
+.continue TABINIT ?  F|empty(M|rahmen)
+.assign M|kkunde = M|rahmen^kunde2^id   ? 'M|rahmen^dnr'="3"
+.assign M|kkunde = M|rahmen^lief2^id    ? 'M|rahmen^dnr'="4"
+.formula   M|werk   = M|rahmen^werk
+.formula   M|ablade = M|rahmen^ablstelle
+.. guessing item / product
+.select sales 'M|rahmen^id'     ? 'M|rahmen^dnr'="3"
+.select purchasing 'M|rahmen^id'     ? 'M|rahmen^dnr'="4"
+!NEXT: check rows for possible item
+.select line
+.continue TABINIT ? _T|mehr
+.continue NEXT    ?  H|artex^gruppe <> 1
+.continue NEXT    ?  H|artex^packmit
+.continue NOMATCH ? _F|empty(M|kart)  &  M|kart^id <> H|artex^id
+.assign M|kart = H|artex^id
+.formula   M|kkuartnr = H|zkuartnr       ?  F|defined(H|zkuartnr)
+.continue NEXT
+!NOMATCH: blanket order has more than one product / item
+.formula M|kart = ""
+.formula M|kkuartnr = ""
+.continue TABINIT
+..
+!ART: show customer item number for item
+.. .formel   M|kkuartnr = M|kart^kuartnr
+.continue TABINIT
+..
+!ARTALLE: show all items for blanket order
+.formula  M|kart = ""        ?  M|kballe
+.formula  M|kkuartnr = ""    ?  M|kballe
+.protection "kart" 0            ?  M|kballe
+.protection -reset "kart" 0     ? _M|kballe
+.continue TABINIT
+..
+!DATE: set date from - date to to current year
+.formula M|kvom = 'F|year(T|datum)' + "0101"
+.formula M|kbis = 'F|year(T|datum)' + "1231"
+.continue TABINIT
+..
+..
+!TABINIT: a key field was changed, remove old rows
+.formula M|gesmge = 0
+.make screen line -- ? M|tzeilen > 0
+.continue END
+..*****************************************************************************
+!END
+.continue

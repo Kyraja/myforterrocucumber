@@ -1,0 +1,230 @@
+..!interpreter english
+..@@BEGINHEAD
+..========================================================================
+..==
+..==  Name              : EDI.PRICAT2EDI
+..==
+..==  Pfad              : dfue
+..==
+..==  Funktion          : Artikelpreisliste (PRICAT) in die EDI-DB
+..==                      Åbernehmen
+..==
+..==  Erstellungsdatum  : 13.02.2002
+..==
+..==  Autor             : Ozan Kesim
+..==  Verantwortlich    : mh
+..==  Menuepunkte       :
+..==
+..==  Maskenprioritaet
+..==  bei EFOP          :
+..==
+..==  Besonderheiten    :
+..==
+..==  Aenderungshistorie:
+..#KOR#EDI-MODUL#DATUM#éNDERUNGS-INDEX#MitarbeiterkÅrzel#
+..#KOR#PRI#27.02.2002#0#ok#
+..==
+..========================================================================
+..@@ENDHEAD
+..
+.. include standard programs
+.input ARB
+..
+.. variable definitions
+..@@BEGINVARDEFS
+..====================================================
+.set trans -
+..... procedure stack pointer .....
+.type integer   xprocsp
+.type bool  xbfehler
+.type integer xzaehler
+..====================================================
+..@@ENDVARDEFS
+..
+.. initialize procedure stack pointer
+..fo xprocsp = 0
+.. alle variablen mÅssen definiert sein, sonst bricht das programm ab
+.set demand -
+..
+.. ----------------------------------------
+.continue EPROCDEF
+.. procedure definitions
+..
+!PROC001: ----- WRITE_EDI_SET -----
+.. hol zeile aus zwischendatei
+.select from 'xdEDI' xtxt1 # xtxt2 # xtxt3 # xtxt4 # xtxt5 # xtxt6 # xtxt7 # xtxt8 # xtxt9 # xtxt10 # xtxt11 # xtxt12 # xtxt13 # xtxt14 # xtxt15 # xtxt16 # xtxt17 # xtxt18 # xtxt19 # xtxt20 # xtxt21 # xtxt22 # xtxt23 # xtxt24 # xtxt25 #
+..
+..
+!LOOP001: ==============================
+.continue ELOP001 ? _(mehr)
+.make line
+..
+.formula xii = 1
+..
+..
+!LOOP002: ==============================
+.continue ELOP002 ? _(xii <= 25)
+.formula h|text.xii = xtxt.xii
+..
+..
+.continue EL001 ? _(xii=25)
+.. IF001
+.formula xzaehler = xzaehler + 1
+.formula h|text.xii = xzaehler
+..
+!EL001
+.. FI001
+..
+.formula xii = xii + 1
+..
+.continue LOOP002
+!ELOP002: ==============================
+..
+.. hol zeile aus zwischendatei
+.select from 'xdEDI' xtxt1 # xtxt2 # xtxt3 # xtxt4 # xtxt5 # xtxt6 # xtxt7 # xtxt8 # xtxt9 # xtxt10 # xtxt11 # xtxt12 # xtxt13 # xtxt14 # xtxt15 # xtxt16 # xtxt17 # xtxt18 # xtxt19 # xtxt20 # xtxt21 # xtxt22 # xtxt23 # xtxt24 # xtxt25 #
+..
+.continue LOOP001
+!ELOP001: ==============================
+..
+.continue 'xprocst.xprocsp'
+..
+..
+!PROC002: ----- FEHLER -----
+.select -
+.formula xbfehler = true
+.box Fehler in Vorgang
+'xvortxt'
+'xtxt1'
+'xtxt2'
+..
+.end .
+..
+.continue 'xprocst.xprocsp'
+..
+!EPROCDEF: ----- end procedure definitions -----
+.. ----------------------------------------
+..
+.formula xbfehler = false
+..
+..
+.continue EL002 ? _('M|dateiname'<>"")
+.. IF002
+.formula xdEDI = 'M|dateiname'
+..
+.continue FI002
+!EL002
+.box Meldung
+Es ist keine PRICAT-Datei zur öbernahme in die EDI-DB vorhanden!
+Bitte, erstellen Sie sie durch das Button "PRICAT erstellen"!
+.end
+..
+!FI002
+..
+..>> Test, ob Datei angelegt
+..>>
+.formula xsybefehl = "test -w " + xdEDI
+.system 'xsybefehl' background
+..>> Setzen Ergebnis der Operation
+.formula xprocreturn = mehr
+..
+..
+.continue EL003 ? _(_xprocreturn)
+.. IF003
+.box Meldung
+Es ist keine PRICAT-Datei zur öbernahme in die EDI-DB vorhanden!
+Bitte, erstellen Sie sie durch das Button "PRICAT erstellen"!
+..
+.end
+..
+!EL003
+.. FI003
+..
+.. erst mal den kopf des EDI-datensatzes anlegen
+.formula xsuch = "VKPRICAT"
+..
+.make edifact
+.formula such = xsuch
+.. Nachricht Kennung 2116 = Artikelpreisliste
+.formula h|edinachr = "2116"
+..
+.. interne bezeichnung
+.set trans +
+.formula h|name = "ausgehende Artikelpreisliste (PRICAT)"
+.set trans -
+.formula h|name = h|name + " " + M|kunde
+..
+.. status: erstmal undefiniert
+.formula h|status = 99
+..
+.. fehlercode: erstmal undefiniert
+.formula h|fcode = 99
+..
+.. import/export-flag setzen
+.formula h|imex = "EX"
+..
+.. vorgangsart -> PRICAT
+.formula h|vorart = 33
+..
+.. idnr fÅr Kunde (Besteller) bei Lieferant
+.formula h|idkundeab = M|kunde
+..
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+..
+.. alles roger
+.select lock header
+.. status: vorgang in edi-datenbank eingetragen
+.formula h|status = 2
+.. alles ohne fehler
+.formula h|fcode = 0
+.rewrite
+..
+..
+.continue EL004 ? _(_(mehr))
+.. IF004
+.. schwerer fehler
+.set trans +
+.formula xtxt1 = "Konnte keinen Datensatz in der EDI-Datenbank anlegen!"
+.formula xtxt2 = "PROGRAMMABBRUCH   PID: " + pid
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC002
+!RET002
+.formula xprocsp = xprocsp - 1
+..
+!EL004
+.. FI004
+..
+.formula xEDInr = h|num
+.select -
+..
+.. Meldung fÅr Anwender
+..
+.continue EL005 ? _(_(xbfehler))
+.. IF005
+.note Die Artikelpreisliste fÅr Kunde 'M|kunde' wurde erfolgreich in die EDI-Datenbank Åbernommen!
+.formula M|edinr = xEDInr
+..
+.continue FI005
+!EL005
+.output terminal
+.set trans +
+Fehler beim öbernehmen der Artikelpreisliste
+fÅr den Kunde 'M|kunde'!
+Bitte siehe die Post bzw. das Fehlerprotokoll!
+.set trans -
+..
+!FI005
+..
+.. die tmp. datei lîschen
+.formula xsys = "rm -f " + xdEDI
+.system 'xsys' background
+..

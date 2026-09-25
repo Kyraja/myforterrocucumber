@@ -1,0 +1,135 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : la/REGULIERER.EV
+.. Autor          : ok
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Infosystem REGULIERER, alle Events
+..
+..#KOR#EDI-MODUL#DATUM#ŽNDERUNGS-INDEX#Mitarbeiterkrzel#
+..#KOR#EDI#23.08.2006#0#ok#
+..*****************************************************************************
+.set trans -
+..
+.type text xname ? _F|defined(U|xname)
+.type text xmen  ? _F|defined(U|xmen)
+.type text x1    ? _F|defined(U|x1)
+.type text x2    ? _F|defined(U|x2)
+.type text x3    ? _F|defined(U|x3)
+.type text x4    ? _F|defined(U|x4)
+.type text x5    ? _F|defined(U|x5)
+.type text x6    ? _F|defined(U|x6)
+.type bool xanl  ? _F|defined(U|xanl)
+..
+.continue REGSEL  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "regul"
+.continue KDSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "kdsach"
+.continue BSEL    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "save"
+.continue
+..
+!KDSEL
+.continue            ? +'M|kdsach' = 0
+.assign M|kunde     = M|kdsach^firma
+.assign M|kdname    = M|kdsach^firma^sucherw
+.assign M|werk      = M|kdsach^werk
+.assign M|ablade    = M|kdsach^ablstelle
+.assign M|kommentar = U|x6
+.continue
+..
+!REGSEL
+.input "is/TABLEEREN"
+.continue STM1   ? F|empty(M|regul)
+.formula U|xname  = "la/REGULIERER" + 'M|regul' + ".DTR"
+.copy M|blad = G|false
+.continue WEITER ? F|filenotempty(U|xname)
+..
+!MREG
+.box Meldung
+Fr den Regulierer 'M|regul' sind keine Daten vorhanden!
+..
+.set trans +
+.formula U|xmen = "Sollen die Daten angelegt werden?"
+..
+.menu 'U|xmen'
+Ja, anlegen   >> .copy U|xanl = G|true
+Nein, Abbruch >> .end
+.set trans -
+..
+!AUSG
+.output new 'U|xname'
+.input "DATEI.F"
+.set trans +
+######    Datei mit Informationen vom Regulierer XY
+######    verwaltete Kundenwerke
+######    mit bestimmten Werten fr:
+######
+######    - Identnummer des Kunden bei abas
+######    - Werk des Kunden
+######    - Abladestelle des Kunden
+# Kunden-Sachbearbeiter   # Kunde # Kundenname # Werk # Abladestelle # Kommentar
+0  #   # 00000000 # 000  # 00000        # max. Parameterl„nge#
+.set trans -
+.output terminal
+..
+!WEITER
+.continue HOL ? F|filenotempty(U|xname)
+.error -message Die Daten konnten nicht angelegt werden!
+.end 1
+..
+!HOL
+.select from 'U|xname' U|x1 # U|x2 # U|x3 # U|x4 # U|x5 # U|x6 #
+.continue ENDE   ? _G|mehr
+.continue HOL    ? F|empty(U|x1)
+.make screen line +O
+.assign M|kdsach    = U|x1
+.assign M|kunde     = M|kdsach^firma
+.assign M|kdname    = M|kdsach^firma^sucherw
+.assign M|werk      = M|kdsach^werk
+.assign M|ablade    = M|kdsach^ablstelle
+.assign M|kommentar = U|x6
+.continue HOL
+..
+!ENDE
+.continue
+..
+!STM1
+.error -message Zuerst muss ein Regulierer ausgew„hlt werden!
+.end 1
+..
+!BSEL
+.continue STM1   ? F|empty(M|regul)
+.formula U|xname  = "la/REGULIERER" + 'M|regul' + ".DTR"
+.continue MREG ? _F|filenotempty(U|xname)
+.copy M|blad = G|false
+.continue FEHLER          ? _M|tzeilen > 0
+.output new 'U|xname'
+.input "DATEI.F"
+.set trans +
+..
+######    Datei mit Informationen vom Regulierer XY
+######    verwaltete Kundenwerke
+######    mit bestimmten Werten fr:
+######
+######    - Identnummer des Kunden bei abas
+######    - Werk des Kunden
+######    - Abladestelle des Kunden
+# Kunden-Sachbearbeiter   # Kunde # Kundenname # Werk # Abladestelle # Kommentar
+.set trans -
+!ZEILE
+.select screen line
+.continue EZEIL   ? _G|mehr
+'M|kdsach'#'M|kunde'#'M|kdname'#'M|werk'#'M|ablade'#'M|kommentar'#
+.continue ZEILE
+..
+!EZEIL
+.copy M|blad = G|true ? M|tzeilen > 0
+.continue MELD1       ? M|tzeilen > 0
+..
+!FEHLER
+.box Vorsicht
+In der Tabelle sind keine Daten vorhanden!
+.continue REGSEL
+..
+!MELD1
+.box Meldung
+Daten wurden gespeichert!
+.continue

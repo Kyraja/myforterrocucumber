@@ -1,0 +1,1141 @@
+..!interpreter english declaration noabbrev
+.. at 2016-12-23, 13:40
+.set TRANS -
+..========================================================================
+..==  Name              : IS.PRJMLVBABDECKBLATT.EV
+..==  Pfad              : allppro
+..==  Funktion          : EFOP an IS PRJMLVBABDECKBLATT
+..==  Erstellungsdatum  : 16.12.2011
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2016 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allppro/LV.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF"
+..====================================================
+.type text    xtsel xtsys xtcmd xtid xtkontowerte xtkoartrrwerte xtnummer xtnumkoart xytaufrufernr xytzeitstempel xtsperrstempel
+.type integer xi1 xistufe xizeile xievtstufe ximonat
+.type integer xyvdn xyvgr
+.type real    xrwert xrkoartwert xrkoartzuschlag xrbaswert
+.type GD      xdatum
+.type bool    xbdbneu
+.type integer xprocsp   ? _F|defined(U|xprocsp)
+.formula U|xprocsp = 0
+.set DEMAND -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Sperre_entfernen -----
+.continue EL001 ? _((M|ysperre) & (_(F|empty(M|ydeckblatt))))
+.continue EL002 ? _(M|ydeckblatt^ysperre)
+.select lock add M|ydeckblatt
+.continue EL003 ? _(G|mehr)
+.copy H|ysperre = G|FALSE
+.rewrite
+.continue FI003
+!EL003
+.set TRANS +
+.box Hinweis
+Das Deckblatt 'M|ydeckblatt^nummer' / 'M|ydeckblatt^such' konnte nicht freigegeben werden.
+Bitte Sperre manuell entfernen.
+.set TRANS -
+!FI003
+!EL002
+!EL001
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Farbe_und_Schreibschutz_Kopf -----
+.protection        ybauftragseingang 0  ? _M|ysperre
+.protection -RESET ybauftragseingang 0  ?  M|ysperre
+.protection        ybforecast        0  ? _M|ysperre
+.protection -RESET ybforecast        0  ?  M|ysperre
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Farbe_und_Schreibschutz_Zeile -----
+.protection        ytwertdeck 'M|aktzeile'  ? _M|ysperre ;  M|ytkoartrr^gruppe = 2
+.protection -RESET ytwertdeck 'M|aktzeile'  ?  M|ysperre & _M|ytkoartrr^gruppe = 2
+.continue 'xprocst.xprocsp'
+!PROC004: ----- Farbe_und_Schreibschutz_Tabelle -----
+.select screen header
+.select screen line
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC003
+!RET001
+.formula xprocsp = xprocsp - 1
+.select screen line
+.continue LOOP001
+!ELOP001: ==============================
+.continue 'xprocst.xprocsp'
+!PROC005: ----- Tabelle_leeren -----
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+.formula M|yevtkommd    = ""
+.colour -BACKGROUND "-1 -1 -1" yevtkommd 0
+.assign M|ysperre = G|FALSE
+.make screen line --O
+.continue 'xprocst.xprocsp'
+!PROC006: ----- DeckblattBearbeiten -----
+.continue EL004 ? _(_(F|empty(M|ydeckblatt)))
+.continue EL005 ? _(_(M|ysperre))
+.formula U|xytaufrufernr = G|aufrufernr
+.input "allpstart/GET.CALLERNO"
+.formula U|xtsperrstempel = U|xytzeitstempel
+.copy M|ysperre     = G|TRUE
+.continue EL006 ? _((M|ydeckblatt^ysperre) & (_(F|empty(M|ydeckblatt^yaufrufernr))))
+.formula U|xytaufrufernr = M|ydeckblatt^yaufrufernr
+.input "allpstart/GET.CALLERNO"
+.continue EL007 ? _(U|xytzeitstempel = M|ydeckblatt^yaufruferzp)
+.set trans +
+.formula U|xtsel = "Achtung"
+.box -button ok -title 'U|xtsel'
+'F|formatstr("{1} {2} wird gerade bearbeitet.", M|ydeckblatt^grbez, M|ydeckblatt^nummer)'
+
+Bearbeiter: 'M|ydeckblatt^ysperrzeich'
+Zeitpunkt der Sperre: 'M|ydeckblatt^ysperrzp'
+
+Das Deckblatt wird zur Anzeige geîffnet.
+.set trans -
+.copy M|ysperre = G|FALSE
+!EL007
+!EL006
+.continue EL008 ? _(M|ysperre)
+.select lock add M|ydeckblatt
+.continue EL009 ? _(G|mehr)
+.copy    H|ysperre     = G|TRUE
+.formula H|ysperrzeich = G|bzeichen
+.copy    H|ysperrzp    = G|zeitpunkt
+.formula H|yaufrufernr = G|aufrufernr
+.formula H|yaufruferzp = U|xtsperrstempel
+.rewrite
+.copy    M|ysperre     = G|TRUE
+.continue FI009
+!EL009
+.set TRANS +
+.box Hinweis
+Das Deckblatt 'M|ydeckblatt^nummer' / 'M|ydeckblatt^such' konnte nicht freigegeben werden.
+Bitte Sperre manuell entfernen.
+.set TRANS -
+.copy M|ysperre = G|FALSE
+!FI009
+!EL008
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC002
+!RET003
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC004
+!RET004
+.formula xprocsp = xprocsp - 1
+!EL005
+.input "is/ABASFARBEN.DEF"          ? _F|defined(U|xabasred)
+.formula M|yevtkommd = G|kaktname13             ?  M|ysperre
+.formula M|yevtkommd = G|kaktname12             ? _M|ysperre
+.colour -BACKGROUND 'U|xabasred'   yevtkommd 0  ?  M|ysperre
+.colour -BACKGROUND 'U|xabasgreen' yevtkommd 0  ? _M|ysperre
+!EL004
+.continue 'xprocst.xprocsp'
+!PROC007: ----- Deckblatt_eintragen -----
+.continue EL010 ? _(_(F|empty(M|ydeckblatt)))
+.select add M|ydeckblatt
+.copy    M|ybezugsdatdeck = H|ybezugsdatum
+.copy    M|yrevdatdeck    = H|yrevdatum
+.assign  M|ykalkblatt     = H|ykblattid
+.copy    M|ybezugsdatkalk = M|ykalkblatt^ybezugsdatum
+.copy    M|yprojekt       = H|yprojekt
+.copy    M|ykunde         = H|ykunde
+.copy    M|yverantwkst    = H|yverantwkst
+.copy    M|ybauftragseingang = H|ybauftragseingang
+.copy    M|ybforecast        = H|ybforecast
+.formula M|yevtkommd      = G|kaktname12
+.formula P|maskkontextfop = ""
+.input "is/ABASFARBEN.DEF"
+.colour -BACKGROUND 'U|xabasgreen' yevtkommd 0
+.continue EL011 ? _(U|xbdbneu)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC006
+!RET005
+.formula xprocsp = xprocsp - 1
+!EL011
+!EL010
+.continue 'xprocst.xprocsp'
+!PROC008: ----- Werte_zu_Kostenart -----
+.formula U|xrkoartwert     = 0
+.formula U|xrkoartzuschlag = 0
+.formula U|xtnumkoart      = H|koart^nummer
+.formula U|xtsel = "$,,zkoart==" + H|koart^id + ";@ablageart=(1);@zeilen=(1)"
+.load 9 group "5:1" 'U|xtsel'
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.formula U|xtnummer = 9|nummer
+.load 9 line '9|selzeile'
+.continue EL012 ? _(F|defined(U|xrwert.xtnummer))
+.continue EL013 ? _(((9|koartvon <= M|ybezugsdatdeck) ; (F|empty(9|koartvon))) & ((9|koartbis >= M|ybezugsdatdeck) ; (F|empty(9|koartbis))))
+.continue EL014 ? _(F|defined(H|zproz))
+.continue EL015 ? _((M|ybdetail) ; (M|tbaumstufe = 0) ; (G|evtvar = "ytbaumaufzu"))
+.formula M|ytwerttech          = M|ytwerttech          +  U|xrwert.xtnummer
+!EL015
+.formula U|xrtwerttech.xistufe = U|xrtwerttech.xistufe + (U|xrwert.xtnummer * H|zproz / 100)    ? H|aktzeile = 1 ; 'H|optyp(L="0")' = "(115)"
+.formula U|xrtwerttech.xistufe = U|xrtwerttech.xistufe - (U|xrwert.xtnummer * H|zproz / 100)    ? H|aktzeile > 1 & 'H|optyp(L="0")' = "(97)"
+.formula U|xrkoartwert         = U|xrkoartwert         + (U|xrwert.xtnummer * H|zproz / 100)    ? H|aktzeile = 1 ; 'H|optyp(L="0")' = "(115)"
+.formula U|xrkoartwert         = U|xrkoartwert         - (U|xrwert.xtnummer * H|zproz / 100)    ? H|aktzeile > 1 & 'H|optyp(L="0")' = "(97)"
+.continue FI014
+!EL014
+.continue EL016 ? _((M|ybdetail) ; (M|tbaumstufe = 0) ; (G|evtvar = "ytbaumaufzu"))
+.formula M|ytwerttech          = M|ytwerttech          + U|xrwert.xtnummer
+!EL016
+.formula U|xrtwerttech.xistufe = U|xrtwerttech.xistufe + U|xrwert.xtnummer
+.formula U|xrkoartwert         = U|xrkoartwert         + U|xrwert.xtnummer
+!FI014
+!EL013
+!EL012
+.continue EL017 ? _(G|evtvar = "ybuneuberech")
+.continue EL018 ? _(((9|koartvon <= M|ybezugsdatdeck) ; (F|empty(9|koartvon))) & ((9|koartbis >= M|ybezugsdatdeck) ; (F|empty(9|koartbis))))
+.continue EL019 ? _(_(F|defined(U|xrktozuschlag.xtnummer)))
+.type real U|xrktozuschlag.xtnummer
+.load 8 group 'U|xydbgrzuschlagsatz' 'F|expr("$,,yaufwkonto==" + 9|id + ";yzuschlagsbasis<>`;@ablageart=(1)")'
+.continue EL020 ? _(G|mehr)
+.continue EL021 ? _(_(F|defined(U|xrkoartzuschlag.xtnumkoart)))
+.type real xrkoartzuschlag.xtnummer
+.formula U|xrkoartzuschlag.xtnummer = U|xrkoartzuschlag
+!EL021
+.load 7 add 8|yzuschlagsbasis
+.continue EL022 ? _(G|mehr)
+.formula U|xrbaswert = 0
+.load 7 line
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.load 6 group 'U|xydbgrdeckblatt' 'F|expr("$,,id==" + M|ydeckblatt^id + ";ytkoart==" + 7|koart^id + ";@ablageart=(1);@zeilen=(1)")'
+.continue EL023 ? _(G|mehr)
+.load 6 line '6|selzeile'
+.formula U|xrbaswert = U|xrbaswert + 6|ytwertkoart
+!EL023
+.load 7 line
+.continue LOOP003
+!ELOP003: ==============================
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ykstelle=="     +  M|yverantwkst^id
+.formula U|xtsel = U|xtsel + ";ygjahr="        + 'F|year(M|ybezugsdatdeck)'
+.formula U|xtsel = U|xtsel + ";ybstd=0"
+.formula U|xtsel = U|xtsel + ";ytzuschlsatz==" + 8|id
+.formula U|xtsel = U|xtsel + ";@ablageart=(1);@zeilen=(1)"
+.load 7 group 'U|xydbgrzuschlsatzwert' 'U|xtsel'
+.continue EL024 ? _(G|mehr)
+.load 7 line '7|selzeile'
+.formula U|xrktozuschlag.xtnummer = U|xrbaswert * (7|ytzs.ximonat / 100)
+.continue FI024
+!EL024
+.formula U|xtsel = "$,,ytzuschlsatz==" + 8|id + ";ygjahr=" + 'F|year(M|ybezugsdatdeck)' + ";ybstd=1;@ablageart=(1);@zeilen=(1)"
+.load 7 group 'U|xydbgrzuschlsatzwert' 'U|xtsel'
+.continue EL025 ? _(G|mehr)
+.load 7 line '7|selzeile'
+.formula U|xrktozuschlag.xtnummer = U|xrbaswert * (7|ytzs.ximonat / 100)
+!EL025
+!FI024
+!EL022
+!EL020
+!EL019
+.load 8
+.load 7
+.load 6
+.formula U|xrkoartzuschlag = U|xrkoartzuschlag + U|xrktozuschlag.xtnummer
+!EL018
+!EL017
+.load 9 continue
+.continue LOOP002
+!ELOP002: ==============================
+.continue EL026 ? _(_(F|defined(U|xrdbktowert.xtnumkoart)))
+.type real xrdbktowert.xtnumkoart
+.formula U|xrdbktowert.xtnumkoart = U|xrkoartwert
+!EL026
+.continue EL027 ? _((U|xbdbneu) ; (G|evtvar = "ybuuebertragen"))
+.reserve
+.continue EL028 ? _(_(F|defined(U|xrkoartdeck.xtnumkoart)))
+.type real xrkoartdeck.xtnumkoart
+.formula U|xrkoartdeck.xtnumkoart = U|xrdbktowert.xtnumkoart
+.reserve
+.select lock group 'U|xydbgrdeckblatt' 'F|expr("$,,id==" + M|ydeckblatt^id + ";ytkoart==" + U|xtnumkoart + ";@ablageart=(1);@zeilen=(1)")'
+.continue EL029 ? _(G|mehr)
+.select lock line 'H|selzeile'
+.continue FI029
+!EL029
+.select lock add M|ydeckblatt
+.make line +O
+.assign H|ytkoart = U|xtnumkoart
+!FI029
+.formula H|ytwertkoart = U|xrkoartdeck.xtnumkoart
+.rewrite
+.select
+!EL028
+.select
+!EL027
+.continue EL030 ? _(G|evtvar = "ybuneuberech")
+.reserve
+.continue EL031 ? _(F|defined(U|xrkoartzuschlag.xtnumkoart))
+.formula U|xrkoartzuschlag.xtnumkoart = U|xrkoartzuschlag
+.reserve
+.select lock group 'U|xydbgrdeckblatt' 'F|expr("$,,id==" + M|ydeckblatt^id + ";ytkoart==" + U|xtnumkoart + ";@ablageart=(1);@zeilen=(1)")'
+.continue EL032 ? _(G|mehr)
+.select lock line 'H|selzeile'
+.continue FI032
+!EL032
+.select lock add M|ydeckblatt
+.make line +O
+.assign H|ytkoart = U|xtnumkoart
+!FI032
+.formula H|ytwertkoart = U|xrkoartzuschlag.xtnumkoart
+.rewrite
+.select
+!EL031
+.select
+!EL030
+.load 9 group 'U|xydbgrdeckblatt' 'F|expr("$,,id==" + M|ydeckblatt^id + ";ytkoart==" + H|koart^id + ";@ablageart=(1);@zeilen=(1)")'
+.continue EL033 ? _(G|mehr)
+.load 9 line '9|selzeile'
+.continue EL034 ? _(_(F|defined(U|xrkoartdeck.xtnumkoart)))
+.type real xrkoartdeck.xtnumkoart
+.formula U|xrkoartdeck.xtnumkoart = 9|ytwertkoart
+!EL034
+.continue EL035 ? _(F|defined(H|zproz))
+.formula M|ytwertdeck          = U|xrkoartdeck.xtnumkoart        ? M|ybdetail ; M|tbaumstufe = 0 ; G|evtvar = "ytbaumaufzu"
+.formula U|xrtwertdeck.xistufe = U|xrtwertdeck.xistufe + (U|xrkoartdeck.xtnumkoart * H|zproz / 100)    ? H|aktzeile = 1 ; 'H|optyp(L="0")' = "(115)"
+.formula U|xrtwertdeck.xistufe = U|xrtwertdeck.xistufe - (U|xrkoartdeck.xtnumkoart * H|zproz / 100)    ? H|aktzeile > 1 & 'H|optyp(L="0")' = "(97)"
+.continue FI035
+!EL035
+.formula M|ytwertdeck          = U|xrkoartdeck.xtnumkoart        ? M|ybdetail ; M|tbaumstufe = 0 ; G|evtvar = "ytbaumaufzu"
+.formula U|xrtwertdeck.xistufe = U|xrtwertdeck.xistufe
+!FI035
+!EL033
+.continue 'xprocst.xprocsp'
+!PROC009: ----- BAB_Rechenregel -----
+.formula M|tbaumstat   = "+"                    ? _M|ybdetail
+.formula M|ytbaumaufzu = "icon:folder_closed"   ? _M|ybdetail
+.formula M|tbaumstat   = "-"                    ?  M|ybdetail
+.formula M|ytbaumaufzu = "icon:folder_opened"   ?  M|ybdetail
+.formula U|xistufe = U|xistufe + 1
+.type integer xizeile.xistufe       ? _F|defined(U|xizeile.xistufe)
+.type real    xrtwerttech.xistufe   ? _F|defined(U|xrtwerttech.xistufe)
+.type real    xrtwertdeck.xistufe   ? _F|defined(U|xrtwertdeck.xistufe)
+.formula U|xizeile.xistufe = M|aktzeile
+.reserve LIFO
+.select add H|koart
+.select line
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.continue EL036 ? _((M|ybdetail) ; ((G|evtvar = "ytbaumaufzu") & (M|tbaumstufe = U|xievtstufe)))
+.make screen line +O
+.formula M|tbaumstufe    = U|xistufe
+.formula M|ytkoartrr     = H|koart^id
+.formula M|ytkoartrrname = H|koart^namebspr
+.formula M|ytproz        = H|zproz      ?  F|defined(H|zproz)
+.formula M|ytproz        = 100          ? _F|defined(H|zproz)
+.protection ytwertdeck 'M|aktzeile'     ? _M|ysperre ; H|koart^gruppe = 2
+!EL036
+.continue EL037 ? _(H|koart^gruppe = 2)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC009
+!RET006
+.formula xprocsp = xprocsp - 1
+.continue FI037
+!EL037
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC008
+!RET007
+.formula xprocsp = xprocsp - 1
+!FI037
+.select line
+.continue LOOP004
+!ELOP004: ==============================
+.formula U|xizeile = M|aktzeile
+.select screen line 'U|xizeile.xistufe'
+.formula M|ytwerttech = U|xrtwerttech.xistufe
+.formula M|ytwertdeck = U|xrtwertdeck.xistufe
+.select screen line 'U|xizeile'
+.select lifo
+.formula U|xi1     = U|xistufe
+.formula U|xistufe = U|xistufe - 1
+.continue EL038 ? _(U|xistufe > 0)
+.formula U|xrtwerttech.xistufe = U|xrtwerttech.xistufe + (U|xrtwerttech.xi1 * H|zproz / 100)    ? H|aktzeile = 1 ; 'H|optyp(L="0")' = "(115)"
+.formula U|xrtwerttech.xistufe = U|xrtwerttech.xistufe - (U|xrtwerttech.xi1 * H|zproz / 100)    ? H|aktzeile > 1 & 'H|optyp(L="0")' = "(97)"
+.formula U|xrtwerttech.xi1 = 0
+.formula U|xrtwertdeck.xistufe = U|xrtwertdeck.xistufe + (U|xrtwertdeck.xi1 * H|zproz / 100)    ? H|aktzeile = 1 ; 'H|optyp(L="0")' = "(115)"
+.formula U|xrtwertdeck.xistufe = U|xrtwertdeck.xistufe - (U|xrtwertdeck.xi1 * H|zproz / 100)    ? H|aktzeile > 1 & 'H|optyp(L="0")' = "(97)"
+.formula U|xrtwertdeck.xi1 = 0
+.continue FI038
+!EL038
+.formula U|xrtwerttech.xistufe = U|xrtwerttech.xistufe + (U|xrtwerttech.xi1 * H|zproz / 100)        ?  F|defined(H|zproz)
+.formula U|xrtwerttech.xistufe = U|xrtwerttech.xistufe +  U|xrtwerttech.xi1                         ? _F|defined(H|zproz)
+.formula U|xrtwerttech.xi1 = 0
+.formula U|xrtwertdeck.xistufe = U|xrtwertdeck.xistufe + (U|xrtwertdeck.xi1 * H|zproz / 100)        ?  F|defined(H|zproz)
+.formula U|xrtwertdeck.xistufe = U|xrtwertdeck.xistufe +  U|xrtwertdeck.xi1                         ? _F|defined(H|zproz)
+.formula U|xrtwertdeck.xi1 = 0
+!FI038
+.continue 'xprocst.xprocsp'
+!PROC010: ----- Deckblatt_anlegen -----
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC005
+!RET008
+.formula xprocsp = xprocsp - 1
+.formula U|xdatum = 'G|datum:8'<<6 + "01"
+.formula U|xdatum =  U|xdatum + 31
+.formula U|xdatum = 'U|xdatum:8'<<6 + "01"
+.formula U|xdatum =  U|xdatum - 1
+.formula U|xtid   = "DB" + F|tostring(G|versionneu) + "-" + G|pid
+.formula U|xtcmd = "<(ProjectSuiteCalculation)><(New)>,(CoverSheet) "
+.formula U|xtcmd = U|xtcmd + "?yextid="      +  U|xtid
+.formula U|xtcmd = U|xtcmd + "|ykblattid="   +  M|ykalkblatt^id     ? _F|empty(M|ykalkblatt)
+.formula U|xtcmd = U|xtcmd + "|yskblatt="    +  M|ykalkblatt^id     ? _F|empty(M|ykalkblatt)
+.formula U|xtcmd = U|xtcmd + "|yrevdatum="   + 'U|xdatum:8'
+.formula U|xtcmd = U|xtcmd + "|ybmaskezu=1"
+.command -WAIT 'U|xtcmd'
+.formula U|xtsel = "$,,yextid==" + U|xtid + ";@ablageart=(Active)"
+.select group 'U|xydbgrdeckblatt' 'U|xtsel'
+.continue EL039 ? _(G|mehr)
+.formula M|ydeckblatt = H|id
+.copy U|xbdbneu = G|TRUE
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC007
+!RET009
+.formula xprocsp = xprocsp - 1
+.continue FI039
+!EL039
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC007
+!RET010
+.formula xprocsp = xprocsp - 1
+!FI039
+.continue 'xprocst.xprocsp'
+!PROC011: ----- WerteAusLeistungsliste -----
+.load 9 line
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.continue EL040 ? _(_(F|empty(9|ytvkkonto)))
+.formula U|xtnummer = 9|ytvkkonto^nummer
+.type real xrvkwert.xtnummer    ? _F|defined(U|xrvkwert.xtnummer)
+.type real xrwert.xtnummer      ? _F|defined(U|xrwert.xtnummer)
+.formula U|xrvkwert.xtnummer = U|xrvkwert.xtnummer + 9|ytvkwertman
+.formula U|xrwert.xtnummer   = U|xrwert.xtnummer   + 9|ytvkwertman
+!EL040
+.continue EL041 ? _(_(F|empty(9|ytekkonto)))
+.formula U|xtnummer = 9|ytekkonto^nummer
+.type real xrekwert.xtnummer    ? _F|defined(U|xrekwert.xtnummer)
+.type real xrwert.xtnummer      ? _F|defined(U|xrwert.xtnummer)
+.formula U|xrekwert.xtnummer = U|xrekwert.xtnummer + 9|ytekwert
+.formula U|xrwert.xtnummer   = U|xrwert.xtnummer   + 9|ytekwert
+!EL041
+.continue EL042 ? _(F|defined(0|ytkoko))
+.formula U|xtnummer = ""
+.continue EL043 ? _((_(F|empty(0|ytkoko^ygkzseigen^yaufwkonto))) & (9|ytwertkategoriek = "EL"))
+.formula U|xtnummer = 0|ytkoko^ygkzseigen^yaufwkonto^nummer
+!EL043
+.continue EL044 ? _((_(F|empty(0|ytkoko^ygkzsfremd^yaufwkonto))) & (9|ytwertkategoriek = "FL"))
+.formula U|xtnummer = 0|ytkoko^ygkzsfremd^yaufwkonto^nummer
+!EL044
+.continue EL045 ? _((_(F|empty(0|ytkoko^ygkzssonst^yaufwkonto))) & (9|ytwertkategoriek = "SOKO"))
+.formula U|xtnummer = 0|ytkoko^ygkzssonst^yaufwkonto^nummer
+!EL045
+.continue EL046 ? _((_(F|empty(0|ytkoko^ygkzsfert^yaufwkonto))) & (9|ytwertkategoriek = "FERT"))
+.formula U|xtnummer = 0|ytkoko^ygkzsfert^yaufwkonto^nummer
+!EL046
+.continue EL047 ? _(_(F|empty(U|xtnummer)))
+.type real xrgkwert.xtnummer    ? _F|defined(U|xrgkwert.xtnummer)
+.type real xrwert.xtnummer      ? _F|defined(U|xrwert.xtnummer)
+.formula U|xrgkwert.xtnummer = U|xrgkwert.xtnummer + 9|ytgkwert
+.formula U|xrwert.xtnummer   = U|xrwert.xtnummer   + 9|ytgkwert
+!EL047
+.continue FI042
+!EL042
+.continue EL048 ? _(_(F|empty(M|ykalkblatt^yprojgkkoko)))
+.formula U|xtnummer = ""
+.continue EL049 ? _((_(F|empty(M|ykalkblatt^yprojgkkoko^ygkzseigen^yaufwkonto))) & (9|ytwertkategoriek = "EL"))
+.formula U|xtnummer = M|ykalkblatt^yprojgkkoko^ygkzseigen^yaufwkonto^nummer
+!EL049
+.continue EL050 ? _((_(F|empty(M|ykalkblatt^yprojgkkoko^ygkzsfremd^yaufwkonto))) & (9|ytwertkategoriek = "FL"))
+.formula U|xtnummer = M|ykalkblatt^yprojgkkoko^ygkzsfremd^yaufwkonto^nummer
+!EL050
+.continue EL051 ? _((_(F|empty(M|ykalkblatt^yprojgkkoko^ygkzssonst^yaufwkonto))) & (9|ytwertkategoriek = "SOKO"))
+.formula U|xtnummer = M|ykalkblatt^yprojgkkoko^ygkzssonst^yaufwkonto^nummer
+!EL051
+.continue EL052 ? _((_(F|empty(M|ykalkblatt^yprojgkkoko^ygkzsfert^yaufwkonto))) & (9|ytwertkategoriek = "FERT"))
+.formula U|xtnummer = M|ykalkblatt^yprojgkkoko^ygkzsfert^yaufwkonto^nummer
+!EL052
+.continue EL053 ? _(_(F|empty(U|xtnummer)))
+.type real xrgkwert.xtnummer    ? _F|defined(U|xrgkwert.xtnummer)
+.type real xrwert.xtnummer      ? _F|defined(U|xrwert.xtnummer)
+.formula U|xrgkwert.xtnummer = U|xrgkwert.xtnummer + 9|ytgkwert
+.formula U|xrwert.xtnummer   = U|xrwert.xtnummer   + 9|ytgkwert
+!EL053
+!EL048
+!FI042
+.formula U|xi1 = 1
+!LOOP006: ==============================
+.continue ELOP006 ? _((F|defined(9|yhkzs.xi1)) ; (F|defined(9|yskzs.xi1)))
+.continue EL054 ? _((_(F|empty(9|yhkzs.xi1))) & (_(F|empty(9|yhkzs.xi1^yaufwkonto))) & (9|ythkzsabs.xi1 <> 0))
+.formula U|xtnummer = 9|yhkzs.xi1^yaufwkonto^nummer
+.type real xrhkwert.xtnummer    ? _F|defined(U|xrhkwert.xtnummer)
+.type real xrwert.xtnummer      ? _F|defined(U|xrwert.xtnummer)
+.formula U|xrhkwert.xtnummer = U|xrhkwert.xtnummer + 9|ythkzsabs.xi1
+.formula U|xrwert.xtnummer   = U|xrwert.xtnummer   + 9|ythkzsabs.xi1
+!EL054
+.continue EL055 ? _((_(F|empty(9|yskzs.xi1))) & (_(F|empty(9|yskzs.xi1^yaufwkonto))) & (9|ytskzsabs.xi1 <> 0))
+.formula U|xtnummer = 9|yskzs.xi1^yaufwkonto^nummer
+.type real xrskwert.xtnummer    ? _F|defined(U|xrskwert.xtnummer)
+.type real xrwert.xtnummer      ? _F|defined(U|xrwert.xtnummer)
+.formula U|xrskwert.xtnummer = U|xrskwert.xtnummer + 9|ytskzsabs.xi1
+.formula U|xrwert.xtnummer   = U|xrwert.xtnummer   + 9|ytskzsabs.xi1
+!EL055
+.formula U|xi1 = U|xi1 + 1
+.continue LOOP006
+!ELOP006: ==============================
+.load 9 line
+.continue LOOP005
+!ELOP005: ==============================
+.continue 'xprocst.xprocsp'
+!PROC012: ----- Tabelle_laden -----
+.continue EL056 ? _(F|empty(M|ybabktr))
+.set TRANS +
+.box Fehler
+Bitte erst das Master-Ktr-BAB Formular angeben.
+.set TRANS -
+.cursor ybabktr 0
+.continue FI056
+!EL056
+.make screen line --O
+.continue EL057 ? _(_(F|empty(M|ykalkblatt)))
+.formula U|xtsel = "$,ykblattid==" + M|ykalkblatt^id + ";yboptpos=0;ytleistlistid<>`;@ablageart=(1);@zeilen=(1)"
+.load 0 group 'U|xydbgrlvkalkpos' 'U|xtsel'
+!LOOP007: ==============================
+.continue ELOP007 ? _(G|mehr)
+.load 0 line '0|selzeile'
+.load 9 group "145:5" '0|ytleistlistid'
+.continue EL058 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC011
+!RET011
+.formula xprocsp = xprocsp - 1
+!EL058
+.load 0 continue
+.continue LOOP007
+!ELOP007: ==============================
+.continue EL059 ? _(_(F|empty(M|ykalkblatt^yprojgkleistlistid)))
+.load 9 group "145:5" 'M|ykalkblatt^yprojgkleistlistid'
+.continue EL060 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC011
+!RET012
+.formula xprocsp = xprocsp - 1
+!EL060
+!EL059
+!EL057
+.formula U|ximonat = F|month(M|ybezugsdatdeck)
+.formula U|xistufe = 0
+.select add M|ybabktr
+.select line
+!LOOP008: ==============================
+.continue ELOP008 ? _(mehr)
+.make screen line +O
+.formula M|tbaumstufe    = U|xistufe
+.formula M|ytkoartrr     = H|koart^id
+.formula M|ytkoartrrname = H|koart^namebspr
+.formula M|ytproz        = 100
+.protection ytwertdeck 'M|aktzeile'     ? _M|ysperre ; H|koart^gruppe = 2
+.type integer xizeile.xistufe       ? _F|defined(U|xizeile.xistufe)
+.type real    xrtwerttech.xistufe   ? _F|defined(U|xrtwerttech.xistufe)
+.type real    xrtwertdeck.xistufe   ? _F|defined(U|xrtwertdeck.xistufe)
+.formula U|xizeile.xistufe = M|aktzeile
+.formula U|xrtwerttech.xistufe = 0
+.formula U|xrtwertdeck.xistufe = 0
+.continue EL061 ? _(H|koart^gruppe = 2)
+.continue EL062 ? _('H|koart^optyp(L="0")' <> "(108)")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET013" 
+.continue PROC009
+!RET013
+.formula xprocsp = xprocsp - 1
+!EL062
+.continue FI061
+!EL061
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET014" 
+.continue PROC008
+!RET014
+.formula xprocsp = xprocsp - 1
+!FI061
+.select line
+.continue LOOP008
+!ELOP008: ==============================
+.file -TEMPNAME U|xtkontowerte
+.file -TEMPNAME U|xtkoartrrwerte
+.output NEW 'U|xtkontowerte'
+.input DATEI.F
+.formula U|xtnummer = ""
+.formula U|xtnummer = F|nextelem(U|xrwert, xtnummer)
+!LOOP009: ==============================
+.continue ELOP009 ? _(_(F|empty(U|xtnummer)))
+'U|xtnummer' # 'U|xrwert.xtnummer(L="0")' #
+.formula U|xtnummer = F|nextelem(U|xrwert, xtnummer)
+.continue LOOP009
+!ELOP009: ==============================
+.output NEW WERF.WEG
+.formula M|ykontowerte = U|xtkontowerte
+!FI056
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskein")
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"
+.assign M|ybabktr = 5|ypmbabktr^id
+.protection ybauftragseingang 0
+.protection ybforecast        0
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "maskende")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET015" 
+.continue PROC001
+!RET015
+.formula xprocsp = xprocsp - 1
+.end 1         ? M|ybmaskezu
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtart = "buttonvor")
+.continue EL063 ? _(_(G|evtvar = "ybudeckneu"))
+.continue EL064 ? _(F|empty(M|ydeckblatt))
+.set TRANS +
+.box Hinweis
+Bitte zuerst ein Deckblatt angeben.
+.set TRANS -
+.error
+.end 1
+!EL064
+!EL063
+.continue ESAC001
+!BRK003
+.continue BRK004 ? _(G|evtart = "buttonnach")
+.continue BRK005 ? _(G|evtvar = "bstart")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET016" 
+.continue PROC012
+!RET016
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK005
+.continue BRK006 ? _(G|evtvar = "ybudeckneu")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET017" 
+.continue PROC010
+!RET017
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET018" 
+.continue PROC012
+!RET018
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK006
+.continue BRK007 ? _(G|evtvar = "ybudeckkop")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET019" 
+.continue PROC005
+!RET019
+.formula xprocsp = xprocsp - 1
+.formula U|xdatum = 'G|datum:8'<<6 + "01"
+.formula U|xdatum =  U|xdatum + 31
+.formula U|xdatum = 'U|xdatum:8'<<6 + "01"
+.formula U|xdatum =  U|xdatum - 1
+.formula U|xtid   = "DB" + F|tostring(G|versionneu) + "-" + G|pid
+.formula U|xtcmd = "<(ProjectSuiteCalculation)>" + M|ydeckblatt^id + "<(Copy)>,(CoverSheet) "
+.formula U|xtcmd = U|xtcmd + "?yextid="      +  U|xtid
+.formula U|xtcmd = U|xtcmd + "|yrevdatum="   + 'U|xdatum:8'
+.formula U|xtcmd = U|xtcmd + "|ybmaskezu=1"
+.command -WAIT 'U|xtcmd'
+.formula U|xtsel = "$,,yextid==" + U|xtid + ";@ablageart=(Active)"
+.select group 'U|xydbgrdeckblatt' 'U|xtsel'
+.continue EL065 ? _(G|mehr)
+.formula M|ydeckblatt = H|id
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET020" 
+.continue PROC007
+!RET020
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET021" 
+.continue PROC012
+!RET021
+.formula xprocsp = xprocsp - 1
+.continue FI065
+!EL065
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET022" 
+.continue PROC007
+!RET022
+.formula xprocsp = xprocsp - 1
+!FI065
+.continue ESAC002
+!BRK007
+.continue BRK008 ? _(G|evtvar = "ybudeckzeig")
+.continue EL066 ? _(_(F|empty(M|ydeckblatt)))
+.continue EL067 ? _(M|ysperre)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET023" 
+.continue PROC001
+!RET023
+.formula xprocsp = xprocsp - 1
+.assign M|ysperre = G|FALSE
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET024" 
+.continue PROC002
+!RET024
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET025" 
+.continue PROC004
+!RET025
+.formula xprocsp = xprocsp - 1
+!EL067
+.input "is/ABASFARBEN.DEF"                      ? _F|defined(U|xabasred)
+.formula M|yevtkommd = G|kaktname13             ?  M|ysperre
+.formula M|yevtkommd = G|kaktname12             ? _M|ysperre
+.colour -BACKGROUND 'U|xabasred'   yevtkommd 0  ?  M|ysperre
+.colour -BACKGROUND 'U|xabasgreen' yevtkommd 0  ? _M|ysperre
+!EL066
+.continue ESAC002
+!BRK008
+.continue BRK009 ? _(G|evtvar = "ybudeckbearb")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET026" 
+.continue PROC006
+!RET026
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK009
+.continue BRK010 ? _(G|evtvar = "ybuuebertragen")
+.continue EL068 ? _(M|ysperre)
+.select lock add M|ydeckblatt
+.continue EL069 ? _(G|mehr)
+.set TRANS +
+.box -BUTTON yes:no -TITLE Achtung
+Sollen die bisherigen Werte der Deckblatt-Kalkulation Åberschrieben werden?
+.set TRANS -
+.continue EL070 ? _(G|box = G|boxyes)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET027" 
+.continue PROC012
+!RET027
+.formula xprocsp = xprocsp - 1
+!EL070
+.continue FI069
+!EL069
+.set TRANS +
+.box Hinweis
+Das Deckblatt 'M|ydeckblatt^nummer' / 'M|ydeckblatt^such' kann nicht bearbeitet werden.
+öbernahme der Werte ist nicht mîglich.
+.set TRANS -
+!FI069
+.continue FI068
+!EL068
+.set TRANS +
+.note -IMMEDIATELY Kommando erlaubt keine énderungen
+.set TRANS -
+!FI068
+.continue ESAC002
+!BRK010
+.continue BRK011 ? _(G|evtvar = "ybuneuberech")
+.continue EL071 ? _(M|ysperre)
+.select lock add M|ydeckblatt
+.continue EL072 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET028" 
+.continue PROC012
+!RET028
+.formula xprocsp = xprocsp - 1
+.continue FI072
+!EL072
+.set TRANS +
+.box Hinweis
+Das Deckblatt 'M|ydeckblatt^nummer' / 'M|ydeckblatt^such' kann nicht bearbeitet werden.
+öbernahme der Werte ist nicht mîglich.
+.set TRANS -
+!FI072
+.continue FI071
+!EL071
+.set TRANS +
+.note -IMMEDIATELY Kommando erlaubt keine énderungen
+.set TRANS -
+!FI071
+.continue ESAC002
+!BRK011
+.continue BRK012 ? _(G|evtvar = "ybualleauf")
+.copy M|ybdetail = G|TRUE
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET029" 
+.continue PROC012
+!RET029
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK012
+.continue BRK013 ? _(G|evtvar = "ybuallezu")
+.copy M|ybdetail = G|FALSE
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET030" 
+.continue PROC012
+!RET030
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK013
+.continue BRK014 ? _(G|evtvar = "ytbaumaufzu")
+.continue BRK015 ? _(M|tbaumstat = "+")
+.continue EL073 ? _(_(F|empty(M|ykontowerte)))
+.select from 'M|ykontowerte' U|xtnummer # U|xrwert #
+!LOOP010: ==============================
+.continue ELOP010 ? _(G|mehr)
+.type real xrwert.xtnummer      ? _F|defined(U|xrwert.xtnummer)
+.formula U|xrwert.xtnummer = U|xrwert
+.select from 'M|ykontowerte' U|xtnummer # U|xrwert #
+.continue LOOP010
+!ELOP010: ==============================
+!EL073
+.formula M|tbaumstat   = "-"
+.formula M|ytbaumaufzu = "icon:folder_opened"
+.formula U|xievtstufe = M|tbaumstufe
+.formula U|xistufe    = M|tbaumstufe + 1
+.formula U|xizeile    = M|aktzeile
+.select add M|ytkoartrr
+.continue EL074 ? _(H|gruppe = 2)
+.select line
+!LOOP011: ==============================
+.continue ELOP011 ? _(mehr)
+.make screen line +O
+.formula M|tbaumstufe    = U|xistufe
+.formula M|ytkoartrr     = H|koart^id
+.formula M|ytkoartrrname = H|koart^namebspr
+.formula M|ytproz        = H|zproz      ?  F|defined(H|zproz)
+.formula M|ytproz        = 100          ? _F|defined(H|zproz)
+.type integer xizeile.xistufe       ? _F|defined(U|xizeile.xistufe)
+.type real    xrtwerttech.xistufe   ? _F|defined(U|xrtwerttech.xistufe)
+.type real    xrtwertdeck.xistufe   ? _F|defined(U|xrtwertdeck.xistufe)
+.formula U|xizeile.xistufe     = M|aktzeile
+.formula U|xrtwerttech.xistufe = 0
+.formula U|xrtwertdeck.xistufe = 0
+.continue EL075 ? _(H|koart^gruppe = 2)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET031" 
+.continue PROC009
+!RET031
+.formula xprocsp = xprocsp - 1
+.continue FI075
+!EL075
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET032" 
+.continue PROC008
+!RET032
+.formula xprocsp = xprocsp - 1
+!FI075
+.select line
+.continue LOOP011
+!ELOP011: ==============================
+!EL074
+.continue ESAC003
+!BRK015
+.continue BRK016 ? _(M|tbaumstat = "-")
+.formula M|tbaumstat   = "+"
+.formula M|ytbaumaufzu = "icon:folder_closed"
+.formula U|xizeile = G|evtzeile
+.select screen line 'U|xizeile'
+.continue EL076 ? _(G|mehr)
+.formula U|xistufe = M|tbaumstufe
+.select screen line
+.continue EL077 ? _(G|mehr)
+!LOOP012: ==============================
+.continue ELOP012 ? _(M|tbaumstufe > U|xistufe)
+.make screen line -O
+.continue LOOP012
+!ELOP012: ==============================
+!EL077
+.select screen line 'U|xizeile
+.continue FI076
+!EL076
+.error(1111)
+.end 1
+!FI076
+.continue ESAC003
+!BRK016
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC002
+!BRK014
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK004
+.continue BRK017 ? _(G|evtart = "feldfuell")
+.continue BRK018 ? _(G|evtvar = "ydeckblatt")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET033" 
+.continue PROC005
+!RET033
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK018
+!ESAC004: =====   ENDCASE   =====
+.continue ESAC001
+!BRK017
+.continue BRK019 ? _(G|evtart = "feldaus")
+.continue BRK020 ? _(G|evtvar = "ykalkblatt")
+.continue EL078 ? _(_(F|empty(M|ykalkblatt)))
+.load 0 add M|ykalkblatt
+.formula M|yevtkommd      = G|kaktname12
+.copy    M|ybezugsdatkalk = 0|ybezugsdatum
+.copy    M|ykunde         = 0|ykunde
+.copy    M|yverantwkst    = 0|yverantwkst
+.select group 'U|xydbgrdeckblatt' 'F|expr("$,,ykblattid==" + 0|id + ";@ablageart=(1)")'
+.continue EL079 ? _(G|mehr)
+.reserv
+.select continue
+.continue EL080 ? _(G|mehr)
+.select group 'U|xydbgrdeckblatt' 'F|expr("%,,ybezugsdatum=;yrevdatum=;yprojekt=;yverantwkst=;ykunde=;ybauftragseingang=;ybforecast=" + ";.ykblattid==" + 0|id + ";@autostart=(1);@ablageart=(1)")'
+.assign M|ydeckblatt = H|id     ? G|mehr
+.continue FI080
+!EL080
+.select
+.assign M|ydeckblatt = H|id
+!FI080
+.load 0
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET034" 
+.continue PROC007
+!RET034
+.formula xprocsp = xprocsp - 1
+.continue FI079
+!EL079
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET035" 
+.continue PROC010
+!RET035
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET036" 
+.continue PROC012
+!RET036
+.formula xprocsp = xprocsp - 1
+!FI079
+!EL078
+.continue ESAC005
+!BRK020
+.continue BRK021 ? _(G|evtvar = "ydeckblatt")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET037" 
+.continue PROC007
+!RET037
+.formula xprocsp = xprocsp - 1
+.continue ESAC005
+!BRK021
+.continue BRK022 ? _(G|evtvar = "ybauftragseingang")
+.continue EL081 ? _(_(F|empty(M|ydeckblatt)))
+.continue EL082 ? _(M|ybauftragseingang)
+.continue EL083 ? _(F|empty(M|ydeckblatt^yprojekt))
+.set TRANS +
+.box Hinweis
+Das Deckblatt muss einen Verweis auf ein Projekt enthalten,
+wenn es als Auftragseingangskalkulation gekennzeichnet werden soll.
+.set TRANS -
+.copy M|ybauftragseingang = M|ydeckblatt^ybauftragseingang
+.error
+.end 1
+.continue FI083
+!EL083
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";id<>"       + M|ydeckblatt^id
+.formula U|xtsel = U|xtsel + ";yprojekt==" + M|ydeckblatt^yprojekt^id
+.formula U|xtsel = U|xtsel + ";ybauftragseingang==1;@ablageart=(1)"
+.load 0 group 'U|xydbgrdeckblatt' 'U|xtsel'
+.continue EL084 ? _(G|mehr)
+.set TRANS +
+.box -BUTTON yes:no -TITLE Hinweis
+Es existiert bereits ein Deckblatt zu diesem Projekt, das als Auftragseingangskalkulation gekennzeichnet ist.
+Soll das aktuelle Deckblatt als Auftragseingangskalkulation gespeichert werden?
+.set TRANS -
+.continue EL085 ? _(G|box = G|boxyes)
+.select lock group 'U|xydbgrdeckblatt' '0|id'
+.continue EL086 ? _(G|mehr)
+.copy H|ybauftragseingang = G|FALSE
+.rewrite
+.continue FI086
+!EL086
+.set TRANS +
+.box Hinweis
+Das Deckblatt '0|nummer' kann nicht bearbeitet werden.
+Die Kennzeichnung Auftragseingangskalkulation kann nicht entfernt werden.
+.set TRANS -
+.copy M|ybauftragseingang = M|ydeckblatt^ybauftragseingang
+.error
+.end 1
+!FI086
+.continue FI085
+!EL085
+.copy M|ybauftragseingang = M|ydeckblatt^ybauftragseingang
+.error
+.end 1
+!FI085
+!EL084
+!FI083
+!EL082
+!EL081
+.select lock add M|ydeckblatt
+.continue EL087 ? _(G|mehr)
+.copy H|ybauftragseingang = M|ybauftragseingang
+.rewrite
+.continue FI087
+!EL087
+.copy M|ybauftragseingang = M|ydeckblatt^ybauftragseingang
+!FI087
+.continue ESAC005
+!BRK022
+.continue BRK023 ? _(G|evtvar = "ybforecast")
+.continue EL088 ? _(_(F|empty(M|ydeckblatt)))
+.continue EL089 ? _(M|ybforecast)
+.continue EL090 ? _(F|empty(M|ydeckblatt^yprojekt))
+.set TRANS +
+.box Hinweis
+Das Deckblatt muss einen Verweis auf ein Projekt enthalten,
+wenn es als Forecastkalkulation gekennzeichnet werden soll.
+.set TRANS -
+.copy M|ybforecast = M|ydeckblatt^ybforecast
+.error
+.end 1
+.continue FI090
+!EL090
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";id<>"       + M|ydeckblatt^id
+.formula U|xtsel = U|xtsel + ";yprojekt==" + M|ydeckblatt^yprojekt^id
+.formula U|xtsel = U|xtsel + ";ybforecast==1;@ablageart=(1)"
+.load 0 group 'U|xydbgrdeckblatt' 'U|xtsel'
+.continue EL091 ? _(G|mehr)
+.set TRANS +
+.box -BUTTON yes:no -TITLE Hinweis
+Es existiert bereits ein Deckblatt zu diesem Projekt, das als Forecastkalkulation gekennzeichnet ist.
+Soll das aktuelle Deckblatt als Forecastkalkulation gespeichert werden?
+.set TRANS -
+.continue EL092 ? _(G|box = G|boxyes)
+.select lock group 'U|xydbgrdeckblatt' '0|id'
+.continue EL093 ? _(G|mehr)
+.copy H|ybforecast = G|FALSE
+.rewrite
+.continue FI093
+!EL093
+.set TRANS +
+.box Hinweis
+Das Deckblatt '0|nummer' kann nicht bearbeitet werden.
+Die Kennzeichnung Forecastkalkulation kann nicht entfernt werden.
+.set TRANS -
+.copy M|ybforecast = M|ydeckblatt^ybforecast
+.error
+.end 1
+!FI093
+.continue FI092
+!EL092
+.copy M|ybforecast = M|ydeckblatt^ybforecast
+.error
+.end 1
+!FI092
+!EL091
+!FI090
+!EL089
+!EL088
+.select lock add M|ydeckblatt
+.continue EL094 ? _(G|mehr)
+.copy H|ybforecast = M|ybforecast
+.rewrite
+.continue FI094
+!EL094
+.copy M|ybforecast = M|ydeckblatt^ybforecast
+!FI094
+.continue ESAC005
+!BRK023
+.continue BRK024 ? _(G|evtvar = "ytwertdeck")
+.select lock add M|ydeckblatt
+.continue EL095 ? _(G|mehr)
+.select lock group 'U|xydbgrdeckblatt' 'F|expr("$,,id==" + M|ydeckblatt^id + ";ytkoart==" + M|ytkoartrr^id + ";@ablageart=(1);@zeilen=(1)")'
+.continue EL096 ? _(G|mehr)
+.select lock line 'H|selzeile'
+.continue FI096
+!EL096
+.select lock add M|ydeckblatt
+.make line +O
+.assign H|ytkoart = M|ytkoartrr^id
+!FI096
+.formula H|ytwertkoart = ytwertdeck
+.rewrite
+.continue FI095
+!EL095
+.set TRANS +
+.box Hinweis
+Das Deckblatt 'M|ydeckblatt^nummer' / 'M|ydeckblatt^such' kann nicht bearbeitet werden.
+öbernahme der Werte ist nicht mîglich.
+.set TRANS -
+!FI095
+.continue ESAC005
+!BRK024
+!ESAC005: =====   ENDCASE   =====
+.continue ESAC001
+!BRK019
+.continue BRK025 ? _(G|evtart = "zeilebewvor")
+.error
+.end 1
+.continue ESAC001
+!BRK025
+!ESAC001: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJMLVBABDECKBLATT.EV")'     ? F|fileexists(F|foppath("IFOP.IS.PRJMLVBABDECKBLATT.EV"))
+.continue

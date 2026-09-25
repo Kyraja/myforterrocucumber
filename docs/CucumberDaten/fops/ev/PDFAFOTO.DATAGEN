@@ -1,0 +1,67 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : PDFAFOTO.DATAGEN
+.. Autor          : saac
+.. Funktion       : FOP-Datengenerator zum Einbetten von Dateien in PDF/A3-Dateien
+..                  Beispiel zum Kopieren der Fotos aus den Artikeln zu den Zeilen
+..                  eines VK/EK-Vorgangs
+.. Functionality  : FOP data generator to embed files in PDF/A3 files
+..                  sample to copy photos from all articles in a sales/purchase
+..                  process
+..*****************************************************************************
+.set trans -
+..
+.type text xpdfafolder      ? _F|defined(U|xpdfafolder)
+.type text xtcpcmd          ? _F|defined(U|xtcpcmd)
+.type text xerrormessage    ? _F|defined(U|xerrormessage)
+.type text xcmderrfile      ? _F|defined(U|xcmderrfile)
+.type text xsourcefile      ? _F|defined(U|xsourcefile)
+.type text xfilename        ? _F|defined(U|xfilename)
+.type text xfilepath        ? _F|defined(U|xfilepath)
+..
+.formula U|xpdfafolder = P|datname
+.formula U|xpdfafolder = U|xpdfafolder <$ "/" + "/pdfa"
+.continue COPY           ? F|isdir('U|xpdfafolder')
+.formula U|xtcpcmd = "mkdir " + 'U|xpdfafolder'
+.system 'U|xtcpcmd' background
+..
+!COPY
+.select screen head
+!NEXT
+.select screen line
+.continue END               ? _G|mehr
+.continue NEXT              ? _(M|artikelsuch^gruppe = 1)
+.continue NEXT              ? F|empty(M|artikelsuch)
+.continue NEXT              ? F|empty(M|artikelsuch^foto)
+..
+.formula U|xsourcefile = M|artikelsuch^foto
+.formula U|xfilename = U|xsourcefile
+.formula U|xfilename = U|xfilename >$ "\"            ?  U|xfilename / "*\\*"
+.formula U|xfilename = U|xfilename >$ "/"            ?  U|xfilename / "*\/*"
+.formula U|xfilepath = U|xpdfafolder + "/" + U|xfilename
+..
+..!CLIENT
+..pc.copy -QUIET -bin 'U|xsourcefile' 'U|xfilepath'
+.continue NEXT      ? F|fileexists('U|xfilepath')
+..
+..!SERVER
+.formula U|xtcpcmd = "cp -f " + U|xsourcefile + " " + U|xfilepath
+.system 'U|xtcpcmd' background
+.continue NEXT      ? F|fileexists('U|xfilepath')
+..try to copy from directory $MANDIR/win for relative paths
+.formula U|xtcpcmd = "cp -f win/" + U|xsourcefile + " " + U|xfilepath
+.system 'U|xtcpcmd' background
+..
+.continue ERRFILE   ? _F|fileexists('U|xfilepath')
+..
+.continue NEXT
+..
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+.set trans +
+..
+!ERRFILE: errormessage is transferred to print log
+.formula U|xerrormessage = "Datei nicht gefunden " + U|xsourcefile
+.continue END

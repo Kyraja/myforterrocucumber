@@ -1,0 +1,152 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : LKO.EV
+..  Datum          : 23.03.2004
+..  Version        : 2
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : Allgemeines Event-FOP des Infosystems LKO
+... Includes       :
+..
+..  include is/RANGECHECK
+..*****************************************************************************
+.type bool xbsel
+..
+..*****************************************************************************
+..************************ Query event and event source ***********************
+..
+.set trans -
+.continue START      ? (G|evtartengl = "BUTTON_BEFORE")    & (G|evtvar = "bstart")
+.continue SEL        ? (G|evtartengl = "BUTTON_AFTER")     & (G|evtvar = "bsel")
+.continue SETRANGE   ? (G|evtartengl = "FIELD_EXIT")       & (G|evtvar = "bereichvon")
+.continue VTAB       ? (G|evtartengl = "FIELD_EXIT")       & (G|evtvar = "vtab" ; G|evtvar = "vgr" ; G|evtvar = "vdn")
+.continue VTABCHK    ? (G|evtartengl = "FIELD_VALIDATION") & (G|evtvar = "vtab")
+.continue TABLEEREN  ?  G|evtartengl = "FIELD_EXIT"
+.set trans +
+..
+..*****************************************************************************
+!VTABCHK
+..*****************************************************************************
+.end 1 ? F|empty(M|vtab)
+.continue END
+..
+..*****************************************************************************
+!VTAB: choose database
+..*****************************************************************************
+.copy M|bese = G|false
+.formula M|bereichvon = ""
+.formula M|bereichbis = ""
+.formula M|kbform     = ""
+.input is/DBCHOOSER
+.protection bereichvon           ? M|vdn = 68 & M|vgr = 2
+.protection bereichbis           ? M|vdn = 68 & M|vgr = 2
+.protection -reset kbform        ? M|vdn = 68 & M|vgr = 2
+.protection -reset bereichvon    ? (M|vdn = 68 & M|vgr = 1) ; (M|vdn = 5 & M|vgr = 1)
+.protection -reset bereichbis    ? (M|vdn = 68 & M|vgr = 1) ; (M|vdn = 5 & M|vgr = 1)
+.protection kbform               ? (M|vdn = 68 & M|vgr = 1) ; (M|vdn = 5 & M|vgr = 1)
+.set trans -
+.input "is/TABLEEREN"
+.set trans +
+.continue END
+..
+..*****************************************************************************
+!START: start button pressed
+..*****************************************************************************
+.continue END                    ? M|vgr=0 & M|vdn=0
+.continue FETCH                  ? M|bese = G|true
+.type text xpvon xpbis
+..
+.set trans -
+.formula U|xpvon = "bereichvon"
+.formula U|xpbis = "bereichbis"
+.input "is/RANGECHECK"
+.set trans +
+..
+.formula M|bese    = G|false
+.input "is/TABLEEREN"
+..
+.formula M|select = "$,@numsuch=" + M|bereichvon + "!" + M|bereichbis
+..
+.. Account
+.formula M|select = M|select + ";@gruppe=1"   ? M|vdn = 5
+.. Account range
+.formula M|select = M|select + ";@gruppe=17" ? M|vdn = 68 & M|vgr = 1
+..
+.set trans -
+.formula U|xxtfield = "nummer" ? F|empty(M|bereichvon) & F|empty(M|bereichbis)
+.formula M|select = M|select + ";@ordnung=" + U|xxtfield
+.set trans +
+..
+..*****************************************************************************
+!FETCH: Fetch data
+..*****************************************************************************
+.select account 'M|select'                   ? M|vdn = 5
+..
+.load 0 accrange 'M|select'                  ? M|vdn = 68 & M|vgr = 1
+..
+... Account range form
+.load 0 add M|kbform            ? M|vdn = 68 & M|vgr = 2 & _F|empty(M|kbform)
+.continue END                   ? M|vdn = 68 & M|vgr = 2 &  F|empty(M|kbform)
+..
+.type bool xbmehr
+.formula U|xbmehr = G|mehr
+..
+.input 'M|bkopf'
+..
+..*****************************************************************************
+!LOOP: Loop over selected objects
+..*****************************************************************************
+.continue LEND ? _U|xbmehr
+.input 'M|tab'
+.load 0 accrange       ? M|vdn = 68 & M|vgr = 1
+.select account        ? M|vdn = 5
+.formula U|xbmehr = G|mehr
+.continue LOOP
+..
+..*****************************************************************************
+!LEND: Loop end
+..*****************************************************************************
+.input 'M|bfuss'
+.continue END
+..
+..*****************************************************************************
+!SEL: invoke selection bar
+..*****************************************************************************
+.. no range selection for account range forms
+.continue END ? M|vtab^vgrtxts = "(AccountRangeForm)"
+..formula U|xbsel = G|true
+..
+.formula M|bereichvon = ""
+.formula M|bereichbis = ""
+.formula M|datname = "(5)"    ? M|vdn = 5
+.formula M|datname = "(68)"   ? M|vdn = 68 & M|vgr = 1
+.formula G|evtfeldneu = "%"
+.input "is/AUSWAHL"
+.formula M|bese = _(M|select = "!")
+.input "is/TABLEEREN"
+.continue END
+..
+..*****************************************************************************
+!SETRANGE: Set range
+..*****************************************************************************
+.set trans -
+.input "is/TABLEEREN"
+.set trans +
+.copy M|bese = G|false
+.formula M|bereichbis = M|bereichvon ? +M|bereichbis = 0
+.continue END
+..
+..
+..*****************************************************************************
+!TABLEEREN: clear result table
+..*****************************************************************************
+.set trans -
+.input "is/TABLEEREN"
+.set trans +
+.continue END
+..
+..*****************************************************************************
+!END: end
+..*****************************************************************************
+.continue

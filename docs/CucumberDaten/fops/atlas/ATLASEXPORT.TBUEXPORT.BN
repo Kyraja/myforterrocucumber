@@ -1,0 +1,81 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ATLASEXPORT.TBUEXPORT.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Export
+.. Functionality  : Export
+..*****************************************************************************
+.set trans -
+..
+.type text   xtfehler    ? _F|defined(T|xtfehler)
+.type text   xtmpfile          ? _F|defined(U|xtmpfile)
+.type text   xtout             ? _F|defined(U|xtout)
+.type text   xterr             ? _F|defined(U|xterr)
+..
+.. nothing to do
+.continue END     ?  F|empty(M|kexportfop)
+..
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+.. check required arguments
+.continue NOVORG  ?  F|empty(M|tvorgang)
+.continue NOEDI   ?  F|empty(M|tedi)
+..
+.. status must be 2
+.continue ERRAKT  ?  M|tedi^status <> 2
+..
+..
+.input "ATLASPARAMS"
+.assign T|xvatvorgang = M|tvorgang^id
+.assign T|xvatedi = M|tedi^id
+..
+.. run individual efop
+.input 'M|kexportfop'
+..
+.. update status of edi message
+.select lock edifact 'M|tedi^id'
+.continue ERREDI  ? _T|mehr
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=53
+#!action=modify
+#!charset=eks
+id;status;fcode
+'M|tedi^id';0;0
+.output
+.select
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERREDI  ? _G|mehr
+..
+.. status icon
+.formula M|tstatus  = ""
+.formula M|tstatusz = G|icowarn         ? _F|empty(M|tedi)
+.formula M|tstatusz = G|icook           ?  M|tedi^status = 0
+.formula M|tstatusz = "icon:ball_blue"  ?  M|tedi^status = 2
+..*****************************************************************************
+!END
+.continue
+..
+!NOVORG
+.error Zum Erzeugen der Export-Datei muss der Vorgang bekannt sein.
+.end 1
+..
+!NOEDI
+.error Zum Erzeugen der Export-Datei muss die EDI-Nachricht vorhanden sein.
+.end 1
+..
+!ERREDI
+.error Das Erstellen der EDI-Nachricht ist gescheitert.
+.formula M|tstatusz = G|icoerror
+.end 1
+..
+!ERRAKT
+.set trans +
+.formula T|xtfehler = F|formatstr("EDI-Nachricht {1} kann nicht Åbertragen werden.", 'M|tedi^nummer')
+.set trans -
+.error 'T|xtfehler'
+.end 1

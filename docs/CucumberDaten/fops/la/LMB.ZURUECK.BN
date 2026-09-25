@@ -1,0 +1,144 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : LMB.ZURUECK.BN
+..  Datum          : 12.04.05
+..  Version        : 2005
+..  Autor          : cl
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..  Funktion       :
+..  Ablauf         : zurÅckschreibe-EFOP
+..                   Losgrî·e und Mindestbestand werden zurÅckgeschrieben
+..
+..  includes       :
+..
+..*****************************************************************************
+.set trans -
+.type text    xtlmenge      ? _F|defined(U|xtlmenge)
+.type bool    xberst        ? _F|defined(U|xberst)
+.type text    xintlgruppe   ? _F|defined(U|xintlgruppe)
+.type text    xsel          ? _F|defined(U|xsel)
+.type DVM2    xtmpfile      ? _F|defined(U|xtmpfile)
+.type text    xtout         ? _F|defined(U|xtout)
+.type text    xterr         ? _F|defined(U|xterr)
+.type integer xi            ? _F|defined(U|xi)
+.type ID39    xid           ? _F|defined(U|xid)
+.type GL100   xtedpkopf     ? _F|defined(U|xtedpkopf)
+.type GL100   xtedpzeile    ? _F|defined(U|xtedpzeile)
+..
+.. Artikel Ñndern erlaubt?
+.continue FEHLER ? _F|cmdpermitted(2,13, ,1)
+..
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+.. prÅfen, ob es sich um die interne Lagergruppe handelt / internal warehouse group?
+.assign U|xintlgruppe = F|sysinfo(10)^intlgruppe^id
+..
+.continue FEHLER4         ? M|protokoll
+..
+.copy U|xberst = G|TRUE
+.select screen header
+.formula U|xi = 1
+.continue FEHLER1 ? M|tzeilen = 0
+..
+!NEXT
+.continue ENDE ? U|xi > M|tzeilen
+.select screen line 'U|xi'
+.continue ENDE              ? _G|mehr
+.continue NOHAKEN ? _M|tauswahl
+.continue EXTERN            ? U|xintlgruppe <> M|klgruppe^id
+..
+!INTERN: Auf interne Lagergruppe zurÅckschreiben
+.load 2 modificationlock nowait parts 'M|artikel^id'
+.continue FEHLER2         ? _G|mehr
+.continue NICHTSTUN       ? 2|mindest = M|min & 2|losgr = M|losgr
+.continue GESPERRT        ? _G|gesperrt
+.load 2 
+..
+!MSCHREIBEN: Mindestbestand und Losgrî·e Ñndern / edit minimum stock level and batch size
+.output new 'U|xtmpfile'
+.formula U|xtedpkopf  = "id"
+.formula U|xtedpkopf  = U|xtedpkopf + "#mindest"       ? _F|protected(M|min,M|aktzeile)
+.formula U|xtedpkopf  = U|xtedpkopf + "#losgr"         ? _F|protected(M|losgr,M|aktzeile)
+.formula U|xtedpzeile = 'M|artikel^id'
+.formula U|xtedpzeile = U|xtedpzeile + "#" + 'M|min'    ? _F|protected(M|min,M|aktzeile)
+.formula U|xtedpzeile = U|xtedpzeile + "#" + 'M|losgr'  ? _F|protected(M|losgr,M|aktzeile)
+#!database=2:1
+#!action=update
+#!flddelimiter=#
+#!CHARSET=EKS
+'U|xtedpkopf'
+'U|xtedpzeile'
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue GESPERRT ? _G|mehr
+.continue AENDERN 
+..
+!GESPERRT
+.formula M|iconz = "icon:stop"  ? _M|schutz
+.formula U|xi = U|xi + 1 
+.continue NEXT
+..
+!NICHTSTUN
+.formula M|iconz = "icon:ok"    ? _M|schutz
+.formula U|xi = U|xi + 1
+.continue NEXT
+..
+!AENDERN
+.formula M|iconz = "icon:save"  ? _M|schutz
+.formula U|xi = U|xi + 1
+.continue NEXT
+!NOHAKEN
+.formula U|xi = U|xi + 1
+.continue NEXT
+..
+!FEHLER1:
+.error Keine Zeilen vorhanden. Bitte erst den Startbutton drÅcken.
+.end 1
+
+!FEHLER2:
+.error Artikel nicht vorhanden.
+.end 1
+
+!FEHLER4:
+.error ZurÅckschreiben nicht bei Protokollausgabe mîglich.
+.end 1
+!EXTERN: Auf externe Lagergruppe zurÅckschreiben
+.formula U|xsel ="$,,art=" + artikel^id + ";lgruppe=" + M|klgruppe^id +  ";@gruppe=3;@ablageart=(Active)"
+.load 2 modificationlock nowait warehousedata 'U|xsel'
+.continue NEXT ? _G|mehr
+.assign U|xid = 2|id
+.load 2
+.continue NICHTSTUN       ? U|xid^mindest = M|min & U|xid^losgr = M|losgr
+.continue GESPERRT        ? _G|gesperrt
+..
+!EXMSCHREIBEN: externer Mindestbestand und Losgrî·e Ñndern / edit minimum stock level and batch size
+.output new 'U|xtmpfile'
+.formula U|xtedpkopf = "1:id"
+.formula U|xtedpkopf = U|xtedpkopf + "#mindest" ? _F|protected(M|min,M|aktzeile)
+.formula U|xtedpkopf = U|xtedpkopf + "#losgr"   ? _F|protected(M|losgr,M|aktzeile)
+.formula U|xtedpzeile = 'U|xid'
+.formula U|xtedpzeile = U|xtedpzeile + "#" + 'M|min'   ? _F|protected(M|min,M|aktzeile)
+.formula U|xtedpzeile = U|xtedpzeile + "#" + 'M|losgr' ? _F|protected(M|losgr,M|aktzeile)
+#!action=update
+#!database=lager
+#!group=lagergruppeneigenschaft
+#!flddelimiter=#
+#!CHARSET=EKS
+id#art\
+'U|xtedpkopf'
+#'U|xid^art'\
+'U|xtedpzeile'
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue GESPERRT ? _G|mehr
+.continue AENDERN
+..
+!FEHLER
+.error Artikel Ñndern ist nicht erlaubt. Daher darf auch die FunktionalitÑt des ZurÅckschreibens nicht genutzt werden!
+.end 1
+..
+!ENDE
+.continue

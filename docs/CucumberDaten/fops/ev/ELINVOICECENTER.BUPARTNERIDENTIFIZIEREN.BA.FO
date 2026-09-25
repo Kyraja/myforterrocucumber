@@ -1,0 +1,101 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICECENTER.BUPARTNERIDENTIFIZIEREN.BA.FO
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Functionality  : row button efop : Nachrichtenpartner identifizieren 
+..
+..                  Der Nachrichtenpartner (edipartner = VP17) kann anhand 
+..                  von bis zu drei Parametern identifiziert werden
+..                      + Steuernummer 
+..                      + Umsatzsteuer-Identnummer
+..                      + GLN
+..
+...Includes
+..  include ev/ELINVOICEPROCESS.OBJSUCHE.VP5.BUSINESSPARTNER.FO
+..*****************************************************************************
+.set trans -
+..
+..<META M|='ev/ELINVOICECENTER'>
+..
+..EDI-Konfig Supplier/Suppliercontact
+..<META 3|='P1:4'>
+..
+..EDI-Konfig Customer/Customercontact
+..<META 5|='P0:4'>
+..
+..*****************************************************************************
+.. KEINE SUCHPARAMETER = NICHT SUCHEN
+.continue END ? F|empty(M|edipartnersteuernummer) & F|empty(M|edipartnerustid) & F|empty(M|edipartnergln)
+..
+..*****************************************************************************
+..
+.input "is/ABASFARBEN.DEF" ? _F|defined(U|xabasyellow)
+..
+.. Aufruf: ev/ELINVOICEPROCESS.OBJSUCHE.VP5.BUSINESSPARTNER.FO
+.type text searchfop ? _F|defined(U|searchfop)
+.formula U|searchfop = "ev/ELINVOICEPROCESS.OBJSUCHE.VP5.BUSINESSPARTNER.FO"
+..
+.. Parameter-Felder 
+.type text xsuchsteunr ? _F|defined(U|xsuchsteunr)
+.type text xsuchustid  ? _F|defined(U|xsuchustid)
+.type text xsuchgln    ? _F|defined(U|xsuchgln)
+.. Ergaenzende Parameter um Kunden/Lieferanten NICHT zu durchzsuchen
+.. Hier: Kundenstamm nicht durchsuchen
+.type bool xskippLIEF  ? _F|defined(U|xskippLIEF)
+.type bool xskippKUN   ? _F|defined(U|xskippKUN)
+.copy U|xskippKUN = G|true
+..
+.. Ergebnis-Felder
+.type VP5 xgefundenVP5 ? _F|defined(U|xgefundenVP5)
+.type text xtsuchfehler ? _F|defined(U|xtsuchfehler)
+..
+.formula U|xsuchsteunr = ""
+.formula U|xsuchustid = ""
+.formula U|xsuchgln = ""
+..
+.formula U|xsuchsteunr = M|edipartnersteuernummer
+.formula U|xsuchustid = M|edipartnerustid
+.formula U|xsuchgln = M|edipartnergln
+..
+.input 'U|searchfop'
+.formula M|edipartnerfehler = U|xtsuchfehler
+.continue NOPARTN ? F|empty(U|xgefundenVP5)
+.colour -background -1 -1 -1 edipartner 'M|aktzeile'
+.assign M|edipartner = U|xgefundenVP5
+..
+.continue EKEDI ? M|edipartner^dnr=1
+.continue VKEDI ? M|edipartner^dnr=0
+.continue END
+..
+!EKEDI
+.load 3 supplier 'F|formatstr("$,,;@gruppe=4;@zeilen=(1);edinachr={1};klnum={2}", M|edinr^edinachr^id, M|edipartner^id)'
+.continue END ? _G|mehr
+.load 3 line '3|selzeile'
+.assign M|ediobjsuch = 3|suchkonfig
+.assign M|vabmodell = 3|abmodell
+.assign M|ediaktiv = 3|erlaubt 
+.load 3
+.continue END
+..
+!VKEDI
+.load 5 customer 'F|formatstr("$,,;@gruppe=4;@zeilen=(1);edinachr={1};klnum={2}", M|edinr^edinachr^id, M|edipartner^id)'
+.continue END ? _G|mehr
+.load 5 line '5|selzeile'
+.assign M|ediobjsuch = 5|suchkonfig
+.assign M|vabmodell = 5|abmodell
+.assign M|ediaktiv = 5|erlaubt 
+.load 5
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+!NOPARTN
+.formula M|edipartner = ""
+.formula M|ediobjsuch = ""
+.formula M|vabmodell = ""
+.colour -background 'U|xabasyellow' edipartner 'M|aktzeile'
+.continue

@@ -1,0 +1,105 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           :     PAYMENT.OUTGOING.CHF   
+.. Date           :     11/11/2014
+.. Version        :     1.0
+.. Author         :     rasc
+.. Copyright      :     
+.. Functionality  :     Outgoing payment weekly
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xtcmd      ? _F|defined(U|xtcmd)
+.type text U|xtedp      ? _F|defined(U|xtedp)
+.type text U|xtout      ? _F|defined(U|xtout)
+.type text U|xterr      ? _F|defined(U|xterr)
+.type text U|xtref      ? _F|defined(U|xtref)
+.type GD2  U|xdate      ? _F|defined(U|xdate)
+..
+.formula U|xdate        = M|qflagdate:8           ?  F|defined(M|qflagdate)
+.formula U|xdate        = G|datum:8               ? _F|defined(M|qflagdate)
+....formula U|xdate        = "31.10.14"
+..
+.file -TEMPNAME U|xtedp
+.file -TEMPNAME U|xtout
+.file -TEMPNAME U|xterr
+..
+.output NEW 'U|xtedp'
+.input DATEI.F
+#!EDP_TESTFLAG2=1
+#!EDP_DATE='U|xdate:8'
+#!database=101
+#!group=2
+#!action=NEW
+#!report=REF
+#!EDP_LANG='P|spr'
+zaterm;gkonto;kozabetrplus;opladen;
+'U|xdate:8';14640;'G|true';;
+.output
+.formula U|xtcmd        = "edpimport.sh -p abas123 -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.continue ERROR         ? F|filesize(U|xterr) > 0
+.select from
+!SELFROM
+.select from 'U|xtout' U|xtref^
+.continue ERROR         ? F|empty(U|xtref) ; 'U|xtref'="(0,0,0)"
+..
+!PAY
+.output NEW 'U|xterr'
+.output NEW 'U|xtedp'
+.input DATEI.F
+#!EDP_TESTFLAG2=1
+#!EDP_DATE='U|xdate:8'
+#!EDP_LANG=D
+#!database=4
+#!action=payment
+#!menuchoice=(TransferOutgoingPayments)
+id;zavorschl;
+;'U|xtref';
+.output
+.formula U|xtcmd        = "edpimport.sh -p abas123 -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.continue ERROR         ? F|filesize(U|xterr) > 0
+..
+.output NEW 'U|xtout'
+.output NEW 'U|xterr'
+.output NEW 'U|xtedp'
+.input DATEI.F
+#!EDP_TESTFLAG2=1
+#!EDP_DATE='U|xdate:8'
+#!EDP_LANG=D
+#!database=4
+#!action=payment
+#!menuchoice=(DebitOutstandingItems)
+#!firsttabfld=tabnr
+#!dontchange=-
+id;gkonto;beleg;beldat;budat;bezahlt;tabnr;1:konto;0:kladen;
+;18400;CHF;'U|xdate:8';'U|xdate:8';ja;+1;14640;;
+.output
+.formula U|xtcmd        = "edpimport.sh -p abas123 -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.continue END           ? F|filesize(U|xterr) = 0
+..
+!ERROR
+.continue END           ? G|edp
+.....edi -READONLY 'U|xterr'
+.continue END
+..
+!END
+.continue

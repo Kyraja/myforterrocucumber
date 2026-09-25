@@ -1,0 +1,126 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BSTL.BSTART.BN
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Beschafft die Daten der Stueckliste.
+.. Functionality  : Gets data of the BOM.
+..*****************************************************************************
+.set trans -
+..
+.type PS39:2 xintlg xlaggr
+.type M11.3  xgesmge
+.type GD2    xkonddat
+..
+.copy U|xintlg = F|sysinfo(10)^intlgruppe
+.copy U|xlaggr = M|lgruppe
+.formula U|xgesmge = M|menge
+.copy U|xkonddat = M|konddat
+..
+!RESOLVE: Load current element
+.select parts 'M|select'
+.continue END ? _G|mehr
+..
+.copy H|lgruppean = U|xlaggr ? U|xlaggr^id <> U|xintlg^id ; F|equals(H|bsart, "(Relocation)")
+.continue WGROUP ? _F|equals(H|bsart, "(Relocation)") ; H|tzeilen <> 1
+.select line 1
+.continue WGROUP ? H|elem^id <> H|id
+.. skip destination warehouse group, continue with source warehouse group
+.copy H|lgruppean = H|umllg
+..
+!WGROUP
+.select header
+.copy H|flistean = M|fertliste ? _F|empty(M|fertliste) & M|stufe = 1 & _F|equals(H|bsart, "(Relocation)")
+.formula H|gesmge = U|xgesmge
+.copy H|konddat = U|xkonddat
+.copy H|mitaufl = M|mitaufl
+.continue ELEMROW ? _F|equals(H|bsart, "(Relocation)") ; H|tzeilen<>1
+..
+!ELEMROW: Get next row of the currently loaded element
+.select line
+.continue END   ? F|empty(M|tzeilen) & _G|mehr
+.continue LEVEL ? _G|mehr
+.input 'M|tab' ? _F|empty(M|tab)
+.continue ELEMROW
+..
+!LEVEL: Resolve next level of BOM
+.select -
+.copy M|vaterkopiert = G|FALSE
+..
+!MASKROW: Get next element of BOM in the table of the mask
+.formula M|maskenzeile = M|maskenzeile + 1
+.continue END ? M|maskenzeile > M|tzeilen
+.select screen line 'M|maskenzeile'
+.continue END ? _G|mehr
+.formula U|xgesmge = M|gesamt
+.continue COMBINED ? M|combiprod
+.continue MASKROW  ? M|tbaumstat <> "+"
+.formula M|stufe = M|tbaumstufe
+.formula M|stufe = M|stufe + 1
+.continue MAXLEVEL ? M|stufe > M|anzstufen
+.formula M|select = M|elem^id
+.copy U|xlaggr = M|laggr
+.formula M|tbaumstat = ""
+.formula M|maskenzeile = M|aktzeile
+.continue COPYROW ? _M|vaterkopiert
+.continue RESOLVE
+..
+!COMBINED
+!MAXLEVEL: Do not resolve this element
+.formula M|tbaumstat = ""
+.continue MASKROW
+..
+!COPYROW: While resolving next level copy parent row at the bottom of the BOM
+.. Store parent in header
+.formula M|kbaumstufe = M|tbaumstufe
+.copy M|kelart = M|elart
+.formula   M|kvpos = M|vpos
+.copy M|kelem = M|elem
+.copy M|klaggr = M|laggr
+.copy M|kdispoa = M|dispoa
+.copy M|kbsart = M|bsart
+.copy M|klaenge = M|laenge
+.copy M|kbreite = M|breite
+.copy M|kmge = M|mge
+.assign M|kelle = ""
+.copy M|kelle = M|elle ? (M|klaenge=0) & (M|kbreite=0) & (M|kmge<>0)
+.copy M|kmgr = M|mgr
+.copy M|klgr = M|lgr
+.copy M|kebu = M|ebu
+.formula   M|kpostext = M|postext
+.copy M|kgesamt = M|gesamt
+.copy M|ktele = M|tele
+.copy M|krelevant = M|relevant
+.copy M|kicon = M|tbaumicon
+..
+.. Copy parent from header to table
+.select screen line 'M|tzeilen'
+.make screen line +O
+.colour -background 'M|bauteil' 'M|aktzeile'
+.assign M|tbaumstat = "-"
+.copy M|tbaumstufe = M|kbaumstufe
+.copy M|elart = M|kelart
+.formula   M|vpos = M|kvpos
+.copy M|elem = M|kelem
+.copy M|laggr = M|klaggr
+.copy M|dispoa = M|kdispoa
+.copy M|bsart = M|kbsart
+.copy M|laenge = M|klaenge
+.copy M|breite = M|kbreite
+.copy M|mge = M|kmge
+.assign M|elle = ""
+.copy M|elle = M|kelle ? (M|klaenge=0) & (M|kbreite=0) & (M|kmge<>0)
+.copy M|mgr = M|kmgr
+.copy M|lgr = M|klgr
+.copy M|ebu = M|kebu
+.formula   M|postext = M|kpostext
+.copy M|gesamt = M|kgesamt
+.copy M|tele = M|ktele
+.copy M|vaterkopiert = G|TRUE
+.copy M|relevant = M|krelevant
+.copy M|tbaumicon = M|kicon
+.continue RESOLVE
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,215 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ERFLIE.DATERZ.BN
+.. Datum          : 18.12.2007
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Erstellt bzw erweitert die Abruf-Datei VKAUV.
+...Includes       : Creates or appends to forecast file VKAUV.
+..*****************************************************************************
+.set trans -
+..
+.. needed to modify files outside the abas ERP workspace
+.type text xtsystem      ? _F|defined(T|xtsystem)
+.type text xtdaterflie   ? _F|defined(T|xtdaterflie)
+.. set cursor on missing fields
+.type text xtfeld        ? _F|defined(T|xtfeld)
+.type text xtfehler      ? _F|defined(T|xtfehler)
+.. number of rows with proper data
+.type integer xirows         ? _F|defined(T|xirows)
+.formula T|xirows = 0
+.type text xtzeit        ? _F|defined(U|xtzeit)
+.type text xartikel      ? _F|defined(U|xartikel)
+.. trim whitespace from quantity field
+.type text xmenge        ? _F|defined(U|xmenge)
+..
+..
+.. check termcodes
+.input "dfue/ERFLIE.KBUPRUEFEN.BN"
+..
+..
+.. check required header fields
+..
+.select screen header
+.formula T|xtfeld = "vkundeab"
+.continue ERRMUSS ? F|empty(M|vkundeab)
+.formula T|xtfeld = "werk"
+.continue ERRMUSS ? F|empty(M|werk)
+.formula T|xtfeld = "ablstelle"
+.continue ERRMUSS ? F|empty(M|ablstelle)
+.formula T|xtfeld = "kuartnr"
+.continue ERRMUSS ? F|empty(M|kuartnr)
+.formula T|xtfeld = "verwschl"
+.continue ERRMUSS ? F|empty(M|verwschl)
+.formula T|xtfeld = "vkundeab"
+.continue ERRMUSS ? F|empty(M|vkundeab)
+.formula T|xtfeld = "zekunde"
+.continue ERRMUSS ? F|empty(M|zekunde)
+.formula U|xtfeld = "labruf"
+.continue ERRMUSS ? F|empty(M|labruf)  & M|kbvklab
+.formula U|xtfeld = "labrufd"
+.continue ERRMUSS ? F|empty(M|labrufd) & M|kbvklab
+.formula U|xtfeld = "uebdat"
+.continue ERRMUSS ? F|empty(M|uebdat)  & M|kbfabinfo
+.formula T|xtfeld = ""
+.continue ERRMUSS ? F|empty(M|uebdat)  & M|kbpusinfo
+.formula T|xtfeld = ""
+..
+.. check table fields, need at least one row with proper data
+..
+!ROWS
+.select screen line
+.continue EROWS   ? _T|mehr
+.formula M|menge=0                       ?  M|termcod = "222222"
+.formula T|xirows = T|xirows + 1         ?  M|termcod = "222222"  ;  ( _F|empty(M|termcod)  &  M|menge > 0 )
+.continue ROWS
+!EROWS
+.continue ERRMUSS ?  T|xirows = 0
+..
+..
+.. check forecast file spelling (upper/lower case)
+.. called fop will abort fop (.ende 1) if error is found
+.input "dfue/ERFLIE.LABDATEI.FA"
+..
+..
+.. save data, create del. forecast schedule (lieferabruf)
+.set cancel --
+..
+.. file name: temp import file
+.file -tempname T|xtdaterflie
+.. we may only access the import file, if the flagfile exists
+.continue NOFLAG  ? _M|kbvklab & ( _F|fileexists(M|klabdateif)  ;  _F|filewriteable(M|klabdateif) )
+.continue NEWFLAG ?  M|kbvklab &    F|fileexists(M|klabdateif)
+.continue START   ?  M|kbvklab
+.. remove flagfile, to reserve access to import file
+.formula T|xtsystem = "rm " + 'M|klabdateif'
+.system 'T|xtsystem' background
+.continue ERRACC  ? _T|mehr
+!START
+.. move import file to writeable temporary import file
+.. create new file if there is no import file at the moment
+.formula M|klabdatei=M|klabdatei+'G|versionneu' ?  M|kbvklab
+.formula T|xtsystem = "mv " + 'M|klabdatei' + " " + T|xtdaterflie    ?  F|fileexists(M|klabdatei)
+.formula T|xtsystem = "touch " + T|xtdaterflie                       ? _F|fileexists(M|klabdatei)
+.system 'T|xtsystem' background
+.continue ERRIMP  ? _T|mehr
+.continue ERRIMP  ? _F|filewriteable(T|xtdaterflie)
+.continue ERRIMP  ? _F|fileexists(T|xtdaterflie)
+..
+.. Append to temp import file
+.output addedto 'T|xtdaterflie'
+.input "DATEI.F"
+..
+.. write message data
+.select screen header
+.. Funktion 915 = LABFAB-Feinabruf
+.formula T|xtzeit = ( "0000" + ('T|zeit' << ":" + 'T|zeit' >> ":" )) >> 4
+.formula T|xirows = 1
+?000#01#VDA#VKAU#4905#'M|vkundeab'######'G|datum:8'#'U|xtzeit'############'T|xirows'#                 ?  M|kblab
+?000#01#VDA#VKAU#4905#'M|vkundeab'######'G|datum:8'#'U|xtzeit'#915###########'T|xirows'#              ?  M|kbfab
+?000#01#VDA#VKAU#4905#'M|vkundeab'######'G|datum:8'#'U|xtzeit'############'T|xirows'#                 ?  M|kbfabinfo
+?000#01#EDIFACT#VKAU#DELJIT#'M|vkundeab'######'G|datum:8'#'U|xtzeit'############'T|xirows'#           ?  M|kbpusinfo
+..
+.continue LABFAB   ?  M|kblab     ; M|kbfab
+.continue FABINFO  ?  M|kbpusinfo ; M|kbfabinfo
+.continue SROWS
+..
+!LABFAB
+.formula T|xirows = T|xirows + 1
+400#01#511#'M|vkundeab'#'M|vkundeab^frbez'##1#'datum:8'#'M|uebdat:8'################'T|xirows'#
+.formula T|xirows = T|xirows + 1
+500#01#512#'M|werk'#'M|labruf'#'M|labrufd:8'#'M|labrufa'#'M|labrufad:8'#'M|kuartnr'##'M|abbenr'#'M|ablstelle'#'M|zekunde'#'M|meinheit'#'M|anliint'#'M|ferfrkenn'#'M|matfrkenn'#'M|verwschl'#######'T|xirows'#
+.formula T|xirows = T|xirows + 1
+?501#01######'M|vbrstelle'##'M|kanbannr'###############'T|xirows'# ? M|kblab ; M|kbfab
+.. Satzart 502 mit FAB-Horizont
+.formula T|xirows = T|xirows + 1                               ?  M|kbfab & _F|empty(M|kfabhorizont)
+?502#01#515##'M|kfabhorizont:8'####################'T|xirows'# ?  M|kbfab & _F|empty(M|kfabhorizont)
+.formula T|xirows = T|xirows + 1
+520#01#513#'M|erfdatlels:8'#'M|lelsnr'#'M|datlels:8'#'M|menleein'#'M|einfzahl:0'#################'T|xirows'#
+.continue SROWS
+..
+!FABINFO
+.formula U|xartikel = M|kartikel^nummer  ? _F|sysinfo(18)^swziffern
+.formula U|xartikel = M|kartikel^such    ?  F|sysinfo(18)^swziffern
+.formula T|xirows = T|xirows + 1
+?700#02#551#'M|vkundeab'#'M|vkundeab^frbez'###'M|uebdat:8'#################'T|xirows'#                          ?  M|kbfabinfo
+?700#02#PUS#'M|vkundeab'#'M|vkundeab^frbez'#'M|labrufa'#'M|labruf'#'M|uebdat:8'#################'T|xirows'#     ?  M|kbpusinfo
+.formula T|xirows = T|xirows + 1
+800#01#552#'M|werk'#'M|labruf'#'M|labrufd:8'#'M|kuartnr'#'M|kartikel^nummer'#'M|ablstelle'###'M|verwschl'#############'T|xirows'#
+.formula U|xirows = U|xirows +1             ?  M|kbpusinfo
+?801#01#PUS#####'M|vbrstelle'##'M|kanbannr'###############'U|xirows'# ?  M|kbpusinfo
+.formula T|xirows = T|xirows + 1
+820#01#553#'M|einfzahl:0'#'M|erfdatlels:8'#'M|lelsnr:8'#'M|datlels:8'#'M|menleein'#################'T|xirows'#
+.continue SROWS
+..
+!SROWS: create row data
+.select screen line
+.continue ESAVE   ? _T|mehr
+.continue SROWS   ?  F|empty(M|termcod)
+.formula T|xtzeit = ""
+.formula T|xtzeit = 'M|tzeit' << ":" + 'M|tzeit' >> ":"      ? _F|empty(M|tzeit)
+.formula T|xtzeit = F|substr( "0" + T|xtzeit, -1,-4)         ? _F|empty(M|tzeit)
+.formula T|xirows = T|xirows + 1
+.formula U|xmenge = 'M|menge'
+?521#01#514#'M|termcod'#'U|xmenge'####################'T|xirows'#                ?  M|kblab
+?521#01#514#'M|termcod'#'U|xmenge'###'T|xtzeit'#################'T|xirows'#      ?  M|kbfab
+?821#01#554#'M|termcod'#'U|xmenge'#'T|xtzeit'###################'T|xirows'#      ?  M|kbpusinfo ; M|kbfabinfo
+.continue SROWS
+!ESAVE
+.formula T|xirows = T|xirows + 1
+?601#01#519#0#0#0#0#0#0#0#0##############'T|xirows'#    ?  M|kblab     ; M|kbfab
+?900#01#559#0#0#0#0#0#0#0#0##############'T|xirows'#    ?  M|kbpusinfo ; M|kbfabinfo
+..
+.. close temp import file
+.output
+.. move temp import file back to real import file location
+.formula T|xtsystem = "mv " + T|xtdaterflie + " " + 'M|klabdatei'
+.system 'T|xtsystem' background
+.continue ERRIMP  ? _T|mehr
+.note -immediately Die Importdatei 'M|klabdatei' wurde erstellt.
+.continue END   ? M|kbvklab
+..
+.. create new flag file
+.formula T|xtsystem = "touch " + 'M|klabdateif'
+.system 'T|xtsystem' background
+.continue ERRFLAG ? _T|mehr
+..
+.set cancel +
+..
+.continue SUCCESS ? _G|edp
+.continue END
+..*****************************************************************************
+..
+!END
+.continue
+..
+..
+!SUCCESS
+.note Die LAB-Inhousedatei "'M|klabdatei'" wurde erfolgreich gespeichert!
+.continue
+..
+!ERRMUSS
+.error Da nicht alle Muss-Daten ausgefÅllt sind, kann nicht gespeichert werden!
+.cursor 'T|xtfeld' 0    ? _F|empty(T|xtfeld)
+.end 1
+..
+!NOFLAG
+.error Die Datei "'M|klabdateif'" ist momentan nicht vorhanden!
+.end 1
+..
+!ERRACC
+.error Die Datei "'M|klabdateif'" konnte vor dem Schreibvorgang nicht gelîscht werden!
+.end 1
+..
+!ERRIMP
+.error Die LAB-Inhousedatei "'M|klabdatei'" konnte nicht gespeichert werden!
+.end 1
+..
+!ERRFLAG
+.error Die Datei "'M|klabdateif'" konnte nicht angelegt werden!
+.end 1
+..
+!NEWFLAG
+.error Das Anlegen von neuen Abrufe ist gesperrt!
+.end 1

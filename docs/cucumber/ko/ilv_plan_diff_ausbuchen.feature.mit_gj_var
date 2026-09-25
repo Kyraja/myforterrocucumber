@@ -1,0 +1,143 @@
+# *****************************************************************************
+#  Name           : ilv_plan_diff_ausbuchen.feature.mit_gj_var
+#  Autor          : Silvia Warth
+#  Verantwortlich : sih
+#  Kontrolle      : uo
+#  Funktion       : Test der Differenzausbuchung bei Hilfs- und Haupt-Kst bei der Plan-ILV mit der Kore-Konfig-Einstellung 
+#                   "Buchungserzeugung mit gerundeten Verrechnungssätzen: ja".
+#                   
+#
+# *****************************************************************************
+@persistent
+Feature: Differenzausbuchung ILV
+Background:
+# Vorgaengertest arbeitet mit aktuellem Datum (15.08.`date +%y`)
+# Platzhalter LFDGJ wird im Testbett durch das aktuelle Jahr ersetzt!
+# LFDGJ
+Given I set the fake date to "15.08.LFDGJ"
+#
+Scenario: 1 Abschlüsse öffnen, damit ILV fuer Monat 2 erneut ausgeführt werden kann
+Given I open an editor "abschl" from table "(FiscalYearManagement):(Closings)" with command "NEW" for record ""
+And I set field "such" to "xopen"
+And I press button "kpbbu" in row 5
+And I press button "kobbu" in row 4
+And I press button "fbbbu" in row 4
+And I press button "mbbbu" in row 4
+And I respond with answer "Ja" to the dialog with id "8965"
+# And I respond with answer "Ja" to the dialog with id "7644"
+And I respond with answer "Ja" to the dialog with id "7626"
+And I save the current editor
+And I close the current editor
+
+Scenario: 98 ILV Ist und Plan für Monat 3 mit ungerundeten Verrechnungssätzen ausführen
+Given I open an editor "ilv" for tip command "ilv" and arguments ""
+And I set field "monat" to "3"
+And I set field "datart" to "ist"
+And I set field "vorschau" to "ja"
+And I press button "bstart"
+And I save the current editor 
+
+Given I open an editor "ilv" for tip command "ilv" and arguments ""
+And I set field "monat" to "3"
+And I set field "datart" to "plan"
+And I press button "bstart"
+And I save the current editor 
+
+Scenario: 99 Darstelung der Differenz aus kumulierten fixen und prop. Planwerten und kumulierter Ist-Wert
+Given I open an editor "babx" from table "(EDS):(EDS)" with command "VIEW" for record "BABKSPLAN"
+And I set field "sganmon" to "3"
+And I set field "sgendmon" to "3"
+Then field "ikum" has value "0.02" in row 1
+Then field "pfixkum" has value "-5.89" in row 1
+Then field "ppropkum" has value "5.89" in row 1
+And I save the current editor
+And I close the current editor
+
+Scenario: 2 Kostenrechnungskonfiguration ändern
+Given I open an editor "konf" from table "(CostType):(CostAccountingConfig)" with command "UPDATE" for record "korekonf"
+And I set field "vsround" to "ja"
+And I save the current editor
+And I close the current editor
+
+Scenario: 3 ILV Ist und Plan für Monat 2 nochmal ausführen
+Given I open an editor "ilv" for tip command "ilv" and arguments ""
+And I set field "monat" to "2"
+And I set field "datart" to "Ist"
+And I press button "bstart"
+And I save the current editor 
+
+Given I open an editor "ilv" for tip command "ilv" and arguments ""
+And I set field "datart" to "plan"
+And I set field "datart" to "Plan"
+And I press button "bstart"
+And I save the current editor 
+And I close the current editor
+
+# Die Rechenregel 2 beinhaltet alle Kostenarten des Systems. AUf Kostenstelle 12345 (KSPLAN) sind alle Kostenstellen verdichtet.
+# Betrachtet man also den Wert der Rechenregel 2 kombiniert mit Kst 12345, müssten bei den kumulierten Istkosten sowie bei der Summe aus kumulierten fixen
+# und kumulierten proportionalen Plankosten die Werte 0 erscheinen, wenn alle Kst bei der ILV entlastet wurden und die Differenzen der Kst
+# ausgebucht wurden, was in der Kostenrechnungskonfiguration so eingestellt ist.
+
+Scenario: 4 BAB-Formular mit V-Kst KSPLAN für Monat 2 (bei ILV mit gerundeten Verrechnungssätzen)
+
+Given I open an editor "babx" from table "(EDS):(EDS)" with command "VIEW" for record "babksplan"
+Then field "ikum" has value "0.02" in row 1
+Then field "pfixkum" has value "-8.66" in row 1
+Then field "ppropkum" has value "8.66" in row 1
+And I save the current editor
+And I close the current editor
+
+# ILV-Buchung zur Differenzausbuchung auf Haupt-Kst in Monat 2: Planwerte prüfen
+Given I open an editor "bu" from table "(Entry):(StatisticalEntry)" with command "VIEW" for search criteria "$,,vkzart=plan;monat=2;ursache=Leistungsverrechnung Haupt-Kostenstelle;@richtung=rueckwaerts;@maxtreffer=1"
+Then field "kstelle" has value "1210" in row 1
+Then field "phfixbetr" has value "0.09" in row 1
+Then field "kstelle" has value "1301" in row 2
+Then field "phfixbetr" has value "-0.06" in row 2
+Then field "kstelle" has value "1410" in row 3
+Then field "psfixbetr" has value "0.24" in row 3
+Then field "kstelle" has value "1510" in row 4
+Then field "psfixbetr" has value "0.41" in row 4
+Then field "kstelle" has value "100000" in row 5
+Then field "phfixbetr" has value "0.56" in row 5
+Then field "kstelle" has value "100000" in row 6
+Then field "psfixbetr" has value "-0.06" in row 6
+And I close the current editor
+
+# Normalerweise müssen die Istkosten im BAB-Formular babksplan auf null sein, da alle Differenzen ausgebucht sind.
+# Wegen des Faktors -1 bei der Kostenart 483 tut das nicht, daher wird hier der Faktor auf 1 gesetzt.
+Given I open an editor "koart1" from table "(CostType):(CostType)" with command "UPDATE" for record "483"
+And I set field "faktor" to "1"
+And I save the current editor
+And I close the current editor
+
+Given I open an editor "babx" from table "(EDS):(EDS)" with command "VIEW" for record "BABKSPLAN"
+Then field "ikum" has value "0.00" in row 1
+Then field "pfixkum" has value "-8.66" in row 1
+Then field "ppropkum" has value "8.66" in row 1
+And I save the current editor
+And I close the current editor
+
+Scenario: 5 ILV Ist und Plan für Monat 3 nochmal ausführen
+Given I open an editor "ilv" for tip command "ilv" and arguments ""
+And I set field "monat" to "3"
+And I set field "datart" to "ist"
+And I press button "bstart"
+And I save the current editor 
+
+Given I open an editor "ilv" for tip command "ilv" and arguments ""
+And I set field "monat" to "3"
+And I set field "datart" to "plan"
+And I press button "bstart"
+And I save the current editor 
+
+Scenario: 6 Darstelung der Differenz aus kumulierten fixen und prop. Planwerten und kumulierter Ist-Wert
+Given I open an editor "babx" from table "(EDS):(EDS)" with command "VIEW" for record "BABKSPLAN"
+And I set field "sganmon" to "3"
+And I set field "sgendmon" to "3"
+Then field "ikum" has value "0.00" in row 1
+Then field "pfixkum" has value "-8.71" in row 1
+Then field "ppropkum" has value "8.71" in row 1
+And I save the current editor
+And I close the current editor
+
+

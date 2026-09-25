@@ -1,0 +1,157 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KM.EMAIL
+.. Datum          : 23.04.2007
+.. Version        : 2007
+.. Autor          : kk
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Kurzmitteilung als eMail verschicken.
+..                  Datengenerier-FOP im Druckparameter-Layout(KM.EMAIL)
+..
+.. Ablauf         :
+.. Unterprogramm: RM.EMAIL.KOPF      - eMail-Kopf mit EmpfÑngerangaben
+..                RM.EMAIL.ANF       - Anfrage-Inhalt
+..                RM.EMAIL.FUSS      - eMail-Fuss mit Absenderangaben
+..                KM.EMAIL.XMAILUSER - eMail-Versand Åber PrintEngine
+..
+.. Functionality  :
+..
+.. Program flow   :
+.. Includes       :
+.. include ser/RM.EMAIL.KOPF
+.. include ser/RM.EMAIL.ANF
+.. include ser/RM.EMAIL.FUSS
+.. include ser/KM.EMAIL.XMAILUSER
+..
+..*****************************************************************************
+.set trans +
+.type text xtrmdatei    ? _defined(xtrmdatei)
+.type text xtemdatei    ? _defined(xtemdatei)
+.type text xtsys        ? _defined(xtsys)
+.type text xanrede      ? _defined(xanrede)
+.type text xspr         ? _defined(xspr)
+.type text xtfehler     ? _defined(xtfehler)
+.type text xtfeld       ? _defined(xtfeld)
+.type text xtfromadress ? _defined(xtfromadress)
+.type text xttext       ? _defined(xttext)
+.type text xtmfg        ? _defined(xtmfg)
+.type text xtabtlg      ? _defined(xtabtlg)
+.type integer  xizeile      ? _defined(xizeile)
+.type integer  xilge        ? _defined(xilge)
+.type bool xbmehr       ? _defined(xbmehr)
+.type bool xbleer       ? _defined(xbleer)
+.type bool xnotaddpdf   ? _defined(xnotaddpdf)
+..
+.. Dummy-Datendatei erzeugen
+.formula T|xnotaddpdf = true
+..
+.formula T|xtfehler = "Bitte speichern Sie die Serviceanfrage ab und senden Sie erneut!"
+.formula T|xtfeld = "num122"
+.continue F1        ? M|nummer = ""
+..
+.formula T|xtfehler = "Bitte gehen Sie in den éndernmodus und senden Sie erneut!"
+.formula T|xtfeld = "num122"
+.continue F1        ? T|evtkommd="zeigen"
+..
+.. Druckvorgang lÑuft
+.. Dummy-Datendatei erzeugen
+.output new 'xxmldata'
+.input "DATEI.F"
+<?xml version="1.0" encoding="UTF-8"?>
+<ABASData abasversion="2006" source="Screen">
+   <RecordSet caption="0">
+      <Record caption="">
+         <Head caption="0">
+         </Head>
+      </Record>
+   </RecordSet>
+</ABASData>
+..
+.. eMail-Steuerungsdatei
+.formula T|xtemdatei = "rmtmp/XMAILUSER" + 'T|aufrufernr'
+.output new 'xtemdatei'
+.input "DATEI.F"
+..
+.. Druckwiederholung, wenn Tabellenzeilen-Druck-Button gedrÅckt
+.continue SPEMDAT    ? T|evtzeile > 0 & T|evtvar="budruck"
+..
+.. BestÑtigungszeile anlegen
+.select screen header
+.select screen line 'M|tzeilen'
+.formula T|xbleer = false
+.formula T|xbleer = true    ? 'M|uhrzbis'="" & M|datum=T|datum & M|tanfbesch=""
+.make screen line +O      ? _T|xbleer
+.formula M|tbearbeit  = M|bearbeit^id
+.formula M|datum      = T|datum
+.formula M|uhrzvon    = "."
+.formula M|tanfbesch  = "Kurzmitteilung verschickt."
+..
+.select screen header
+.select screen line 'M|tzeilen'
+..
+.formula T|xtrmdatei = "rmtmp/XKM.MAIL." + 'T|aufrufernr' + ".TMP"
+.output new 'xtrmdatei'
+.input "DATEI.F"
+..
+.select object 'M|rman1^id'
+.formula T|xbmehr = T|mehr
+.formula T|xspr = H|spr       ?  T|xbmehr
+.formula T|xspr = T|bsprache  ? _T|xbmehr
+..
+.text xanrede 'xspr' Sehr geehrte Damen und Herren,
+.continue  SPEOBJ            ? _T|xbmehr
+.add H|as
+.input ANREDE            ?  T|mehr
+.continue  SPEOBJ            ? _T|mehr
+..
+.formula T|xanrede = T|xas  ? defined(xas)
+.add
+..
+!SPEOBJ:
+.select -
+..
+.input "ser/RM.EMAIL.KOPF"
+.input "ser/RM.EMAIL.ANF"
+.. Text fÅr Serviceanfrage
+.text xttext 'T|xspr' Wir haben Ihre Anfrage unter der oben genannten Nummer aufgenommen.
+'xttext'
+.text xttext 'T|xspr' Bitte geben Sie bei RÅckfragen immer diese Nummer an.
+'xttext'
+.text xtmfg 'T|xspr' Mit freundlichen GrÅ·en
+.text xtabtlg 'T|xspr' Service
+
+'T|xtmfg                '
+
+'M|tbearbeit^sucherw              '
+  -- 'T|xtabtlg' --
+..
+.input "ser/RM.EMAIL.FUSS"
+.output
+.. generierte Mitteilung der neuen Zeile zuweisen
+.formula M|rmtext = T|xtrmdatei
+..
+!SPEMDAT: eMail-Datei schreiben (xtemdatei)
+.. eMail-EmpfÑnger prÅfen
+.formula T|xtfehler = "Bitte geben Sie einen E-Mail-EmpfÑnger ein und senden Sie erneut."
+.formula T|xtfeld = "rman1"
+.continue F1       ? M|rman1^email=""
+..
+.formula T|xtfehler = "E-Mail-Absender konnte nicht ermittelt werden. Bitte E-Mail erneut versenden."
+.formula T|xtfeld   = ""
+.load 0 company "$,,gruppe=10"
+.continue F1        ? _T|mehr
+.formula T|xtfromadress = 0|email
+.load 0
+..
+.. eMail-Datei mit Parametern schreiben
+.input "ser/KM.EMAIL.XMAILUSER"
+..
+.. Ende Zeit setzen
+.formula M|uhrzbis = "."                ? M|aktzeile <> 0
+.continue
+..
+!F1: Fehler vorhanden
+.error 'xtfehler'
+.cursor 'xtfeld' 0         ? T|xtfeld <> ""
+.end 1

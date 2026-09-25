@@ -1,0 +1,188 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : LMB.EV
+..  Datum          : 11.10.04
+..  Version        : 2004
+..  Autor          : cl
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..  Funktion       :
+..
+..  Ablauf         : Zentrales Ereignis-EFOP des LMB
+..
+..  Functionality  :
+..
+..  Program flow   : Central event FOP of the infosystem LMB
+..
+..  includes       :
+..
+..  include is/HOL.LISTE
+..*****************************************************************************
+.type text xtlgrid   ? _F|defined(U|xtlgrid)
+.type text xtintlg   ? _F|defined(U|xtintlg)
+.type P2:1 xvar      ? _F|defined(U|xvar)
+.type integer xiaktzeile  ? _F|defined(U|xiaktzeile)
+.type integer xizeilehoch ? _F|defined(U|xizeilehoch) 
+.type M7.3   xrverbrauch  ? _F|defined(U|xrverbrauch)
+.type MP4.2 xrundung     ? _F|defined(U|xrundung)
+..
+.formula U|xtintlg   = F|sysinfo(10)^intlgruppe^id
+..
+.set trans -
+..---------------------------- Kopfteil/Header:--------------------------------
+.continue TABLEEREN  ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bstart"
+.continue BSTART     ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "bstart"
+.continue SEL        ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "bselect"
+.continue TAUFZU     ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "taufzu" 
+.continue HAKEN      ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "allean" 
+.continue HAKEN      ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "alleab"  
+.continue BASVERB    ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "tverbrauchbasis"  
+.continue KLGRUPPE   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "klgruppe"
+.continue ZUM        ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "zum"
+.continue ANDLER     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bandler"
+.continue TABLEEREN  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "beigen"
+.continue TABLEEREN  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bfremd"
+.continue TABLEEREN  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bumlagern"
+.continue TABLEEREN  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "blohnfert"
+..-----------------------------------------------------------------------------
+.continue END
+..
+!SEL: define selection with a selection bar
+.assign G|evtfeldneu = "%"
+.input "is/AUSWAHL"
+.copy M|selektion = (M|select <> "!")
+.continue END           ? _M|selektion
+.. and clear header parameter
+.formula M|kartvon = ""
+.formula M|kartbis = ""
+.formula M|kbasisvon = ""
+.formula M|kbasisbis = ""
+.continue TABLEEREN
+..
+!HAKEN: Alle anhaken oder alle Haken entfernen
+.continue ERROR2 ? M|protokoll
+.select screen header
+.select screen line
+.continue END ? _G|mehr
+!HAKLOOP
+.continue NEXT ? _F|empty(M|taufzu)
+.copy M|tauswahl = G|true  ? G|evtvar = "allean" & M|iconz <> M|iconinfo
+.copy M|tauswahl = G|false ? G|evtvar = "alleab"
+!NEXT
+.select screen line
+.continue HAKLOOP ? G|mehr
+.continue END
+..
+!BASVERB: setzt den Verbrauch des Basisartikels (also aller Versionen) bei einer Standard-Version
+.continue END ? M|tverbrauchbasis <> M|iconverbrauch
+.formula U|xrundung   = M|artikel^rundung 
+.formula U|xiaktzeile = M|aktzeile
+!NEXTLINE
+.formula U|xizeilehoch = M|aktzeile - 1
+.continue ERROR3 ? U|xizeilehoch <= 0
+.select screen line 'U|xizeilehoch' 
+.continue NEXTLINE ? F|empty(M|taufzu)
+..hier in Zeile des Basisartikels
+.formula U|xrverbrauch = M|dtv
+.select screen line 'U|xiaktzeile'
+.formula M|dtv = U|xrverbrauch 
+.formula M|mlb = M|dtv * M|wbz
+.formula M|mlb = M|mlb:0
+.formula M|mlb = (M|mlb/U|xrundung):0 * U|xrundung        ? U|xrundung <> 0
+.formula M|abs     = M|min - M|mlb
+.assign M|proz = (M|abs / M|mlb) * 100 ? M|mlb <> 0
+.formula M|proz        = "*"             ? M|mlb = 0  & M|min <> 0
+.formula M|proz        = "0"             ? M|mlb = M|min
+.continue END
+!TAUFZU: Auf - und Zuklappen bei Basisartikeln
+.continue AUFKLP ? M|taufzu = M|iconzu
+.continue ZUKLP  ? M|taufzu = M|iconauf
+.continue END
+!AUFKLP: Aufklappen
+.formula M|taufzu = M|iconauf
+.formula M|select = "$,,"
+.formula M|select = M|select + ";basisartikel=" + 'M|basisartikel^id'
+.input "is/HOL.LISTE"
+.continue END
+!ZUKLP: Zuklappen
+.formula M|taufzu = M|iconzu
+.select screen line
+!ZULOOP
+.continue END ? M|aktzeile = 0
+.continue END ? _F|empty(M|taufzu)
+.make screen line -o
+.continue ZULOOP
+!BSTART: Bereich / range
+.protection -reset beschkost ?  M|bandler
+.protection -reset lhaltkost ?  M|bandler
+.protection beschkost        ? _M|bandler
+.protection lhaltkost        ? _M|bandler
+.continue BESART           ?  _M|beigen & _M|bfremd & _M|bumlagern & _M|blohnfert
+.continue MELDUNG          ?  (M|lhaltkost = 0 ; M|beschkost = 0) & M|bandler
+.continue MELDUNG          ?   M|lhaltkost = 0 & M|beschkost = 0 & M|bandler
+.. Nothing to do while selection bar is active
+.continue HOL              ? M|selektion
+.formula M|select = "$,,"
+.formula M|select = M|select + "@numsuch=" + 'M|kartvon' + "!" + 'M|kartbis'
+.formula M|select = M|select + ";basisartikel^such=" + 'M|kbasisvon' + "!" + 'M|kbasisbis'
+.assign U|xvar = M|select + ";@lesen=(No)"
+.continue ERROR1 ? _G|mehr
+..
+!HOL: query database
+.input "is/TABLEEREN"
+.input "is/HOL.LISTE"
+.continue END
+..
+!KLGRUPPE: Lagergruppe  /  warehouse group
+.continue FIRMA         ? F|empty(M|klgruppe)
+.formula U|xtlgrid     = M|klgruppe^id
+.continue TABLEEREN     ? U|xtintlg = U|xtlgrid
+.copy M|protokoll   = G|TRUE
+.copy M|zurueck     = G|FALSE
+.continue TABLEEREN
+..
+!FIRMA: interne Lagergruppe  / internal warehouse group
+.formula M|klgruppe = F|sysinfo(10)^intlgruppe^num39
+.formula U|xtlgrid  = M|klgruppe^id
+.continue TABLEEREN
+..
+!ZUM
+.formula M|zum = G|datum   ? 'M|zum' = ""
+.continue TABLEEREN
+..
+!ANDLER
+.protection -reset beschkost  ?  M|bandler
+.protection -reset lhaltkost  ?  M|bandler
+.protection beschkost         ? _M|bandler
+.protection lhaltkost         ? _M|bandler
+.continue TABLEEREN
+..
+!TABLEEREN: clear table
+.input "is/TABLEEREN"
+.continue END
+..
+..
+!BESART: Eine Beschaffungsart muss gewÑhlt sein
+.box Beschaffungsart
+Bitte eine Beschaffungsart wÑhlen.
+.continue END
+..
+!MELDUNG
+.box Meldung
+Beschaffungskosten und Lagerhaltungskostensatz mÅssen gefÅllt sein.
+Ansonsten ist keine Losgrî·enberechnung nach Andler mîglich.
+..
+!END
+.continue
+..*****************************************************************************
+!ERROR1: Invalid range - message is given bei core
+.error
+.cursor kartvon
+.end 1
+!ERROR2: ZurÅckschreiben aktivieren
+.error Protokoll und ZurÅckschreiben aktivieren!
+.cursor zurueck
+.end 1
+!ERROR3: Setzen des durchschnittlichen Verbrauchs
+.error Fehler beim Setzen des Durchschnittsverbrauchs!
+.end 1

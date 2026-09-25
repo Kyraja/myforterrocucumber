@@ -229,6 +229,17 @@ Feature: Login
     }
   });
 
+  it('parses subeditor close/save phrases into dedicated action types', () => {
+    const text = `Feature: Subeditor
+  Scenario: Back to parent
+    And I save the current subeditor to switch back to the parent editor
+    And I close the current subeditor to switch back to the parent editor
+`;
+    const result = parseGherkin(text);
+    const actions = result.scenarios[0].steps.map((s) => s.action.type);
+    expect(actions).toEqual(['subeditorSpeichern', 'subeditorSchliessen']);
+  });
+
   it('round-trips data table through parse → generate', () => {
     const text = `Feature: Round Trip Table
 
@@ -240,6 +251,45 @@ Feature: Login
     const parsed = parseGherkin(text);
     const regenerated = generateGherkin(parsed);
     expect(regenerated).toBe(text);
+  });
+
+  it('parses chained editor-open into recordFromEditor (not record)', () => {
+    const text = `Feature: Chain
+  Scenario: Chain
+    Given I open an editor "AUF1" from table "3:1" with command "NEW" for record ""
+    Given I open an editor "LS1" from table "3:3" with command "DELIVERY" for record from editor "AUF1"
+`;
+    const result = parseGherkin(text);
+    const a = result.scenarios[0].steps[1].action;
+    if (a.type !== 'editorOeffnen') throw new Error('expected editorOeffnen');
+    expect(a.recordFromEditor).toBe('AUF1');
+    expect(a.record).toBe('');
+  });
+
+  it('round-trips for record from editor "X" without quoting the chain ref', () => {
+    const text = `Feature: Chain RT
+
+  Scenario: Chain RT
+    Given I open an editor "AUF1" from table "3:1" with command "NEW" for record ""
+    Given I open an editor "LS1" from table "3:3" with command "DELIVERY" for record from editor "AUF1"
+`;
+    const parsed = parseGherkin(text);
+    const regenerated = generateGherkin(parsed);
+    expect(regenerated).toBe(text);
+  });
+
+  it('parses chained menu-choice variant into recordFromEditor', () => {
+    const text = `Feature: Menu chain
+  Scenario: Menu chain
+    Given I open an editor "R1" from table "3:1" with command "NEW" for record ""
+    Given I open an editor "R2" from table "3:3" with command "TRANSFER" for record from editor "R1" and menu choice "Teillieferung"
+`;
+    const result = parseGherkin(text);
+    const a = result.scenarios[0].steps[1].action;
+    if (a.type !== 'editorOeffnenMenue') throw new Error('expected editorOeffnenMenue');
+    expect(a.recordFromEditor).toBe('R1');
+    expect(a.record).toBe('');
+    expect(a.menuChoice).toBe('Teillieferung');
   });
 
   it('normalizes smart/curly quotes to straight quotes', () => {

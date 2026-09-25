@@ -1,0 +1,342 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDIEXPINI.KBUSCHREIBEN.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Die Felder werden in die Datei DFUE.EXP.INI geschrieben
+.. Functionality  :
+..  include     dfue/DFUE.EXP.INI
+..*****************************************************************************
+.set trans -
+..
+.type text   xtsystem
+.type text   xtmpbool
+..
+.type text   xtinidatei
+.type text   xtsicherung
+.type text   xtdfueexpinineu
+..
+.. assign names to ini-file and backup
+.formula T|xtinidatei  = "dfue/DFUE.EXP.INI"
+.formula T|xtsicherung =  T|xtinidatei + ".bak" + 'T|datum:8'
+..
+.. backup ini-file
+.formula T|xtsystem = "cp -f " + T|xtinidatei + " " + T|xtsicherung
+.system 'T|xtsystem' background
+..
+.. create new ini-file as temporary file, it is copied when created successfully
+.file -tempname T|xtdfueexpinineu
+.output new 'T|xtdfueexpinineu'
+.input "DATEI.F"
+..
+.set command %
+..!interpreter english translate
+..*****************************************************************************
+.. FOP-Name       : DFUE.EXP.INI
+.. Autor          : generiert mit EDIEXPINI.KBUSCHREIBEN.BN
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Parameterdatei Export-Programmes
+.. Functionality  :
+..*****************************************************************************
+..
+..
+.. include standard programs
+.input "ARB"
+..
+.. variable definitions
+..
+.type bool  xbDruckVKRE
+.type bool  xbRMeldAn
+.type text  xProtDrucker
+.type text  xdDFUEEXPEDI2IHS
+.type text  xdDfueExpEdi2INV
+.type text  xdDFUEEXPSPEDVDA
+.type text  xdDFUEEXPVKREVDA
+.type text  xdDFUEEXPVKREEDI
+.type text  xdDFUEGETSPEDLS
+.type text  xdDFUESPEDPAPDRVDA
+.type text  xdDFUEVK2EDIEDIRE
+.type text  xdDFUEVK2EDIVDARE
+.type text  xdDFUEWANHDRUCKVDA
+.type text  xdDFUEWBSDRUCKVDA
+.type text  xDfueVKREgeraet
+.type text  xdGetProtokoll
+.type integer   xplausi01
+.type integer   xplausi02
+.type integer   xplausi03
+.type integer   xplausi04
+.type integer   xplausi05
+.type integer   xplausi06
+.type integer   xplausi07
+.type integer   xplausi08
+.type integer   xplausi09
+.type integer   xplausi10
+.type text  xdPostSenden
+.type text  xdProto
+.type text  xIDBeipack
+.type text  xIdDfueExKonto
+.type text  xIdDfueExVerteil
+.type text  xIdPackNrSatz
+.type text  xIDSelDFUEQue
+.type text  xIDSelEDIKunUebnr
+.type text  xIDSelEDIzuBearb
+.type text  xIDSelSPEDLS
+.type text  xSchEDIzuBearb
+.type text  xSchlEDIKunUebnr
+.type text  xSchlDFUEQue
+.type text  xSendeVerz
+.type text  xSwVerpackung
+.type text  xSwVersand
+.type bool  xBmitAdressen
+.type bool  xbSendePWert0
+.type bool  xinvwithservices
+..
+.type text  xRabObj   xRabHaend    xRabLeist
+..
+.type text  xWBeteil  xWBeteilQ
+..
+..
+.. alle variablen muessen definiert sein, sonst bricht das programm ab
+.set demand -
+..
+.. ###################################################################
+.. #                                                                 #
+.. #                                                                 #
+.. #                                                                 #
+.. #            Folgenden Bereich unbedingt anpassen !!!!!!!!!!      #
+.. #                                                                 #
+.. #                                                                 #
+.. ###################################################################
+..
+..**ok,05.04.2001 (neu xbRMeldAn, xProtDrucker)
+..>> - fÅr Rechnungen:
+..>>   ==============
+..>>   beim Senden von Verkaufs-Rechnungen bekommt der Anwender Meldungen
+..>>   auf seinem Bildschirm, welche Rechnungen gerade gesendet werden
+..>>   xbRMeldAn = false  --> keine Meldungen ausgegeben
+..>>   (Standard: false)
+..>>
+..>>   Wenn der Anwender das Fehlerprotokoll, das Åber Postverteiler
+..>>   gesendet wird, auch automatisch drucken lassen mîchte, kann
+..>>   unten ein Drucker wie z.B. "S1" angegeben werden.
+..>>   Wenn die Variable xProtDrucker leer ("") ist, findet keine Ausgabe statt
+..>>   (Standard: leer)
+..
+%set command .
+.formula T|xtmpbool= "true"  ? M|remeldan = true
+.formula T|xtmpbool= "false" ? M|remeldan = false
+.set command %
+.formula T|xbRMeldAn = 'xtmpbool'
+.formula T|xProtDrucker = "'M|protdrucker'"
+%set command .
+..
+.formula T|xtmpbool= "true"  ? M|adrausgabe = true
+.formula T|xtmpbool= "false" ? M|adrausgabe = false
+.set command %
+..
+..Adressdaten aus Betriebsdatensatz nicht/mit ausgegeben
+..Programm INV.VK2EDI.EDIRE
+.formula T|xBmitAdressen = 'xtmpbool'
+..
+.. IDnr des postverteilers fuer DFUE export
+.formula T|xIdDfueExVerteil = "'M|exverteil'"
+..
+.. IDnr des Geldtransitkonto/Bankkonto
+.formula T|xIdDfueExKonto = "'M|eskonto'"
+..
+%set command .
+.formula T|xtmpbool= "true"  ? M|druckvkre = true
+.formula T|xtmpbool= "false" ? M|druckvkre = false
+..
+.set command %
+.. sollen die belege fuer VK-RE gleich nach dem versenden
+.. mit DFUE.EXP gedruckt werden
+.. Gilt auch fÅr die Ausgabe der Sammel-Abrechnungsliste - INVOICE edifact
+.formula T|xbDruckVKRE = 'xtmpbool'
+..
+.. geraet auf das VKRE gedruckt werden
+.. fuer drucker
+.formula T|xDfueVKREgeraet = "'M|druckervkre'"
+..
+.. suchwort-match fuer zusatzpositionen "versandkosten" und "verpackungskosten"
+.. unbedingt auf "*" achten.
+.formula T|xSwVersand = "'M|suchversand'"
+.formula T|xSwVerpackung = "'M|suchverpack'"
+..
+.. suchwort-match fuer A.BEIPACK fuer LSDFUE
+.. unbedingt auf "*" achten.
+.formula T|xIDBeipack = "'M|suchbeipack'"
+..
+.. absolutes verzeichnis, wo die zu sendenden dateien hin gemovet werden sollen
+.formula T|xSendeVerz = "'M|sendeverz'"
+..
+%set command .
+.formula T|xtmpbool= "true"  ? M|sendepackm = true
+.formula T|xtmpbool= "false" ? M|sendepackm = false
+.set command %
+..
+.. sollen packmittel in den rechnungen mit gesendet werden
+.formula T|xbSendePackmit     =  'xtmpbool'
+..
+.. Sollen die Rechnungspositionon mit eine Positionswert gleich Null
+.. mit Åbertragen werde? (fÅr JA --> true, fÅr NEIN --> false)
+%set command .
+.formula T|xtmpbool= "true"  ? M|bsendepwert0 = true
+.formula T|xtmpbool= "false" ? M|bsendepwert0 = false
+.set command %
+..
+.formula T|xbSendePWert0      =   'xtmpbool'
+..
+..**ok,24.09.2001 (Variablen fÅr die CS-Online-View-Ausgabe der Speditionspapiere)
+..**ok,04.07.2005 (die Variablen xdDFUEWBSDRUCKVDAOV, xdDFUESPEPADRVDAOV, xdDFUEWANDRUCKVDAOV wurden abgeschafft)
+..
+.. ###################################################################
+.. #                                                                 #
+.. #                                                                 #
+.. # nur aendern, wenn der lader LADER.EDI.EXPORT geaendert wurde !  #
+.. #                                                                 #
+.. #                                                                 #
+.. ###################################################################
+..
+.. selektion noch zu bearbeitender EDI-datensaetze
+.formula T|xIDSelEDIzuBearb =  "'M|seledibearb'"
+.. zugehoeriger schluessel
+.formula T|xSchEDIzuBearb = "'M|schledibear'"
+..
+.. alles notwendige fuer die DFUE-queue
+.formula T|xIDSelDFUEQue = "'M|seldfueque'"
+.formula T|xSchlDFUEQue = "'M|schldfueque'"
+..
+.. Schluessel und SEL fuer suche von EDI-DB-saetzen anhand
+.. des kunden und der uebnr
+.formula T|xIDSelEDIKunUebnr = "'M|selkuuebnr'"
+.formula T|xSchlEDIKunUebnr = "'M|schlkuuebnr'"
+..
+.. Selektion aller LS-pos zu einem SPED
+.formula T|xIDSelSPEDLS = "'M|selspedls'"
+..
+.. ###################################################################
+.. #                                                                 #
+.. #                                                                 #
+.. #            ab hier nichts mehr aendern !!!!!!!!!!!!!!!!!!!      #
+.. #                                                                 #
+.. #                                                                 #
+.. ###################################################################
+..
+.. programm, welches das uebertragungsprotokoll eines kunden/lieferanten ermittelt
+.formula T|xdGetProtokoll = "'M|expprog1'"
+..
+.. programm, mit dem post gesendet wird
+.formula T|xdPostSenden = "'M|expprog2'"
+..
+.. programm, welches die zwischendatei fuer VDA-rechnungen erzeugt,
+.. die in die EDI-DB aufgenommen wird
+.formula T|xdDFUEVK2EDIVDARE = "'M|expprog3'"
+..
+.. programm, welches die zwischendatei fuer edifact-rechnungen erzeugt,
+.. die in die EDI-DB aufgenommen wird
+.formula T|xdDFUEVK2EDIEDIRE = "'M|expprog4'"
+..
+.. protokolldatei fuer export
+.formula T|xdProto = "'M|expprog5'"
+..
+.. exportprogramm fuer VK-RE-VDA
+.formula T|xdDFUEEXPVKREVDA = "'M|expprog6'"
+..
+.. exportprogramm fuer VK-RE-edifact
+.formula T|xdDFUEEXPVKREEDI = "'M|expprog7'"
+..
+.. programm, welches die ASCII aus dem EDI-datensatz erzeugt
+.formula T|xdDFUEEXPEDI2IHS = "'M|expprog8'"
+..
+.. programm, welches die ASCII aus dem EDI-datensatz erzeugt
+.. Programm fÅr edifact-INVOICE ( musste gekuerzt werden )
+.formula T|xdDfueExpEdi2INV = "'M|expprog9'"
+..
+.. programm, welches alle LS/LS-pos zu einem SPED holt
+.formula T|xdDFUEGETSPEDLS = "'M|expprog10'"
+..
+.. programm, welches eine sonderbehandlung beim export von sped-auftraegen
+.. durchfuehrt
+.formula T|xdDFUEEXPSPEDVDA = "'M|expprog15'"
+..
+.. die plausiarten
+.. mengeneinheit he wird auf erlaubte werte nach VDA4913 geprueft
+.formula T|xplausi01 = 'M|plausi01'
+.. plausis bei packmitteln
+.formula T|xplausi02 = 'M|plausi02'
+.. plausis fuer laenderkennzeichen in der laendertabelle
+.formula T|xplausi03 = 'M|plausi03'
+.. plausis fuer packmittel beipack
+.formula T|xplausi04 = 'M|plausi04'
+.. plausi fuer anschrif/versandanschrift im LS
+.formula T|xplausi05 = 'M|plausi05'
+.. plausi fuer werk/abladestelle
+.formula T|xplausi06 = 'M|plausi06'
+.. plausi fuer versandart
+.formula T|xplausi07 = 'M|plausi07'
+.. plausi fuer anschrift im betriebsdatensatz 1
+.formula T|xplausi08 = 'M|plausi08'
+.. plausi fuer lieferantennummer im debitor
+.formula T|xplausi09 = 'M|plausi09'
+..
+.. Neue Variable fÅr Rabatte (Zusatzpositionen) EDI-INVOIC
+.. UNten mÅssen die Identnummer der Zusatzpositionen eingetragen werden
+.formula T|xRabObj = "'M|rabobj'"
+.formula T|xRabHaend = "'M|rabhaend'"
+.formula T|xRabLeist = "'M|rableist'"
+..
+..
+..För EDIFACT-INVOIC erweitert um die Variable "xWBeteil" und "xWBeteilQ"
+..Wenn WarenendempfÑnger als Kunde oder Kundenkontakt angelegt worden ist
+..und die Adressdaten Åbertragen werden mÅssen,
+..ist als "xWBeteil" eine Verweisvariable eingetragen werden (auch V-03-01 und
+..die Rechnungsmaske erweitern).
+..Hier wird im Programm der Befehl ".dazu xWBeteil" verwendet.
+..
+..In die Variable "xWBeteilQ" mu· entsprechende Qualifier eingetragen werden.
+..
+..Wenn WarenendempfÑnger nur als "Identnummer" Åbertragen werden soll, dann
+..braucht man kein Kundendatensatz anlegen.
+..Es reicht aus, wenn die V-03-01 und die Rechnungsmaske um ein Zusatzfeld
+..erweitert wird.
+..So mu· man die Variable "xWBeteil" nur die neue Zusatzvariablename eintragen,
+..so wird der Inhalt aus der Rechnungsmaske Åbertragen.
+..In die Variable  "xWBeteilQ" mu· entsprechende Qualifier eingetragen werden.
+..FÅr WarenendempfÑnger ist sie "UC" (Ultimate consignee).
+..
+.formula T|xWBeteil = "'M|wbeteil'"
+.formula T|xWBeteilQ = "'M|wbeteilq'"
+..
+..
+.. Bei Erstellung der EDI-Rechnung mit INVOICEEXPORT (Abbildungsmodell 4100)
+.. koennen optional Dienstleistungen in der EDI-Rechnung uebertragen werden
+..
+%set command .
+.formula U|xtmpbool= "true"  ?  M|invwithservices
+.formula U|xtmpbool= "false" ? _M|invwithservices
+.set command %
+.formula U|xinvwithservices   =  'U|xtmpbool'
+..
+.. end of DFUE.EXP.INI
+%set command .
+..
+..
+.. copy new file to ini-file
+.formula T|xtsystem = "cp -f " + T|xtdfueexpinineu + " " + T|xtinidatei
+.system 'T|xtsystem' background
+..
+.output new "WERF.WEG"
+..
+.continue ERFOLG
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERFOLG: show success message in message box
+.box
+Die Datei 'T|xtinidatei' wurde aktualisiert!
+.continue

@@ -3,27 +3,19 @@
 // ============================================================
 
 import { generateCodeVerifier, generateCodeChallenge, generateState } from './pkce';
-import { recordTokenUsage, notifyTokenLimitReached } from './tokenHistory';
+import { recordTokenUsage, notifyTokenLimitReached, isMftDailyLimitHitThisSession } from './tokenHistory';
 import type { TokenPurpose } from './tokenHistory';
-import { getTemperature } from './settings';
+import { countTokens } from './tokenCounter';
+import { getAiRequestTimeoutMs, getAgentMaxTokens } from './settings';
 
 // Re-export error classes and helpers from mftErrors (used by generatePackage etc.)
-export { TokenLimitError, isMftTenantOrAuthError } from './mftErrors';
-import { TokenLimitError } from './mftErrors';
-
-/** Thrown when the agent returns an empty response. Carries the conversationId for retry. */
-export class EmptyAgentResponseError extends Error {
-  conversationId: string;
-  constructor(message: string, conversationId: string) {
-    super(message);
-    this.name = 'EmptyAgentResponseError';
-    this.conversationId = conversationId;
-  }
-}
+export { TokenLimitError, RateLimitError } from './mftErrors';
+import { TokenLimitError, RateLimitError, isRateLimitMessage } from './mftErrors';
 
 const STORAGE_PREFIX = 'cucumbergnerator_mft_';
 // Session storage prefix for PKCE flow (ephemeral, cleared after callback)
 const SESSION_PREFIX = 'cucumbergnerator_pkce_';
+const SESSION_RETURN_QUERY = SESSION_PREFIX + 'return_query';
 
 // Proxy paths configured in vite.config.ts — avoids CORS issues in dev.
 // In production, configure your web server to proxy these paths accordingly.
@@ -31,7 +23,7 @@ const DEFAULT_TOKEN_URL = '/mft-auth/connect/token';
 const DEFAULT_API_BASE = '/mft-api';
 // Authorize URL is a full URL (browser redirect, not proxied)
 const DEFAULT_AUTHORIZE_URL = 'https://integration-myforterro-core.fcs-dev.eks.forterro.com/connect/authorize';
-const TIMEOUT_MS = 180_000;
+const DEFAULT_AI_API_VERSION: 'v1' | 'v2' = 'v2';
 
 // Token safety margin: refresh 60s before actual expiry
 const TOKEN_EXPIRY_MARGIN_MS = 60_000;
@@ -133,6 +125,41 @@ export function setAuthorizeUrl(url: string): void {
  */
 function getRedirectUri(): string {
   return window.location.origin + window.location.pathname;
+}
+
+type AiApiVersion = 'v1' | 'v2';
+
+function getAiApiVersion(): AiApiVersion {
+  const v = getStored('ai_api_version');
+  return v === 'v1' || v === 'v2' ? v : DEFAULT_AI_API_VERSION;
+}
+
+function getAiApiVersionOrder(): AiApiVersion[] {
+  const preferred = getAiApiVersion();
+  return preferred === 'v2' ? ['v2', 'v1'] : ['v1', 'v2'];
+}
+
+function buildAiUrl(apiBase: string, version: AiApiVersion, path: string): string {
+  return `${apiBase}/${version}/ai${path}`;
+}
+
+async function fetchAiWithFallback(path: string, init: RequestInit): Promise<Response> {
+  const apiBase = getApiBase();
+  let lastResponse: Response | null = null;
+  for (const version of getAiApiVersionOrder()) {
+    const headers = {
+      ...(init.headers as Record<string, string> | undefined),
+      'api-version': version === 'v2' ? '2.0' : '1.0',
+    };
+    const res = await fetch(buildAiUrl(apiBase, version, path), {
+      ...init,
+      headers,
+    });
+    if (res.status !== 404 && res.status !== 400) return res;
+    lastResponse = res;
+  }
+  if (lastResponse) return lastResponse;
+  throw new Error('AI API endpoint not reachable.');
 }
 
 // ── Token management ──────────────────────────────────────────
@@ -311,6 +338,25 @@ export async function initiateLogin(clientId: string, applicationId: string, cli
   if (clientSecret) sessionStorage.setItem(SESSION_PREFIX + 'client_secret', clientSecret);
   sessionStorage.setItem(SESSION_PREFIX + 'application', applicationId);
 
+  // Preserve URL feature flags across OAuth redirects so the app returns
+  // with the same dev/ai mode after callback URL cleanup.
+  const currentParams = new URLSearchParams(window.location.search);
+  const returnParams = new URLSearchParams();
+  const aiParam = currentParams.get('ai');
+  const devParam = currentParams.get('dev');
+  if (aiParam === 'true' || aiParam === 'false') returnParams.set('ai', aiParam);
+  if (devParam === 'true' || devParam === 'false') returnParams.set('dev', devParam);
+  // Fallback to session-gated values when query params are currently absent.
+  if (!returnParams.has('ai') && sessionStorage.getItem('cucumbergnerator_ai_enabled') === 'true') {
+    returnParams.set('ai', 'true');
+  }
+  if (!returnParams.has('dev') && sessionStorage.getItem('cucumbergnerator_dev_mode') === 'true') {
+    returnParams.set('dev', 'true');
+  }
+  const returnQuery = returnParams.toString();
+  if (returnQuery) sessionStorage.setItem(SESSION_RETURN_QUERY, returnQuery);
+  else sessionStorage.removeItem(SESSION_RETURN_QUERY);
+
   // Also persist client_id and application in localStorage for later use
   setStored('client_id', clientId);
   if (clientSecret) setStored('client_secret', clientSecret);
@@ -368,6 +414,7 @@ export async function handleAuthCallback(): Promise<{ success: boolean; error?: 
   const clientId = sessionStorage.getItem(SESSION_PREFIX + 'client_id');
   const clientSecret = sessionStorage.getItem(SESSION_PREFIX + 'client_secret');
   const application = sessionStorage.getItem(SESSION_PREFIX + 'application');
+  const returnQuery = sessionStorage.getItem(SESSION_RETURN_QUERY) || '';
 
   console.log('[OAuth] SessionStorage:', {
     hasState: !!expectedState,
@@ -383,6 +430,7 @@ export async function handleAuthCallback(): Promise<{ success: boolean; error?: 
   sessionStorage.removeItem(SESSION_PREFIX + 'client_id');
   sessionStorage.removeItem(SESSION_PREFIX + 'client_secret');
   sessionStorage.removeItem(SESSION_PREFIX + 'application');
+  sessionStorage.removeItem(SESSION_RETURN_QUERY);
 
   if (!expectedState || !codeVerifier || !clientId) {
     return { success: false, error: 'PKCE-Daten nicht gefunden. Bitte erneut anmelden.' };
@@ -395,7 +443,7 @@ export async function handleAuthCallback(): Promise<{ success: boolean; error?: 
   }
 
   // Clean URL (remove code/state from address bar)
-  const cleanUrl = getRedirectUri();
+  const cleanUrl = returnQuery ? `${getRedirectUri()}?${returnQuery}` : getRedirectUri();
   window.history.replaceState({}, '', cleanUrl);
 
   // Exchange code for tokens
@@ -511,7 +559,7 @@ export async function getValidToken(): Promise<string> {
     return existing;
   }
 
-  // Try to refresh using refresh_token
+  // PKCE flow: refresh the access token via the stored refresh_token.
   return refreshAccessToken();
 }
 
@@ -539,6 +587,16 @@ export function logout(): void {
   removeStored('user_email');
   removeStored('tenant_id');
   removeStored('tenants');
+  // Tenant-scoped caches — must be cleared so the next user/tenant does not
+  // inherit stale limits or consumption data.
+  try {
+    sessionStorage.removeItem('cucumbergnerator_mft_tenant_daily_limit');
+    sessionStorage.removeItem('cucumbergnerator_mft_server_daily_total');
+    sessionStorage.removeItem('cucumbergnerator_mft_server_consumption_available');
+    sessionStorage.removeItem('cucumbergnerator_mft_daily_limit_hit_session');
+  } catch {
+    // sessionStorage unavailable — safe to ignore
+  }
   // client_id, application, client_secret are intentionally kept
   // so the login form is pre-filled on next login.
 }
@@ -578,7 +636,22 @@ export function getStoredTenantId(): string | null {
 }
 
 export function setStoredTenantId(id: string): void {
+  const previous = getStored('tenant_id');
   setStored('tenant_id', id);
+  // If the tenant actually changed, invalidate tenant-scoped caches so the
+  // UI does not show the previous tenant's limit/consumption until the next
+  // sync completes.
+  if (previous && previous !== id) {
+    try {
+      sessionStorage.removeItem('cucumbergnerator_mft_tenant_daily_limit');
+      sessionStorage.removeItem('cucumbergnerator_mft_server_daily_total');
+      sessionStorage.removeItem('cucumbergnerator_mft_server_consumption_available');
+      sessionStorage.removeItem('cucumbergnerator_mft_daily_limit_hit_session');
+      window.dispatchEvent(new CustomEvent('tenant-changed'));
+    } catch {
+      // ignore
+    }
+  }
 }
 
 export function getStoredTenants(): MftTenant[] {
@@ -609,10 +682,13 @@ export async function listTenants(token?: string): Promise<MftTenant[]> {
   });
 
   if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    const wwwAuth = res.headers.get('www-authenticate') || '';
+    console.warn('[listTenants] Failed', res.status, 'www-authenticate:', wwwAuth, 'body:', body.slice(0, 400));
     if (res.status === 403) {
       throw new Error('Keine Berechtigung fuer Tenant-Liste. Tenant-ID manuell eingeben.');
     }
-    throw new Error(`Tenant-Abfrage fehlgeschlagen (${res.status})`);
+    throw new Error(`Tenant-Abfrage fehlgeschlagen (${res.status})${wwwAuth ? ' | ' + wwwAuth : ''}`);
   }
 
   const data: MftTenant[] = await res.json();
@@ -631,8 +707,7 @@ export async function listModels(): Promise<MftModel[]> {
     throw new Error('Kein Tenant ausgewaehlt. Bitte zuerst einen Tenant waehlen.');
   }
 
-  const apiBase = getApiBase();
-  const res = await fetch(`${apiBase}/v1/ai/inference/openai/models`, {
+  const res = await fetchAiWithFallback('/inference/openai/models', {
     headers: {
       Authorization: `Bearer ${token}`,
       'MFT-Tenant-Id': tenantId,
@@ -641,7 +716,9 @@ export async function listModels(): Promise<MftModel[]> {
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`Modell-Abfrage fehlgeschlagen (${res.status}): ${text.slice(0, 200)}`);
+    const wwwAuth = res.headers.get('www-authenticate') || '';
+    console.warn('[listModels] Failed', res.status, 'tenantId:', tenantId, 'www-authenticate:', wwwAuth, 'body:', text.slice(0, 400));
+    throw new Error(`Modell-Abfrage fehlgeschlagen (${res.status})${wwwAuth ? ' | ' + wwwAuth : ''}: ${text.slice(0, 200)}`);
   }
 
   const data: { data: MftModel[] } = await res.json();
@@ -664,21 +741,49 @@ export interface MftAgentDescriptor {
   publicationStatus: string;
 }
 
-interface ChatResponseChunkDto {
-  ConversationId: string;
-  MessageId: string;
-  AnsweringTo: string;
-  Type: 'Delta' | 'Complete';
-  Message: string;
-  Thinking: string | null;
-  CreatedAt: string;
-  CompletedAt: string | null;
+export interface MftFileInfo {
+  fileId: string;
+  fileName?: string;
+  size: number;
+  mimeType?: string | null;
 }
 
-export interface ChatWithAgentResult {
-  conversationId: string;
-  messageId: string;
-  fullMessage: string;
+export interface MessageAttachment {
+  fileName?: string;
+  content?: string;
+  fileId?: string;
+}
+
+export interface RunWithAgentResult {
+  response: string;
+  conversationId: string | null;
+}
+
+const AGENT_FIELD_LIMITS = {
+  name: 200,
+  description: 10_240,
+  model: 128,
+  instructions: 100_000,
+} as const;
+
+function validateAgentFields(name: string, model: string, instructions: string, description?: string): void {
+  const fields: Array<[string, string, number]> = [
+    ['Agent-Name', name, AGENT_FIELD_LIMITS.name],
+    ['Modell', model, AGENT_FIELD_LIMITS.model],
+    ['Instructions', instructions, AGENT_FIELD_LIMITS.instructions],
+  ];
+  if (description != null) fields.push(['Beschreibung', description, AGENT_FIELD_LIMITS.description]);
+  const invalid = fields.find(([, value, max]) => value.length > max);
+  if (invalid) throw new Error(`${invalid[0]} darf höchstens ${invalid[2].toLocaleString('de-DE')} Zeichen enthalten.`);
+}
+
+export interface ConversationAttachmentContent {
+  attachmentId: string;
+  fileName: string;
+  size: number;
+  mimeType: string;
+  base64?: string;
+  url?: string;
 }
 
 /**
@@ -689,12 +794,10 @@ export async function discoverMftAgents(): Promise<MftAgentDescriptor[]> {
   const tenantId = getStoredTenantId();
   if (!tenantId) throw new Error('Kein Tenant ausgewählt.');
 
-  const apiBase = getApiBase();
-  const res = await fetch(`${apiBase}/v1/ai/agents/discover`, {
+  const res = await fetchAiWithFallback('/agents/discover', {
     headers: {
       Authorization: `Bearer ${token}`,
       'MFT-Tenant-Id': tenantId,
-      'api-version': '1.0',
     },
   });
 
@@ -712,20 +815,26 @@ export async function createMftAgent(
   instructions: string,
   description?: string,
 ): Promise<MftAgentDto> {
+  validateAgentFields(name, model, instructions, description);
   const token = await getValidToken();
   const tenantId = getStoredTenantId();
   if (!tenantId) throw new Error('Kein Tenant ausgewählt. Bitte zuerst einen Tenant wählen.');
 
-  const apiBase = getApiBase();
-  const res = await fetch(`${apiBase}/v1/ai/agents`, {
+  const res = await fetchAiWithFallback('/agents', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
       'MFT-Tenant-Id': tenantId,
-      'api-version': '1.0',
     },
-    body: JSON.stringify({ name, model, instructions, description: description ?? null, temperature: getTemperature() }),
+    body: JSON.stringify({
+      name,
+      model,
+      instructions,
+      description: description ?? null,
+      maxTokens: getAgentMaxTokens(),
+      ignoreUserMcpServers: true,
+    }),
   });
 
   if (!res.ok) {
@@ -749,6 +858,32 @@ export async function createMftAgent(
   return res.json();
 }
 
+/** Upload a file for reuse in later agent messages. */
+export async function uploadMftFile(file: File): Promise<MftFileInfo> {
+  const token = await getValidToken();
+  const tenantId = getStoredTenantId();
+  if (!tenantId) throw new Error('Kein Tenant ausgewählt. Bitte zuerst einen Tenant wählen.');
+
+  const form = new FormData();
+  form.append('file', file, file.name);
+  const res = await fetchAiWithFallback('/files', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'MFT-Tenant-Id': tenantId,
+    },
+    body: form,
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    const error = new Error(`Datei-Upload fehlgeschlagen (${res.status}): ${body.slice(0, 200)}`) as Error & { status?: number };
+    error.status = res.status;
+    throw error;
+  }
+  return res.json() as Promise<MftFileInfo>;
+}
+
 /**
  * Update an existing agent (e.g. when context files change).
  */
@@ -758,20 +893,25 @@ export async function updateMftAgent(
   model: string,
   instructions: string,
 ): Promise<void> {
+  validateAgentFields(name, model, instructions);
   const token = await getValidToken();
   const tenantId = getStoredTenantId();
   if (!tenantId) throw new Error('Kein Tenant ausgewählt.');
 
-  const apiBase = getApiBase();
-  const res = await fetch(`${apiBase}/v1/ai/agents/${agentId}`, {
+  const res = await fetchAiWithFallback(`/agents/${agentId}`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
       'MFT-Tenant-Id': tenantId,
-      'api-version': '1.0',
     },
-    body: JSON.stringify({ name, model, instructions, temperature: getTemperature() }),
+    body: JSON.stringify({
+      name,
+      model,
+      instructions,
+      maxTokens: getAgentMaxTokens(),
+      ignoreUserMcpServers: true,
+    }),
   });
 
   if (!res.ok) {
@@ -789,13 +929,11 @@ export async function deleteMftAgent(agentId: string): Promise<void> {
   const tenantId = getStoredTenantId();
   if (!tenantId) throw new Error('Kein Tenant ausgewählt.');
 
-  const apiBase = getApiBase();
-  const res = await fetch(`${apiBase}/v1/ai/agents/${agentId}`, {
+  const res = await fetchAiWithFallback(`/agents/${agentId}`, {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${token}`,
       'MFT-Tenant-Id': tenantId,
-      'api-version': '1.0',
     },
   });
 
@@ -807,48 +945,83 @@ export async function deleteMftAgent(agentId: string): Promise<void> {
   }
 }
 
+
 /**
- * Chat with a MyForterro agent via SSE streaming.
- * Calls onDelta with each incremental text chunk.
- * Returns the full assembled message + conversationId once complete.
+ * Synchronous agent call wrapper — delegates to the SSE streaming endpoint.
  */
-export async function chatWithAgent(
+export async function chatWithAgentSync(
   agentId: string,
   message: string,
-  conversationId: string | null,
-  onDelta: (text: string) => void,
-): Promise<ChatWithAgentResult> {
+  purpose?: TokenPurpose,
+  modelName?: string,
+  details?: string,
+  /** Optional callback — receives the final full response text once available */
+  onDelta?: (text: string) => void,
+  attachments?: MessageAttachment[],
+): Promise<{ response: string; conversationId: string }> {
+  const run = await runWithAgentSync(
+    agentId,
+    message,
+    attachments,
+    purpose,
+    modelName,
+    details,
+  );
+  if (onDelta) onDelta(run.response);
+  return {
+    response: run.response,
+    conversationId: run.conversationId ?? '',
+  };
+}
+
+/**
+ * Executes an agent call via the SSE /chat streaming endpoint.
+ * Streaming keeps the connection alive, avoiding gateway 100s timeouts.
+ * Falls back to the blocking /run endpoint if streaming is unavailable.
+ */
+export async function runWithAgentSync(
+  agentId: string,
+  message: string,
+  attachments?: MessageAttachment[],
+  purpose?: TokenPurpose,
+  modelName?: string,
+  details?: string,
+): Promise<RunWithAgentResult> {
+  if (isMftDailyLimitHitThisSession()) {
+    throw new TokenLimitError('Tageslimit fuer KI-Anfragen erreicht. Bitte morgen erneut versuchen.');
+  }
+
   const token = await getValidToken();
   const tenantId = getStoredTenantId();
   if (!tenantId) throw new Error('Kein Tenant ausgewählt. Bitte zuerst einen Tenant wählen.');
 
-  const apiBase = getApiBase();
-  const qp = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : '';
+  const timeoutMs = getAiRequestTimeoutMs();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   let res: Response;
   try {
-    res = await fetch(`${apiBase}/v1/ai/agents/${agentId}/chat${qp}`, {
+    res = await fetchAiWithFallback(`/agents/${agentId}/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
         'MFT-Tenant-Id': tenantId,
-        'api-version': '1.0',
         Accept: 'text/event-stream',
       },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({
+        message,
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
+      }),
       signal: controller.signal,
     });
   } catch (err) {
     clearTimeout(timer);
     if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new Error(`Timeout nach ${TIMEOUT_MS / 1000}s — der Agent antwortet nicht.`);
+      throw new Error(`Timeout nach ${timeoutMs / 1000}s — der Agent antwortet nicht.`);
     }
     throw new Error(`Netzwerkfehler: ${err instanceof Error ? err.message : 'Verbindung fehlgeschlagen'}`);
   }
-
   clearTimeout(timer);
 
   if (!res.ok) {
@@ -856,169 +1029,129 @@ export async function chatWithAgent(
     if (res.status === 401) { removeStored('token'); removeStored('token_expiry'); throw new Error('Token abgelaufen. Bitte erneut einloggen.'); }
     if (res.status === 403) throw new Error('Keine Berechtigung für KI-Anfragen. Prüfe Tenant und Berechtigungen.');
     if (res.status === 404) throw new Error('Agent nicht gefunden. Bitte Agent neu erstellen.');
-    if (res.status === 429 || body.includes('token limit') || body.includes('daily') || body.includes('exceeded')) {
-      notifyTokenLimitReached();
-      throw new TokenLimitError('Tageslimit fuer KI-Anfragen erreicht. Bitte morgen erneut versuchen.');
-    }
-    if (res.status === 503) throw new Error('KI-Service nicht verfügbar. Bitte später erneut versuchen.');
-    throw new Error(`MyForterro API Fehler ${res.status}: ${body.slice(0, 200)}`);
-  }
-
-  // Check if the response is a JSON error instead of an SSE stream
-  const contentType = res.headers.get('content-type') ?? '';
-  if (contentType.includes('application/json')) {
-    const body = await res.text().catch(() => '');
     if (body.includes('token limit') || body.includes('daily') || body.includes('exceeded')) {
       notifyTokenLimitReached();
       throw new TokenLimitError('Tageslimit fuer KI-Anfragen erreicht. Bitte morgen erneut versuchen.');
     }
-    // Try to parse as JSON error
-    try {
-      const data = JSON.parse(body);
-      if (data.error) {
-        const errMsg = typeof data.error === 'string' ? data.error : data.error.message ?? JSON.stringify(data.error);
-        throw new Error(`MyForterro Agent Fehler: ${errMsg}`);
-      }
-    } catch (e) {
-      if (e instanceof TokenLimitError) throw e;
-      if (e instanceof Error && e.message.startsWith('MyForterro')) throw e;
+    if (res.status === 429 || isRateLimitMessage(body)) {
+      throw new RateLimitError(body || 'Zu viele Anfragen in kurzer Zeit — bitte kurz warten und erneut versuchen.');
     }
-    throw new Error(`Unerwartete Antwort vom Agent: ${body.slice(0, 200)}`);
+    if (res.status === 503) throw new Error('KI-Service nicht verfügbar. Bitte später erneut versuchen.');
+    throw new Error(`MyForterro API Fehler ${res.status}: ${body.slice(0, 300)}`);
   }
 
-  if (!res.body) throw new Error('Keine Antwort vom Server.');
+  let responseText = '';
+  let resultConversationId: string | null = null;
+  const contentType = res.headers.get('content-type') ?? '';
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  let resultConversationId = '';
-  let resultMessageId = '';
-  let fullMessage = '';
-  let hasComplete = false;
+  if (contentType.includes('text/event-stream') && res.body) {
+    // Parse SSE stream: accumulate Delta chunks, stop on Complete
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let streamDone = false;
 
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    try {
+      while (!streamDone) {
+        const { value, done } = await reader.read();
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data:')) continue;
-        const json = trimmed.slice(5).trim();
-        if (!json || json === '[DONE]') continue;
-        try {
-          const chunk = JSON.parse(json);
-          // Check for error objects in SSE data — API sends both "error" (lowercase) and "Error" (uppercase)
-          const errValue = chunk.error || chunk.Error;
-          if (errValue) {
-            const errMsg = typeof errValue === 'string' ? errValue : errValue.message ?? JSON.stringify(errValue);
-            if (errMsg.includes('token limit') || errMsg.includes('daily') || errMsg.includes('exceeded')) {
-              notifyTokenLimitReached();
-              throw new TokenLimitError('Tageslimit fuer KI-Anfragen erreicht. Bitte morgen erneut versuchen.');
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue;
+          const jsonStr = line.slice(5).trim();
+          if (!jsonStr || jsonStr === '[DONE]') continue;
+          try {
+            const event = JSON.parse(jsonStr) as {
+                type?: string; $type?: string;
+                message?: string; Message?: string;
+                thinking?: string; Thinking?: string;
+                conversationId?: string; ConversationId?: string;
+                completedAt?: string | null; CompletedAt?: string | null;
+                code?: string; Code?: string;
+            };
+              if (event.conversationId ?? event.ConversationId) {
+                resultConversationId = event.conversationId ?? event.ConversationId ?? null;
+              }
+              const errorCode = event.code ?? event.Code;
+              if (errorCode) throw new Error(`Agent-Fehler: ${event.message ?? event.Message ?? errorCode}`);
+              responseText += event.message ?? event.Message ?? '';
+              if (event.type === 'Complete' || event.$type === 'turn-end' || event.completedAt != null || event.CompletedAt != null) {
+              streamDone = true;
+              break;
             }
-            if (errMsg.includes('Too many connections')) {
-              throw new Error('Zu viele gleichzeitige Anfragen. Bitte kurz warten und erneut versuchen.');
-            }
-            throw new Error(`MyForterro Agent Fehler: ${errMsg}`);
+          } catch (parseErr) {
+            if (parseErr instanceof Error && parseErr.message.startsWith('Agent-Fehler')) throw parseErr;
+            // skip malformed SSE lines
           }
-          // Check for Error-type chunks (not in typed DTO but may come from API)
-          if (chunk.Type === 'Error') {
-            const msg = chunk.Message ?? '';
-            if (msg.includes('token limit') || msg.includes('daily') || msg.includes('exceeded')) {
-              notifyTokenLimitReached();
-              throw new TokenLimitError('Tageslimit fuer KI-Anfragen erreicht. Bitte morgen erneut versuchen.');
-            }
-            throw new Error(`Agent-Fehler: ${msg}`);
-          }
-          const typed = chunk as ChatResponseChunkDto;
-          resultConversationId = typed.ConversationId;
-          resultMessageId = typed.MessageId;
-          if (typed.Type === 'Delta') {
-            fullMessage += typed.Message;
-            onDelta(typed.Message);
-          } else if (typed.Type === 'Complete') {
-            // Complete chunk signals end of stream; message may be empty — use assembled Delta text.
-            if (typed.Message) fullMessage = typed.Message;
-            hasComplete = true;
-          }
-        } catch (parseErr) {
-          // Re-throw TokenLimitError and explicit errors
-          if (parseErr instanceof TokenLimitError) throw parseErr;
-          if (parseErr instanceof Error && parseErr.message.startsWith('MyForterro')) throw parseErr;
-          if (parseErr instanceof Error && parseErr.message.startsWith('Agent-Fehler')) throw parseErr;
-          // Skip malformed SSE lines
         }
       }
+    } finally {
+      reader.cancel().catch(() => undefined);
     }
-  } finally {
-    reader.releaseLock();
+  } else {
+    // Fallback: non-streaming response (e.g. plain JSON from /run)
+    const text = await res.text();
+    const candidate = text.trim();
+    if (candidate.startsWith('{') && candidate.endsWith('}')) {
+      try {
+        const data = JSON.parse(candidate) as { message?: string; conversationId?: string; result?: string };
+        responseText = data.message ?? data.result ?? text;
+        resultConversationId = data.conversationId ?? null;
+      } catch {
+        responseText = text;
+      }
+    } else {
+      responseText = text;
+    }
   }
 
-  if (!hasComplete && !fullMessage) {
-    if (resultConversationId) {
-      throw new EmptyAgentResponseError('Keine Antwort vom Agenten empfangen (Stream vorzeitig beendet).', resultConversationId);
-    }
-    throw new Error('Keine Antwort vom Agenten empfangen (Stream vorzeitig beendet). Bitte erneut versuchen.');
-  }
-  if (!fullMessage) {
-    // hasComplete was true but no delta content — agent returned empty response
-    console.warn('[chatWithAgent] Complete-Chunk empfangen aber kein Text-Inhalt. ConversationId:', resultConversationId);
-    if (resultConversationId) {
-      throw new EmptyAgentResponseError('Leere Antwort vom Agenten.', resultConversationId);
-    }
+  if (!responseText.trim()) {
     throw new Error('Leere Antwort vom Agenten. Bitte erneut versuchen.');
   }
 
-  return { conversationId: resultConversationId, messageId: resultMessageId, fullMessage };
-}
-
-/**
- * Synchronous wrapper around chatWithAgent — collects the full streamed response
- * and returns it as a plain string + conversationId.  Drop-in replacement for
- * chatCompletion() when routing through an agent.
- */
-export async function chatWithAgentSync(
-  agentId: string,
-  message: string,
-  conversationId: string | null,
-  purpose?: TokenPurpose,
-  modelName?: string,
-  details?: string,
-  /** Optional streaming callback — each text delta is passed as it arrives */
-  onDelta?: (text: string) => void,
-): Promise<{ response: string; conversationId: string }> {
-  let result: ChatWithAgentResult;
-  const deltaHandler = onDelta ?? (() => {});
-  try {
-    result = await chatWithAgent(agentId, message, conversationId, deltaHandler);
-  } catch (err) {
-    const isRetryable = (err instanceof EmptyAgentResponseError)
-      || (err instanceof Error && err.message.includes('Zu viele gleichzeitige Anfragen'));
-    if (isRetryable) {
-      const retryConvId = (err instanceof EmptyAgentResponseError) ? err.conversationId : conversationId;
-      console.warn(`[chatWithAgentSync] ${(err as Error).message} — automatischer Retry in 3s (ConvId: ${retryConvId})...`);
-      await new Promise((r) => setTimeout(r, 3000));
-      result = await chatWithAgent(agentId, message, retryConvId, deltaHandler);
-    } else {
-      throw err;
-    }
-  }
-  // SSE streams don't return token usage — estimate from message lengths (~3 chars/token for German)
-  const estPrompt = Math.ceil(message.length / 3);
-  const estCompletion = Math.ceil(result.fullMessage.length / 3);
+  const promptTokens = countTokens(message);
+  const completionTokens = countTokens(responseText);
   recordTokenUsage({
     model: modelName || 'agent',
-    promptTokens: estPrompt,
-    completionTokens: estCompletion,
-    totalTokens: estPrompt + estCompletion,
+    promptTokens,
+    completionTokens,
+    totalTokens: promptTokens + completionTokens,
     purpose: purpose ?? 'unknown',
     ...(details && { details }),
   });
-  return { response: result.fullMessage, conversationId: result.conversationId };
+
+  return { response: responseText.trim(), conversationId: resultConversationId };
+}
+
+/**
+ * Fetches message attachment content through the AI API attachment endpoint.
+ * V2 can return inline base64 payloads or URL references.
+ */
+export async function fetchConversationAttachment(
+  attachmentId: string,
+): Promise<ConversationAttachmentContent> {
+  const token = await getValidToken();
+  const tenantId = getStoredTenantId();
+  if (!tenantId) throw new Error('Kein Tenant ausgewählt. Bitte zuerst einen Tenant wählen.');
+
+  const res = await fetchAiWithFallback(`/attachments/${encodeURIComponent(attachmentId)}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'MFT-Tenant-Id': tenantId,
+    },
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Attachment-Abruf fehlgeschlagen (${res.status}): ${body.slice(0, 200)}`);
+  }
+
+  return res.json() as Promise<ConversationAttachmentContent>;
 }
 
 // ── Chat Completion ───────────────────────────────────────────
@@ -1032,6 +1165,11 @@ export async function chatCompletion(
   purpose?: TokenPurpose,
   details?: string,
 ): Promise<string> {
+  // Short-circuit on known daily-limit state (see chatWithAgent for rationale)
+  if (isMftDailyLimitHitThisSession()) {
+    throw new TokenLimitError('Tageslimit fuer KI-Anfragen erreicht. Bitte morgen erneut versuchen.');
+  }
+
   if (!model || !model.trim()) {
     throw new Error('Kein Modell ausgewählt. Bitte zuerst ein Modell in den Einstellungen wählen.');
   }
@@ -1042,27 +1180,26 @@ export async function chatCompletion(
     throw new Error('Kein Tenant ausgewaehlt. Bitte zuerst einen Tenant waehlen.');
   }
 
-  const apiBase = getApiBase();
+  const timeoutMs = getAiRequestTimeoutMs();
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   let res: Response;
   try {
-    res = await fetch(`${apiBase}/v1/ai/inference/openai/chat/completions`, {
+    res = await fetchAiWithFallback('/inference/openai/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
         'MFT-Tenant-Id': tenantId,
-        'api-version': '1.0',
       },
-      body: JSON.stringify({ model, messages, stream: false, temperature: getTemperature() }),
+      body: JSON.stringify({ model, messages, stream: false }),
       signal: controller.signal,
     });
   } catch (err) {
     clearTimeout(timer);
     if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new Error(`Timeout nach ${TIMEOUT_MS / 1000}s — das Modell "${model}" antwortet nicht.`);
+      throw new Error(`Timeout nach ${timeoutMs / 1000}s — das Modell "${model}" antwortet nicht.`);
     }
     throw new Error(`Netzwerkfehler: ${err instanceof Error ? err.message : 'Verbindung fehlgeschlagen'}`);
   } finally {
@@ -1080,9 +1217,12 @@ export async function chatCompletion(
     if (res.status === 403) {
       throw new Error('Keine Berechtigung fuer KI-Anfragen. Pruefe Tenant und Berechtigungen.');
     }
-    if (res.status === 429 || body.includes('token limit')) {
+    if (body.includes('token limit') || body.includes('daily') || body.includes('exceeded')) {
       notifyTokenLimitReached();
       throw new TokenLimitError('Tageslimit fuer KI-Anfragen erreicht. Bitte morgen erneut versuchen.');
+    }
+    if (res.status === 429 || isRateLimitMessage(body)) {
+      throw new RateLimitError(body || 'Zu viele Anfragen in kurzer Zeit — bitte kurz warten und erneut versuchen.');
     }
     if (res.status === 503) {
       throw new Error('KI-Service nicht verfuegbar. Bitte spaeter erneut versuchen.');
@@ -1096,6 +1236,9 @@ export async function chatCompletion(
     if (data.error.message?.includes('token limit') || data.error.message?.includes('daily') ) {
       notifyTokenLimitReached();
       throw new TokenLimitError('Tageslimit fuer KI-Anfragen erreicht. Bitte morgen erneut versuchen.');
+    }
+    if (data.error.message && isRateLimitMessage(data.error.message)) {
+      throw new RateLimitError(data.error.message);
     }
     throw new Error(`MyForterro: ${data.error.message}`);
   }
@@ -1116,4 +1259,239 @@ export async function chatCompletion(
     throw new Error('Leere Antwort vom Modell. Bitte erneut versuchen.');
   }
   return content;
+}
+
+// ── Server-based per-call reconciliation ──────────────────────
+
+// ── Consumption Report ────────────────────────────────────────
+
+export interface ConsumptionTotals {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface DailyConsumption extends ConsumptionTotals {
+  /** ISO date string (YYYY-MM-DD) */
+  date: string;
+}
+
+export interface TenantConsumptionReport {
+  tenantId: string;
+  from: string;
+  until: string;
+  total: ConsumptionTotals;
+  dailyConsumptions: DailyConsumption[];
+}
+
+/** Raw DTO shape returned by /v1/admin/tenants/{tenantId}/consumption. */
+interface RawConsumptionResponse {
+  tenantId: string;
+  filters: { from: string; until: string };
+  moduleConsumptionReports: Array<{
+    moduleName?: string;
+    chatCompletionConsumptionReportDto?: {
+      total?: ConsumptionTotals;
+      dailyConsumptions?: DailyConsumption[];
+    };
+  }>;
+}
+
+const CONSUMPTION_UNAVAILABLE_UNTIL_KEY = `${STORAGE_PREFIX}consumption_unavailable_until`;
+const CONSUMPTION_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
+
+function getConsumptionUnavailableUntil(): number {
+  try {
+    const raw = sessionStorage.getItem(CONSUMPTION_UNAVAILABLE_UNTIL_KEY);
+    const parsed = raw ? parseInt(raw, 10) : 0;
+    return Number.isFinite(parsed) ? parsed : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function markConsumptionUnavailableNow(): void {
+  try {
+    sessionStorage.setItem(
+      CONSUMPTION_UNAVAILABLE_UNTIL_KEY,
+      String(Date.now() + CONSUMPTION_RETRY_COOLDOWN_MS),
+    );
+  } catch {
+    // ignore
+  }
+}
+
+function clearConsumptionUnavailableFlag(): void {
+  try {
+    sessionStorage.removeItem(CONSUMPTION_UNAVAILABLE_UNTIL_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Fetch the server-side token consumption report for the current tenant.
+ *
+ * Requires tenant-admin privileges. Used to reconcile locally estimated token
+ * counts (recorded via {@link recordTokenUsage}) with authoritative server totals.
+ *
+ * @param from - ISO-8601 start datetime (inclusive)
+ * @param until - ISO-8601 end datetime (exclusive)
+ * @returns Flattened consumption report for the AI module, or `null` if the
+ *          user is not permitted (403) or no AI consumption exists in the range.
+ */
+export async function fetchTenantConsumption(
+  from: string,
+  until: string,
+): Promise<TenantConsumptionReport | null> {
+  if (Date.now() < getConsumptionUnavailableUntil()) {
+    return null;
+  }
+
+  const token = await getValidToken();
+  const tenantId = getStoredTenantId();
+  if (!tenantId) return null;
+
+  const toConsumptionDate = (value: string): string => {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toISOString().slice(0, 10);
+  };
+  const fromDate = toConsumptionDate(from);
+  const untilDate = toConsumptionDate(until);
+
+  // V2-first consumption report.
+  try {
+    const resV2 = await fetchAiWithFallback(`/consumption?From=${encodeURIComponent(fromDate)}&Until=${encodeURIComponent(untilDate)}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'MFT-Tenant-Id': tenantId,
+      },
+    });
+    if (resV2.ok) {
+      clearConsumptionUnavailableFlag();
+      const data = await resV2.json() as {
+        inferenceConsumptionReport?: {
+          total?: ConsumptionTotals;
+          dailyConsumptions?: DailyConsumption[];
+        };
+      };
+      const report = data.inferenceConsumptionReport;
+      if (report) {
+        return {
+          tenantId,
+          from,
+          until,
+          total: report.total ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          dailyConsumptions: report.dailyConsumptions ?? [],
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('[fetchTenantConsumption] V2 consumption failed:', err);
+  }
+
+  // Legacy fallback for deployments that still expose admin consumption.
+  const apiBase = getApiBase();
+  const legacyUrl = `${apiBase}/v1/admin/tenants/${tenantId}/consumption?From=${encodeURIComponent(fromDate)}&Until=${encodeURIComponent(untilDate)}`;
+  let legacyRes: Response;
+  try {
+    legacyRes = await fetch(legacyUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'MFT-Tenant-Id': tenantId,
+        'api-version': '1.0',
+      },
+    });
+  } catch (err) {
+    console.warn('[fetchTenantConsumption] Legacy consumption failed:', err);
+    return null;
+  }
+
+  if (legacyRes.status === 403 || legacyRes.status === 401) {
+    markConsumptionUnavailableNow();
+    return null;
+  }
+  if (!legacyRes.ok) {
+    markConsumptionUnavailableNow();
+    return null;
+  }
+
+  const data: RawConsumptionResponse = await legacyRes.json();
+  const aiModule = data.moduleConsumptionReports?.find((m) => m.chatCompletionConsumptionReportDto);
+  const ai = aiModule?.chatCompletionConsumptionReportDto;
+  if (!ai) {
+    markConsumptionUnavailableNow();
+    return null;
+  }
+
+  clearConsumptionUnavailableFlag();
+
+  return {
+    tenantId: data.tenantId,
+    from: data.filters.from,
+    until: data.filters.until,
+    total: ai.total ?? { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    dailyConsumptions: ai.dailyConsumptions ?? [],
+  };
+}
+
+// ── Tenant AI Configuration (daily limit) ─────────────────────
+
+export interface TenantAiConfiguration {
+  tenantId: string;
+  /**
+   * Tenant-specific daily token limit.
+   * - A positive integer → tenant has a custom limit
+   * - `-1` → tenant has no limit (unlimited)
+   * - `null` → no tenant override; the platform-wide default applies (not
+   *   exposed by the API, so callers fall back to a hardcoded value).
+   */
+  maxDailyTokens: number | null;
+}
+
+/**
+ * Fetch the current tenant's AI configuration, primarily to learn its
+ * daily token limit (`maxDailyTokens`). Returns null on network / 403 /
+ * malformed-response errors so callers can fall back to the hardcoded default.
+ */
+export async function fetchTenantAiConfiguration(): Promise<TenantAiConfiguration | null> {
+  const token = await getValidToken();
+  const tenantId = getStoredTenantId();
+  if (!tenantId) return null;
+
+  let res: Response;
+  try {
+    res = await fetchAiWithFallback('/configuration', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'MFT-Tenant-Id': tenantId,
+      },
+    });
+  } catch (err) {
+    console.warn('[fetchTenantAiConfiguration] Netzwerkfehler:', err);
+    return null;
+  }
+
+  if (!res.ok) return null;
+  try {
+    const data = await res.json() as { tenantId: string; maxDailyTokens?: number | null };
+    return {
+      tenantId: data.tenantId,
+      maxDailyTokens: data.maxDailyTokens ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Convenience wrapper: fetch today's consumption (UTC midnight → tomorrow UTC midnight).
+ */
+export async function fetchTodaysConsumption(): Promise<TenantConsumptionReport | null> {
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return fetchTenantConsumption(start.toISOString(), end.toISOString());
 }

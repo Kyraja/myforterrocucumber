@@ -17,6 +17,7 @@
  */
 
 import type { FeatureInput, TableDef, StepAction } from '../types/gherkin';
+import { stepTextFromAction } from './actionText';
 
 // Common abas ERP synonyms for fuzzy matching (AI name → possible table names)
 const ABAS_SYNONYMS: Record<string, string[]> = {
@@ -202,16 +203,16 @@ function resolveAction(
 
 /**
  * Updates the step text to replace the name-based table ref with the numeric ref.
- * Only replaces in known patterns to avoid false matches.
+ * Delegates to the canonical {@link stepTextFromAction} for editor-open variants
+ * (preserves the `for record from editor "..."` chain form) and falls back to
+ * `originalText` for step types that resolveTableRefs doesn't rewrite.
  */
 function stepTextFromResolvedAction(action: StepAction, originalText: string): string {
   switch (action.type) {
     case 'editorOeffnen':
-      return `I open an editor "${action.editorName}" from table "${action.tableRef}" with command "${action.command}" for record "${action.record}"`;
     case 'editorOeffnenSuche':
-      return `I open an editor "${action.editorName}" from table "${action.tableRef}" with command "${action.command}" for search criteria "${action.searchCriteria}"`;
     case 'editorOeffnenMenue':
-      return `I open an editor "${action.editorName}" from table "${action.tableRef}" with command "${action.command}" for record "${action.record}" and menu choice "${action.menuChoice}"`;
+      return stepTextFromAction(action).text;
     case 'infosystemOeffnen':
       return `I open the infosystem "${action.infosystemRef}"`;
     default:

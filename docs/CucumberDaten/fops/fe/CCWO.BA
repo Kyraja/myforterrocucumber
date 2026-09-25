@@ -1,0 +1,128 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : CCWO.BA
+.. Author         : jbraun
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  :
+..
+..*****************************************************************************
+.set trans -
+.type text     xtkomm      ? _F|defined(U|xtkomm)
+.type integer  xifbuchung  ? _F|defined(U|xifbuchung)
+.type integer  xiretoure   ? _F|defined(U|xiretoure)
+.type integer  xibetrieb   ? _F|defined(U|xibetrieb)
+.type integer  xistorno    ? _F|defined(U|xistorno)
+.type bool     xbreterlaub ? _F|defined(U|xbreterlaub)
+.type bool     xbstorno    ? _F|defined(U|xbstorno)
+..
+.continue OBJEKT    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "objekt"
+.continue MATERIAL  ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tfbu"
+.continue RUECKBAU  ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "burueck"
+.continue STORNO    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bustorno"
+.continue ZEIT      ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "buzeit"
+.continue END
+..
+!ZEIT: TeitrÅckmeldung / TimeEntry
+.continue END ? F|empty(M|buzeit)
+.continue ABLZEIT ? M|ablage
+.formula U|xtkomm = "(TimeEntry)"+ " ? barmex=" + M|rueckmeldung^nummer
+.command -wait 'U|xtkomm'
+.continue END
+..
+!ABLZEIT
+.formula U|xtkomm = "(TimeEntry)"+ " ? barmex=+" + M|rueckmeldung^nummer
+.command -wait 'U|xtkomm'
+.continue END
+..
+!STORNO
+.continue END ? F|empty(M|bustorno)
+.copy U|xbstorno = G|TRUE 
+.assign U|xistorno = 7
+.assign U|xibetrieb = 9
+.continue STFEHLER    ? _F|cmdpermitted(U|xibetrieb, U|xistorno)
+.continue SETSTORNO
+..
+!STFEHLER
+.copy U|xbstorno = G|FALSE
+.continue FEHLER2 ? _U|xbstorno
+..
+!SETSTORNO
+.formula U|xtkomm = "<(Workorder)>"+M|rueckmeldung^id+"<(Reversal)>"  ? F|empty(M|rueckmeldung^bdeobjekt)
+.. Wenn RÅckmeldung aus BDE enstanden ist, muss das BDE-Objekt storniert werden
+.. Ausnahme: Betriebsauftrag ist schon abgeschlossen
+.formula U|xtkomm = "<(PDC)>"+M|rueckmeldung^bdeobjekt^id+"<(Reversal)>"  ? _F|empty(M|rueckmeldung^bdeobjekt) & _M|ablage
+.formula U|xtkomm = "<(Workorder)>"+M|rueckmeldung^id+"<(Reversal)>"      ? _F|empty(M|rueckmeldung^bdeobjekt) &  M|ablage     
+.command -wait 'U|xtkomm'
+.continue END
+..
+!RUECKBAU
+.continue END ? F|empty(M|burueck)
+.copy U|xbreterlaub = G|TRUE
+.assign U|xiretoure = 22
+.assign U|xibetrieb = 9
+.continue ERLFEHLER    ? _F|cmdpermitted(U|xibetrieb, U|xiretoure)
+.continue RET 
+..
+!ERLFEHLER
+.copy U|xbreterlaub = G|FALSE
+.continue FEHLER1 ? _U|xbreterlaub
+..
+!RET
+.continue COPY ? M|ablage ; F|empty(M|tba) 
+.formula U|xtkomm = "<(Workorder)>"+M|rueckmeldung^nummer+"<(Return)>"
+.command -wait 'U|xtkomm'
+.continue END
+..
+!COPY
+.formula U|xtkomm = "<(Workorder)>"+M|rueckmeldung^id+"<(Copy)>"
+.command -wait 'U|xtkomm'
+.continue END
+..
+!OBJEKT
+.continue RM ? M|objekt = M|icon1z 
+.continue LJ ? M|objekt = M|icon4z
+..
+!RM
+.formula U|xtkomm = "<(Workorder)>"+M|rueckmeldung^id+";<(View)>,(CompletionConfirmations)"
+.command -parallel 'U|xtkomm'
+.continue END
+..
+!LJ
+.formula U|xtkomm = "<(Journal)>"+M|journal^id+"<(View)>"
+.command -parallel 'U|xtkomm'
+.continue END
+..
+!MATERIAL
+.continue ERROR  ?  F|empty(M|tfbu) 
+..
+.. fbuchung
+.assign U|xifbuchung = 35
+.continue FEHLER      ? _F|tcmdpermitted(U|xifbuchung) 
+.formula U|xtkomm = "(WOIssue)"+ " ? auftrag=" + M|tba^id +"| [autoclose]=1"
+.command -parallel 'U|xtkomm'
+.continue
+..
+!ERROR
+.continue ABGELEGT  ?   _F|empty(M|rueckmeldung)
+.error Darf nicht manuell gebucht werden.
+.end 1
+..
+!ABGELEGT
+.error Betriebsauftrag ist abgelegt. 
+.end 1
+..
+!FEHLER
+.error Eine Materialentnahme ist nicht erlaubt!
+.end 1
+..
+!FEHLER1
+.error RÅckbau nicht erlaubt!
+.end 1
+..
+!FEHLER2
+.error Storno nicht erlaubt!
+.end 1
+..
+!END
+.continue

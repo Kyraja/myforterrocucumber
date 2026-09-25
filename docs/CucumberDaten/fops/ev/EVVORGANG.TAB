@@ -1,0 +1,1316 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..
+..  FOP-Name       : EVVORGANG.TAB
+..  Datum          : 11.10.04
+..  Version        : 2004
+..  Autor          : cl
+..  Verantwortlich : cl
+..  Kontrolle      : tiwe
+..
+..  Funktion       : fÅllt Tabelle des IS EVVORGANG fÅr alle VorgÑnge im
+..                   Ein- und Verkauf
+..
+..  Pufferbelegung : H| --> Einkauf/Verkauf
+..                   0| --> Kunde aus Verkauf (ev/ADRESSE3)
+..                   1| --> Artikel
+..                   2| --> Werkstoff
+..                   3| --> Betreuer          (ev/DRUCK.BN)
+..                   4| --> Betriebsdatensatz (st/BKOPF.ME)
+..                   5| --> firma
+..                   6| --> edi
+..                   7| --> Versandplanung
+..
+..  Functionality  : fills Infosystem EVVORGANG for all transactions
+..                   in purchasing and sales
+..
+..  Buffer         : H| --> Purchasing/Sales
+..                   0| --> Customer Sales    (ev/ADRESSE3)
+..                   1| --> Product
+..                   2| --> Material
+..                   3| --> In-house contact  (ev/DRUCK.BN)
+..                   4| --> Company data      (st/BKOPF.ME)
+..                   5| --> firma
+..                   6| --> edi
+..
+..  Ablauf         :
+..  Program flow   :
+..
+..  includes       :
+..
+..  include ev/GRWECHSEL
+..  include ev/ADRESSE3
+..  include ev/EVVORGANG.VAR
+..  include ev/EVVORGANG.ZUGFERDKOPF
+..  include ev/EVVORGANG.ZUGFERDTABELLE
+..  include ev/EVVORGANG.ZUGFERDSUMME
+..
+..*****************************************************************************
+.set trans -
+.type bool      xmehr          ? _F|defined(U|xmehr)
+.type integer   xend           ? _F|defined(U|xend)
+.type text      xtlief         ? _F|defined(U|xtlief)
+.type text      xtlief1        ? _F|defined(U|xtlief1)
+.type text      xtkg           ? _F|defined(U|xtkg)
+.type bool      xbdel          ? _F|defined(U|xbdel)
+.type text      xtvbez         ? _F|defined(U|xtvbez)
+.type text      xta            ? _F|defined(U|xta)
+.type text      xtb            ? _F|defined(U|xtb)
+.type text      xtc            ? _F|defined(U|xtc)
+.type text      xtd            ? _F|defined(U|xtd)
+.type text      xtw            ? _F|defined(U|xtw)
+.type text      xtx            ? _F|defined(U|xtx)
+.type text      xtz            ? _F|defined(U|xtz)
+.type text      xt1            ? _F|defined(U|xt1)
+.type text      xt2            ? _F|defined(U|xt2)
+.type text      xt3            ? _F|defined(U|xt3)
+.type text      xt4            ? _F|defined(U|xt4)
+.type text      xt5            ? _F|defined(U|xt5)
+.type text      xt6            ? _F|defined(U|xt6)
+.type text      xt7            ? _F|defined(U|xt7)
+.type text      xt8            ? _F|defined(U|xt8)
+.type text      xt9            ? _F|defined(U|xt9)
+.type integer   xwo            ? _F|defined(U|xwo)
+.type text      xtext          ? _F|defined(U|xtext)
+.type text      xsttext        ? _F|defined(U|xsttext)
+.type text      xtexta         ? _F|defined(U|xtexta)
+.type text      xtext2         ? _F|defined(U|xtext2)
+.type text      xtext3         ? _F|defined(U|xtext3)
+.type text      xtext4         ? _F|defined(U|xtext4)
+.type text      xtext5         ? _F|defined(U|xtext5)
+.type text      xtyp           ? _F|defined(U|xtyp)
+.type text      xtpreis        ? _F|defined(U|xtpreis)
+.type M11.4     xumfaktor      ? _F|defined(U|xumfaktor)
+.type text      xtwbez         ? _F|defined(U|xtwbez)
+.type text      xdel           ? _F|defined(U|xdel)
+.type integer   xi             ? _F|defined(U|xi)
+.type text      xbasispreis    ? _F|defined(U|xbasispreis)
+.type text      xnot           ? _F|defined(U|xnot)
+.type text      xdzu           ? _F|defined(U|xdzu)
+.type text      xddat          ? _F|defined(U|xddat)
+.type text      xdmat          ? _F|defined(U|xdmat)
+.type text      xdland         ? _F|defined(U|xdland)
+.type integer   xndel          ? _F|defined(U|xndel)
+.type integer   xbuart         ? _F|defined(U|xbuart)
+.type text      xtzuschlag     ? _F|defined(U|xtzuschlag)
+.type real      xueb           ? _F|defined(U|xueb)
+.type real      xvueb          ? _F|defined(U|xvueb)
+.type MN11.3    xlsueb         ? _F|defined(U|xlsueb)
+.type MN11.3    xvlsueb        ? _F|defined(U|xvlsueb)
+.type real      xrepw          ? _F|defined(U|xrepw)
+.type R13.2     xnettosumme    ? _F|defined(U|xnettosumme)
+.type bool      xbmzueb        ? _F|defined(U|xbmzueb)
+.type MP6.3     xgesgew        ? _F|defined(U|xgesgew)
+.type MP6.3     xnettogew      ? _F|defined(U|xnettogew)
+.type ARTR51000 xmge           ? _F|defined(U|xmge)
+.type text      xtbtext        ? _F|defined(U|xtbtext)
+.type text      xtextkl        ? _F|defined(U|xtextkl)
+.type bool      xbeuro         ? _F|defined(U|xbeuro)
+.type bool      xbvsperre      ? _F|defined(U|xbvsperre)
+.type text      xtptext        ? _F|defined(U|xtptext)
+.type bool      xbinres        ? _F|defined(U|xbinres)
+.type bool      xbefteil       ? _F|defined(U|xbefteil)
+.type bool      xbzbedv        ? _F|defined(U|xbzbedv)
+.type text      xtkom          ? _F|defined(U|xtkom)
+.type text      xid            ? _F|defined(U|xid)
+.type GL60      xt1origmerk    ? _F|defined(U|xt1origmerk)
+.type GL60      xt2origmerk    ? _F|defined(U|xt2origmerk)
+.type bool      xbvardr        ? _F|defined(U|xbvardr)
+.type integer   xseite         ? _F|defined(U|xseite)
+.type bool      xbdeffspr      ? _F|defined(U|xbdeffspr)
+.type bool      xbbeist        ? _F|defined(U|xbbeist)
+.type M7.3      xlgbest        ? _F|defined(U|xlgbest)
+.type DVM2      xbeschr        ? _F|defined(U|xbeschr)
+.type text      xtherkunft     ? _F|defined(U|xtherkunft)
+.type text      xtasap         ? _F|defined(U|xtasap)
+.type bool      xgrwzeile      ? _F|defined(U|xgrwzeile)
+.type text      xtbeipack      ? _F|defined(U|xtbeipack)
+.type DVM2      xtmpfile       ? _F|defined(U|xtmpfile)
+.type text      xtsys          ? _F|defined(U|xtsys)
+.type text      xtout          ? _F|defined(U|xtout)
+.type text      xterr          ? _F|defined(U|xterr)
+.type PS12:3    x1             ? _F|defined(U|x1)
+.type integer   xbgruppe       ? _F|defined(U|xbgruppe)
+.type text      xttmpdat       ? _F|defined(U|xttmpdat)
+.type integer   xanz           ? _F|defined(U|xanz)
+.type integer   xtzeilen       ? _F|defined(U|xtzeilen)
+.type text      xtfakturasel   ? _F|defined(U|xtfakturasel)
+.type bool      xbinkopfstschl ? _F|defined(U|xbinkopfstschl)
+.type PS12:3    xsthinw        ? _F|defined(U|xsthinw)
+.type text      xselect        ? _F|defined(U|xselect)
+.type bool      xdruckftext    ? _F|defined(U|xdruckftext)
+.type bool      xmerkanzahlung ? _F|defined(U|xmerkanzahlung)
+.type bool      xbhatartikel   ? _F|defined(U|xbhatartikel)
+.type text      xmerkartikelpos ? _F|defined(U|xmerkartikelpos)
+..
+.copy U|xmerkanzahlung = G|FALSE
+.. Varianten drucken ja / nein -> default ist nein
+..   .formel T|xbvardr = T|TRUE
+.copy U|xbvardr = G|FALSE
+..
+.copy M|bkdel   = G|FALSE
+..**EURO**
+.copy U|xbeuro  = G|FALSE
+.copy U|xbeuro  = G|TRUE  ? _F|empty(G|ninland) & (G|eurokurs>0.00) & (land=G|ainland)
+..**EURO**
+..
+.file -tempname U|xtout
+.file -tempname U|xterr
+.file -tempname U|xtmpfile
+.file -tempname U|xttmpdat
+..
+.output new 'U|xtmpfile'
+.input "DATEI.F"
+.output
+..
+.input "is/TABLEEREN"
+..
+.formula M|null1 = 0.0
+.copy M|bmitueb = G|TRUE
+.formula M|stringmat = ""
+.copy U|xbdel = G|FALSE
+.formula U|xueb = 0.0
+.formula U|xlsueb = 0.0
+.formula U|xnettosumme = 0.0
+.formula U|xvueb = 0.0
+.formula U|xvlsueb = 0.0
+..
+.assign M|spr = F|value(H|spr, "AS72")
+.assign P|spr = M|spr        ? _P|sprfoschutz
+.copy P|sprmaske = G|TRUE
+.assign P|spr = G|bsprache   ? M|bkommliste & _P|sprfoschutz
+..
+.continue START              ? F|empty(H|fktaplan)
+.copy M|fakturaplan = H|fktaplan
+.add M|fakturaplan
+.text M|faktura 'P|spr' Fakturaplan
+.formula M|textfaktura = D|name
+.formula M|textfaktura = 'D|name.P|ksi'
+.add
+.formula U|xtfakturasel = "$,,id="+'H|fktaplan^id'+";reart=(83);@gruppe=3;@zeilen=ja;@autostart=ja;@richtung=rÅckwÑrts"
+.load 9 billingplan 'U|xtfakturasel'
+.formula M|firech = 0    ? _G|mehr
+.continue  KEINERECH     ? _G|mehr
+.load 9 line 
+.formula M|firech = 0    ? _G|mehr
+.continue  KEINERECH     ? _G|mehr
+.formula M|firech = 1
+..
+!KEINERECH
+.formula M|fakturadruck = 0
+.formula M|fakturadruck = 1 ? H|fktaplandruck
+..
+!START
+.formula M|ibanbetr = F|sysinfo(10)^iban
+.formula M|uebertr = H|uebertr
+.formula M|steunr = H|steunr ? _F|empty(H|steunr)
+.formula M|ustid = H|ustidfa ? _F|empty(H|ustidfa)
+.formula M|vtyp = H|typ
+.assign M|vtypa = H|typa
+.assign M|stornopartnervorg = H|stornopartnervorg
+.formula M|bbrutto = H|brutto
+.copy M|sumnetto = H|sumnetto
+.copy M|sumbrutto = H|sumbrutto
+.formula M|prg = H|prg
+.copy M|fakt = G|FALSE
+.copy M|fakt = H|fakt  ? F|defined(H|fakt) & H|typ = G|reko
+.formula U|xsthinw = ""
+.copy U|xsthinw = H|sthinw
+.copy M|sthinw = U|xsthinw
+.formula M|kopien = H|kopien
+.formula P|anzahl = H|kopien
+.formula M|zbed1 = ""
+.formula M|zbedvert = ""
+.formula M|zbedschl = ""
+.formula M|anlagen = ""
+.formula M|ebeleg = H|nummer
+.formula M|adresse = H|adresse
+.formula M|adresse2 = H|adresse2
+.copy M|vzweck = H|vzweck
+.copy U|xbzbedv = G|FALSE
+.copy M|reanzpossteuer = H|reanzpossteuer 
+..
+.. 5 Rechnung
+.continue VGRE ? H|typ = G|reko
+.. 2 Angebot ; 1 Rahmenauftrag
+.continue VGAN ? H|typ = G|anko ; H|typ = G|rako
+.. 36 Chance
+.continue VGAN ? H|typ = G|chko
+.. 33 Serviceangebot
+.continue VGAN ? H|typ = G|snko
+.. 3 Auftrag / Bestellung
+.continue VGAU ? H|typ = G|abko
+.. 34 Serviceauftrag
+.continue VGAU ? H|typ = G|sbko
+.. 35 Reparaturauftrag
+.continue VGAU ? H|typ = G|srko
+.. 37 Kostenvoranschlag
+.continue VGAU ? H|typ = G|kvko
+.. 4 Lieferschein
+.continue VGLS ? H|typ = G|liko
+.. 31 Webauftrag
+.continue VGAU ? H|typ = G|wako
+..
+!VGLS: Lieferschein Verkauf / delivery note: sale
+.continue EVGLS ? M|ekvk = 4
+..
+.formula M|frbez = ""
+.formula M|frbez = H|kunde^frbez       ? H|kunde^gruppe = 1
+.formula M|frbez = H|kunde^firma^frbez ? H|kunde^gruppe = 2
+..
+.. GeschÑftspartnerA: Anschrift Versand
+.assign M|kunde = H|kunde
+.. GeschÑftspartnerC: Anschrift Rechnung (fehlt)
+.assign M|kunde2 = H|reempf
+.. GeschÑftspartnerB: Anschrift
+.assign M|kunde3 = H|warenempf
+..
+.continue LSSPR
+..
+!EVGLS: Lieferschein Einkauf / delivery note: purchasing
+.formula M|anlagen = H|anlagen
+.formula M|ebeleg = H|ebeleg          ? _F|empty(H|ebeleg) 
+.formula M|ebeleg = H|nummer          ?  F|equals(H|lsart, "(CancelationReturnPackingSlip)") ; F|equals(H|lsart, "(ReturnPackingSlip)") ; F|equals(H|lsart, "(CanceledReturnPackingSlip)")
+.formula M|frbez = ""
+.formula M|frbez = H|lief^frbez       ? H|lief^gruppe = 1
+.formula M|frbez = H|lief^firma^frbez ? H|lief^gruppe = 2
+.assign M|kunde = H|lief
+.assign M|kunde2 = H|resteller
+.assign M|kunde3 = ""
+..
+!LSSPR: Lieferschein-K-Sprache / Correspondence language: delivery note
+..
+.. der fehlende Rechnungskunde wird hier geholt
+.input "ev/ADRESSE3"            ? M|ekvk = 3
+..
+.text U|xta 'P|spr'   Lieferschein
+.. (ReturnPackingSlip) RÅcklieferschein
+.text U|xtb 'P|spr'   RÅcksendebestÑtigung                   ? M|ekvk = 3 & F|equals(H|lsart, "(ReturnPackingSlip)")
+.text U|xtb 'P|spr'   RÅcklieferschein                       ? M|ekvk = 4 & F|equals(H|lsart, "(ReturnPackingSlip)")
+.. (CancelationReturnPackingSlip) Storno-RÅcklieferschein
+.text U|xtc 'P|spr'   Storno zu RÅcksendebestÑtigung Nr.     ? M|ekvk = 3 & F|equals(H|lsart, "(CancelationReturnPackingSlip)")
+.text U|xtc 'P|spr'   Storno zu RÅcklieferschein Nr.         ? M|ekvk = 4 & F|equals(H|lsart, "(CancelationReturnPackingSlip)")
+.. (PackingSlipReversal) Storno-Lieferschein fÅr EK und VK
+.text U|xtc 'P|spr'   Storno zu Lieferschein Nr.             ? F|equals(H|lsart, "(PackingSlipReversal)")
+.. (CanceledReturnPackingSlip) Stornierter RÅcklieferschein
+.text U|xtd 'P|spr'   RÅcksendebestÑtigung                   ? M|ekvk = 3 & F|equals(H|lsart, "(CanceledReturnPackingSlip)")
+.text U|xtd 'P|spr'   RÅcklieferschein                       ? M|ekvk = 4 & F|equals(H|lsart, "(CanceledReturnPackingSlip)")
+..
+.text U|xta 'P|spr' Kundenanlieferung                        ? M|ekvk = 3 & (F|equals(H|lsart, "(CustomerDelivery)") ; F|equals(H|lsart, "(CanceledCustomerDelivery)"))
+.text U|xtc 'P|spr' Storno zu Kundenanlieferung Nr.          ? M|ekvk = 3 & F|equals(H|lsart, "(CancelationCustomerDelivery)")
+..
+.. RÅcklieferschein
+.formula U|xta = U|xtb                                      ? F|equals(H|lsart, "(ReturnPackingSlip)")
+.. Storno-RÅcklieferschein oder Storno-Lieferschein
+.formula U|xta = U|xtc + " " + 'M|stornopartnervorg^nummer' ? F|equals(H|lsart, "(CancelationCustomerDelivery)") ; F|equals(H|lsart, "(PackingSlipReversal)") ; F|equals(H|lsart, "(CancelationReturnPackingSlip)")
+.. Stornierter RÅcklieferschein
+.formula U|xta = U|xtd                                      ? F|equals(H|lsart, "(CanceledReturnPackingSlip)")
+..
+.continue BUART
+..
+!VGRE: Rechnung Verkauf / invoice: sale
+.copy U|xbzbedv  = G|FALSE
+.copy M|zbed1 = H|zbed
+.copy M|zbedvert = H|zbedvert
+.continue EVGRE                   ? M|ekvk = 4
+..
+.formula M|frbez = ""
+.formula M|frbez = H|kunde^frbez       ? H|kunde^gruppe = 1
+.formula M|frbez = H|kunde^firma^frbez ? H|kunde^gruppe = 2
+..
+.. GeschÑftspartnerA: Anschrift Rechnung
+.assign M|kunde = H|reempf
+.. Name des Rechnungskunde in eingetragener Drucksprache
+.add H|reempf  
+.formula M|kundename = 'D|name.P|ksi'
+.add
+.. GeschÑftspartnerC: Anschrift (fehlt)
+.assign M|kunde2 = H|kunde
+.. GeschÑftspartnerB: Anschrift Versand
+.assign M|kunde3 = H|warenempf
+.. Umsatzsteuer-Identifikationsnummer des RechnungsempfÑngers
+.formula M|kustid = H|rechnustid ? F|equals(H|stlaart, "(Domestic)") & _F|empty(H|rechnustid)
+..
+.continue NOZUGFERD ? H|ktyp <> G|reko
+.continue NOZUGFERD ? _F|sysinfo(18)^zugferd
+.formula U|xselect = F|formatstr("$,,klnum={1};edinachraz=(ZUGFeRDInvoice);erlaubt=1;@zeilen=ja;@gruppe=4", M|kunde^id)
+.load 6 customer 'U|xselect'
+.continue NOZUGFERD ? _G|mehr
+.load 6 line '6|selzeile'
+.continue NOZUGFERD ? _G|mehr
+.assign M|abmodell = 6|ieabmodell^id ? G|mehr
+!NOZUGFERD
+..
+.continue RESPR
+..
+!EVGRE: Rechnung Einkauf / invoice: purchasing
+.formula M|anlagen = H|anlagen
+.formula M|ebeleg = H|ebeleg  ? _F|empty(H|ebeleg)
+.formula M|ebeleg = H|nummer  ?  M|belastung ; F|equals(H|vorganga, "(CashPaymentReversal)") ; F|equals(H|vorganga, "(CancelationDownpayment)") ; F|equals(H|vorganga, "(CancelationCreditNoteCommercial)")
+.formula M|frbez = ""
+.formula M|frbez = H|lief^frbez        ? H|lief^gruppe = 1
+.formula M|frbez = H|lief^firma^frbez  ? H|lief^gruppe = 2
+.assign M|kunde  = H|lief
+.assign M|kunde2 = H|resteller
+.assign M|kunde3 = ""
+.formula M|kustid = H|lief^ustid ? F|equals(H|vorganga, "(CreditNoteCommercial)") & M|belastung
+..
+!RESPR: Rechnung-K-Sprache / Correspondence language: invoice
+..
+.. der fehlende Anschriftskunde wird hier geholt
+.input "ev/ADRESSE3"                 ? M|ekvk = 3
+..
+.. Rechnung und stornierte Rechnung fÅr EK und VK
+.text U|xta 'P|spr' Rechnung                                ? F|equals(H|vorganga, "(Invoice)") ; F|equals(H|vorganga, "(InvoiceCanceled)")
+.text U|xta 'P|spr' Rechnung                                ? F|equals(H|vorganga, "(CashPayment)") ; F|equals(H|vorganga, "(CashPaymentCanceled)")
+.. Storno-Barzahlung und Storno-Rechnung fÅr EK und VK
+.text U|xtd 'P|spr' Storno zu Rechnung Nr.                  ? F|equals(H|vorganga, "(CancelationDownpayment)") ; F|equals(H|vorganga, "(CashPaymentReversal)") ; F|equals(H|vorganga, "(InvoiceReversal)")
+.text U|xtw 'P|spr' Anzahlungsrechnung
+.text U|xtb 'P|spr' KaufmÑnnische Gutschrift
+.text U|xtd 'P|spr' Storno zu KaufmÑnnischer Gutschrift Nr. ? F|equals(H|vorganga, "(CancelationCreditNoteCommercial)")
+..
+.. KaufmÑnnische Gutschrift , Stornierte KaufmÑnnische Gutschrift
+.formula U|xta = U|xtb                                      ? F|equals(H|vorgang, "(CreditNoteCommercial)") ; F|equals(H|vorgang, "(CanceledCreditNoteCommercial)")
+.. Storno-Rechung fÅr EK und VK fÅr Rechnung und Barzahlung und KaufmÑnnische Gutschrift
+.formula U|xta = U|xtd + " " +'M|stornopartnervorg^nummer'  ? F|equals(H|vorganga, "(CancelationDownpayment)") ; F|equals(H|vorganga, "(CancelationCreditNoteCommercial)") ; F|equals(H|vorganga, "(CashPaymentReversal)") ; F|equals(H|vorganga, "(InvoiceReversal)")
+.. Anzahlung
+.formula U|xta = U|xtw                                      ? F|equals(H|vorganga, "(CanceledDownpayment)") ; F|equals(H|vorgang, "(Downpayment)")
+.continue BUART
+..
+!VGAN: Angebot / quotation
+.copy M|zbedschl = H|zbedschl
+..
+.continue EVGAN                        ? M|ekvk = 4
+.copy M|bmitueb = G|FALSE              ? H|ohneueb
+.formula M|frbez = ""
+.formula M|frbez = H|kunde^frbez       ? H|kunde^gruppe = 1
+.formula M|frbez = H|kunde^firma^frbez ? H|kunde^gruppe = 2
+..
+.. GeschÑftspartnerA: Anschrift
+.assign M|kunde  = H|kunde
+.. GeschÑftspartnerC: Anschrift Rechnung (fehlt)
+.assign M|kunde2 = H|reempf
+.. GeschÑftspartnerB: Anschrift Versand
+.assign M|kunde3 = H|warenempf
+..
+.continue ANSPR
+..
+!EVGAN: Anfrage / request
+.formula M|anlagen = H|anlagen
+.formula M|frbez = ""
+.formula M|frbez = H|lief^frbez       ? H|lief^gruppe = 1
+.formula M|frbez = H|lief^firma^frbez ? H|lief^gruppe = 2
+.assign M|kunde = H|lief
+.assign M|kunde2 = H|resteller
+.assign M|kunde3 = ""
+..
+!ANSPR: Angebot/Anfrage-K-Sprache / Correspondence language: quotation, request
+..
+.. der fehlende Rechnungskunde wird hier geholt
+.input "ev/ADRESSE3"                 ? M|ekvk = 3
+..
+.text U|xta 'P|spr'  Chance         ? M|vtyp = G|chko
+.text U|xta 'P|spr'  Angebot        ? M|ekvk = 3 & (H|typ = G|anko ; H|typ = G|snko)
+.text U|xta 'P|spr'  Anfrage        ? M|ekvk = 4 & H|typ = G|anko
+.text U|xta 'P|spr'  Rahmenauftrag  ? H|typ = G|rako
+..
+.continue BUART
+..
+!VGAU: Auftrag / sales-order  - Webauftrag / Repair order - Reparaturauftrag
+.copy M|zbed1 = H|zbed
+.copy M|zbedschl = H|zbedschl
+.continue EVGAU                        ? M|ekvk = 4
+..
+.copy U|xbvsperre = G|FALSE
+.copy U|xbvsperre = G|TRUE             ? H|vsperre
+.formula M|frbez = ""
+.formula M|frbez = H|kunde^frbez       ? H|kunde^gruppe = 1
+.formula M|frbez = H|kunde^firma^frbez ? H|kunde^gruppe = 2
+..
+.. GeschÑftspartnerA: Anschrift
+.assign M|kunde  = H|kunde
+.. GeschÑftspartnerC: Anschrift Rechnung (fehlt)
+.assign M|kunde2 = H|reempf
+.. GeschÑftspartnerB: Anschrift Versand
+.assign M|kunde3 = H|warenempf
+..
+.continue AUSPR
+..
+!EVGAU: Bestellung / purchase-order
+.formula M|anlagen = H|anlagen
+.formula M|frbez = ""
+.formula M|frbez = H|lief^frbez       ? H|lief^gruppe = 1
+.formula M|frbez = H|lief^firma^frbez ? H|lief^gruppe = 2
+.assign M|kunde = H|lief
+.assign M|kunde2 = H|resteller
+.assign M|kunde3 = ""
+..
+!AUSPR: Auftrag/Bestellung-K-Sprache / Correspondence language: sales-order, purchase-order
+..
+.. der fehlende Rechnungskunde wird hier geholt
+.input "ev/ADRESSE3"                            ? M|ekvk = 3
+..
+.text U|xta 'P|spr' AuftragsbestÑtigung         ? M|ekvk = 3
+.text U|xta 'P|spr' Webauftrag                  ? M|ekvk = 3 & M|vtyp = G|wako & _U|xbvsperre
+.text U|xta 'P|spr' Warenkorb                   ? M|ekvk = 3 & M|vtyp = G|wako & U|xbvsperre
+.text U|xta 'P|spr' Bestellung                  ? M|ekvk = 4
+.text U|xta 'P|spr' Reparaturauftrag            ? M|ekvk = 3 & M|vtyp = G|srko
+.text U|xta 'P|spr' Kostenvoranschlag Reparatur ? M|ekvk = 3 & M|vtyp = G|kvko
+..
+!BUART
+.add M|kunde^as
+.continue B2UART ? _G|mehr
+.formula M|anrede =  D|name
+.formula M|anrede = 'D|name.P|ksi'  ? 'D|name.P|ksi' <> ""
+.add
+..
+!B2UART
+.formula M|fax = M|kunde^fax
+.formula M|fax2 = M|kunde2^fax
+.formula M|fax3 = M|kunde3^fax
+.formula M|ipro = 1   ?  M|pro
+.formula M|ipro = 0   ? _M|pro
+.formula M|uid = ""   ? _(H|typ = G|reko ; M|pro)
+.formula M|uid2 = ""  ? _(H|typ = G|reko ; M|pro)
+.formula M|uid3 = ""  ? _(H|typ = G|reko ; M|pro)
+.formula M|uid = ""   ? M|ekvk = 4 & H|typ = G|reko & (H|buart = 0 ; H|buart = 2)
+.formula M|uid2 = ""  ? F|empty(M|ans2)
+.formula M|kanz = 0   ? M|pro
+..
+.formula M|email = M|kunde^email
+.formula M|email2 = M|kunde2^email
+.formula M|email3 = M|kunde3^email
+.formula M|buart2 = U|xta
+.copy M|ustart = H|ustart 
+..
+.text U|xta 'P|spr' Pro-forma-Rechnung  ? M|pro & (M|vtyp = G|reko ; M|vtyp = G|liko ; M|vtyp = G|abko)
+.text U|xta 'P|spr' Belastung           ? M|belastung
+.assign M|vom = H|vom
+.formula U|xbuart = H|buart
+.formula M|ibuart = H|buart
+.formula M|buart = U|xta        ?  M|pro
+.formula M|buart = U|xta        ?  M|belastung
+.formula M|buart = M|buart2     ? _M|pro & _M|belastung
+..
+!VORSCHRIFT:
+.formula M|vorschr = ""
+.continue GEWAEHR                ?  M|ekvk = 3
+.formula M|vorschr = H|vorschr   ? _F|empty(H|vorschr)
+..
+!GEWAEHR: GewÑhrleistung / Warranty
+.add H|gewaehr
+.continue PBED                      ? _G|mehr
+.formula M|gewaehr =  D|name
+.formula M|gewaehr = 'D|name.P|ksi' ? 'D|name.P|ksi' <> ""
+.add
+..
+!PBED: Preisstellung / Price Terms
+.add H|pbed
+.continue VERSAND                   ? _G|mehr
+.formula M|pbed =  D|name
+.formula M|pbed = 'D|name.P|ksi'    ? 'D|name.P|ksi' <> ""
+.add
+..
+!VERSAND
+.add H|versand
+.formula M|vart = H|vart             ? _G|mehr & M|ekvk = 3
+.formula M|vart = H|versandname      ? _G|mehr & M|ekvk = 4
+.continue VRGSTRGL                   ? _G|mehr
+.formula M|vart = D|name
+.formula M|vart = 'D|name.P|ksi'     ? 'D|name.P|ksi' <> ""
+.add
+..
+!VRGSTRGL: Vorgangssteuerregel
+.add H|vrgstrgl
+.continue RECHNUNG                   ? _G|mehr
+.continue RECHNUNG                   ? F|empty(D|sthinw)
+.load 5 add D|sthinw
+.continue RECHNUNG                   ? _G|mehr
+.formula M|vrgstrgl =  5|name
+.formula M|vrgstrgl = '5|name.P|ksi' ? '5|name.P|ksi' <> ""
+..
+!RECHNUNG:
+.add H|rechnung
+.continue LBED                       ? _G|mehr
+.formula M|rechnung =  D|name
+.formula M|rechnung = 'D|name.P|ksi' ? 'D|name.P|ksi'  <> ""
+.add
+..
+!LBED: Versand / shipping
+.add H|lbed
+.continue FOPKOPF           ? _G|mehr
+.formula M|schl = ""
+.formula M|schl = "UNFREI"  ? D|schl="01"
+.formula M|schl = "FREI"    ? D|schl="02"; D|schl="03"; D|schl="04"; D|schl="05"
+.formula M|freiunfrei = ""
+.formula M|freiunfrei = "X       |        " ? M|schl = "FREI"
+.formula M|freiunfrei = "        |       X" ? M|schl = "UNFREI"
+.formula M|lbed =  D|name
+.formula M|lbed = 'D|name.P|ksi' ? 'D|name.P|ksi' <> ""
+.copy M|incocode = H|lbed^incocode
+.add
+.formula M|incoort = H|incoort
+..
+!FOPKOPF: individuelles FOP fuer Kopffelder / individual FOP for header fields
+.formula U|xbhatartikel = G|FALSE
+.input "ev/EVVORGANG.ZUGFERDKOPF" ? _F|empty(M|abmodell)
+.input "ev/FOPKOPF"
+..
+!ZEILE: Zeile des Vorgangs holen / select process lines
+.input "ev/GRWECHSEL"
+.select line
+.formula U|xend = 0
+.formula U|xend = 1     ? _G|mehr
+.continue END           ? _G|mehr
+.. FÅr Auftrag, Bestellung und Serviceauftrag wird keine Alternativposition angedruckt
+.continue ZEILE      ? H|alternativpos & (H|kopf^typ = G|abko ; H|kopf^typ = G|sbko)
+.continue GRWECHSEL  ? _F|defined(H|pmgemkopf)
+.continue ZEILE      ? H|kopf^typ = G|liko & _F|empty(H|pmgemkopf) & _H|kopf^verpackplan
+..
+!GRWECHSEL
+.input "ev/GRWECHSEL"
+..
+.load 1 add H|art
+..
+!VBEZANF
+.copy U|xbinres  = G|FALSE
+.copy U|xbefteil = G|FALSE
+..
+!VBEZVK: Verkauf
+.formula U|xbgruppe = 0
+.continue VBEZEK    ? M|ekvk = 4
+..
+.formula U|xbgruppe = 0
+.continue VKBEZ     ? F|empty(H|art^basisartikel)
+.continue VKBEZ     ? H|art^gruppe <> 1
+..
+.load 3 add H|art^basisartikel
+.continue VKBASISBEZ
+..
+!VKBEZ
+.formula U|xtvbez = '1|vbez.P|ksi'
+.formula U|xtvbez = '1|vkbez.P|ksi'      ? F|empty(U|xtvbez)
+.formula U|xtvbez = '1|name.P|ksi'       ? F|empty(U|xtvbez)
+.formula U|xtvbez = 1|vbez               ? F|empty(U|xtvbez)
+.formula U|xtvbez = 1|vkbez              ? F|empty(U|xtvbez)
+.formula U|xtvbez = 1|name               ? F|empty(U|xtvbez)
+.continue VKEKENDE
+..
+!VKBASISBEZ
+.formula U|xtvbez = '1|vbez.P|ksi'
+.formula U|xtvbez = '3|vbez.P|ksi'       ? F|empty(U|xtvbez)
+.formula U|xtvbez = '1|vkbez.P|ksi'      ? F|empty(U|xtvbez)
+.formula U|xtvbez = '3|vkbez.P|ksi'      ? F|empty(U|xtvbez)
+.formula U|xtvbez = '1|name.P|ksi'       ? F|empty(U|xtvbez)
+.formula U|xtvbez = '3|name.P|ksi'       ? F|empty(U|xtvbez)
+.formula U|xtvbez = 1|vbez               ? F|empty(U|xtvbez)
+.formula U|xtvbez = 3|vbez               ? F|empty(U|xtvbez)
+.formula U|xtvbez = 1|vkbez              ? F|empty(U|xtvbez)
+.formula U|xtvbez = 3|vkbez              ? F|empty(U|xtvbez)
+.formula U|xtvbez = 1|name               ? F|empty(U|xtvbez)
+.formula U|xtvbez = 3|name               ? F|empty(U|xtvbez)
+.load 3
+.continue VKEKENDE
+..
+!VBEZEK: Einkauf
+.formula U|xtvbez = '1|ebez.P|ksi'
+.formula U|xtvbez = '1|name.P|ksi'       ? F|empty(U|xtvbez)
+.formula U|xtvbez = 1|ebez               ? F|empty(U|xtvbez)
+.formula U|xtvbez = 1|name               ? F|empty(U|xtvbez)
+..
+!VKEKENDE
+.continue VBEZENDE                      ? _F|defined(1|zptyp)
+..
+.formula U|xbgruppe = 1
+..
+.. 7: AU/BE-Position,BV
+.formula U|xtvbez = '1|vbez.P|ksi'  ? 1|gruppe <> 1 & H|typ = G|arpos & F|equals(1|zptyp, "(SOPOItemPOS)") & M|ekvk = 3
+.formula U|xtvbez = '1|ebez.P|ksi'  ? 1|gruppe <> 1 & H|typ = G|arpos & F|equals(1|zptyp, "(SOPOItemPOS)") & M|ekvk = 4
+.formula U|xtvbez = ""              ? 1|gruppe <> 1 & H|typ = G|arpos & _F|equals(1|zptyp, "(SOPOItemPOS)")
+..
+!VBEZENDE
+.formula U|xlgbest = 0
+.formula U|xlgbest = 1|lgbestand    ? 1|gruppe = 1  & H|typ = G|arpos
+..
+.continue MACH              ? 1|gruppe <> 1
+.copy U|xbinres = G|TRUE    ? (H|eres^id <> H|lres^id) & M|ekvk = 3
+.copy U|xbinres = G|TRUE    ? _F|empty(H|lres^id) & M|ekvk = 4
+.continue VERKAUF           ? M|ekvk = 3
+.. nur fÅr Einkauf
+.copy U|xbinres = G|TRUE    ? _F|empty(H|lres^id) & _F|equals(H|bsart, "(Relocation)")
+!VERKAUF
+.continue BEFTEIL           ? M|ekvk = 4
+.. Verkauf: ist H|eateil = TRUE, dann wurde der Artikel Åber die StÅckliste aufgelîst -> Res. drucken
+.. 69: Eigenfertigung
+.copy U|xbinres = G|TRUE    ? F|equals(1|bsart, "(InhouseProduction)") & H|eateil
+!BEFTEIL
+.. 66: Åber Artikel
+.copy U|xbefteil = G|TRUE   ? F|equals(1|bsart, "(InhouseProduction)") & F|equals(1|earta, "(UsingProducts)") & 1|tzeilen > 0
+.. im FOP ev/FOPKOPF wird gesetzt, ob Beistellungen gedruckt werden sollen
+.copy U|xbinres = G|FALSE   ? _U|xbbeist & M|ekvk = 4 & H|kotyp = G|abko
+..
+!MACH: Zeile im IS erzeugen
+.continue ZEILE    ? H|mge = 0 & H|rest = 0 & H|typ = arpos & (M|vtyp = 4 ; M|vtyp = 5)
+.continue MAKE     ? M|tzeilen = 0
+.continue ZEILE    ? _F|empty(H|fktaplanpos^status) & H|fktaplanpos^status<>"*"
+!MAKE
+.make screen line +O
+..
+.copy M|rerelev = H|rerelev
+.formula M|irerelev = 0         ? _H|rerelev             
+.formula M|irerelev = 1         ?  H|rerelev
+.formula M|bgruppe = U|xbgruppe
+.formula M|ean = 1|ean          ?  F|defined(1|ean)
+.copy M|herkunft = H|herkunft
+.copy M|kettrab = H|kettrab
+.copy M|prtsthinw = H|prtsthinw
+.copy M|prtsthinwschl = H|prtsthinw^schl ? _F|empty(strgl)
+.copy M|ksthinw = U|xsthinw
+.copy M|vergl = 0  
+.copy M|vergl = 1                    ? 'M|prtsthinw^id' = 'M|ksthinw^id' & _F|empty(U|xsthinw)
+.output addedto 'U|xtmpfile'
+?'M|prtsthinw^id'#'M|prtsthinwschl'  ?  _F|empty(H|strgl) & _F|empty(H|prtsthinw)
+.output
+.formula M|stwert = H|stwert
+.formula M|stsatz = H|stsatz
+.formula M|konddat = H|konddat
+.formula M|prgmge = H|prgmge
+.formula M|rabmge = H|rabmge
+.formula M|artrab = H|artrab
+.formula M|artprg = H|artprg
+.formula M|lzeit = H|lzeit          ? F|defined(H|lzeit)
+.formula M|zoll = 1|zoll            ? H|typ = G|arpos & 1|gruppe = 1
+.formula M|igruppe = 0
+.formula U|xseite = U|xseite + 1
+.formula M|znummer = M|zn
+.formula M|iend = 'U|xend'
+.formula M|artikelsuch = 1|id
+.. Artikelname in Drucksprache
+.formula M|artikelname = '1|name.P|ksi'
+.assign M|basisartikel = 1|basisartikel  ? 1|gruppe = 1
+.formula M|agruppe = 1|gruppe
+.formula M|zkuartnr = H|zkuartnr     ? M|ekvk = 3
+.copy M|beipack = H|beipack          ? M|ekvk = 3
+.text U|xtbeipack 'P|spr'  Beipack
+.formula M|text3 = ""
+.formula M|text3 = U|xtbeipack       ? M|beipack
+.copy M|serprod = H|serprod
+.copy M|istleihg = G|TRUE            ? H|serprod^serprodtyp = "1"
+.assign M|repverr = H|repverr        ? 1|gruppe = 5 & M|ekvk = 3
+..
+.. xdruckftext wird in ev/FOPKOPF gesetzt
+.continue EHTF2                      ? U|xdruckftext
+.continue EHTF                       ? F|empty(1|ftext)
+.file -screen -tempname M|tftext
+.output new 'M|tftext'
+.input "DATEI.F"
+.input -text '1|ftext'
+.output new werf.weg
+.formula M|rohftext = 1|ftext
+..
+!EHTF
+.continue EHTF2                     ? F|empty(1|ftext2)
+.file -screen -tempname M|tftext2
+.output new 'M|tftext2'
+.input "DATEI.F"
+.input -text '1|ftext2'
+.output new werf.weg
+.formula M|rohftext2 = 1|ftext2
+..
+!EHTF2
+.continue BESCHR                     ? F|empty(H|pftext)
+.file -screen -tempname M|zftext
+.output new 'M|zftext'
+.input "DATEI.F"
+.input -text 'H|pftext'
+.output new werf.weg
+.formula M|rohzftext = H|pftext
+..
+!BESCHR
+.continue EHTZF              ? 1|gruppe <> 1
+.continue EHTZF              ? F|empty(1|beschr)
+.. Textbaustein Beschreibung
+.assign U|xbeschr = F|foppath(1|beschr)
+.continue ERROR1             ? _G|mehr & 1|beschr <> ""
+.continue ERROR2             ? 1|beschr <> "" & _F|fileexists(U|xbeschr)
+..
+.assign M|fbeschr = F|foppath(1|beschr)
+.file -screen -tempname M|beschr
+.output new 'M|beschr'
+.input "DATEI.F"
+.input -text 'M|fbeschr'
+..
+!EHTZF
+.formula M|auflief1 = U|xtorigin1
+.formula M|auflief2 = U|xtorigin2
+.formula M|verw = ""              ? M|ekvk = 3
+.formula M|verw = H|verw          ? M|ekvk = 4
+.formula M|projekt = ""           ? M|ekvk = 3
+.assign M|projekt = H|projekt     ? M|ekvk = 4 & H|typ = G|arpos
+.formula M|abnrpo = H|abnrpo      ? M|ekvk = 3
+..
+.assign M|position = H|id
+.formula M|lief = H|orig^kopf
+.formula M|aube = H|orig^orig^kopf ? _F|empty(M|lief)
+.formula M|aube = H|orig^kopf      ?  F|empty(M|lief)
+.assign M|kategorie = H|kategorie
+.copy M|treanzpossteuer = G|FALSE
+.copy M|treanzpossteuer = G|TRUE ? F|equals(H|kategorie, "(Downpayment)") & M|reanzpossteuer
+.copy U|xmerkanzahlung = G|TRUE ? M|treanzpossteuer
+.formula M|ianz = 0 
+.formula M|ianz = 1         ?  F|equals(H|kategorie, "(Downpayment)")
+.formula M|ianz = 0         ?  M|pro
+.formula M|kanz = 1         ?  M|ianz = 1 & _M|pro
+.formula M|anzpwert = H|fktaplanpos^anzpwert
+.formula M|alt = 0          ? _H|alternativpos
+.formula M|alt = 1          ?  H|alternativpos
+.copy M|alternativpos = H|alternativpos
+.formula M|vbez = U|xtvbez
+.formula M|ptext = H|ptext
+.formula U|xtptext = H|ptext <<";" ? 1|gruppe <> 1 & H|typ = G|arpos
+.formula M|ptext = ""              ? 1|gruppe <> 1 & H|typ = G|arpos
+.assign M|vktypa = H|typa
+.assign M|vktyp  = H|typ
+.assign M|fktaplanpos = H|fktaplanpos
+..
+.formula U|xrepw =  H|pwert
+.formula U|xrepw = -H|pwert  ? (F|equals(H|lsart, "(ReturnPackingSlip)") & M|vtyp = 4) ; F|equals(H|lsart, "(PackingSlipReversal)")
+.formula U|xrepw = -H|pwert  ? M|ekvk = 4 & F|equals(H|lsart, "(CanceledReturnPackingSlip)")
+.formula U|xrepw = -H|pwert  ? M|belastung & (F|equals(H|vorganga, "(CreditNoteCommercial)") ; F|equals(H|vorganga, "(CanceledCreditNoteCommercial)"))
+.formula U|xrepw =  H|pwert / G|eurokurs ? U|xbeuro
+.formula U|xrepw = -H|pwert / G|eurokurs ? U|xbeuro & F|equals(H|lsart, "(ReturnPackingSlip)") & M|vtyp = 4
+.formula U|xrepw = -H|pwert / G|eurokurs ? U|xbeuro & F|equals(H|lsart, "(PackingSlipReversal)")
+.formula U|xrepw = -H|pwert / G|eurokurs ? U|xbeuro & M|ekvk = 4 & F|equals(H|lsart, "(CanceledReturnPackingSlip)")
+.formula U|xrepw = -H|pwert / G|eurokurs ? U|xbeuro & M|belastung & (F|equals(H|vorganga, "(CreditNoteCommercial)") ; F|equals(H|vorganga, "(CanceledCreditNoteCommercial)"))
+..
+.formula U|xmge  =  H|mge
+.formula U|xmge  = -H|mge  ? (F|equals(H|lsart, "(ReturnPackingSlip)") & M|vtyp = 4) ; F|equals(H|lsart, "(PackingSlipReversal)")
+.formula U|xmge  = -H|mge  ? F|equals(H|lsart, "(CanceledCustomerDelivery)")
+.formula U|xmge  = -H|mge  ? F|equals(H|lsart, "(CanceledReturnPackingSlip)")
+.formula U|xmge  = -H|mge  ? M|ekvk = 3 & F|equals(H|lsart, "(CustomerDelivery)")
+.formula U|xmge  = -H|mge  ? F|equals(H|vorganga, "(InvoiceReversal)")
+.formula U|xmge  = -H|mge  ? F|equals(H|vorganga, "(CashPaymentReversal)") & F|empty(H|lsart)
+.formula U|xmge  = -H|mge  ? _M|belastung & H|mge < 0 & (F|equals(H|vorganga, "(CreditNoteCommercial)") ; F|equals(H|vorganga, "(CanceledCreditNoteCommercial)"))
+..
+.continue DAZU       ? H|typ = G|trpos
+.. bei Lieferscheinen werden ein paar Marken Åbersprungen (wenn nicht Pro-forma-Lieferschein!)
+.make screen line -O ? _M|pro & M|vtyp = G|liko & (H|typ = G|espos ; H|typ = G|prpos ; H|typ = G|stpos ; H|typ = G|mipos ; H|typ = G|delpos ; H|typ = G|supos ; H|typ = G|zspos)
+.continue ZEILE      ? _M|pro & M|vtyp = G|liko & (H|typ = G|espos ; H|typ = G|prpos ; H|typ = G|stpos ; H|typ = G|mipos ; H|typ = G|delpos ; H|typ = G|supos ; H|typ = G|zspos)
+.. bei Rechnungen mit Steuerbuchungsart "Steuersofortabzug" werden die zwei erzeugten Steuerzeilen Åbersprungen
+.make screen line -O ? M|vtyp = G|reko & H|typ = G|stpos & F|equals(H|kopf^ustart, "(TaxFreeWithTaxLines)")
+.continue ZEILE      ? M|vtyp = G|reko & H|typ = G|stpos & F|equals(H|kopf^ustart, "(TaxFreeWithTaxLines)")
+..
+.continue DEL     ? H|typ = G|delpos
+.continue ZSPOS   ? H|typ = G|zspos
+.continue ESPOS   ? H|typ = G|espos
+.continue SUPOS   ? H|typ = G|supos
+.continue PRPOS   ? H|typ = G|prpos
+.continue STPOS   ? H|typ = G|stpos
+.continue ZUPOS   ? H|typ = G|zupos ; H|typ = G|seitpos ; H|typ = G|abspos
+.continue MIPOS   ? H|typ = G|mipos
+.continue ARPOS   ? H|typ = G|arpos
+.continue INKLPOS ? H|typ = G|sipos
+.continue ZEILE
+..
+!DEL: Del-Position (Typ=14)
+.type text xxh1   ? _F|defined(U|xxh1)
+.type real2 xxmge ? _F|defined(U|xxmge)
+..
+.copy U|xbdel = G|TRUE
+.formula U|xbasispreis = H|herkunft^basis
+.formula U|xnot        = H|herkunft^matnotiz
+.formula U|xdzu        = H|herkunft^matproz
+.formula U|xddat       = H|herkunft^matdat
+.formula U|xdmat       = H|herkunft^matart
+.formula U|xdland      = H|herkunft^matland
+.formula U|xxh1 = U|xdmat
+..
+!DELZEIL
+.text U|xtzuschlag 'P|spr'   Zuschlag
+.text U|xtkg       'P|spr'   kg
+.formula U|xdel = 'U|xtzuschlag' + " " + 'U|xxh1'
+.formula M|pos = ""
+.formula M|alt = 0     ? _H|alternativpos
+.formula M|alt = 1     ?  H|alternativpos
+.copy M|alternativpos = H|alternativpos
+.formula M|artikel = U|xdel
+.formula M|mge = U|xmge
+.copy M|heinheit = H|he
+.formula M|epreis = H|preis
+.formula M|epreis = -H|preis ? F|equals(H|vorganga, "(CashPaymentReversal)")
+.formula M|epreis = -H|preis ? F|equals(H|vorganga, "(InvoiceReversal)")
+.formula M|epreis = -H|preis ? H|preis > 0 & _M|belastung & (F|equals(H|vorganga, "(CreditNoteCommercial)") ; F|equals(H|vorganga, "(CanceledCreditNoteCommercial)"))
+.formula M|proz = ""
+.formula M|gpreis = U|xrepw
+.formula M|ezuschlag = 0
+.. Zugferd
+.formula M|ebetragnet = M|epreis
+.formula M|ebetragbrutto = M|epreis
+..
+.formula M|bdel = U|xbdel
+.formula M|dmat = U|xdmat
+.assign M|zptyp = 1|zptyp
+.formula M|delherkunft = H|herkunft^id
+..
+.continue DAZU
+..
+!ZSPOS: Zwischensummenposition (Typ=8)
+.formula M|pos = H|pnum
+.formula M|alt = 0       ? _H|alternativpos
+.formula M|alt = 1       ?  H|alternativpos
+.copy M|alternativpos = H|alternativpos
+.formula M|artikel = U|xtvbez
+.formula M|epreis = H|preis
+.formula M|proz = H|proz
+.formula M|gpreis = U|xrepw
+.assign M|zptyp = 1|zptyp
+..
+.continue DAZU
+..
+!ESPOS: Nettosummen-/Endsummenposition (Typ=16)
+.formula M|pos = ""
+.formula M|alt = 0      ? _H|alternativpos
+.formula M|alt = 1      ?  H|alternativpos
+.copy M|alternativpos = H|alternativpos
+.formula M|artikel = U|xtvbez
+.formula M|epreis = H|preis
+.formula M|proz = H|proz
+.formula M|gpreis = U|xrepw
+.assign M|zptyp  = 1|zptyp
+..
+.continue DAZU
+..
+!SUPOS: Summenposition (Typ=9)
+.formula M|pos = H|pnum
+.formula M|alt = 0       ? _H|alternativpos
+.formula M|alt = 1       ?  H|alternativpos
+.copy M|alternativpos = H|alternativpos
+.formula M|artikel = U|xtvbez
+.formula M|gpreis = U|xrepw
+.assign M|zptyp = 1|zptyp
+..
+.continue DAZU
+..
+!PRPOS: (Typ=11)
+.formula U|xtherkunft = ""
+.continue NOHERKUNFT      ? F|empty(H|herkunft)
+.. Preis/Rabattherkunft T|xtherkunft
+.add H|herkunft
+.formula U|xtherkunft = D|evbez.P|ksi ? G|mehr
+.formula U|xtherkunft = D|name.P|ksi  ? F|empty(U|xtherkunft)
+.add
+..
+!NOHERKUNFT
+.formula M|pos = H|pnum
+.formula M|alt = 0               ? _H|alternativpos
+.formula M|alt = 1               ?  H|alternativpos
+.copy M|alternativpos = H|alternativpos
+.formula M|artikel = U|xtvbez
+.formula M|artikel = U|xtherkunft ? _F|empty(H|herkunft)
+.formula M|proz = H|proz
+.formula M|epreis = H|preis
+.formula M|gpreis = U|xrepw
+.formula M|ezuschlag = M|epreis * M|proz / 100
+.. Zugferd
+.formula M|ebetragbrutto = M|epreis
+.formula M|ebetragnet = M|epreis * M|position^pehe + M|ezuschlag
+..
+.assign M|zptyp = 1|zptyp
+..
+.continue DAZU
+..
+!STPOS: Steuerposition (Typ=10)
+.text U|xtbtext 'P|spr'   Basis:
+.formula M|pos = ""
+.formula M|alt = 0        ? _H|alternativpos
+.formula M|alt = 1        ?  H|alternativpos
+.copy M|alternativpos = H|alternativpos
+.formula M|artikel = U|xtvbez
+.formula M|epreis = H|preis 
+.formula M|epreis = -H|preis ? M|belastung & H|preis < 0
+.formula M|proz = H|proz
+.formula M|gpreis = U|xrepw
+.assign M|zptyp = 1|zptyp
+.copy M|treanzpossteuer = G|TRUE ? U|xmerkanzahlung
+.copy U|xmerkanzahlung = G|FALSE
+.continue DAZU
+..
+!ZUPOS: Zusatzposition (Typ=12)
+.. LS: die Menge wird ausgegeben / STD: der Preis wird ausgegeben
+.formula M|pos = H|pnum
+.formula M|alt = 0       ? _H|alternativpos
+.formula M|alt = 1       ?  H|alternativpos
+.copy M|alternativpos = H|alternativpos
+.formula M|artikel = 1|ident
+.continue ARTIKEL        ? 1|gruppe   = 1
+.make screen line -O     ? 1|nichtls  = G|TRUE & M|vtyp = G|liko
+.continue ZEILE          ? 1|nichtls  = G|TRUE & M|vtyp = G|liko
+.formula M|artikel = ""  ? F|equals(1|zptyp, "(Text)")
+.formula M|vbez = ""     ? F|equals(1|zptyp, "(Text)")
+.. zptyp 12: neutrale Position und kategorie 71: Gutschein
+.formula U|xtherkunft = ""
+.add H|herkunft
+.continue ITEMORI ? _G|mehr
+.continue ITEMORI ? G|mehr & (D|dnr = 3 ; D|dnr = 4)
+.formula U|xtherkunft = D|vbez.P|ksi
+.formula U|xtherkunft = D|vkbez.P|ksi ? F|empty(U|xtherkunft)
+.formula U|xtherkunft = D|name.P|ksi  ? F|empty(U|xtherkunft)
+.add
+..
+!ITEMORI: Origin of item
+.formula U|xtherkunft = 1|name.P|ksi ? F|empty(U|xtherkunft)
+.formula M|vbez = U|xtherkunft       ? F|equals(1|zptyp, "(NeutralItem)") & F|equals(1|kategorie, "(Voucher)")
+..
+.assign M|zptyp = 1|zptyp
+..
+!ARTIKEL
+.formula M|gpreis = U|xrepw
+.formula M|mge = U|xmge
+..
+.continue DAZU
+..
+!MIPOS: Mindestpreisposition (Typ=13)
+.formula M|pos = H|pnum
+.formula M|alt = 0       ? _H|alternativpos
+.formula M|alt = 1       ?  H|alternativpos
+.copy M|alternativpos = H|alternativpos
+.formula M|artikel = 1|ident
+.formula M|epreis = H|preis
+.formula M|gpreis = U|xrepw
+.assign M|zptyp = 1|zptyp
+..
+.continue DAZU
+..
+!INKLPOS: Steuer inklusive (Bruttorechnung) (Typ=51)
+.formula M|pos = H|pnum
+.formula M|alt = 0       ? _H|alternativpos
+.formula M|alt = 1       ?  H|alternativpos
+.copy M|alternativpos = H|alternativpos
+.formula M|artikel = U|xtvbez
+.formula M|epreis = H|preis
+.formula M|proz = H|proz
+.formula M|gpreis = H|pwert
+.formula M|brnetto = H|preis - H|pwert
+.text U|xtext2 'P|spr'   Nettosumme
+.formula M|text2 = U|xtext2
+.copy M|treanzpossteuer = G|TRUE ? U|xmerkanzahlung
+.copy U|xmerkanzahlung = G|FALSE
+..
+.continue DAZU
+..
+!ARPOS: Artikelposition (Typ=7)
+.continue NICHTVPLAN    ? F|empty(M|planung)
+.make screen line -O    ? F|empty(H|planung)
+.continue ZEILE         ? F|empty(H|planung)
+.load 7 shippingplanning 'M|planung'
+.continue NICHTVPLAN    ? _G|mehr
+..
+!VPLANZEILE
+.load 7 line
+.continue NICHTVPLAN ? _G|mehr
+.continue MEHRPLAN   ? 1|id = 7|art^id & M|vorgang^id = 7|vkkopf^id & H|id = 7|vkpos^id
+.continue VPLANZEILE
+..
+!MEHRPLAN
+.formula M|zeichn = 7|zeichn
+.formula M|planlmge = 7|planlmge
+.copy M|lihe = 7|lihe
+.copy M|tplanung = 7|evplanung
+..
+!NICHTVPLAN
+.text U|xtext3 'P|spr'  Der Artikel ist leider nicht mehr lieferbar
+.text U|xtext4 'P|spr'  Nachlieferung
+.text U|xtext5 'P|spr'  in KW
+.. LS: gew wird ausgegeben / STD: epreis und gpreis wird ausgegeben
+.formula M|text1 = ""
+.formula M|text1 = ">>>  "+U|xtext3 ? H|mge=0 & H|rest>0 & U|xbuart=0 & _F|empty(H|status) & M|ekvk = 3 & M|vtyp <> G|abko
+.formula M|pos = H|pnum
+.formula M|alt = 0        ? _H|alternativpos
+.formula M|alt = 1        ?  H|alternativpos
+.copy M|alternativpos = H|alternativpos
+.formula M|artikel = 1|ident
+.continue LEARTIKEL  ? _F|defined(1|zptyp)
+.make screen line -O ? F|equals(1|zptyp, "(SOPOItemPOS)") & 1|nichtls & M|vtyp = G|liko
+.continue ZEILE      ? F|equals(1|zptyp, "(SOPOItemPOS)") & 1|nichtls & M|vtyp = G|liko
+..
+!LEARTIKEL: Lagereinheit des Artikels
+.copy M|leinheit = 1|le
+.formula M|artikel = H|ptext    ? 1|gruppe <> 1
+.formula M|artikel = 1|ident    ? 1|gruppe <> 1 & F|empty(M|artikel)
+.continue NLFFERT               ? M|ekvk = 3
+.assign M|lffert = H|lffert
+.formula M|namelffert = H|lffert^name
+..
+!NLFFERT
+.. ich bin eine Zusatzposition
+.formula M|igruppe = 0            ? 1|gruppe <> 1 & H|typ = G|arpos
+.. ich bin ein richtiger Artikel
+.formula M|igruppe = 1            ? 1|gruppe = 1  & H|typ = G|arpos
+.formula M|iumrech = 0
+.formula M|iumrech = 1            ? H|lehe <> 1
+.. Entnahmemenge in Handelseinheit
+.formula M|umrech = H|limge - H|lifrg
+.. Entnahmemenge in Lagereinheit
+.formula M|emge = 0
+.formula M|emge = H|lehe * M|umrech
+.copy M|heinheit = H|he
+.formula M|lgbest = U|xlgbest
+.assign M|platz = H|platz
+.assign M|rueckligrund = H|rueckligrund
+.formula M|mge = U|xmge
+.formula U|xgesgew = H|gewicht * U|xmge * H|lehe          ? U|xmge >= 0
+.formula U|xgesgew = (H|gewicht * U|xmge * H|lehe) * (-1) ? U|xmge < 0
+.formula U|xnettogew = 0.0
+.continue AUBEPOS                     ? 1|gruppe <> 1
+.formula U|xnettogew = U|xgesgew      ? _1|packmit
+..
+!AUBEPOS
+.formula M|gesgew = U|xgesgew
+.formula M|nettosumme = U|xnettogew
+.formula M|epreis = H|preis    ? H|mge <> 0
+.formula M|epreis = -H|preis   ? H|mge < 0 & H|preis > 0 & _M|belastung & (F|equals(H|vorganga, "(CreditNoteCommercial)") ; F|equals(H|vorganga, "(CanceledCreditNoteCommercial)"))
+.formula M|epreis = -H|preis   ? F|equals(H|vorganga, "(InvoiceReversal)") ; F|equals(H|vorganga, "(CashPaymentReversal)")
+.formula M|proz = H|proz
+.formula M|gpreis = U|xrepw
+.formula M|ezuschlag = M|epreis * M|proz / 100
+.. Zugferd
+.formula M|ebetragnet = M|epreis + M|ezuschlag
+.formula M|ebetragbrutto = M|epreis
+..
+.formula M|gew = H|gewicht
+.formula M|gew = 0                  ? H|mge = 0
+.formula M|text2 = ""
+.formula M|text2 = ">>>  "+U|xtext4+" "+'  H|rest'+" "+'M|heinheit(L=P|spr)'+" "+U|xtext5+" "+'H|term' ? F|empty(H|status) & H|rest > 0 & H|tterm > M|vom & 'H|tterm' <> ""
+.formula M|text2 = ""               ? M|vtyp <> G|liko
+.. leeren bei Kundenanlieferung
+.formula M|text2 = ""               ? F|equals(H|lsart, "(CustomerDelivery)")
+.formula M|binres = U|xbinres
+.formula M|efteil = U|xbefteil
+.formula M|ibinres = 1              ?  U|xbinres
+.formula M|ibinres = 0              ? _U|xbinres
+.formula M|iefteil = 1              ?  U|xbefteil
+.formula M|iefteil = 0              ? _U|xbefteil
+..
+.. Materialzuordnung prÅfen
+.formula U|xid = M|position^id
+..
+.. keine MZ wenn Angebot oder Serviceangebot
+.continue OMZ          ? M|vtyp = G|anko ; M|vtyp = G|snko
+.continue LIEF         ? M|vtyp <> G|reko
+.add orig
+.continue LIEF         ? _G|mehr
+.formula U|xid = D|id  ? D|kotyp = G|liko
+.add
+..
+!LIEF
+.continue XTKOM        ? M|vtyp <> G|abko
+.continue OMZ          ? M|vtyp = G|abko & M|igruppe = 0
+.. Bestellungen sind hier uninteressant
+.continue OMZ          ? M|ekvk = 4
+.. Materialzuordnung fÅr die Kommissionierung eines Auftrages
+.add H|eres
+.formula U|xmehr = G|mehr
+.continue OMZ          ? _U|xmehr
+.formula U|xid = D|id
+.add
+.formula U|xtkom = "$,reserv=" + U|xid + ";@ordnung=reserv,einplan,aktiv,pos,abeweg;@ablageart=(Both)" ? M|ekvk = 3 & M|mge >= 0
+.continue MZ
+..
+!XTKOM
+.continue MZ      ? _M|vtyp = G|liko & _M|vtyp = G|reko
+.continue EINKAUF ? M|ekvk= 4
+.formula U|xtkom = "$,abeweg=" + U|xid + ";@ordnung=abeweg,einplan,aktiv,pos,reserv;@ablageart=(Both)" ? U|xmge >= 0
+.formula U|xtkom = "$,zbeweg=" + U|xid + ";@ordnung=zbeweg,einplan,aktiv,pos;@ablageart=(Both)" ? U|xmge < 0 ; (U|xmge >= 0 & U|xbuart = 1)
+.continue MZ
+..
+!EINKAUF
+.formula U|xtkom = "$,zbeweg=" + U|xid + ";@ordnung=zbeweg,einplan,aktiv,pos;@ablageart=(Both)" ? U|xmge >= 0
+.formula U|xtkom = "$,abeweg=" + U|xid + ";@ordnung=abeweg,einplan,aktiv,pos,reserv;@ablageart=(Both)" ? U|xmge < 0 ; (U|xmge >= 0 & U|xbuart = 1)
+..
+!MZ
+.formula U|xtkom = U|xtkom + ";einplan=FALSE"
+.load 3 mallocation 'U|xtkom'
+.formula U|xmehr = G|mehr
+.. Selektionsstring leeren
+.formula U|xtkom = ""
+.continue OMZ          ? _U|xmehr
+.copy M|mzda = G|TRUE
+.formula M|imzda = 1
+.formula M|imzda = 2   ? M|vtyp = G|abko
+.copy M|mzda = G|FALSE ? M|ekvk = 3 & (F|equals(H|vorgang, "(CancelationCreditNoteCommercial)") ; F|equals(H|vorgang, "(CanceledCreditNoteCommercial)") ; F|equals(H|vorgang, "(CreditNoteCommercial)"))
+.copy M|mzda = G|FALSE ? F|equals(H|lsart, "(PackingSlipReversal)")
+.copy M|mzda = G|FALSE ? F|equals(H|lsart, "(CancelationReturnPackingSlip)") & M|ekvk = 3
+.copy M|mzda = G|FALSE ? F|equals(H|lsart, "(CanceledReturnPackingSlip)") & M|ekvk = 3
+.copy M|mzda = G|FALSE ? F|equals(H|lsart, "(CancelationCustomerDelivery)") & M|ekvk = 3
+.copy M|mzda = G|FALSE ? F|equals(H|lsart, "(CanceledCustomerDelivery)") & M|ekvk = 3
+.copy M|mzda = G|FALSE ? F|equals(H|vorgang, "(CashPaymentReversal)")
+..
+!OMZ
+.continue KEINEZUPOS   ? 1|gruppe <> 4
+.continue DAZU
+..
+!KEINEZUPOS: Chargen
+.copy M|charge = H|charge
+.formula M|tcharge = H|tcharge
+.formula U|xta = ""
+.text U|xta 'P|spr'  Chargen/Seriennummer:  ? _F|empty(H|tcharge) ; _F|empty(H|charge)
+.formula U|xta = U|xta + " " + H|tcharge    ? _F|empty(H|tcharge)
+.formula M|chargetext = U|xta
+..
+!WSTOFF: Werkstoff / material
+.load 2 add 1|wstoff
+.continue DAZU                        ? _G|mehr
+.formula U|xtwbez = '2|vbez.P|ksi' ? M|ekvk = 3
+.formula U|xtwbez = '2|ebez.P|ksi' ? M|ekvk = 4
+.formula U|xtwbez = 2|vbez         ? F|empty(U|xtwbez) & M|ekvk = 3
+.formula U|xtwbez = 2|ebez         ? F|empty(U|xtwbez) & M|ekvk = 4
+.formula M|werbez = U|xtwbez
+..
+!DAZU: öbertrÑge / carry over
+.formula M|bstnr = ""          ? M|ekvk = 3
+.formula M|bstnr = H|bstnr     ? M|ekvk = 4
+.formula U|xvlsueb = U|xlsueb
+.formula U|xlsueb = U|xlsueb + U|xgesgew
+.formula U|xnettosumme = U|xnettosumme + U|xnettogew
+.formula M|lsueb = U|xlsueb
+.formula M|vlsueb = U|xvlsueb
+.formula M|summe = U|xlsueb
+.formula M|netto = U|xnettosumme
+.formula U|xgesgew = 0
+.formula U|xnettogew = 0
+.formula U|xvueb = U|xueb          ? _H|alternativpos & (H|typ = G|trpos ; H|typ = G|delpos ; H|typ = G|arpos; H|typ = G|prpos; H|typ = G|mipos; H|typ = G|zupos ; H|typ = G|stpos)
+.formula U|xueb = U|xueb + U|xrepw ? _H|alternativpos & (H|typ = G|trpos ; H|typ = G|delpos ; H|typ = G|arpos; H|typ = G|prpos; H|typ = G|mipos; H|typ = G|zupos ; H|typ = G|stpos)
+.formula M|ueb = U|xueb
+.formula M|vueb = U|xvueb
+..
+.continue FOPZEILE   ? H|typ = G|trpos
+.continue EINHEIT    ? H|pehe <> 1 & H|pehe <> 0 & 1|gruppe = 1
+.continue LIEFERUNG
+..
+!EINHEIT: Unit
+.text U|xtpreis 'P|spr'  Preis pro
+.formula U|xumfaktor = 1 / H|pehe
+.formula M|pehe = H|pehe
+.formula M|umfaktor = U|xumfaktor
+.formula M|preispro = U|xtpreis
+.formula M|preisumrtext = U|xtpreis+" "+'H|pe(L=P|spr)'+" (1 " + 'M|heinheit(L=P|spr)'+" = "+'M|pehe'+" "+'H|pe(L=P|spr)'+")"
+..
+!LIEFERUNG: Liefertermin
+.continue ENDZEILE       ? M|vtyp = G|liko
+.continue ENDZEILE       ? H|typ <> G|arpos
+.formula M|lterm1 = H|term
+.formula M|lterm2 = H|tterm
+.formula M|wtterm = 'H|wtterm(L=P|spr)'
+.continue ENDZEILE       ? F|empty(M|wtterm)
+.text U|xtlief 'P|spr'  Liefertermin:
+.text U|xtasap 'P|spr'  Sobald als mîglich.
+.formula M|liefertext = U|xtlief + " " + M|wtterm  ? (H|kotyp = G|abko ; H|kotyp = G|sbko ; H|kotyp = G|srko)
+.formula M|liefertext = U|xtlief + " " + U|xtasap  ? _H|kopf^ablagef & (H|kotyp = G|abko ; H|kotyp = G|sbko ; H|kotyp = G|srko) & H|term:8 < G|datum:8
+.continue ENDZEILE                                 ?  H|kotyp = G|abko ; H|kotyp = G|sbko ; H|kotyp = G|srko
+..
+.text U|xt5 'P|spr'  Lieferzeit ca.
+.text U|xt3 'P|spr'  Woche
+.text U|xt4 'P|spr'  Wochen
+.formula U|xwo = ((H|lzeit+2)/5):0
+.formula M|liefertext = U|xtlief + " " + M|wtterm            ? (H|kotyp = G|anko ; H|kotyp = G|snko) & H|lzeit = 0
+.formula M|liefertext = U|xt5 + " " + 'U|xwo' + " " + U|xt3  ? (H|kotyp = G|anko ; H|kotyp = G|snko) & H|lzeit <> 0 & U|xwo = 1
+.formula M|liefertext = U|xt5 + " " + 'U|xwo' + " " + U|xt4  ? (H|kotyp = G|anko ; H|kotyp = G|snko) & H|lzeit <> 0 & U|xwo <> 1
+..
+!ENDZEILE: individuelles FOP fÅr Tabellenfelder, Artikelfelder
+.text U|xtlief 'P|spr'   Beistellungen:    ? U|xbbeist & M|ekvk = 4 & H|kotyp = G|abko & U|xbinres
+.formula M|liefertext2 = U|xtlief          ? U|xbbeist & M|ekvk = 4 & H|kotyp = G|abko & U|xbinres
+..
+!FOPZEILE: individual FOP for table fields, product fields
+.input "ev/EVVORGANG.ZUGFERDTABELLE" ? _F|empty(M|abmodell)
+.input "ev/FOPZEILE"
+.continue ZEILE             ? H|typ = G|trpos
+.. Varianten drucken
+.input "ev/EVVORGANG.VAR"   ? U|xbvardr
+.continue ZEILE
+..
+!END
+.text U|xsttext 'P|spr'   Steuerlicher Hinweis:
+.make screen line +O        ? F|empty(G|webuser)
+.formula M|iend = 'U|xend'  ? F|empty(G|webuser)
+..
+.continue ENDEND    ?  M|vtyp = 4
+.continue ENDEND    ? _F|filenotempty(U|xtmpfile)
+.formula U|xtsys = "group_by.sh -n2 -k1 -c " + U|xtmpfile + " > " + U|xtout + " 2>> " + 'U|xterr'
+.system 'U|xtsys' background
+.continue ERROR3    ? _G|mehr
+..
+!ANZ
+.continue ENDEND    ? _F|filenotempty(U|xtout)
+.formula U|xtsys = "wc -l > " + U|xttmpdat + " < "+ U|xtout
+.system 'U|xtsys' background
+.select from 'U|xttmpdat' U|xanz
+.select from 
+..
+!SELECT
+.select from 'U|xtout' U|x1
+.continue ENDEND     ? _G|mehr
+.make screen line +O
+.formula M|text = U|xsttext
+.formula M|iend = 'U|xend'
+.assign M|prtsthinw = U|x1
+.copy U|xbinkopfstschl = G|FALSE
+.copy U|xbinkopfstschl = G|TRUE    ? M|prtsthinw^id = U|xsthinw^id & U|xanz = 1
+.assign M|prtsthinwschl = U|x1^schl
+.formula U|xsttext = ""
+.continue SELECT
+..
+!NOSCHL: alle Infosystemzeilen durchlaufen und SchlÅssel entfernen
+.select screen header
+.formula U|xtzeilen = M|tzeilen
+..
+!SELLINE
+.select screen line
+.formula M|prtsthinwschl = ""    ? G|mehr
+.continue SELLINE                ? G|mehr
+.formula U|xanz = 0
+.copy U|xbinkopfstschl = G|FALSE
+.select screen line 'U|xtzeilen'
+..
+!ENDEND: wenn anz = 1 dann keine SchlÅssel drucken
+.continue NOSCHL ? U|xbinkopfstschl
+.formula U|xend = 2
+.make screen line +O         ? F|empty(G|webuser)
+.formula M|iend = 'U|xend'   ? F|empty(G|webuser)
+..
+!KOPF: Zeilen beendet, zurÅck zum Kopf / end of lines, back to header of process
+.select header
+.formula M|uauftrag = U|xorigin
+.copy M|bkdel = G|TRUE       ? U|xbdel
+..
+!ZBED: Zahlungsbedingung / terms of payment
+.. Sollen bei negativen RechnungsbetrÑgen bzw. buart = 1 keine 
+.. Zahlungsbedingungen gedruckt werden, so mÅssen diese Zeilen wieder 
+.. aufgenommen werden.
+.. .continue ENDE1             ? U|xueb < 0
+.. .continue ENDE1             ? U|xbuart = 1
+..
+.select add zbed
+.continue ENDE1                  ? _G|mehr
+.formula M|zbed = ""
+.formula M|zbed = H|name
+.formula M|zbed = 'H|name.P|ksi' ? 'H|name.P|ksi' <> ""
+.select add
+..
+..*****************************************************************************
+!ENDE1: individuelles FOP fÅr Felder nach der Tabelle (z. Bsp. Summen)
+.input "ev/EVVORGANG.ZUGFERDSUMME"  ? _F|empty(M|abmodell)
+.. individual FOP for fields after the table (e.g. totals)
+.input "ev/FOPENDE"
+.continue
+..
+!ERROR1
+.error UngÅltiger FO-Dateiname '1|beschr'.
+.end 1
+..
+!ERROR2
+.error Die verwendete Datei '1|beschr' existiert nicht mehr.
+.end 1
+..
+!ERROR3: Consolidation failed!
+.error Verdichten gescheitert!
+.end 1

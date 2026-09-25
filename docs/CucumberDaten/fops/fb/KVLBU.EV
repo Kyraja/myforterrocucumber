@@ -1,0 +1,112 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Common event FOP of the Infosystem fb/KVLBU
+..*****************************************************************************
+..
+.set trans -
+..
+.continue PRESTART       ? (G|evtartengl = "BUTTON_BEFORE") & (G|evtvar = "bstart")
+.continue DATEI          ? G|evtvar = "vdn" ; G|evtvar = "vgr" ; G|evtvar = "vtab"
+.continue RANGE          ? (G|evtartengl = "FIELD_EXIT")   & (G|evtvar = "bevon")
+.continue PERIOD         ? G|evtvar = "anfm" ; G|evtvar = "endm"
+.continue PERIOD         ? G|evtvar = "anfj" ; G|evtvar = "endj"
+.continue PERIOD         ? G|evtvar = "von"  ; G|evtvar = "bis"
+.continue TOUCHED
+..
+..*****************************************************************************
+!RANGE
+..*****************************************************************************
+.copy M|bebis = M|bevon ? F|empty(M|bebis)
+.continue TOUCHED
+..
+..*****************************************************************************
+!PERIOD: period changed
+..*****************************************************************************
+.input "fb/IS.SETPERIOD"
+.continue TOUCHED
+..
+..*****************************************************************************
+!TOUCHED: Parameter changed
+..*****************************************************************************
+.input "is/TABLEEREN"
+.continue END
+..
+..*****************************************************************************
+!DATEI: Menu to choose database
+..*****************************************************************************
+.input "is/DBCHOOSER"
+.input "is/TABLEEREN"
+.continue END
+..
+..*****************************************************************************
+!PRESTART
+..*****************************************************************************
+.copy    M|kvstartdat = F|fystartdate(F|sysinfo(12)^kvjahrku) ? 'M|vtab(L=":")' = "(Customer)"
+.copy    M|kvstartdat = F|fystartdate(F|sysinfo(12)^kvjahrko) ? 'M|vtab(L=":")' = "(Account)"
+.copy    M|kvstartdat = F|fystartdate(F|sysinfo(12)^kvjahrma) ? 'M|vtab(L=":")' = "(Employee)"
+.copy    M|kvstartdat = F|fystartdate(F|sysinfo(12)^kvjahrli) ? 'M|vtab(L=":")' = "(Vendor)"
+.continue ERR01 ? F|empty(M|kvstartdat)
+.continue ERR02 ? M|von < M|kvstartdat
+..
+..*****************************************************************************
+!START: Start
+..*****************************************************************************
+.input "is/DBCHOOSER"
+..checking Account
+.input "is/RANGECHECK"
+..checking kvnum
+.type GL30 xpvon ? _F|defined(U|xpvon)
+.type GL30 xpbis ? _F|defined(U|xpbis)
+.formula U|xpvon = "kvvon"
+.formula U|xpbis = "kvbis"
+.input "is/RANGECHECK"
+..
+.formula M|select = M|bevon +"!"+ M|bebis
+..
+.set setofbooks 'M|bukreis^bknr'
+..
+.select year 'M|anfj' 'M|anfm'
+.formula M|asaldat = G|adatum
+.select year 'M|endj' 'M|endm'
+.formula M|esaldat = G|edatum
+..
+.set currency 'M|buwaehr'
+.set outcurr 'M|buwaehr'
+.formula M|select = "!"       ? (M|select ="")
+..
+.continue FETCH ? M|vdn <> 68
+..
+.. account ranges
+.formula M|select  = "$,"
+.formula M|select  = M|select + "@gruppe=17" ? M|vdn = 68 & M|vgr = 1
+.formula M|select  = M|select + "@gruppe=19" ? M|vdn = 68 & M|vgr = 3
+.formula M|select  = M|select + ";@numsuch=" + 'M|bevon' + "!" + 'M|bebis
+..
+..*****************************************************************************
+!FETCH
+..*****************************************************************************
+.input "is/TABLEEREN"
+.input "is/HOL.LISTE"       ? M|vdn <> 68
+.input "is/HOL.KOBERKONTEN" ? M|vdn = 68
+.continue END
+..
+..
+..*****************************************************************************
+!ERR01
+..*****************************************************************************
+.error Kontovorg„nge nicht im Termindatensatz aktiviert.
+.end 1
+..
+..*****************************************************************************
+!ERR02
+..*****************************************************************************
+.error Startdatum im Termindatensatz vor Startdatum der Kontovorg„nge.
+.end 1
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

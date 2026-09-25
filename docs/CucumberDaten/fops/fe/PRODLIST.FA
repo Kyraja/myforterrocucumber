@@ -1,0 +1,63 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : PRODLIST.FA
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Freigabe-Bool in Fertigungsvorschlag setzen/entfernen
+.. Functionality  :
+..*****************************************************************************
+..
+.set trans -
+.type text xtdat2 ? _F|defined(U|xtdat2)
+.type text xtsys  ? _F|defined(U|xtsys)
+.type text xterr1 ? _F|defined(U|xterr1)
+..
+.file -tempname U|xtdat2
+.file -tempname U|xterr1
+..
+!LOCK: FV-Verweis
+.select add M|vorgang^id
+.continue BOX      ? _G|mehr
+.continue BOX      ?  F|empty(M|aufzu)
+..
+.select modificationlock waitshort object 'H|id'
+.continue BOX      ? _G|mehr
+.. Žndernsperre nicht bekommen, dann zu SPERR
+.continue SPERR    ? _G|gesperrt
+.select -
+..
+!AENDERN: Fertigungsvorschlag „ndern: Freigabe aktualisieren
+.output new 'U|xtdat2'
+.input "DATEI.F"
+sn;zeile;mfreig
+'M|vorgang^id';1;'M|freigeben(L="0")'
+.output terminal
+.formula U|xtsys = "edpimport.sh -I " + U|xtdat2 + " -u -p " + G|einmalpw + " -Z sn:zeile" + " 2>" + U|xterr1
+.system 'U|xtsys' background
+.continue FEHLER1 ? _G|mehr
+.continue END
+..
+!FEHLER1
+.set trans +
+.output terminal
+Eingabedatei:
+.input 'U|xtdat2'
+Fehlerdatei:
+.set trans -
+.input 'U|xterr1'
+.error Aktualisieren der Freigabe hat nicht funktioniert!
+.end 1
+..
+!BOX
+.box
+Freigabe nicht m”glich!
+.end 1
+..
+!SPERR: FV konnte nicht gesperrt werden!
+.box 
+Fertigungsvorschlag ist in Bearbeitung!
+.end 1
+..*****************************************************************************
+!END
+.continue

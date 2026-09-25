@@ -1,0 +1,162 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ABCANA.EV
+.. Datum          : 14.02.2007
+.. Version        : 2007r1
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Event-FOP fÅr ABC-Analyse
+..
+.. Ablauf         :
+..
+...Includes       :
+.. include sk/ABCANA.ZURUECK
+..*****************************************************************************
+.set trans -
+.type text xzeitraum ? _F|defined(U|xzeitraum)
+.type text xeigen    ? _F|defined(U|xeigen)
+.type text xkauf     ? _F|defined(U|xkauf)
+.type text xintl     ? _F|defined(U|xintl)
+..
+.formula M|sumumsatz  = ""
+.formula M|sumpositiv = ""
+..
+.continue SUMME      ? G|evtartengl="BUTTON_AFTER"  & G|evtvar="bstart"
+.continue ALLE       ? G|evtartengl="FIELD_EXIT"    & G|evtvar="algruppe"
+.continue EINE       ? G|evtartengl="FIELD_EXIT"    & G|evtvar="elgruppe"
+.continue AAUSWERT   ? G|evtartengl="FIELD_EXIT"    & G|evtvar="aauswert"
+.continue EAUSWERT   ? G|evtartengl="FIELD_EXIT"    & G|evtvar="eauswert"
+.continue TABLEEREN  ? G|evtartengl="FIELD_EXIT"    & G|evtvar="klgruppe"
+.continue TABLEEREN  ? G|evtartengl="FIELD_EXIT"    & G|evtvar="kauf"
+.continue TABLEEREN  ? G|evtartengl="FIELD_EXIT"    & G|evtvar="eigen"
+.continue TABLEEREN  ? G|evtartengl="FIELD_EXIT"    & G|evtvar="bpreis"
+.continue TABLEEREN  ? G|evtartengl="FIELD_EXIT"    & G|evtvar="preisea"
+.continue TABLEEREN  ? G|evtartengl="FIELD_EXIT"    & G|evtvar="preiseb"
+.continue ABCA       ? G|evtartengl="FIELD_EXIT"    & G|evtvar="rpa"
+.continue ABCB       ? G|evtartengl="FIELD_EXIT"    & G|evtvar="rpb"
+.continue ABCC       ? G|evtartengl="FIELD_EXIT"    & G|evtvar="rpc"
+.continue RUECK      ? G|evtartengl="FIELD_EXIT"    & G|evtvar="rueckschreiben"
+.continue BRUECK     ? G|evtartengl="BUTTON_AFTER"  & G|evtvar="brueckschreiben"
+.continue END
+..
+!BRUECK
+.continue ERROR ?  _M|rueckschreiben
+.input "sk/ABCANA.ZURUECK"
+.continue END   
+..
+!RUECK
+.input "sk/ABCANA.RUECK" 
+.set trans +
+.text U|xzeitraum 'P|spr' Zeitraum
+.text U|xkauf 'P|spr' Kaufteil
+.text U|xeigen 'P|spr' Eigenfertigungsteile
+.text U|xintl 'P|spr' Interne Lagergruppe
+.set trans -
+..
+.formula M|abckriterien = "A:"+'M|rpa'+",B:"+'M|rpb'+",C:"+'M|rpc'+";"+'U|xzeitraum'+":"+'M|anfdat'+"-"+'M|enddat'+";"+'U|xkauf'+":"+'M|kauf'+","+'M|preisea'+";"+'U|xeigen'+":"+'M|eigen'+","+'M|preiseb'+";"+'U|xintl'+":"+'M|klgruppe'
+.continue SCHREIBSCHUTZ ? _M|rueckschreiben
+.continue TABLEEREN
+..
+!SCHREIBSCHUTZ: Schreibschutz aufheben
+.protection -reset klgruppe
+.protection -reset kauf
+.protection -reset eigen
+.protection -reset bpreis
+.protection -reset anfdat
+.protection -reset enddat
+.protection -reset preisea
+.protection -reset preiseb
+.protection -reset rpa
+.protection -reset rpb
+.protection -reset rpc
+.formula M|abckriterien = ""
+.continue TABLEEREN
+..
+!SUMME
+.error Summe muss 100% ergeben.  ? (M|rpa + M|rpb + M|rpc) <> 100,00
+.continue TABLEEREN
+..
+!ALLE: alle Lagergruppen betrachten
+.copy M|elgruppe = G|FALSE
+.copy M|algruppe = G|TRUE
+.protection klgruppe
+.formula M|klgruppe = ""
+.copy M|aauswert = G|TRUE
+.copy M|eauswert = G|FALSE
+.continue TABLEEREN
+..
+!EINE: nur eine spezielle Lagergruppe beachten
+.copy M|algruppe = G|FALSE
+.copy M|elgruppe = G|TRUE
+.protection -reset klgruppe
+.. Vorbelegungen: internen Lagergruppe / default: internal warehouse group
+.copy M|klgruppe = F|sysinfo(10)^intlgruppe
+.continue TABLEEREN
+..
+!AAUSWERT
+.copy M|eauswert = G|FALSE
+.copy M|aauswert = G|TRUE
+.continue TABLEEREN
+..
+!EAUSWERT
+.copy M|eauswert = G|TRUE
+.copy M|aauswert = G|FALSE ? M|elgruppe = G|TRUE
+.copy M|aauswert = G|TRUE  ? M|elgruppe = G|FALSE
+.copy M|eauswert = G|FALSE ? M|elgruppe = G|FALSE
+.continue TABLEEREN
+..
+!ABCA
+.continue HINWEIS ? M|rpa > 100
+.formula M|rpb = 100 - M|rpa
+.formula M|rpc = ""
+.formula M|srpa = M|rpa
+.formula M|srpb = M|srpa + M|rpb
+.formula M|srpc = 100,00
+.copy M|rueckschreiben = G|FALSE
+.formula M|abckriterien = ""
+.continue TABLEEREN
+..
+!ABCB
+.continue HINWEIS                     ? M|rpb > 100
+.formula M|rpc = 100 - M|rpa - M|rpb  ? M|rpa + M|rpb <= 100
+.continue HINWEIS                     ? M|rpa + M|rpb > 100
+.formula M|srpa = M|rpa
+.formula M|srpb = M|srpa + M|rpb
+.formula M|srpc = 100,00
+.copy M|rueckschreiben = G|FALSE
+.formula M|abckriterien = ""
+.continue TABLEEREN
+..
+!ABCC
+.continue HINWEIS                     ? M|rpc > 100
+.formula M|rpa = 100 - M|rpc - M|rpb  ? M|rpc + M|rpb <= 100
+.continue HINWEIS                     ? M|rpc + M|rpb > 100
+.formula M|srpa = M|rpa
+.formula M|srpb = M|srpa + M|rpb
+.formula M|srpc = 100,00
+.copy M|rueckschreiben = G|FALSE
+.formula M|abckriterien = ""
+.continue TABLEEREN
+..
+!TABLEEREN: Tabelle und Diagramme leeren
+.formula M|hinweis = ""
+.make screen line -- ? M|tzeilen > 0
+..
+.chart -INIT
+.chart -SHOW chart 0
+.continue END
+..
+!END
+.continue 
+..
+!HINWEIS: Summe darf 100 nicht Åberschreiten, Einzelne Eingabe darf 100 nicht Åberschreiten
+.error UnzulÑssige Angabe. Summe darf maximal 100% ergeben.
+.formula M|rpa = ""  ? G|evtvar = "rpa"
+.formula M|rpb = ""  ? G|evtvar = "rpb"
+.formula M|rpc = ""  ? G|evtvar = "rpc"
+.cursor 'G|evtvar'
+..
+!ERROR
+.error RÅckschreiben ist nicht aktiviert. Vorbelegungen nicht gesetzt.
+.end 1

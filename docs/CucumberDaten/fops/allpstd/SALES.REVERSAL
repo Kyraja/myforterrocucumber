@@ -1,0 +1,513 @@
+..!interpreter english declaration noabbrev
+.set trans -
+..========================================================================
+..==  Name              : SALES.REVERSAL
+..==  Pfad              : allpstd
+..==  Funktion          : Storno von Verkaufslieferscheinen und - Rechnungen
+..==  Erstellungsdatum  : 06.01.2014
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2014 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+..====================================================
+.type text    xtsys xtsel xtsales xtext xttitel xtstornols xtstornore xtkenn
+.type text    xtedpdat xtedpout xtedpmsg xtedperr
+.type bool    xbmehr xbmitau xbohneau xbtransfer xbhinweis xbedp
+.type integer xianz xizeile
+.type realx   xxmge xxwert
+.type GD      xbudat xd1
+.type P3:23.24 xpsales
+.copy U|xbhinweis = G|FALSE
+.type integer xprocsp      ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- ZeileFuellen -----
+        <Field name="pnum">'0|pnum'</Field>
+?        <Field name="mge">'F|eval(0|mge * (-1))'</Field>           ?  0|typ = G|arpos
+?        <Field name="preis">'0|preis'</Field>                      ?  0|typ = G|arpos
+?        <Field name="he">'0|he(L=":")'</Field>                     ?  0|typ = G|arpos
+?        <Field name="tterm">'0|tterm:8'</Field>                    ?  0|typ = G|arpos
+?        <Field name="pwert">'F|eval(0|pwert * (-1))'</Field>       ? _0|typ = G|arpos & _0|typ = G|stpos & _0|typ = G|sipos & _0|typ = G|supos & _0|typ = G|zspos & _0|typ = G|espos & _0|typ = G|trpos
+        <Field name="ptext">'0|ptext'</Field>
+        <Field name="projekt">'0|projekt^id'</Field>
+        <Field name="yprjmpnullrechnung">'0|yprjmpnullrechnung(L=":")'</Field>
+.continue EL001 ? _((_(0|typ = G|stpos)) & (_(0|typ = G|sipos)) & (_(0|typ = G|supos)) & (_(0|typ = G|zspos)) & (_(0|typ = G|espos)) & (_(0|typ = G|trpos)))
+        <Field name="yprjmpeigenleist">'F|eval(0|yprjmpeigenleist * (-1))'</Field>
+        <Field name="yprjmpfremdleist">'F|eval(0|yprjmpfremdleist * (-1))'</Field>
+        <Field name="yprjmpsonstkost">'F|eval(0|yprjmpsonstkost * (-1))'</Field>
+        <Field name="yprjmpfertleist">'F|eval(0|yprjmpfertleist * (-1))'</Field>
+        <Field name="konto">'0|konto^id'</Field>
+        <Field name="kstelle">'0|kstelle^id'</Field>
+!EL001
+.continue EL002 ? _(_(F|empty(0|pftext)))
+.copy U|xbmehr = G|FALSE
+.select from '0|pftext' U|xtext^
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL003 ? _(U|xbmehr)
+'U|xtext'
+.continue FI003
+!EL003
+.copy U|xbmehr = G|TRUE
+        <Field name="pftext" abasType="TN">'U|xtext'
+!FI003
+.select from '0|pftext' U|xtext^
+.continue LOOP001
+!ELOP001: ==============================
+?</Field>       ? U|xbmehr
+!EL002
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue EL004 ? _(F|sysinfo(18)^dokvfolge)
+!REPT001: ==============================
+.set trans +
+.read "Bitte Nummer oder Suchwort angeben" U|xtsales
+.set trans -
+.continue EL005 ? _(_(F|empty(U|xtsales)))
+.assign U|xpsales = U|xtsales
+.continue EL006 ? _(G|mehr)
+.formula U|xtsales = ""
+.continue FI006
+!EL006
+.box
+'U|xtsales': nicht gefunden
+!FI006
+!EL005
+.continue REPT001 ? _(F|empty(U|xtsales))
+.continue EL007 ? _(_(F|empty(U|xpsales)))
+.load 0 add U|xpsales
+.continue EL008 ? _(_(0|uebertr))
+.continue EL009 ? _(0|typ = G|REKO)
+.load 0 line
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.continue EL010 ? _(0|orig^kotyp = G|LIKO)
+.set trans +
+.box Hinweis
+Diese Rechnungen wurde aus einem Lieferschein erstellt.
+Das Stornieren der Rechnung ist mit Hilfe dieses Programms nicht mîglich.
+Bitte stornieren Sie die Rechnung manuell.
+.set trans -
+.continue
+!EL010
+.load 0 line
+.continue LOOP002
+!ELOP002: ==============================
+!EL009
+.load 0 header
+.set trans +
+.formula U|xttitel = "Achtung"
+.box -button ok:cancel -title 'U|xttitel'
+?Der Lieferschein 'U|xpsales' wird storniert.   ? 0|typ = G|LIKO
+?Die Rechnung 'U|xpsales' wird storniert.       ? 0|typ = G|REKO
+.set trans -
+.continue EL011 ? _(G|box = G|boxyes)
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"
+.formula U|xtsel = "$,,kenn/==" + 0|such<<1 + 0|nummer + ","
+.formula U|xtsel = U|xtsel + ";@filingmode=(Both)"
+.load 9 group "3:23" 'U|xtsel'      ? 0|typ = G|LIKO
+.load 9 group "3:24" 'U|xtsel'      ? 0|typ = G|REKO
+.continue EL012 ? _(G|mehr)
+.set trans +
+.formula U|xttitel = "Achtung"
+.box -button yes:no -title 'U|xttitel'
+?Der Lieferschein wurde bereits storniert.  ? 0|typ = G|LIKO
+?Die Rechnung wurde bereits storniert.      ? 0|typ = G|REKO
+Wirklich nochmals stornieren
+.set trans -
+.continue   ? _G|box = G|boxyes
+!EL012
+.copy U|xbtransfer = G|FALSE
+.set trans +
+.formula U|xttitel = "Achtung"
+.formula U|xtext ="Soll der erzeugte Stornolieferschein sofort gebucht werden?" ? 0|typ = G|LIKO
+.formula U|xtext ="Soll die erzeugte Stornorechnungn sofort gebucht werden?"    ? 0|typ = G|REKO
+.set trans -
+.box -button yes:no -title 'U|xttitel'
+'U|xtext'
+.copy U|xbtransfer = G|TRUE     ? G|box = G|boxyes
+.copy U|xbmitau  = G|FALSE
+.copy U|xbohneau = G|FALSE
+.formula U|xbudat = 0|budat
+.input "allpstart/PRUEF.BUDAT"
+.continue EL013 ? _(U|xbbuchbar)
+.formula U|xd1 = (0|budat:8)<<6 + "01"
+.formula U|xd1 =  U|xd1 + 31
+.formula U|xd1 = (U|xd1:8)<<6 + "01"
+.formula U|xd1 =  U|xd1 - 1
+.formula U|xtsel = "$,,yprojekt==" + 0|yprjmproj^id + ";ystichtag==" + U|xd1:8 + ";yabrechtyp==`;yauposid==`;ytpposid==`;ybabgeschlossen==1;@filingmode=(Active)"
+.load 9 group 'U|xydbgrwipstat' 'U|xtsel'
+.copy U|xbbuchbar = FALSE   ? G|mehr
+!EL013
+.load 0 line
+!LOOP003: ==============================
+.continue ELOP003 ? _((G|mehr) & ((_(U|xbmitau)) ; (_(U|xbohneau)) ; (U|xbbuchbar)))
+.continue EL014 ? _((0|orig^ablagef) ; (F|empty(0|orig)) ; (_(F|empty(0|orig^status))))
+.copy U|xbohneau = G|TRUE
+.continue FI014
+!EL014
+.copy U|xbmitau = G|TRUE
+.continue EL015 ? _(_(0|kopf^zbed^id = 0|okopf^zbed^id))
+.set trans +
+.box Fehler
+Die Zahlungsbedingung im Vorgang passt nicht zu der des Auftrags.
+Storno nicht mîglich.
+.set trans -
+.continue
+!EL015
+!FI014
+.continue EL016 ? _((_(F|empty(0|projekt))) & ((F|empty(0|kopf^yprjmproj)) ; (_(0|projekt^id = 0|kopf^yprjmproj^id))) & (U|xbbuchbar))
+.formula U|xtsel = "$,,yprojekt==" + 0|projekt^id + ";ystichtag==" + U|xd1:8 + ";yabrechtyp==`;yauposid==`;ytpposid==`;ybabgeschlossen==1;@filingmode=(Active)"
+.load 9 group 'U|xydbgrwipstat' 'U|xtsel'
+.copy U|xbbuchbar = FALSE   ? G|mehr
+!EL016
+.load 0 line
+.continue LOOP003
+!ELOP003: ==============================
+.continue EL017 ? _(_(U|xbbuchbar))
+.formula U|xbudat = G|datum
+!EL017
+.continue EL018 ? _((U|xbmitau) ; (U|xbohneau))
+.load 0 header
+.file -TEMPNAME U|xtedpdat
+.file -TEMPNAME U|xtedpout
+.file -TEMPNAME U|xtedperr
+.file -TEMPNAME U|xtedpmsg
+.set SEPARATOR
+.set SUBSTITUTION "+LX,&,&amp;, ,<,&lt;, ,>,&gt;,"
+.formula U|xtkenn = 0|such<<1 + 0|nummer + ","
+.formula U|xtkenn = 0|kenn + U|xtkenn           ? _F|empty(0|kenn)
+.output NEW 'U|xtedpdat' -ENCODING "UTF-8"
+.input DATEI.F
+<'G|fragechar'xml version='G|dblquote'1.0'G|dblquote' encoding='G|dblquote'UTF-8'G|dblquote''G|fragechar'>
+<'G|fragechar'edp lang d'G|fragechar'>
+<'G|fragechar'edp updatemode ERRABORT'G|fragechar'>
+<ABASData reftype='G|dblquote'ref'G|dblquote'>
+  <RecordSet>
+?    <Record database="3" group="23" action="copy" id="'0|id'">     ? 0|typ = G|LIKO
+?    <Record database="3" group="24" action="copy" id="'0|id'">     ? 0|typ = G|REKO
+      <Row number="-*"/>
+      <Field name="budat">'U|xbudat:8'</Field>
+      <Field name="yprjmproj">'0|yprjmproj^id'</Field>
+      <Field name="kenn"><![CDATA['U|xtkenn']]></Field>
+.continue EL019 ? _(U|xbmitau)
+.load 0 line
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.continue EL020 ? _((0|orig^ablagef) ; (F|empty(0|orig)) ; (_(F|empty(0|orig^status))))
+.continue FI020
+!EL020
+      <Field name="beleg">'0|orig^id'</Field>
+!FI020
+.load 0 line
+.continue LOOP004
+!ELOP004: ==============================
+.load 0 header
+.load 0 line
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.continue EL021 ? _((0|orig^ablagef) ; (F|empty(0|orig)) ; (_(F|empty(0|orig^status))))
+.continue FI021
+!EL021
+      <Row number="'0|orig^id'">
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+</Row>
+!FI021
+.load 0 line
+.continue LOOP005
+!ELOP005: ==============================
+!EL019
+.continue EL022 ? _((_(U|xbmitau)) & (U|xbohneau))
+.load 0 header
+.load 0 line
+!LOOP006: ==============================
+.continue ELOP006 ? _(G|mehr)
+.continue EL023 ? _((0|orig^ablagef) ; (F|empty(0|orig)) ; (_(F|empty(0|orig^status))))
+      <Row rowOp="+">
+        <Field name="artex">'0|artex^id'</Field>
+.continue EL024 ? _((_(0|typ = G|stpos)) & (_(0|typ = G|sipos)) & (_(0|typ = G|supos)) & (_(0|typ = G|espos)) & (_(0|kotyp = G|REKO)))
+        <Field name="rerelev">'0|rerelev(L=":")'</Field>
+!EL024
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+      </Row>
+!EL023
+.load 0 line
+.continue LOOP006
+!ELOP006: ==============================
+!EL022
+    </Record>
+  </RecordSet>
+</ABASData>
+.set SUBSTITUTION
+.output NEW WERF.WEG
+.formula U|xtsys = "xmlimport.sh"
+.formula U|xtsys =  U|xtsys + " -p " + G|einmalpw
+.formula U|xtsys =  U|xtsys + " -r NUM -T"
+.formula U|xtsys =  U|xtsys + " -I " + U|xtedpdat + " -H " + U|xtedpmsg + " 1>" + U|xtedpout + " 2>" + U|xtedperr
+.input "allpstart/FOP.ALL.EDP.CHECK"
+.continue EL025 ? _(_(U|xbfehler))
+.select from
+.select from 'U|xtedpout' U|xtsel
+.load 1 group "P3:23.24" 'U|xtsel'
+.continue EL026 ? _(_(G|mehr))
+.load 0 header
+.set trans +
+.box Fehler
+?Der Stornolieferschein konnte nicht erstellt werden.      ? 0|typ = G|LIKO
+?Die Stornorechnung konnte nicht erstellt werden.          ? 0|typ = G|REKO
+.set trans -
+.continue
+.continue FI026
+!EL026
+.formula U|xtstornols = 1|id
+!FI026
+.continue FI025
+!EL025
+.load 0 header
+.set trans +
+.box Fehler
+?Der Stornolieferschein konnte nicht erstellt werden.      ? 0|typ = G|LIKO
+?Die Stornorechnung konnte nicht erstellt werden.          ? 0|typ = G|REKO
+.set trans -
+.continue
+!FI025
+.continue EL027 ? _((U|xbmitau) & (U|xbohneau))
+.load 0 header
+.copy U|xbedp = G|FALSE
+.file -TEMPNAME U|xtedpdat
+.file -TEMPNAME U|xtedpout
+.file -TEMPNAME U|xtedperr
+.file -TEMPNAME U|xtedpmsg
+.set SEPARATOR
+.set SUBSTITUTION "+LX,&,&amp;, ,<,&lt;, ,>,&gt;,"
+.output NEW 'U|xtedpdat' -ENCODING "UTF-8"
+.input DATEI.F
+<'G|fragechar'xml version='G|dblquote'1.0'G|dblquote' encoding='G|dblquote'UTF-8'G|dblquote''G|fragechar'>
+<'G|fragechar'edp lang d'G|fragechar'>
+<'G|fragechar'edp updatemode ERRABORT'G|fragechar'>
+<ABASData reftype='G|dblquote'ref'G|dblquote'>
+  <RecordSet>
+?    <Record database="3" group="23" action="update" id="'U|xtstornols'">   ? 0|typ = G|LIKO
+?    <Record database="3" group="24" action="update" id="'U|xtstornols'">   ? 0|typ = G|REKO
+.formula U|xizeile = 0
+.load 0 line
+!LOOP007: ==============================
+.continue ELOP007 ? _(G|mehr)
+.formula U|xizeile = U|xizeile + 1
+.continue EL028 ? _((_(0|kotyp = G|REKO)) ; ((_(0|typ = G|stpos)) & (_(0|typ = G|sipos)) & (_(0|typ = G|supos)) & (_(0|typ = G|espos))))
+.continue EL029 ? _((0|orig^ablagef) ; (F|empty(0|orig)) ; (_(F|empty(0|orig^status))))
+      <Row number="'U|xizeile'" rowOp="+">
+        <Field name="artex">'0|artex^id'</Field>
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+      </Row>
+.copy U|xbedp = G|TRUE
+!EL029
+!EL028
+.load 0 line
+.continue LOOP007
+!ELOP007: ==============================
+    </Record>
+  </RecordSet>
+</ABASData>
+.set SUBSTITUTION
+.continue EL030 ? _(U|xbedp)
+.load 1
+.output NEW WERF.WEG
+.formula U|xtsys = "xmlimport.sh"
+.formula U|xtsys =  U|xtsys + " -p " + G|einmalpw
+.formula U|xtsys =  U|xtsys + " -r NUM -T"
+.formula U|xtsys =  U|xtsys + " -I " + U|xtedpdat + " -H " + U|xtedpmsg + " 1>" + U|xtedpout + " 2>" + U|xtedperr
+.input "allpstart/FOP.ALL.EDP.CHECK"
+.continue EL031 ? _(_(U|xbfehler))
+.select from
+.select from 'U|xtedpout' U|xtsel
+.load 1 group "P3:23.24" 'U|xtsel'
+.continue EL032 ? _(_(G|mehr))
+.set trans +
+.box Fehler
+?Der Stornolieferschein konnte nicht erstellt werden.      ? 0|typ = G|LIKO
+?Die Stornorechnung konnte nicht erstellt werden.          ? 0|typ = G|REKO
+.set trans -
+.continue
+.continue FI032
+!EL032
+.formula U|xtstornols = 1|id
+!FI032
+.continue FI031
+!EL031
+.set trans +
+.box Fehler
+?Der Stornolieferschein konnte nicht erstellt werden.      ? 0|typ = G|LIKO
+?Die Stornorechnung konnte nicht erstellt werden.          ? 0|typ = G|REKO
+.set trans -
+.continue
+!FI031
+!EL030
+!EL027
+.load 0 header
+.continue EL033 ? _(U|xbtransfer)
+.file -TEMPNAME U|xtedpdat
+.file -TEMPNAME U|xtedpout
+.file -TEMPNAME U|xtedperr
+.file -TEMPNAME U|xtedpmsg
+.set SEPARATOR
+.set SUBSTITUTION "+LX,&,&amp;, ,<,&lt;, ,>,&gt;,"
+.output NEW 'U|xtedpdat' -ENCODING "UTF-8"
+.input DATEI.F
+<'G|fragechar'xml version='G|dblquote'1.0'G|dblquote' encoding='G|dblquote'UTF-8'G|dblquote''G|fragechar'>
+<'G|fragechar'edp lang d'G|fragechar'>
+<'G|fragechar'edp updatemode ERRABORT'G|fragechar'>
+<ABASData reftype='G|dblquote'ref'G|dblquote'>
+  <RecordSet>
+?    <Record database="3" group="23" action="transfer" id="'U|xtstornols'"> ? 0|typ = G|LIKO
+?    <Record database="3" group="24" action="transfer" id="'U|xtstornols'"> ? 0|typ = G|REKO
+    </Record>
+  </RecordSet>
+</ABASData>
+.set SUBSTITUTION
+.load 1
+.output NEW WERF.WEG
+.formula U|xtsys = "xmlimport.sh"
+.formula U|xtsys =  U|xtsys + " -p " + G|einmalpw
+.formula U|xtsys =  U|xtsys + " -r NUM -T"
+.formula U|xtsys =  U|xtsys + " -I " + U|xtedpdat + " -H " + U|xtedpmsg + " 1>" + U|xtedpout + " 2>" + U|xtedperr
+.input "allpstart/FOP.ALL.EDP.CHECK"
+!EL033
+.continue FI018
+!EL018
+.set trans +
+.box Fehler
+Der Vorgang '0|nummer' enthÑlt keine Positionen.
+.set trans -
+.continue
+!FI018
+.load 0 header
+.load 0 line
+!LOOP008: ==============================
+.continue ELOP008 ? _(G|mehr)
+.formula U|xtsel = "$,,ylsposid==" + 0|id + ";@filingmode=(Active)"     ? 0|kotyp = G|LIKO
+.formula U|xtsel = "$,,yreposid==" + 0|id + ";@filingmode=(Active)"     ? 0|kotyp = G|REKO
+.load 1 group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP009: ==============================
+.continue ELOP009 ? _(G|mehr)
+.select lock add 1|id
+.continue EL034 ? _(G|mehr)
+.formula H|yaunum      = ""
+.formula H|yauposid    = ""
+.formula H|ylsnum      = ""
+.formula H|ylsposid    = ""
+.formula H|yabrechnung = ""
+.formula H|yrenum      = ""
+.formula H|yreposid    = ""
+.rewrite
+!EL034
+.load 1 continue
+.continue LOOP009
+!ELOP009: ==============================
+.formula U|xtsel = "$,,ymzlsposid==" + 0|id + ";@filingmode=(Active)"   ? 0|kotyp = G|LIKO
+.formula U|xtsel = "$,,ymzreposid==" + 0|id + ";@filingmode=(Active)"   ? 0|kotyp = G|REKO
+.load 1 group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP010: ==============================
+.continue ELOP010 ? _(G|mehr)
+.select lock add 1|id
+.continue EL035 ? _(G|mehr)
+.formula H|ymzaunum      = ""
+.formula H|ymzauposid    = ""
+.formula H|ymzlsnum      = ""
+.formula H|ymzlsposid    = ""
+.formula H|ymzabrechnung = ""
+.formula H|ymzrenum      = ""
+.formula H|ymzreposid    = ""
+.rewrite
+!EL035
+.load 1 continue
+.continue LOOP010
+!ELOP010: ==============================
+.formula U|xtsel = "$,,ytmmlsposid==" + 0|id + ";@filingmode=(Active);@rows=(Yes)"     ? 0|kotyp = G|LIKO
+.formula U|xtsel = "$,,ytmmreposid==" + 0|id + ";@filingmode=(Active);@rows=(Yes)"     ? 0|kotyp = G|REKO
+.load 1 group 'U|xydbgrmatmeldung' 'U|xtsel'
+!LOOP011: ==============================
+.continue ELOP011 ? _(G|mehr)
+.select lock add 1|id
+.continue EL036 ? _(G|mehr)
+.select lock line '1|selzeile'
+.formula H|ytmmlsnum      = ""
+.formula H|ytmmlsposid    = ""
+.formula H|ytmmabrechnung = ""
+.formula H|ytmmrenum      = ""
+.formula H|ytmmreposid    = ""
+.rewrite
+!EL036
+.load 1 continue
+.continue LOOP011
+!ELOP011: ==============================
+.formula U|xtsel = "$,,ytsmlsposid==" + 0|id + ";@filingmode=(Active);@rows=(Yes)"     ? 0|kotyp = G|LIKO
+.formula U|xtsel = "$,,ytsmreposid==" + 0|id + ";@filingmode=(Active);@rows=(Yes)"     ? 0|kotyp = G|REKO
+.load 1 group 'U|xydbgrsubmeldung' 'U|xtsel'
+!LOOP012: ==============================
+.continue ELOP012 ? _(G|mehr)
+.select lock add 1|id
+.continue EL037 ? _(G|mehr)
+.select lock line '1|selzeile'
+.formula H|ytsmlsnum      = ""
+.formula H|ytsmlsposid    = ""
+.formula H|ytsmabrechnung = ""
+.formula H|ytsmrenum      = ""
+.formula H|ytsmreposid    = ""
+.rewrite
+!EL037
+.load 1 continue
+.continue LOOP012
+!ELOP012: ==============================
+.load 0 line
+.continue LOOP008
+!ELOP008: ==============================
+.load 0 header
+.load 1 group "3:23.24" 'U|xtstornols'
+.set trans +
+.box Hinweis
+?Der Lieferschein '0|nummer' wurde mit dem Stornolieferschein '1|nummer' storniert. ? 0|typ = G|LIKO
+?Die Rechnung '0|nummer' wurde mit der Stornorechnung '1|nummer' storniert.         ? 0|typ = G|REKO
+.set trans -
+!EL011
+.continue FI008
+!EL008
+.set trans +
+.box Hinweis
+?Der Lieferschein ist noch nicht gebucht.       ? 0|typ = G|LIKO
+?Die Rechnung ist noch nicht gebucht.           ? 0|typ = G|REKO
+Bitte Ñndern Sie bei Bedarf die abzurechnenden RÅckmeldungen Åber den Abrechnungsbutton in der Position.
+.set trans -
+!FI008
+!EL007
+.continue FI004
+!EL004
+.set trans +
+.box Hinweis
+Bewertung ist nicht aktiv.
+Bitte nutzen Sie Standard-Stornofunktion.
+.set trans -
+!FI004
+.continue

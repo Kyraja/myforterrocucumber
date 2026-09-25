@@ -1,0 +1,254 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SPEDAUF.BK
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Kopffelder zum Speditionsauftrag ausfuellen
+.. Functionality  : Fill header fields for shipping order
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.type text   xtkonst
+.type text   xtsel
+..
+.. check required fields
+.continue NOSHIP  ?  F|empty(M|vkspednr)
+..
+.. fill header / footer fields with data from shipping order / delivery note / firm data
+.. #) numbers shown match the VDA ruleset
+..
+.. 5) Beladestelle
+.assign M|libelade = 'M|vkspednr^belad'
+..
+.. 13) Bordero-/Ladeliste-Nr
+..      .zuweisen M|ladenr  = ""
+.. 15) Versandvermerk
+..      .zuweisen M|verm    = ""
+..
+.. 26) Rauminhalt cdm
+.assign M|sumcdm   = M|vkspednr^ladem
+..
+.. 29) Gefahrgut-Klassifikation
+.assign M|gefgklas  = ""
+..
+.. 30) Gefahrgut-Bezeichnung
+.assign M|gefgbez   = ""
+..
+.. 37) Kontierung
+.assign M|konto     = ""
+..
+.. 41) Abrechnungs-Schl
+.assign M|abrechschl= ""
+..
+.. 42) EmpfangsbestÑtigung
+.text xtkonst 'P|spr' Obige Sendung vollstÑndig und in ordnungsgemÑ·em Zustand erhalten
+.assign M|empfbest  = T|xtkonst
+..
+.. 43) öbernahmebestÑtigung
+.text xtkonst 'P|spr' Obige Sendung vollstÑndig und in ordnungsgemÑ·em Zustand Åbernommen
+.assign M|ueberbest = T|xtkonst
+..
+.. 44) Die Sendung enthÑlt
+.assign M|anzeurflp = ""
+.assign M|taueurfp  = ""
+.assign M|anzeurgp  = ""
+.assign M|taueurgp  = ""
+..
+.. 45) GeschÑftsbedingungen / business conditions
+.text xtkonst 'P|spr' Es gelten die Allgemeinen Deutschen Spediteurbedingungen (ADSp) in ihrer jeweils neusten Fassung. Gerichtsstand ist der Firmensitz des Versandspediteurs.
+.assign M|txtbeding = T|xtkonst
+..
+..
+.. first delivery note
+..
+.. selection
+.formula M|select = "$,,;@gruppe=1;typ=(4);@ablageart=(3);sped=" + M|vkspednr^id   ?  F|empty(M|vklsnr)
+.formula M|select = 'M|vklsnr^id'                                        ? _F|empty(M|vklsnr)
+..
+.load 1 sales 'M|select'
+.continue EDEL    ? _T|mehr
+..
+.assign P|spr = 1|warenempf^spr ? F|modifiable(P|spr) & _P|sprfoschutz
+..
+.. 2) Lieferant-Nr  / Supplier number
+.assign M|linr    = 1|reempf^frbez
+..
+.. 12) Kunden-Nr
+.assign M|kunr    = 1|reempf^nummer
+..
+.. 31) Frankatur / Lieferbedingung
+.assign M|frankat   =  1|lbed^sucherw << ";"
+.. Incoterm, Incoort (Ort der Lieferbedingung)
+.assign M|kincocode = -1|lbed^incocode
+.assign M|kincoort  =  1|incoort
+.assign M|kincocodeort =  M|kincocode + ", "  + M|kincoort     ? _F|empty(M|kincoort) ; _F|empty(M|kincocode)
+.continue FREI    ?  M|kincocode = "CFR"
+.continue FREI    ?  M|kincocode = "CIF"
+.continue FREI    ?  M|kincocode = "CPT"
+.continue FREI    ?  M|kincocode = "CIP"
+.assign M|kunfrei = M|kincocodeort
+.continue ELBED
+!FREI
+.assign M|kfrei = M|kincocodeort
+!ELBED
+..
+.. 34) Versender-Nachnahme
+.assign M|nachvers  = 0.00
+.assign M|nachwae   = 1|land
+.assign M|wawae     = 1|land
+..
+.. 36) Auftrags-Nr
+.assign M|kuaunr    = 1|frzeich
+..
+.. 40) Versandart
+.assign M|kuversand = 1|versand^name
+..
+.. 11) EmpfÑnger
+.continue ANS     ?  F|empty(1|ans2)
+.assign M|kuans1       = 1|ans2 << ";"
+.assign M|kuans2       = 1|ans2 >> ";" << ";"
+.assign M|kuans3       = 1|ans2 >> ";" >> ";" << ";"
+.assign M|kustr        = 1|str2
+.assign M|kuort        = 1|lakenn2 + " " + 1|plz2 + " " + 1|nort2
+.assign M|kuortohneplz = 1|nort2
+.assign M|kustaat      = 1|staat2
+.continue EANS
+!ANS
+.assign M|kuans1       = 1|ans  << ";"
+.assign M|kuans2       = 1|ans  >> ";" << ";"
+.assign M|kuans3       = 1|ans  >> ";" >> ";" << ";"
+.assign M|kustr        = 1|str
+.assign M|kuort        = 1|lakenn + " " + 1|plz + " " + 1|nort
+.assign M|kuortohneplz = 1|nort
+.assign M|kustaat      = 1|staat
+!EANS
+..
+!EDEL
+..
+..
+.. shipping order
+..
+.load 2 transportcompany 'M|vkspednr^id'
+.continue ESHOR   ? _T|mehr
+..
+.. 6) Datum
+.formula M|datum     = 2|uebdat
+..
+.. 6) Eintreffdatum
+.formula M|term      = 2|eindatsoll
+..
+.. 6) Eintreffzeit
+.formula M|zeit      = 2|einzsoll
+..
+.. 7) Relations-Nr
+.assign M|relnr   = ""
+..
+.. 8) Sendung/Ladung
+.assign M|sendnr  = 2|nummer
+..
+.. 14) Anliefer-/Abladesstelle
+.assign M|kuablade = 2|kunde^ablstelle            ?  2|kunde^gruppe = 2
+..
+.. 16) Eintreff-Datum
+.assign M|term    = 2|eindatsoll
+..
+.. 17) Eintreff-Zeit
+.assign M|zeit    = 2|einzsoll
+..
+.. 25) Summe Packmittel
+.assign M|lssumpck = 2|anzpackst
+.assign M|lssumpck = 2|anzpackstls  ?  F|empty(2|anzpackst)
+..
+.. 27) Lademittel
+.assign M|sumlm = 2|gewbrutto - 2|gewnetto
+.assign M|sumlm = 2|bruttogew - 2|nettogew  ?  F|empty(2|gewbrutto)
+..
+.. 28) Brutto Gewicht
+.assign M|sumbru = 2|gewbrutto
+.assign M|sumbru = 2|bruttogew  ?  F|empty(2|gewbrutto)
+..
+.. 32) Warenwert fÅr SVS
+.assign M|wawert  = 2|wwert
+..
+.. 33) Transport-Versicherung
+.assign M|transver= 2|tverswert
+..
+.. 35) Anlagen
+.assign M|anlagen = 2|anlagen
+..
+.. 38) Transportmittel-Nr
+.assign M|transm  = 2|transnr
+..
+.. 39) LKW-Code
+.assign M|lkwcode = 2|lkwart
+..
+!ESHOR
+..
+..
+.. shipper
+..
+.load 3 supplier '2|spediteur^id'
+.continue ESHIP   ? _T|mehr
+..
+.. 4) Nr
+.assign M|kuversnr = 3|frbez         ?  3|gruppe=1
+.assign M|kuversnr = 3|firma^frbez   ?  3|gruppe=2
+..
+.. 9) Versandspediteur
+.assign M|spans1  = 3|ans << ";"
+.assign M|spans2  = 3|ans >> ";" << ";"
+.assign M|spans3  = 3|ans >> ";" >> ";" << ";"
+.assign M|spstr   = 3|str
+.assign M|sport   = 3|lakenn + " " + 3|plz + " " + 3|nort << ";"
+.assign M|spstaat = 3|staat
+.assign M|sptele  = 3|tele
+.assign M|spfax   = 3|fax
+..
+.. 10) Spediteur-Nr
+.assign M|spnr    = 3|nummer
+..
+.formula T|xtsel = "$,,;@gruppe=5"
+.formula T|xtsel = T|xtsel + ";klnum==" + '3|id'
+.formula T|xtsel = T|xtsel + ";kunlie==" + '2|kunde^id'         ?  F|defined(2|kunde)
+.load 4 supplier 'T|xtsel'
+.load 4 line '4|selzeile'  ?  T|mehr
+.formula M|spnr = 4|bemkl    ?  T|mehr
+.continue ESHIP               ?  T|mehr  & _F|empty(M|spnr)
+..
+.continue ESHIP   ? _F|defined(2|kunde^firma)
+.formula T|xtsel = "$,,;@gruppe=5"
+.formula T|xtsel = T|xtsel + ";klnum==" + '3|id'
+.formula T|xtsel = T|xtsel + ";kunlie==" + '2|kunde^firma^id'
+.load 4 supplier 'T|xtsel'
+.load 4 line '4|selzeile'  ?  T|mehr
+.formula M|spnr = 4|bemkl    ?  T|mehr
+..
+!ESHIP
+..
+..
+.. sender address
+..
+.select add F|sysinfo(10,FALSE)
+.continue EFIRM   ? _T|mehr
+..
+.. 1) Versender Anschrift / sender address
+..
+.assign M|lians1   = H|ans << ";"
+.assign M|lians2   = H|ans >> ";" << ";"
+.assign M|lians3   = H|ans >> ";" >> ";" << ";"
+.assign M|listr    = H|str
+.assign M|liort    = H|lakenn + " " + H|plz + " " + H|nort
+.assign M|liortohneplz = H|nort
+.assign M|listaat  = H|staat
+..
+!EFIRM
+..
+..*****************************************************************************
+!END
+.continue
+..
+!NOSHIP
+.error Geben Sie bitte einen Speditionsauftrag ein!
+.end 1

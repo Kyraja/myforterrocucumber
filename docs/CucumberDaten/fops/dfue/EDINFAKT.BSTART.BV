@@ -1,0 +1,80 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDINFAKT.BSTART.BV
+.. Datum          : 24.05.2007
+.. Version        : 2007r3n00
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Startbutton, Erstellt Selektion fÅr das Infosystem
+..                  Das Lesen der Lieferschein-Position geschieht zweistufig,
+..                  zuerst werden alle Lieferschein-Kîpfe zu einem Kunden,
+..                  Kundenkontakt oder Rahmenauftrag gelesen,
+..                  Bei der Auswertung im Zeilen-FOP werden die
+..                  Lieferschein-Positionen gelesen. Zeilen die nicht ausgegeben
+..                  werden sollen werden Åbergangen.
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+.. Ablauf         : Button-Vor EFOP fÅr den Startbutton
+..
+.. Functionality  : start button, constructs query string for infosystem
+..                  Reading of delivery slip positions is done in
+..                  two steps. First all delivery slip headers for
+..                  the selected customer / customer staff ref / or
+..                  blanket order are read.
+..                  delivery slip positions are read when  processing
+..                  the result with the Row-FOP. rows which
+..                  which do not match the given parameters
+..                  (e.g. wrong date, wrong product, packing item) are
+..                  skipped.
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+.. Program flow   : button before efop for start button
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.. check required fields
+.continue ERRCUST     ?   F|empty(M|kkunde2)
+.. check date range
+.continue ERRDATE     ?  _F|empty(M|kvom) & _F|empty(M|kbis) & ( M|kbis < M|kvom )
+..
+.. default to today, if M|kpreisdat is empty
+.formula M|kpreisdat = "."   ?  F|empty(M|kpreisdat)
+..
+.. only check one specific delivery note
+.formula M|select = M|kls^id ? _F|empty(M|kls)
+.continue START               ? _F|empty(M|kls)
+..
+.. select delivery note row for "AR" (~Debitor)
+.formula M|select = "$,,;@gruppe=1;@ordnung=nummer;@ablage=(3);@zeilen=(0);ktyp=(4);kunde2=" + 'M|kkunde2^id'
+.. restrict by date
+.formula M|select = M|select + ";budat="      + 'M|kvom' + "!" + 'M|kbis'    ? _F|empty(M|kvom) ;  _F|empty(M|kbis)
+.. restrict by customer staff ref
+.formula M|select = M|select + ";kunde="      + 'M|kkunde^id'                ?  M|kkunde^id  <>  M|kkunde2^id
+.. restrict by  unloading point and plant
+.formula M|select = M|select + ";ablstelle==" + 'M|kablstelle'               ? _F|empty(M|kablstelle)
+.formula M|select = M|select + ";werk=="      + 'M|kwerk'                    ? _F|empty(M|kwerk)
+..
+!START
+.make screen line -- ? M|tzeilen > 0
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERRCUST: required field missing
+.error Bitte geben Sie einen Kunden ein.
+.cursor kkunde 0
+.end 1
+..
+!ERRDATE: date range has error
+.error Bitte geben Sie einen gÅltigen Zeitraum ein.
+.cursor kvom 0
+.end 1

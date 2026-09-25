@@ -1,0 +1,273 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : KBFORMBILGUV.EV
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : Allgemeines Event-FOP fuer die Infosysteme
+..                   fb/KBFORM fb/GUV fb/BILANZ fb/GUVNACH fb/BILANZNACH etc.
+..  Functionality  : Common event FOP of the infosystems
+..                   fb/KBFORM fb/GUV fb/BILANZ fb/GUVNACH fb/BILANZNACH etc.
+..
+.. include fb/KBFORMBILGUV.PER
+.. include fb/KBFORMBILGUV.HOL
+.. include fb/KBFORMBILGUV.LOAD.ALL
+.. include fb/KBFORMBILGUV.BLBU.BV
+.. include fb/KBFORMBILGUV.CMPVALUES.INIT
+.. include fb/KBFORMBILGUV.CMPVALUES
+.. include fb/KBFORMBILGUV.CMPAR.INIT
+.. include fb/KBFORMBILGUV.COMPARE
+..
+..*****************************************************************************
+..
+.type integer  xizraum
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.continue BLBUBV   ? (G|evtartengl = "BUTTON_BEFORE") & (F|regmatch(F|expr(G|evtvar), "blbu[0-9]+"))
+.continue TREEOC   ? (G|evtvar = "tbaumaufzu")
+.continue CMPAR    ? (G|evtartengl = "FIELD_EXIT")   & (F|regmatch(F|expr(G|evtvar), "cmpkb[0-9]+"))
+.continue OPENALL  ? (G|evtartengl = "BUTTON_BEFORE") & (G|evtvar = "bverdalle")
+.continue LANG     ? (G|evtartengl = "FIELD_EXIT")   & (G|evtvar = "spra")
+.make screen line --
+..
+.continue BKREIS   ? (G|evtartengl = "FIELD_EXIT")   & (G|evtvar = "bukreis")
+.continue CURRENC  ? (G|evtartengl = "FIELD_EXIT")   & (G|evtvar = "buwaehr")
+.continue CURRENC  ? (G|evtartengl = "FIELD_EXIT")   & (G|evtvar = "auswaehr")
+.continue NONULL   ? (G|evtartengl = "FIELD_EXIT")   & (G|evtvar = "nonull")
+.continue KNONULL  ? (G|evtartengl = "FIELD_EXIT")   & (G|evtvar = "knonull")
+.continue KBNONULL ? (G|evtartengl = "FIELD_EXIT")   & (G|evtvar = "kbnonull")
+.continue START    ? (G|evtartengl = "BUTTON_BEFORE") & (G|evtvar = "bstart")
+.continue ARFORM   ? (G|evtartengl = "FIELD_EXIT")   & (G|evtvar = "kbfvon")
+.continue PCLEAR   ? (G|evtartengl = "BUTTON_BEFORE") & (G|evtvar = "bzleer")
+.continue SETPER   ? (G|evtartengl = "FIELD_EXIT")   & ((G|evtvar = "amon1") ; (G|evtvar = "emon1")) & _(M|such65/"*KBFORM*")
+.continue CHECKPER ? (G|evtartengl = "FIELD_EXIT")   &  F|regmatch(F|expr(G|evtvar), "amon[0-9]+")
+.continue CHECKPER ? (G|evtartengl = "FIELD_EXIT")   &  F|regmatch(F|expr(G|evtvar), "emon[0-9]+")
+.continue CHECKPER ? (G|evtartengl = "FIELD_EXIT")   &  F|regmatch(F|expr(G|evtvar), "jahr[0-9]+")
+.continue END
+..
+..*****************************************************************************
+!BLBUBV
+..*****************************************************************************
+.input "fb/KBFORMBILGUV.BLBU.BV"
+.continue END
+..
+..*****************************************************************************
+!NONULL:
+..*****************************************************************************
+.formula M|knonull  = M|nonull
+.formula M|kbnonull = M|nonull
+.continue END
+..
+..*****************************************************************************
+!KNONULL
+..*****************************************************************************
+.formula M|nonull = M|knonull & M|kbnonull
+.continue END
+..
+..*****************************************************************************
+!KBNONULL
+..*****************************************************************************
+.formula M|nonull = M|knonull & M|kbnonull
+.continue END
+..
+..*****************************************************************************
+!BKREIS:
+..*****************************************************************************
+.assign M|bukreis = G|bukreis^id ? F|empty(M|bukreis)
+.continue END
+..
+..*****************************************************************************
+!CURRENC: Currency changed
+..*****************************************************************************
+.assign M|buwaehr    = G|inland^id ? F|empty(M|buwaehr)
+.assign M|auswaehr   = G|inland^id ? F|empty(M|auswaehr)
+.copy M|ausfrwaehr = M|buwaehr^id <> M|auswaehr^id ? F|defined(M|ausfrwaehr)
+.continue END
+..
+..*****************************************************************************
+!LANG: Language changed
+..*****************************************************************************
+.copy P|spra = M|spra
+.continue END
+..*****************************************************************************
+!CHECKPER: Check periods
+..*****************************************************************************
+.type text xxtsmon xxtemon xxtsyear xxteyear xxtfromd xxttod
+.formula U|xizraum = 0
+..
+..*****************************************************************************
+!CHKPLOOP: Loop over periods
+..*****************************************************************************
+.formula U|xizraum = U|xizraum + 1
+.continue END      ? U|xizraum > M|maxperiod
+.continue CHKPLOOP ? F|empty(M|jahr.U|xizraum)
+.formula U|xxtsmon = "amon" + 'U|xizraum'
+.formula U|xxtemon = "emon" + 'U|xizraum'
+.formula U|xxtsyear = "jahr" + 'U|xizraum'
+.formula U|xxteyear = "jahr" + 'U|xizraum'
+.formula U|xxtfromd = "adatum" + 'U|xizraum'
+.formula U|xxttod = "edatum" + 'U|xizraum'
+.input "fb/IS.SETPERIOD"
+.formula M|emon2 = M|emon1 ? G|evtvar = "amon1"
+.formula M|jahr2 = F|prevfy(M|jahr1) ? G|evtvar = "jahr1"
+.continue CHKPLOOP
+..
+..*****************************************************************************
+!SETPER
+..*****************************************************************************
+.formula M|amon2 = M|amon1 ? G|evtvar = "amon1"
+.formula M|emon2 = M|emon1 ? G|evtvar = "emon1"
+.continue CHECKPER
+..
+..*****************************************************************************
+!PCLEAR: Clear period settings
+..*****************************************************************************
+.input "fb/KBFORMBILGUV.PER"
+.continue END
+..
+..*****************************************************************************
+!CMPAR: Comparison account range touched
+..*****************************************************************************
+.input "fb/KBFORMBILGUV.CMPVALUES.INIT"
+.input "fb/KBFORMBILGUV.CMPVALUES"      ? _M|novkz & (M|verglart = 1 ; M|verglart = 3)
+.continue END ? M|tzeilen = 0
+.select screen header
+..*****************************************************************************
+!CMPARL:
+..*****************************************************************************
+.select screen line
+.continue END ? _G|mehr
+.input "fb/KBFORMBILGUV.COMPARE"
+.continue CMPARL
+..
+..*****************************************************************************
+!ARFORM: Account range form selected
+..*****************************************************************************
+.input "fb/KBFORMBILGUV.CMPAR.INIT"
+.formula  M|reregeln  = ""
+.continue END  ? F|empty(M|kbfvon)
+..
+.assign M|reregeln = M|kbfvon^reregeln
+.copy M|bukreis  = M|kbfvon^bukreis   ? _F|empty(M|kbfvon^bukreis)
+.formula   M|cmpkb1   = M|kbfvon^iprkb     ?  F|defined(M|cmpkb1) & F|defined(M|kbfvon^iprkb)
+.continue END
+..
+..*****************************************************************************
+!TREEOC: Open/close tree node
+..*****************************************************************************
+.input "is/TBAUMAUFZU.BN"
+.continue END
+..
+..*****************************************************************************
+!OPENALL
+..*****************************************************************************
+.continue END ? M|tzeilen = 0
+.type integer  xiklapp
+.formula U|xiklapp = F|condexpr(M|verdflag, M|maxtiefe, 99)
+.formula U|xiklapp = 99 ? U|xiklapp <= 0
+.input "fb/KBFORMBILGUV.LOAD.ALL"
+.formula M|verdflag = _M|verdflag
+.continue END
+..
+..*****************************************************************************
+!START: Start button pressed
+..*****************************************************************************
+.continue ERR0     ? F|empty(M|kbfvon)
+..
+.type integer  xiklapp
+..
+.formula U|xiklapp = 99         ? M|maxtiefe <= 0
+.formula U|xiklapp = M|maxtiefe ? M|maxtiefe >  0
+..
+.formula U|xizraum  = 0
+..
+.. set output and posting currency to SAME values (conversion takes place later on)
+.copy M|buwaehr  = G|inland  ? F|empty(M|buwaehr)
+.copy M|auswaehr = M|buwaehr ? F|empty(M|auswaehr)
+.set currency 'F|condexpr(F|empty(M|buwaehr), G|inland^such, M|buwaehr^such)'
+.set outcurr 'G|waehrung'
+..
+.continue NODASH1 ? _F|defined(M|dashboard)
+.continue NODASH1 ? _M|dashboard
+..šbersetzungen der Monate bereitstellen
+..Monate sind um 1 verschoben, da in der ersten Tabellenspalte die Jahressumme dargestellt wird
+.type text xmonat2 xmonat3 xmonat4 xmonat5 xmonat6 xmonat7 xmonat8 xmonat9 xmonat10 xmonat11 xmonat12 xmonat13
+.type integer xi
+.type text xijahr
+.atext -language 'G|bsprache' xmonat2  829 Januar 
+.atext -language 'G|bsprache' xmonat3  830 Februar
+.atext -language 'G|bsprache' xmonat4  831 M„rz
+.atext -language 'G|bsprache' xmonat5  832 April
+.atext -language 'G|bsprache' xmonat6  833 Mai
+.atext -language 'G|bsprache' xmonat7  834 Juni
+.atext -language 'G|bsprache' xmonat8  835 July
+.atext -language 'G|bsprache' xmonat9  836 August
+.atext -language 'G|bsprache' xmonat10  837 September
+.atext -language 'G|bsprache' xmonat11 838 Oktober
+.atext -language 'G|bsprache' xmonat12 839 November
+.atext -language 'G|bsprache' xmonat13 840 Dezember
+..
+!NODASH1: der obere Code wird fr das Controlling-Dashboard verwendet   
+.continue SETSEDAT
+..
+..*****************************************************************************
+!SETSEDAT: Set start and end dates of periods
+..*****************************************************************************
+.formula U|xizraum = U|xizraum + 1
+.continue SETARVAL ? U|xizraum > M|maxperiod
+.formula M|adatum.U|xizraum = "."
+.formula M|adatum.U|xizraum = "" ? F|empty(M|jahr.U|xizraum) ; F|empty(M|amon.U|xizraum) ; F|empty(M|emon.U|xizraum)
+.formula M|edatum.U|xizraum = "" ? F|empty(M|adatum.U|xizraum)
+.continue SETSEDAT              ? F|empty(M|adatum.U|xizraum)
+..
+.. Set start and end date of period
+.select year 'M|jahr.U|xizraum' 'M|amon.U|xizraum' 'M|emon.U|xizraum'
+.formula M|adatum.U|xizraum = G|adatum
+.formula M|edatum.U|xizraum = G|edatum
+.continue NODASH2 ? _F|defined(M|dashboard)
+.continue NODASH2 ? _M|dashboard
+.continue SETSEDAT ? U|xizraum < 2 ; U|xizraum > 13
+..hier hat man nun einen Jahresmonat im Zugriff
+.formula U|xi = F|month(G|adatum)
+.formula U|xijahr = F|year(G|adatum)
+.formula U|xi = U|xi + 1 
+.formula M|txtmonat.xizraum = U|xmonat.xi + " " + U|xijahr
+.. Bei verkrzten Gesch„ftsjahren nach dem letzten Monat keine Zeitr„ume mehr anzeigen
+.formula M|txtmonat.xizraum = ""   ? U|xizraum > M|anzahlmonategj + 1
+!NODASH2
+.continue SETSEDAT
+..
+..*****************************************************************************
+!SETARVAL: Set account range value for comparison (if configured)
+..*****************************************************************************
+.. check if we have to get the current balance for comparison
+.continue START2 ?   M|novkz
+.continue START2 ? _(M|verglart = 1 ; M|verglart = 3)
+..
+.input "fb/KBFORMBILGUV.CMPVALUES"
+..
+.continue START2
+..
+..*****************************************************************************
+!START2: Finally start
+..*****************************************************************************
+.set separator
+.input "fb/KBFORMBILGUV.HOL"
+.set separator ;
+.input "fb/KBFORMBILGUV.LOAD.ALL"
+.continue END
+..
+..*****************************************************************************
+!END: End
+..*****************************************************************************
+.continue
+..
+..
+..*****************************************************************************
+!ERR0: Error - no account range form given
+..*****************************************************************************
+.error Bitte Kontenbereichsformular eingeben.
+.end 1

@@ -1,0 +1,282 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : JSADMIN.EV
+.. Autor          : male
+.. Verantwortlich : TEAMcustom
+.. Funktion       : Allgemeines Event-FOP des Infosystems sy/JSADMIN
+.. Functionality  : Common event FOP of the Infosystem sy/JSADMIN
+..
+.. include sy/JSADMIN.SETOWN
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.type bool xmehr
+.type integer xisleep
+..
+.continue START    ? G|evtvar = "bstart"
+.continue NEWINSTA ? G|evtvar = "bstartinstance" & G|evtartengl = "BUTTON_BEFORE"
+.continue LOAD     ? G|evtvar = "bstartinstance" & G|evtartengl = "BUTTON_AFTER"
+.continue CLEANUP  ? G|evtvar = "bcleanup"       & G|evtartengl = "BUTTON_BEFORE"
+.continue LOAD     ? G|evtvar = "bcleanup"       & G|evtartengl = "BUTTON_AFTER"
+.continue END      ? G|evtzeile = 0
+..
+.continue PRINTCFG ? G|evtvar = "tbprintcfg"  & G|evtartengl = "BUTTON_BEFORE"
+.continue LIST     ? G|evtvar = "tblistusers" & G|evtartengl = "BUTTON_BEFORE"
+.continue LISTAPPS ? G|evtvar = "tblistapps"  & G|evtartengl = "BUTTON_BEFORE"
+.continue REDEPLOY ? G|evtvar = "tbredeploy"  & G|evtartengl = "BUTTON_BEFORE"
+.continue LOAD     ? G|evtvar = "tbredeploy"  & G|evtartengl = "BUTTON_AFTER"
+.continue SHUTDOWN ? G|evtvar = "tbshutdown"  & G|evtartengl = "BUTTON_BEFORE"
+.continue LOAD     ? G|evtvar = "tbshutdown"  & G|evtartengl = "BUTTON_AFTER"
+.continue KILL     ? G|evtvar = "tbkill"      & G|evtartengl = "BUTTON_BEFORE"
+.continue LOAD     ? G|evtvar = "tbkill"      & G|evtartengl = "BUTTON_AFTER"
+.continue END
+..
+..*****************************************************************************
+!START
+..*****************************************************************************
+.continue LOAD
+..
+..*****************************************************************************
+!LOAD
+..*****************************************************************************
+.input "sy/JSADMIN.SETOWN"
+.make screen line --
+.type text xtmp1 xtmp2 xtmp3
+.type integer  xdat1 xdat2 xdat3
+.file -tempname U|xtmp1
+.file -tempname U|xtmp2
+.file -tempname U|xtmp3
+.system 'F|expr("ls -1 jfopserver.*.dat jfopserver.*.dat.shutdown.* | sort > " + U|xtmp1)' background
+.type text xdatfilename xfilecopy
+.type text xhost xinterface xport xpid xppid xname xnotused
+.file -open U|xdat1 'U|xtmp1'
+!L1
+.file -read U|xdat1 U|xdatfilename^
+.copy U|xmehr = G|mehr
+.file -close U|xdat1 ? _U|xmehr
+.continue END ? _U|xmehr
+.make screen line +O
+.file -screen -tempname M|tfilecopy
+.system 'F|expr("cp -a " + U|xdatfilename + " " + M|tfilecopy)' background
+.system 'F|expr("cat " + M|tfilecopy + " | sed " + G|apostroph + "s/\t/#/g" + G|apostroph + " > " + U|xtmp2)' background
+.formula M|tjsfile    = U|xdatfilename
+.file -open U|xdat2 'U|xtmp2'
+!L2
+.file -read U|xdat2 U|xpid # U|xppid # U|xnotused # U|xinterface # U|xnotused # U|xport # U|xnotused # U|xhost # U|xname^
+.copy U|xmehr = G|mehr
+.file -close U|xdat2
+.continue L1 ? _U|xmehr
+.formula   M|tjsfile    = U|xdatfilename
+.formula   M|thost      = U|xhost
+.continue HOSTSET ? M|thost<>"-"
+.formula   M|thost      = M|tjsfile >> "." << "."
+!HOSTSET
+.formula   M|tconfig    = F|condexpr(U|xname <> "jfopserver" & U|xname <> "-", U|xname, "")
+.assign M|tport      = U|xport
+.assign M|tpid       = U|xpid
+.formula   M|tinterface = U|xinterface
+.copy M|tlocally   = M|nodename = M|thost
+.system 'F|formatstr("nc -z {1} {2}", F|condexpr(M|tlocally, U|xinterface, M|thost), M|tport)' background
+.copy M|treachable = G|mehr
+.continue NOTREACH ? _M|treachable
+.. test if process is running locally
+.system 'F|expr("jfopserver_cmds.sh -p -f " + F|tostring(M|tfilecopy))' background
+.copy M|tready     = G|mehr
+.copy M|tshutdown  = _M|tready & F|regmatch(M|tjsfile, "jfopserver[.].*[.]dat[.]shutdown[.].*")
+!NOTREACH
+.continue REMOTE ? _M|tlocally
+.system 'F|formatstr("(ps -p {1} | grep -qw java) && kill -0 {1}", tpid)' background
+.copy M|tdown      = _G|mehr & _M|treachable
+!REMOTE
+.formula   M|tappname   = M|defaultapp
+.formula   M|tstatus    = M|statok    ?  M|tready
+.formula   M|tstatus    = M|statwarn  ? _M|tready
+.formula   M|tstatus    = M|staterror ? _M|treachable
+.input "DATEI.F"
+.system 'F|expr("jfopserver_cmds.sh -U -f " + F|tostring(M|tfilecopy) + " -D# | wc -l > " + U|xtmp3)' background
+.continue CUMCL ? _G|mehr
+.file -open U|xdat3 'U|xtmp3'
+.file -read U|xdat3 M|tclientcount
+.file -close U|xdat3
+!CUMCL
+.system 'F|expr("jfopserver_cmds.sh -t -f " + F|tostring(M|tfilecopy) + " -D# 2>&1 > " + U|xtmp3)' background
+.continue CHKOWN ? _G|mehr
+.file -open U|xdat3 'U|xtmp3'
+.file -read U|xdat3 U|xnotused # M|tuptime # M|tcumclientcount # M|tlastclientstop # U|xnotused^
+.file -close U|xdat3
+!CHKOWN
+.continue L1 ? _M|tready
+.continue L1 ? _F|empty(M|jsownconfig^jshost) & M|jsownconfig^jshost <> U|xinterface
+.copy M|town    = G|TRUE ? F|empty(M|jsownconfig) & F|empty(M|tconfig)
+.copy M|town    = G|TRUE ? M|jsownconfig^jsname = M|tconfig & _F|empty(M|jsownconfig^jsname)
+.copy M|town    = G|TRUE ? M|jsownconfig^nummer = M|tconfig &  F|empty(M|jsownconfig^jsname)
+.formula   M|tstatus = M|statown ? M|town
+.continue L1
+..
+..*****************************************************************************
+!CLEANUP
+..*****************************************************************************
+.type text xout
+.file -tempname U|xout
+.system 'F|formatstr("mkdir -p $(dirname {1}) && touch {1}", U|xout)' background
+.select screen header
+.continue CLN
+!CL1: Loop
+.continue CLE ? _G|mehr
+.continue DOCLN ? F|empty(M|thost) & F|empty(M|tport) & F|empty(M|tpid)
+.. Only local instances and down
+.continue CLN ? _M|tlocally ; _M|tdown
+.. file exists and has not been touched?
+.continue CLN ? _F|fileexists(M|tjsfile)
+.continue CLN ?  F|filenewer(M|tjsfile, M|tfilecopy)
+!DOCLN
+.system 'F|formatstr("rm -f {1} && rm -f {2} 2>&1 1>> {3}", M|tjsfile, M|tfilecopy, U|xout)' background
+.continue CLN
+!CLN: Next
+.select screen line
+.continue CL1
+!CLE
+.formula M|cmdoutput = 'U|xout'
+..
+.. try to clean up java/jfopserver/instances as far as possible
+.. find all directories for the locally started instances
+.type text xcmd
+.type text xpid
+.formula U|xcmd = "ls -d1 java/jfopserver/instances/" + M|nodename + ".* | sed 's,^java/jfopserver/instances/'" + M|nodename + "'\.,,'"
+.system 'F|formatstr("{1} 2>/dev/null 1>{2}", U|xcmd, U|xout)' background
+!LOOP
+.select from 'U|xout' U|xpid^
+.continue END ? _G|mehr
+.system 'F|formatstr("ps -p {1}", U|xpid)' background
+.continue LOOP ? G|status = 0
+.system 'F|formatstr("rm -rf java/jfopserver/instances/{1}.{2}", M|nodename, U|xpid)' background
+.continue LOOP
+..
+..*****************************************************************************
+!NEWINSTA
+..*****************************************************************************
+.continue EDP ? G|edp
+.command -parallel "<(Text)>de.abas.jfop.sy.DummyJFOP.class<(View)>"
+.note -immediately OK
+.continue END
+!EDP
+.type text xout
+.file -tempname U|xout
+.. invoke JFOP and trigger start
+.system 'F|formatstr("printf {1};{1} | PATESTFLAGGEN={1}-f261{1} edpimport.sh -p{2} -o shownotes=0 -a cmdstr -b {1}<text>de.abas.jfop.sy.DummyJFOP.class<zeigen>{1} -f dummy >{3} 2>&1", G|apostroph, G|einmalpw, U|xout)' background
+.copy U|xmehr = G|mehr
+.formula M|cmdoutput = 'U|xout'
+.continue ERR01 ? _U|xmehr
+.note -immediately OK
+.continue END
+..
+..*****************************************************************************
+!SHUTDOWN
+..*****************************************************************************
+.type text xtitel xboxtext
+.set trans +
+.formula U|xtitel = "Serverinstanz herunterfahren"
+.formula U|xboxtext = "Sind Sie wirklich sicher?"
+.set trans -
+.box -button 'F|condexpr(G|batchmode,"yes:no:cancel","no:yes:cancel")' -title 'U|xtitel'
+'U|xboxtext'
+.continue END ? G|box<>G|boxyes
+.type text U|xargs
+.formula U|xargs = "-S"
+.formula U|xisleep = 3
+.continue EXECCMD
+..
+..*****************************************************************************
+!KILL
+..*****************************************************************************
+.type text xtitel xboxtext
+.set trans +
+.formula U|xtitel = "Serverinstanz t”ten"
+.formula U|xboxtext = "Sind Sie wirklich sicher?"
+.set trans -
+.box -button 'F|condexpr(G|batchmode,"yes:no:cancel","no:yes:cancel")' -title 'U|xtitel'
+'U|xboxtext'
+.continue END ? G|box<>G|boxyes
+.type text U|xargs
+.formula U|xargs = "-H"
+.formula U|xisleep = 3
+.continue EXECCMD
+..
+..*****************************************************************************
+!REDEPLOY
+..*****************************************************************************
+.continue END ? F|empty(M|tappname)
+.type text U|xargs
+.formula U|xargs = "-r -a " + M|tappname
+.continue EXECCMD
+..
+..*****************************************************************************
+!PRINTCFG
+..*****************************************************************************
+.type text U|xargs
+.formula U|xargs = "-P"
+.continue EXECCMD
+..
+..*****************************************************************************
+!LIST
+..*****************************************************************************
+.type text U|xargs
+.formula U|xargs = "-U"
+.continue EXECCMD
+..
+..*****************************************************************************
+!LISTAPPS
+..*****************************************************************************
+.type text U|xargs
+.formula U|xargs = "-l"
+.continue EXECCMD
+..
+..*****************************************************************************
+!EXECCMD
+..*****************************************************************************
+.continue ERR02 ? M|tdown
+.input "DATEI.F"
+.type text xout
+.file -tempname U|xout
+.system 'F|expr("jfopserver_cmds.sh " + U|xargs + " -f " + F|tostring(M|tfilecopy) + " 2>&1 1> " + U|xout)' background
+.copy U|xmehr = G|mehr
+.system "sleep 3" background
+.formula M|tcmdoutput = 'U|xout'
+.input -text 'U|xout'
+.. shutdown will take place but exits with 1 if there are still clients logged in.
+.continue SD2   ?  U|xargs = "-S"
+.continue ERR01 ? _U|xmehr
+.note -immediately OK
+.continue END
+!SD2
+.continue ERR01 ?  F|fileexists(M|tjsfile) & _F|filenewer(M|tjsfile, M|tfilecopy)
+.note -immediately OK
+.continue SLEEP
+..
+..*****************************************************************************
+!SLEEP
+..*****************************************************************************
+.continue END ? U|xisleep <= 0
+.system 'F|expr("sleep " + F|tostring(U|xisleep))' background
+.continue END
+..
+..*****************************************************************************
+!ERR01
+..*****************************************************************************
+.error Beim Ausfhren des Kommandos ist ein Fehler aufgetreten.
+.input -text 'M|cmdoutput' ? _F|empty(M|cmdoutput)
+.end 1
+..
+..*****************************************************************************
+!ERR02
+..*****************************************************************************
+.error Diese Serverinstanz ist nicht erreichbar oder existiert nicht mehr.
+.end 1
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue
+

@@ -1,0 +1,290 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : OBLEVK.EV
+..  Autor          : tg
+..  Verantwortlich : cl
+..  Kontrolle      : tiwe
+..  Funktion       : Behandelt zentral Feld- und Zeilenereignisse.
+..  Ablauf         : Zentrales Ereignis-FOP
+..
+..  Functionality  : Central event handling efop
+..  Program flow   : Centrals event handling of fields and rows.
+..*****************************************************************************
+.set trans -
+.type text xmonat1 xmonat2 xmonat3 xmonat4 xmonat5 xmonat6 xmonat7 xmonat8 xmonat9 xmonat10 xmonat11 xmonat12
+.type ARTR52000 xkontoh1 xkontoh2 xkontoh3 xkontoh4 xkontoh5 xkontoh6 xkontoh7 xkontoh8 xkontoh9 xkontoh10 xkontoh11 xkontoh12
+.type integer xi        ? _F|defined(U|xi)
+.type integer xstartm   ? _F|defined(U|xstartm)
+.type integer xstarty   ? _F|defined(U|xstarty)
+.type integer xmi       ? _F|defined(U|xmi)
+.type integer xyear     ? _F|defined(U|xyear)
+.type text    xtmpfile  ? _F|defined(U|xtmpfile)
+.type text    xtmpfile2 ? _F|defined(U|xtmpfile2)
+.type text    xtmpfile3 ? _F|defined(U|xtmpfile3)
+.type text    xtout     ? _F|defined(U|xtout)
+.type text    xterr     ? _F|defined(U|xterr)
+.type text    xtsys     ? _F|defined(U|xtsys)
+.type RU      x1        ? _F|defined(U|x1)
+.type integer x2        ? _F|defined(U|x2)
+.type integer x3        ? _F|defined(U|x3)
+..
+..------------------------- Kopf/Header ---------------------------------------
+.continue BSEL     ? G|evtartengl="BUTTON_AFTER"    & G|evtvar="bselect"
+.continue AUV      ? G|evtartengl="FIELD_EXIT"      & G|evtvar="belegvon"
+.continue INITSEL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="belegbis"
+.continue ARTIKEL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="artikel"
+.continue INITSEL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="kkuli"
+.continue INITSEL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="kkuli2"
+.continue INITSEL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="bkrit"
+.continue DISPO    ? G|evtartengl="FIELD_EXIT"      & G|evtvar="bdisponiert"
+.continue INITSEL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="kvertret"
+.continue INITSEL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="kzeich"
+.continue DECIMAL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="auswaehr"
+.continue INITSEL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="wvdat"
+.continue INITSEL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="inkllsre"
+.continue INITSEL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="bkabnrpo"
+.continue INITSEL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="projekt"
+.continue INITSEL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="mitalternativpos"
+.continue INITSEL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="ausschr"
+.continue INITSEL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="vorgartaz"
+.continue INITSEL  ? G|evtartengl="FIELD_EXIT"      & G|evtvar="kebeleg"
+.continue DASH     ? G|evtartengl="FIELD_EXIT"      & G|evtvar="dashboard"
+.continue SORTDASH ? G|evtartengl="FIELD_EXIT"      & G|evtvar="sortsumdash"
+.continue BASIS    ? G|evtartengl="FIELD_EXIT"      & G|evtvar="basisartikel"
+..------------------------- Tabelle/Table -------------------------------------
+.continue BLIEF    ? G|evtartengl="BUTTON_BEFORE"   & G|evtvar="bfolge"
+.continue REFRESH  ? G|evtartengl="BUTTON_AFTER"    & G|evtvar="bfolge"
+..-----------------------------------------------------------------------------
+.continue END
+..
+!ARTIKEL
+.formula M|basisartikel = M|artikel^basisartikel ? _F|empty(M|artikel)
+.continue INITSEL
+..
+!BASIS
+.formula M|artikel = "" ? _F|empty(M|basisartikel)
+.continue INITSEL
+..
+!EMPTY  
+.formula M|sum1 = 0
+.formula M|sum2 = 0
+.formula M|sum3 = 0
+.formula M|sum4 = 0
+.formula M|sum5 = 0
+.formula M|sum6 = 0
+.input "is/TABLEEREN"
+.continue END
+..
+!SORTDASH: sortieren, summieren, Felder in Kopf schreiben
+.continue EMPTY ? _M|sortsumdash
+.file -tempname U|xtmpfile
+.file -tempname U|xtmpfile2
+.file -tempname U|xtmpfile3
+.file -tempname U|xtout
+.file -tempname U|xterr
+.. Startdatum, das benîtigt wird
+.type GD xstartdate ? _F|defined(U|xstartdate)
+.type GD xenddate   ? _F|defined(U|xenddate)
+.type GD xdate      ? _F|defined(U|xdate)
+..
+...formula U|xstartdate = 'F|firstdayofmonth(G|datum)'
+.formula U|xstartdate = G|datum 
+.. letztes Datum, das benîtigt wird
+.formula U|xdate = 'F|addmonths(G|datum, 5)'
+.formula U|xenddate = 'F|lastdayofmonth(U|xdate)'
+.select screen header
+.continue END ? _G|mehr
+.output new 'U|xtmpfile'
+.input "DATEI.F"
+..
+!SELLINE
+.select screen line
+.continue END     ?  M|tzeilen=0
+.continue LSORT   ? _G|mehr
+.continue SELLINE ?  M|art^gruppe <> 1
+.continue SELLINE ?  F|empty(M|tterm)
+.continue SELLINE ?  'M|tterm:8' < 'U|xstartdate:8'
+.continue SELLINE ?  'M|tterm:8' > 'U|xenddate:8'
+.continue SELLINE ?  M|nwert = 0.00
+.output addedto 'U|xtmpfile'
+'M|nwert'#'F|month(M|tterm)'#'F|year(M|tterm)'
+.output
+.continue SELLINE
+..
+!LSORT: nach Monat sortieren
+.input "is/TABLEEREN"
+.. sortieren aufsteigend Jahr, dann Monat
+.formula U|xtsys = "sort -t# +2n +1n " + U|xtmpfile + " >" + U|xtmpfile2
+.system 'U|xtsys' background
+.continue ERROR03 ? _G|mehr
+..
+!VERD: aufsummieren
+.system 'F|expr("group_by.sh -n3 -k2 -k3 -s1 " + U|xtmpfile2 + " 1>" + U|xtout + " 2>" + U|xterr)' background
+.continue ERROR04 ? _G|mehr
+.formula U|xtsys = "sort -t# +2n +1n " + U|xtout + " >" + U|xtmpfile3
+.system 'U|xtsys' background
+.continue ERROR03 ? _G|mehr
+..
+!SETMONTH
+.formula U|xi = F|month(G|datum)
+.formula U|xmi = 1
+..
+!SSELLINE
+.select from 'U|xtmpfile3' x1 # x2 # x3
+.continue END ? _G|mehr
+..
+!MAKESELLINE
+.make screen line +O
+.continue MAKEWERT  ? U|xi = U|x2
+.formula M|nwert = 0
+.formula M|sum.xmi = 0
+.formula M|xi = U|xi 
+.formula U|xi = U|xi + 1
+.formula U|xi = 1 ? U|xi = 13
+.formula U|xmi = U|xmi + 1
+.continue MAKESELLINE
+..
+!MAKEWERT 
+.formula M|nwert = U|x1 
+.formula M|sum.xmi = U|x1
+.formula M|xi = U|x2
+.formula M|jahr = U|x3
+..
+!COUNT
+.formula U|xi = U|xi + 1
+.formula U|xi = 1 ? U|xi = 13
+.formula U|xmi = U|xmi + 1
+.continue SSELLINE
+..
+!DASH
+.assign P|maskkontextfop = ""
+.input "is/TABLEEREN" ? _M|dashboard
+.continue END         ? _M|dashboard
+.assign P|maskkontextfop = "Dashboard"
+.. Nur Dasboard AUO
+..
+.atext -language 'G|bsprache' xmonat1  829 Januar 
+.atext -language 'G|bsprache' xmonat2  830 Februar
+.atext -language 'G|bsprache' xmonat3  831 MÑrz
+.atext -language 'G|bsprache' xmonat4  832 April
+.atext -language 'G|bsprache' xmonat5  833 Mai
+.atext -language 'G|bsprache' xmonat6  834 Juni
+.atext -language 'G|bsprache' xmonat7  835 July
+.atext -language 'G|bsprache' xmonat8  836 August
+.atext -language 'G|bsprache' xmonat9  837 September
+.atext -language 'G|bsprache' xmonat10 838 Oktober
+.atext -language 'G|bsprache' xmonat11 839 November
+.atext -language 'G|bsprache' xmonat12 840 Dezember
+..
+.formula U|xstartm = F|month(G|datum)
+.formula U|xstarty = F|year(G|datum)
+.formula U|xi = F|month(G|datum)
+.formula U|xyear = F|year(G|datum)
+.formula U|xmi = 1
+.cursor sum1 0
+..
+!MONTHLOOP
+.select year 'U|xyear' 'U|xi' 'U|xi'
+.select accrange 'F|formatstr("$,nummer=1PLANUMS;@gruppe=17")'
+.continue END ? _G|mehr
+..
+.formula M|txtmonat.U|xmi = U|xmonat.U|xi
+.. Plan
+.formula M|kontosum.U|xmi = H|kbpesaldo
+.. Ist 
+.formula M|istksum.U|xmi = H|kbesaldo
+.formula U|xi = U|xi+1
+.formula U|xyear = U|xyear+1 ? U|xi = 13
+.formula U|xi = 1 ? U|xi = 13
+.formula U|xmi = U|xmi + 1
+.continue END ? U|xmi = 7
+.continue MONTHLOOP
+..
+!BSEL: clear parameter in header and set selection by a selection bar
+.copy M|mitalternativpos = G|FALSE
+.copy M|wvdat = G|FALSE ? F|defined(M|wvdat)
+.assign M|belegvon = ""   ? F|defined(M|belegvon)
+.assign M|belegbis = ""   ? F|defined(M|belegbis)
+.assign M|kkuli = ""      ? F|defined(M|kkuli)
+.assign M|kkuli2 = ""     ? F|defined(M|kkuli2)
+.assign M|artikel = ""    ? F|defined(M|artikel)
+.assign M|basisartikel = "" ? F|defined(M|basisartikel)
+.assign M|kzeich = ""     ? F|defined(M|kzeich)
+.assign M|projekt = ""    ? F|defined(M|projekt)
+.assign M|kvertret = ""   ? F|defined(M|kvertret)
+.assign M|ausschr = ""    ? F|defined(M|ausschr)
+.assign M|vorgartaz = ""  ? F|defined(M|vorgartaz)
+.assign M|kebeleg = ""    ? F|defined(M|kebeleg)
+.formula G|evtfeldneu  = "%"
+.input "is/AUSWAHL"
+.copy M|selektion = M|select <> "!"
+.continue INIT
+..
+!AUV: copy value from start to end of area
+.formula M|belegbis = M|belegvon ? _F|empty(M|belegvon)
+.continue INITSEL
+..
+!DISPO: Set visibility of table column "disponiert"
+.formula P|maskkontextfop = ""           ? _M|bdisponiert
+.formula P|maskkontextfop = "FOP_DISPO"  ?  M|bdisponiert
+.continue INITSEL
+..
+!INITSEL: deactivate selektion bar switch
+.copy M|selektion = G|FALSE
+.continue INIT
+..
+!DECIMAL: decimal places of output currency
+.input "is/EVT.FIELD.OUTCURR"
+.copy M|ausnkst = M|auswaehr^nkst
+..
+!INIT: clear table and sum
+.make screen line -- ? M|tzeilen > 0
+.input 'M|bkopf' ? _F|empty(M|bkopf)
+.continue END
+..
+!REFRESH: Refresh table
+.input "is/TABLEEREN"
+.input "is/HOL.LISTE.EVPOS"
+.continue END
+..
+!BLIEF: Button before processing
+.continue ERROR01 ? F|empty(M|evpos)
+..
+.type text xkomm:100
+.continue KLS ? M|aubeo & M|kopf^dnr = 3
+..
+.assign U|xkomm = "{1}<{2}>"
+.formula U|xkomm = F|formatstr(U|xkomm, M|evpos^id, "(Release)")  ? M|kotyps = "(BlanketOrder)" ; M|kotyps = "(Quotation)"  ; M|kotyps = "(Request)"
+.formula U|xkomm = F|formatstr(U|xkomm, M|evpos^id, "(Delivery)") ? M|kotyps = "(SalesOrder)" ; M|kotyps = "(PurchaseOrder)"
+.formula U|xkomm = F|formatstr(U|xkomm, M|evpos^id, "(Invoice)")  ? F|empty(M|kotyp)
+.. hart gesperrte Positionen nicht in Folgebelege Åbernehmen - nur Rechnung mîglich. 
+.continue END0
+..
+!KLS: Lieferschein / Kundenanlieferung fÅr IS AUO
+.formula U|xkomm = 'M|evpos^id' + "<(Delivery)>"                                                         ? M|pwert >= 0
+.formula U|xkomm = "<(Sales)><(New)>,(PackingSlip) ? lsart=(CustomerDelivery) | beleg=" + 'M|evpos^id'   ? M|pwert < 0
+.continue END0
+..
+!END0
+.end 0 'U|xkomm'
+..
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR01: Missing item
+.error -line 'G|evtzeile' -message Es fehlt die Angabe eines Vorgangs oder einer Position!
+.end 1
+..
+!ERROR02: Locked Items, only possible to create invoice
+.error -line 'G|evtzeile' -message Gesperrter Artikel: Folgebeleg wurde nicht erstellt.
+.end 1
+..
+!ERROR03: Sortieren gescheitert
+.error Sortieren gescheitert!
+.end 1
+..
+!ERROR04: Verdichten gescheitert
+.error Verdichten gescheitert!
+.end 1

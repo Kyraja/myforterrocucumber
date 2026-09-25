@@ -1,0 +1,284 @@
+..!interpreter english declaration noabbrev
+.. at 2016-12-23, 13:05
+.set TRANS -
+..========================================================================
+..==  Name              : IS.PRJMAPPROGRESS.EV
+..==  Pfad              : allpstart
+..==  Funktion          : EFOP an IS PRJMAPPROGRESS
+..==  Erstellungsdatum  : 06.03.2012
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2016 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird ber EasyCase bearbeitet und mit easy2lg generiert!
+..==  Žnderungen auáerhalb von EasyCase werden nach der n„chsten Žnderung
+..==  im EasyCase wieder berschrieben und drfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF"
+..====================================================
+.type text    xtsys xtsel xtcmd xttemp xtlvpos xtoberposid xteinlvpos xtbaumstat xtfarbe xtid
+.type text    xtvarwert xtvarproz xtindex
+.type integer xizeile xievtzeile xiknzeile xistufe xivar xispalte xi1
+.type integer xyvdn xyvgr
+.type real    xrzuschlag xrzusatz xrfertgrad xrfertwert xrvkwert
+.type bool    xbok xbmehr xbstart
+.type GD      xdstichtag
+.type integer xprocsp   ? _F|defined(U|xprocsp)
+.formula U|xprocsp = 0
+.set DEMAND -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Fertigstellungsgrad_Knoten_aktualisieren -----
+.continue EL001 ? _(M|tbaumstufe > 0)
+.formula U|xiknzeile = M|ytknoten
+.formula U|xistufe = M|tbaumstufe
+.formula U|xizeile = M|aktzeile
+!REPT001: ==============================
+.formula U|xizeile = U|xizeile - 1
+.select screen line 'U|xizeile'
+.continue REPT001 ? _(M|tbaumstufe < U|xistufe)
+.formula U|xrfertgrad     = 0
+.formula U|xrvkwert       = 0
+.formula U|xi1 = 0
+.select screen line
+.copy U|xbmehr = G|mehr
+!LOOP001: ==============================
+.continue ELOP001 ? _(U|xbmehr)
+.continue EL002 ? _(M|tbaumstufe = U|xistufe)
+.formula U|xi1 = U|xi1 + 1
+.formula U|xtindex = 'U|xistufe' + "S" + 'U|xi1
+.type real xrlvfertgrad.xtindex xrvkwert.xtindex
+.formula U|xrlvfertgrad.xtindex =              M|ytfertstellgrad
+.formula U|xrvkwert.xtindex     =              M|ytvkwertman
+.formula U|xrvkwert             = U|xrvkwert + M|ytvkwertman
+.select screen line
+.copy U|xbmehr = G|mehr
+.continue FI002
+!EL002
+.continue EL003 ? _(M|tbaumstufe < U|xistufe)
+.copy U|xbmehr = G|FALSE
+.continue FI003
+!EL003
+.select screen line
+.copy U|xbmehr = G|mehr
+!FI003
+!FI002
+.continue LOOP001
+!ELOP001: ==============================
+.continue EL004 ? _(U|xrvkwert <> 0)
+.continue EL005 ? _(G|FALSE)
+U|xrvkwert: 'U|xrvkwert'
+
+!EL005
+.formula U|xrfertgrad = 0
+.formula U|xtvarwert = "xrvkwert"     + 'U|xistufe' + "S"
+.formula U|xtvarproz = "xrlvfertgrad" + 'U|xistufe' + "S"
+.formula U|xtindex = ""
+.formula U|xtindex = F|nextelem(U|.xtvarwert, xtindex)
+!LOOP002: ==============================
+.continue ELOP002 ? _(_(F|empty(U|xtindex)))
+.continue EL006 ? _(G|FALSE)
+U|xtindex: 'U|xtindex'
+U|xtvarwert: 'U|xtvarwert'
+U|.xtvarwert.xtindex: 'U|.xtvarwert.xtindex'
+
+!EL006
+.formula U|xrfertgrad = U|xrfertgrad + ((U|.xtvarwert.xtindex * 100 / U|xrvkwert) * (U|.xtvarproz.xtindex / 100))
+.formula U|xtindex = F|nextelem(U|.xtvarwert, xtindex)
+.continue LOOP002
+!ELOP002: ==============================
+.select screen line 'U|xizeile'
+.formula M|ytfertstellgrad = U|xrfertgrad
+.formula M|ytfortschrittswer = M|ytvkwertman * M|ytfertstellgrad / 100
+.continue FI004
+!EL004
+.select screen line 'U|xizeile'
+!FI004
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+!EL001
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskein")
+.select group 'U|xydbgrkennzahlen' 'F|expr("$,,such==PRJMAPFERTGRAD;@ablageart=(Active)")
+.continue EL007 ? _(_(G|mehr))
+.set TRANS +
+.box Fehler
+Die Kennzahl "PRJMAPFERTGRAD - Fertigstellungsgrad Arbeitspaket" existiert nicht.
+Das Infosystem kann nicht gestartet werden.
+.set TRANS -
+.error
+.end 1
+!EL007
+.input 'U|xtupprjmsel'
+.formula U|xdstichtag = ('G|datum:8')<<6     + "01"
+.formula U|xdstichtag = U|xdstichtag + 31
+.formula U|xdstichtag = ('U|xdstichtag:8')<<6 + "01"
+.formula M|ystichtag  =  U|xdstichtag - 1
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "maskende")
+.end 1         ? M|ybmaskezu
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtart = "buttonvor")
+.continue BRK004 ? _(G|evtvar = "bstart")
+.continue EL008 ? _(F|empty(M|yprojekt))
+.set TRANS +
+.box Hinweis
+Bitte zuerst ein Projekt angeben.
+.set TRANS -
+.error
+.end 1
+.continue FI008
+!EL008
+.make screen line --O
+!FI008
+.continue ESAC002
+!BRK004
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK003
+.continue BRK005 ? _(G|evtart = "buttonnach")
+.continue BRK006 ? _(G|evtvar = "bstart")
+.select group 'M|grliste' 'F|expr("$,,yprojekt==" + M|yprojekt^id)'
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.make screen line +O
+.assign  M|ytarbpaket = H|id
+.formula M|ytapname   = H|namebspr
+.formula M|ytsollwert = H|yapsollwert
+.formula M|ytsollstd  = H|yapsollstd
+.formula M|ytstdabw   = M|ytsollstd - M|ytiststd
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yarbpaket==" + H|id
+.formula U|xtsel = U|xtsel + ";ykennzahl==PRJMAPFERTGRAD"
+.formula U|xtsel = U|xtsel + ";ydatum==" + 'M|ystichtag(L="0")'
+.formula U|xtsel = U|xtsel + ";@ablageart=(Active)"
+.load 9 group "154:1" 'U|xtsel'
+.continue EL009 ? _(G|mehr)
+.formula M|ytfertstellgrad = 9|ywert
+!EL009
+.formula U|xtsel = "$,,ybezugsdatum==" + 'M|ystichtag(L="0")' + ";yarbpaket==" + H|id + ";yistblatt==1;ybprojektversion=(No);@ablageart=(Active)"
+.load 9 group 'U|xydbgrpvstat' 'U|xtsel'
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.formula M|ytiststd    = M|ytiststd + 9|ypviststd
+.load 9 continue
+.continue LOOP004
+!ELOP004: ==============================
+.formula M|ytfortschrittswer = M|ytsollwert * M|ytfertstellgrad / 100
+.select continue
+.continue LOOP003
+!ELOP003: ==============================
+.continue ESAC003
+!BRK006
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC001
+!BRK005
+.continue BRK007 ? _(G|evtart = "feldaus")
+.continue BRK008 ? _(G|evtvar = "yprojekt")
+.make screen line --o
+.copy    M|ykunde      = M|yprojekt^ykunde
+.copy    M|yverantwkst = M|yprojekt^yverantwkst
+.continue ESAC004
+!BRK008
+.continue BRK009 ? _(G|evtvar = "ystichtag")
+.make screen line --o
+.formula U|xdstichtag = ('M|ystichtag:8')<<6 + "01"     ? _F|empty(M|ystichtag)
+.formula U|xdstichtag = ('G|datum:8')<<6     + "01"     ?  F|empty(M|ystichtag)
+.formula U|xdstichtag = U|xdstichtag + 31
+.formula U|xdstichtag = ('U|xdstichtag:8')<<6 + "01"
+.formula M|ystichtag  =  U|xdstichtag - 1
+.continue ESAC004
+!BRK009
+.continue BRK010 ? _(G|evtvar = "ytsollwert")
+.select lock add M|ytarbpaket
+.continue EL010 ? _(G|mehr)
+.formula H|yapsollwert = M|ytsollwert
+.rewrite
+.formula M|ytstdabw          = M|ytsollstd - M|ytiststd
+.formula M|ytfortschrittswer = M|ytsollwert * M|ytfertstellgrad / 100
+.continue FI010
+!EL010
+.set TRANS +
+.box Fehler
+Das Arbeitspaket 'M|ytarbpaket' kann nicht bearbeitet werden.
+.set TRANS -
+!FI010
+.continue ESAC004
+!BRK010
+.continue BRK011 ? _(G|evtvar = "ytsollstd")
+.select lock add M|ytarbpaket
+.continue EL011 ? _(G|mehr)
+.formula H|yapsollstd  = M|ytsollstd
+.rewrite
+.formula M|ytstdabw          = M|ytsollstd - M|ytiststd
+.formula M|ytfortschrittswer = M|ytsollwert * M|ytfertstellgrad / 100
+.continue FI011
+!EL011
+.set TRANS +
+.box Fehler
+Das Arbeitspaket 'M|ytarbpaket' kann nicht bearbeitet werden.
+.set TRANS -
+!FI011
+.continue ESAC004
+!BRK011
+.continue BRK012 ? _(G|evtvar = "ytfertstellgrad")
+.continue EL012 ? _(_(F|empty(M|ytarbpaket)))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yarbpaket==" + M|ytarbpaket^id
+.formula U|xtsel = U|xtsel + ";ykennzahl==PRJMAPFERTGRAD"
+.formula U|xtsel = U|xtsel + ";ydatum==" + 'M|ystichtag(L="0")'
+.formula U|xtsel = U|xtsel + ";@ablageart=(Active)"
+.load 9 group "154:1" 'U|xtsel'
+.continue EL013 ? _(G|mehr)
+.select lock group "154:1" 'U|xtsel'
+.continue EL014 ? _(G|mehr)
+.formula H|ywert = M|ytfertstellgrad
+.rewrite
+.continue FI014
+!EL014
+.formula M|ytfertstellgrad = 9|ywert
+!FI014
+.continue FI013
+!EL013
+.formula U|xtcmd = "make " + G|hdatname154 + " GROUP1"
+.'U|xtcmd'
+.assign  H|yarbpaket =  M|ytarbpaket^id
+.assign  H|ykennzahl = "PRJMAPFERTGRAD"
+.formula H|such      =  M|ytarbpaket^such
+.formula H|name      =  M|ytarbpaket^namebspr
+.formula H|ydatum    = 'M|ystichtag(L="0")'
+.formula H|ywert     =  M|ytfertstellgrad
+.rewrite
+!FI013
+.continue EL015 ? _(('G|datum:8')<<6 = ('M|ystichtag:8')<<6)
+.select lock add M|ytarbpaket
+.continue EL016 ? _(G|mehr)
+.formula H|yfertstellgrad = M|ytfertstellgrad
+.rewrite
+.continue FI016
+!EL016
+.set TRANS +
+.box Fehler
+Das Arbeitspaket 'M|ytarbpaket' kann nicht bearbeitet werden.
+.set TRANS -
+!FI016
+!EL015
+!EL012
+.formula M|ytfortschrittswer = M|ytsollwert * M|ytfertstellgrad / 100
+.continue ESAC004
+!BRK012
+!ESAC004: =====   ENDCASE   =====
+.continue ESAC001
+!BRK007
+!ESAC001: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJMAPPROGRESS.EV")'         ? F|fileexists(F|foppath("IFOP.IS.PRJMAPPROGRESS.EV"))
+.continue

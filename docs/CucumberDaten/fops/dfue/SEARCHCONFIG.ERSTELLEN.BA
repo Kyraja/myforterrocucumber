@@ -1,0 +1,305 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SEARCHCONFIG.ERSTELLEN.BA
+.. Author         : thge
+.. Verantwortlich : thge
+.. Kontrolle      : teamcoreinfra
+.. Functionality  : Create objects for the administration console
+..*****************************************************************************
+..
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+..
+.type integer xiid          ? _F|defined(U|xiid)
+.type integer xiline        ? _F|defined(U|xiline)
+.type integer xizn          ? _F|defined(U|xizn)
+.type text    xtkey         ? _F|defined(U|xtkey)
+.type text    xtvalue       ? _F|defined(U|xtvalue)
+.type text    xtname        ? _F|defined(U|xtname)
+.type text    xtabbmod      ? _F|defined(U|xtabbmod)
+.type text    xtschema      ? _F|defined(U|xtschema)
+.type text    xtedpline     ? _F|defined(U|xtedpline)
+.type text    xtinterval    ? _F|defined(U|xtinterval)
+.type text    xttmpfile1    ? _F|defined(U|xttmpfile1)
+.type text    xttmpfile2    ? _F|defined(U|xttmpfile2)
+.type text    xtcmd         ? _F|defined(U|xtcmd)
+.type text    xtobjsuch     ? _F|defined(U|xtobjsuch)
+.type text    xtoneTimePwd  ? _F|defined(U|xtoneTimePwd)
+.type text    xt01          ? _F|defined(U|xt01)
+.type text    xt02          ? _F|defined(U|xt02)
+.type text    xt03          ? _F|defined(U|xt03)
+.type text    xt04          ? _F|defined(U|xt04)
+.type text    xtformurl     ? _F|defined(U|xtformurl)
+.type text    localerfc3066 ? _F|defined(U|localerfc3066)
+..
+..*****************************************************************************
+.. Texte
+..*****************************************************************************
+.set trans +
+.formula U|xt01 = "Web-Anwendung-"
+.formula U|xt02 = "Daten-Anwendung-"
+.formula U|xt03 = "Web Instanz"
+.formula U|xt04 = "Daten Instanz"
+.set trans -
+..
+..*****************************************************************************
+.. Locale
+..*****************************************************************************
+.. 
+.assign U|localerfc3066 = G|bspri
+.continue LANGOK ? _F|empty(U|localerfc3066)
+..
+.. Fallback into alternative language or English
+.type A74 xaltlang
+.assign U|xaltlang = E|ESPR
+.copy U|localerfc3066 = U|xaltlang ? _F|empty(U|xaltlang)
+.assign U|localerfc3066 = "(en)"     ?  F|empty(U|localerfc3066)
+..
+!LANGOK
+..
+..*****************************************************************************
+.. EDP-Datei anlegen
+..*****************************************************************************
+.input "DATEI.F"
+.file -tempname U|xttmpfile1
+.output new 'U|xttmpfile1'
+..
+..*****************************************************************************
+.. Mandanten erstellen
+..*****************************************************************************
+.println #!EDP_TRANSMODE=1
+.println #!ACTION=STORE
+.println #!DATABASE=91
+.println #!GROUP=6
+.println #!LINESEPARATOR=#
+.println #!FLDDELIMITER=;
+.println #!CHARSET=ISO8859
+.println #!TAGFLD=tag
+.println such;such91;name;mname;verwaz;ddeserver
+.println MAND01;MAND01;Mandant: 'G|mandant';'G|mandant';Suchmaschine;'G|ddesrvname'
+.println L-MAND;L-MAND;Mandant: Lucene-Index;Lucene-Index;Suchmaschine;;
+..
+..*****************************************************************************
+.. Web Anwendung(en) erstellen
+..*****************************************************************************
+.println #!ACTION=STORE
+.println #!DATABASE=108
+.println #!GROUP=1
+.println such;such108;name;kontextpfad;abmodell;schema;tag
+..
+.select screen header
+.formula U|xiline = 0
+..
+!MASKENEXT
+.select screen line
+.continue MAKEWINST ? _G|mehr
+.continue MASKENEXT ? _M|tobjtyp = "Web"
+.assign U|xtname    = 'U|xt01' + 'M|tabbmod'
+.assign U|xtschema  = M|tschema
+.assign U|xtschema  = "" ? M|tschema = "-"
+..assign U|xtformurl = "http://" + 'M|host' + ":" + 'M|port'+ "/gwt/" + 'U|localerfc3066'
+..assign U|xtformurl = "/Search" + 'M|tabbmod' + ".html"
+.assign U|xtformurl = "http://" + 'M|host' + ":" + 'M|port' + "/gwt/" + 'U|localerfc3066' + "/Search" + 'M|tabbmod' + ".html"  
+.println WEB'M|tobjid';WEB'M|tobjid';'U|xtname';'U|xtformurl';'M|tabbmod';'U|xtschema';WEB'M|tobjid'
+.continue MASKENEXT 
+..
+!MAKEWINST
+..*****************************************************************************
+.. Web-Instanz erstellen
+..*****************************************************************************
+.println #!ACTION=STORE
+.println #!DATABASE=108
+.println #!GROUP=2
+.println such;such108;name;pfad;port;\
+.println zn;anwendung;mandant
+.println WEBINST;WEBINST;'U|xt03';'M|webserver';'M|port';\
+..
+.select screen header
+.formula U|xiline =  1
+.assign U|xtedpline = ""
+..
+!LINEWINST
+.select screen line
+.continue LASTWINST ? _G|mehr
+.continue LINEWINST ? _M|tobjtyp = "Web"
+.println 'U|xizn';'U|xtedpline';MAND01\ ? _U|xtedpline = ""
+.assign U|xtedpline = 'M|tobjsuch'
+.assign U|xizn = U|xiline
+.assign U|xiline = U|xiline +1 
+.continue LINEWINST
+..
+!LASTWINST
+.println 'U|xizn';'U|xtedpline';MAND01
+..
+..*****************************************************************************
+.. Daten Anwendung(en) erstellen
+..*****************************************************************************
+.println #!ACTION=STORE
+.println #!DATABASE=108
+.println #!GROUP=1
+.println such;such108;name;kontextpfad;abmodell;tag
+..
+.select screen header
+.formula U|xiline = 0
+..
+!MASKNEXT
+.select screen line
+.continue MAKEDINST ? _G|mehr
+.continue MASKNEXT  ? _M|tobjtyp = "Data"
+.formula U|xtname      = 'U|xt02' + 'M|tabbmod'
+.println DATA'M|tobjid';DATA'M|tobjid';'U|xtname';'M|datapath';'M|tabbmod';DATA'M|tobjid'
+.continue MASKNEXT
+..
+!MAKEDINST
+..*****************************************************************************
+.. Daten-Instanz Intervall 1 erstellen
+..*****************************************************************************
+.println #!ACTION=STORE
+.println #!DATABASE=108
+.println #!GROUP=2
+.println such;such108;name;pfad;port;intervall;\
+.println zn;anwendung;mandant;zielmandant
+.println DATAINST1;DATAINST1;'U|xt04';'M|webserver';'M|port';1;\
+..
+.select screen header
+.formula U|xiline =  1
+.assign U|xtedpline = ""
+..
+!LINED1
+.select screen line
+.continue LASTD1 ? _G|mehr
+.continue LINED1 ? _M|tobjtyp = "Data"
+.continue LINED1 ? _M|tinterval = "1"
+.println 'U|xizn';'U|xtedpline';MAND01;L-MAND;\ ? _U|xtedpline = ""
+.assign U|xtedpline = 'M|tobjsuch'
+.assign U|xizn = U|xiline
+.assign U|xiline = U|xiline +1 
+.continue LINED1
+..
+!LASTD1
+.println 'U|xizn';'U|xtedpline';MAND01;L-MAND
+..
+..*****************************************************************************
+.. Daten-Instanz Intervall 2 erstellen
+..*****************************************************************************
+.println #!ACTION=STORE
+.println #!DATABASE=108
+.println #!GROUP=2
+.println such;such108;name;pfad;port;intervall;\
+.println zn;anwendung;mandant;zielmandant
+.println DATAINST2;DATAINST2;'U|xt04';'M|webserver';'M|port';2;\
+..
+.select screen header
+.formula U|xiline =  1
+.assign U|xtedpline = ""
+..
+!LINED2
+.select screen line
+.continue LASTD2 ? _G|mehr
+.continue LINED2 ? _M|tobjtyp = "Data"
+.continue LINED2 ? _M|tinterval = "2"
+.println 'U|xizn';'U|xtedpline';MAND01;L-MAND;\ ? _U|xtedpline = ""
+.assign U|xtedpline = 'M|tobjsuch'
+.assign U|xizn = U|xiline
+.assign U|xiline = U|xiline +1 
+.continue LINED2
+..
+!LASTD2
+.println 'U|xizn';'U|xtedpline';MAND01;L-MAND
+..
+..*****************************************************************************
+.. Daten-Instanz Intervall 10 erstellen
+..*****************************************************************************
+.println #!ACTION=STORE
+.println #!DATABASE=108
+.println #!GROUP=2
+.println such;such108;name;pfad;port;intervall;\
+.println zn;anwendung;mandant;zielmandant
+.println DATAINST10;DATAINST10;'U|xt04';'M|webserver';'M|port';10;\
+..
+.select screen header
+.formula U|xiline =  1
+.assign U|xtedpline = ""
+..
+!LINED10
+.select screen line
+.continue LASTD10 ? _G|mehr
+.continue LINED10 ? _M|tobjtyp = "Data"
+.continue LINED10 ? _M|tinterval = "10"
+.println 'U|xizn';'U|xtedpline';MAND01;L-MAND;\ ? _U|xtedpline = ""
+.assign U|xtedpline = 'M|tobjsuch'
+.assign U|xizn = U|xiline
+.assign U|xiline = U|xiline +1 
+.continue LINED10
+..
+!LASTD10
+.println 'U|xizn';'U|xtedpline';MAND01;L-MAND
+..
+..*****************************************************************************
+.. Daten-Instanz Intervall 20 erstellen
+..*****************************************************************************
+.println #!ACTION=STORE
+.println #!DATABASE=108
+.println #!GROUP=2
+.println such;such108;name;pfad;port;intervall;\
+.println zn;anwendung;mandant;zielmandant
+.println DATAINST20;DATAINST20;'U|xt04';'M|webserver';'M|port';20;\
+..
+.select screen header
+.formula U|xiline =  1
+.assign U|xtedpline = ""
+..
+!LINED20
+.select screen line
+.continue LASTD20 ? _G|mehr
+.continue LINED20 ? _M|tobjtyp = "Data"
+.continue LINED20 ? _M|tinterval = "20"
+.println 'U|xizn';'U|xtedpline';MAND01;L-MAND;\ ? _U|xtedpline = ""
+.assign U|xtedpline = 'M|tobjsuch'
+.assign U|xizn = U|xiline
+.assign U|xiline = U|xiline +1 
+.continue LINED20
+..
+!LASTD20
+.println 'U|xizn';'U|xtedpline';MAND01;L-MAND
+..
+..*****************************************************************************
+.. Daten-Instanz Intervall 30 erstellen
+..*****************************************************************************
+.println #!ACTION=STORE
+.println #!DATABASE=108
+.println #!GROUP=2
+.println such;such108;name;pfad;port;intervall;\
+.println zn;anwendung;mandant;zielmandant
+.println DATAINST30;DATAINST30;'U|xt04';'M|webserver';'M|port';30;\
+..
+.select screen header
+.formula U|xiline =  1
+.assign U|xtedpline = ""
+..
+!LINED30
+.select screen line
+.continue LASTD30 ? _G|mehr
+.continue LINED30 ? _M|tobjtyp = "Data"
+.continue LINED30 ? _M|tinterval = "30"
+.println 'U|xizn';'U|xtedpline';MAND01;L-MAND;\ ? _U|xtedpline = ""
+.assign U|xtedpline = 'M|tobjsuch'
+.assign U|xizn = U|xiline
+.assign U|xiline = U|xiline +1 
+.continue LINED30
+..
+!LASTD30
+.println 'U|xizn';'U|xtedpline';MAND01;L-MAND
+..
+..*****************************************************************************
+.. Objekte per EDP erstellen
+..*****************************************************************************
+.formula U|xtoneTimePwd = G|einmalpw
+.formula U|xtcmd = "edpimport.sh -I " + U|xttmpfile1 + " -p " + 'U|xtoneTimePwd' + " -H /dev/null"
+.system 'U|xtcmd' 
+..
+..
+!END
+.continue

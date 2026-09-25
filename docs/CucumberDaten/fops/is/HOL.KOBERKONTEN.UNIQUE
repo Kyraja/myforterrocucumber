@@ -1,0 +1,138 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : HOL.KOBERKONTEN.UNIQUE
+.. Datum          : 13.05.2008
+.. Version        : 1
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : HOL-FOP fuer Konten aus Kontenbereichen
+..                  und Kontenbereichsformularen.
+..                  Es werden keine Konten doppelt ausgegeben.
+..                  Es werden die Puffer 8 und 9 verwendet!
+..                  Das Tabellen-FOP wird immer aufgerufen, wenn ein Konto
+..                  gefunden wurde. Es befindet sich immer im H-Puffer.
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+..   Parameter    Bedeutung
+..   ---------------------------------------------------------
+..   xp...        ...
+..
+.. Ablauf         :
+..
+.. Functionality  : FOP for fetching accounts from account ranges and account range
+..                 forms in Infosystems. This FOP uses the buffers 8 and 9!
+..                 The Infosystem's table FOP is called if an account range row
+..                 contains an account. The account ist always loaded in the H buffer.
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+..   Argument     meaning
+..   ---------------------------------------------------------
+..   xp...        ...
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+.type text xxtdat1    ? _F|defined(U|xxtdat1)
+.type text xxtdat2    ? _F|defined(U|xxtdat2)
+.type bool xbisarform ? _F|defined(U|xbisarform)
+.type text xxgrliste  ? _F|defined(U|xxgrliste)
+.type text xxtsys     ? _F|defined(U|xxtsys)
+..
+.set trans -
+..
+.formula U|xxgrliste = M|grliste >$ ":"
+.formula U|xxgrliste = "." + U|xxgrliste + "."
+..
+..*****************************************************************************
+!RHEADER
+..*****************************************************************************
+.input 'M|bkopf'  ? M|bkopf <> ""
+.continue RFOOTER ? M|tab    = ""
+..
+.file -tempname U|xxtdat1
+.file -tempname U|xxtdat2
+..
+.input "DATEI.F"
+.output new 'U|xxtdat1'
+..
+.load 8 accrange 'M|select'
+.continue LOOP
+..
+..*****************************************************************************
+!NEXT
+..*****************************************************************************
+.load 8 accrange
+.continue LOOP
+..
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+.continue READ ? _G|mehr
+.. Check loaded group against list of valid groups in T|xxgrliste
+.continue NEXT ? _F|regmatch(U|xxgrliste, F|expr(".*\." + F|tostring(8|gruppe) + "\..*"))
+.formula U|xbisarform = 8|gruppe = 2 ; 8|gruppe = 4 ; 8|gruppe = 5
+.continue FORMROW ?  U|xbisarform
+.. account range
+.continue LAR
+..
+..*****************************************************************************
+!FORMROW: Account range form row
+..*****************************************************************************
+.load 8 line
+.continue NEXT ? _G|mehr
+.. no accounts allowed in account range form
+.continue FORMROW                   ? 8|kbereich  = ""
+..
+..*****************************************************************************
+!LAR: Load account range
+..*****************************************************************************
+.load 9 accrange 'F|expr("$,@gruppe=" + F|tostring(F|eval(8|kbereich^gruppe + 16)) + ";id=" + 8|kbereich^id + ";@zeilen=ja")' ?  U|xbisarform
+.load 9 accrange 'F|expr("$,@gruppe=" + F|tostring(F|eval(8|gruppe + 16)) + ";id=" + 8|id + ";@zeilen=ja")'                   ? _U|xbisarform
+.continue NEXT ? _G|mehr
+.continue ARROW
+..
+..*****************************************************************************
+!ARROW: Account range row
+..*****************************************************************************
+.load 9 line
+.continue NEXT    ? _G|mehr & (8|gruppe = 1 ; 8|gruppe = 3 ; 8|gruppe = 9)
+.. else if no more records
+.continue FORMROW ? _G|mehr
+.continue ARROW   ?  9|konto = ""
+..
+'9|konto^id'
+.continue ARROW
+..
+..*****************************************************************************
+!READ
+..*****************************************************************************
+.output new WERF.WEG
+.output terminal
+.type VP6 xxpkoid ? _F|defined(U|xxpkoid)
+.formula U|xxtsys = "sort -u < " + U|xxtdat1 + " > " + U|xxtdat2
+.system 'U|xxtsys' background
+!RLOOP
+.select from 'U|xxtdat2' U|xxpkoid
+.continue RFOOTER ? _G|mehr
+.select add U|xxpkoid
+.input 'M|tab'
+.continue RLOOP
+..
+..*****************************************************************************
+!RFOOTER
+..*****************************************************************************
+.input 'M|bfuss' ? M|bfuss <> ""
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

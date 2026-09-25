@@ -1,0 +1,162 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LSS2.EV
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Allgemeines Event-FOP des Infosystems fb/LSS2
+.. Functionality  :
+..*****************************************************************************
+..
+.set trans -
+..
+.continue SELEK   ? G|evtartengl = "BUTTON_AFTER"  &  G|evtvar = "bselect"
+.continue LANG    ? G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "spra"
+.continue LEVVAL  ? G|evtartengl = "FIELD_VALIDATION" & G|evtvar = "stufenvon"
+.continue LEVVAL  ? G|evtartengl = "FIELD_VALIDATION" & G|evtvar = "stufenbis"
+..
+.input "fb/LSS2.INIT" ? G|evtartengl <> "FIELD_VALIDATION"
+..
+.continue REPTYPE ? G|evtartengl = "FIELD_VALIDATION" & G|evtvar = "berichtsart"
+.continue START   ? G|evtartengl = "BUTTON_BEFORE"  &  G|evtvar = "bstart"
+.continue PER1    ? G|evtvar = "jahr" ; G|evtvar = "jahr1"
+.continue PER1    ? G|evtvar = "von"  ; G|evtvar = "von1"
+.continue PER1    ? G|evtvar = "bis"  ; G|evtvar = "bis1"
+.continue PER2    ? G|evtvar = "jahr2"
+.continue PER2    ? G|evtvar = "von2"
+.continue PER2    ? G|evtvar = "bis2"
+.continue BERVON  ? G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "bervon"
+.continue BERBIS  ? G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "berbis"
+.continue SOB     ? G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "bukreis"
+.continue CURRENC ? G|evtartengl = "FIELD_EXIT"    & (G|evtvar = "buwaehr" ; G|evtvar = "auswaehr")
+.continue LEVEXIT ? G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "stufenvon"
+.continue END
+..
+..*****************************************************************************
+!REPTYPE
+..*****************************************************************************
+.end 1 ? F|value(M|berichtsart, "AS231") = "(None)"
+.continue
+..
+..*****************************************************************************
+!LEVEXIT
+..*****************************************************************************
+.copy M|stufenbis = M|stufenvon ? M|stufenbis < M|stufenvon
+.continue END
+..
+..*****************************************************************************
+!LEVVAL
+..*****************************************************************************
+.continue ERR02 ? G|evtvar = "stufenbis" & M|.G|evtvar < M|stufenvon
+.continue ERR02 ? G|evtvar = "stufenbis" & M|.G|evtvar < 1 ; M|.G|evtvar > 4
+.continue ERR01 ? G|evtvar = "stufenvon" & M|.G|evtvar < 1 ; M|.G|evtvar > 4
+.continue END
+..
+..*****************************************************************************
+!START
+..*****************************************************************************
+.type text xpvon xpbis
+.formula U|xpvon = "bervon"
+.formula U|xpbis = "berbis"
+.input "is/RANGECHECK"
+.set setofbooks 'M|bukreis^bknr'
+..
+.. set start and end date of period
+.select year 'M|jahr' 'M|von' 'M|bis'
+.formula M|adatum1 = G|adatum
+.formula M|edatum1 = G|edatum
+..
+.formula M|select = "$,@numsuch=" + M|bervon + "!" + M|berbis + ";@gruppe=1;@ordnung=nummer" ? _M|selectcheck
+.input "is/HOL.LISTE"
+.continue END
+..
+..*****************************************************************************
+!SELEK:
+..*****************************************************************************
+.formula M|bervon   = ""
+.formula M|berbis   = ""
+.formula G|evtfeldneu = "%,,nummer=;such=;name=;@gruppe=1;@dschutz=ja;@gschutz=ja;@ordnung=nummer"
+.input "is/AUSWAHL"
+.formula M|selectcheck = _(M|select = "!")
+.input "fb/LSS2.INIT" ? M|selectcheck = G|true
+.continue END
+..
+..*****************************************************************************
+!LANG: Language changed
+..*****************************************************************************
+.copy P|spra = M|spra
+.continue END
+..
+..*****************************************************************************
+!BERVON: Bereich von
+..*****************************************************************************
+.continue END           ? F|empty(M|bervon)
+.formula M|selectcheck = G|false
+.formula M|berbis      = M|bervon ? F|empty(M|berbis)
+..
+..*****************************************************************************
+!BERBIS: Bereich bis
+..*****************************************************************************
+.continue END            ? F|empty(M|berbis)
+.formula M|selectcheck  = G|false
+.continue END
+..
+..*****************************************************************************
+!SOB: Set of books changed
+..*****************************************************************************
+.formula M|bukreis = G|bukreis^id ? F|empty(M|bukreis)
+.continue END
+..
+..*****************************************************************************
+!CURRENC: Posting currency changed
+..*****************************************************************************
+.formula M|.G|evtvar = G|inland^id ? F|empty(M|.G|evtvar)
+.copy M|ausfrwaehr = M|buwaehr^id <> M|auswaehr^id
+.continue END
+..
+..*****************************************************************************
+!PER1: period 1 changed
+..*****************************************************************************
+.type text xxtemon xxtsmon xxtsyear xxteyear xxtfromd xxttod
+.formula U|xxtsmon = "von"
+.formula U|xxtemon = "bis"
+.formula U|xxtsyear= "jahr"
+.formula U|xxteyear= U|xxtsyear
+.formula U|xxtfromd= "adatum1"
+.formula U|xxttod  = "edatum1"
+.input "fb/IS.SETPERIOD"
+.formula M|jahr2 = "" ? _M|mitvorjahr
+.continue END ? _M|mitvorjahr
+.input "fb/LSS.VJ"
+.continue END
+..
+..*****************************************************************************
+!PER2: period 2 changed
+..*****************************************************************************
+.type text xxtemon xxtsmon xxtsyear xxteyear xxtfromd xxttod
+.formula U|xxtsmon = "von2"
+.formula U|xxtemon = "bis2"
+.formula U|xxtsyear= "jahr2"
+.formula U|xxteyear= U|xxtsyear
+.formula U|xxtfromd= "adatum2"
+.formula U|xxttod  = "edatum2"
+.input "fb/IS.SETPERIOD"
+.continue END
+..
+..*****************************************************************************
+!ERR01
+..*****************************************************************************
+.error Nur Werte von 1 bis 4 erlaubt.
+.end 1
+..
+..*****************************************************************************
+!ERR02
+..*****************************************************************************
+.error Nur Werte von 'M|stufenvon' bis 4 erlaubt.
+.end 1
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue
+

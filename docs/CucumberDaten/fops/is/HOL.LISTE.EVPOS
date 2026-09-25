@@ -1,0 +1,106 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : HOL.LISTE.EVPOS
+.. Autor          : tg
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Beschaffung von Ein- und Verkaufinformationen, wobei sowohl
+.. Daten aus dem Kopf wie auch aus der Tabelle besorgt werden. Die Positionen
+.. eines Beleges stehen im H-Puffer, die Kopfdaten im Puffer 0 (Null). Die
+.. Datenbeschaffung basiert auf folgenden Feldern im Infosystem:
+.. M|dn      = Name (Einkauf oder Verkauf) der Datei, die befragt wird
+.. M|grliste = Gruppenliste gegen die die Nummer des Treffers validiert wird
+.. M|kotyp   = Typ des Beleges etwa Auftrag gegen den validiert wird
+.. M|select  = Selektionsbeschreibung
+.. FÅr jeden Treffer wird das Tabellen-Programm in "M|tab" aufgerufen. Vor der
+.. Datenbankanfrage wird das Berichtskopf-Programm in "M|bkopf", danach das
+.. Berichtsfuss-Programm in "M|fuss" aufgerufen.
+.. bei Chancen kann die Position im H-Puffer undefiniert sein.
+..*****************************************************************************
+.set trans -
+..
+.continue ERROR1 ? M|dn = ""
+..
+.. Declarations
+.type text  xxtwrkbuff   ? _F|defined(U|xxtwrkbuff)
+.type text  xxtpipe      ? _F|defined(U|xxtpipe)
+.type integer   XXHEADERGRP  ? _F|defined(U|XXHEADERGRP)
+.type bool  xshellbuffer ? _F|defined(U|xshellbuffer)
+.type VID10 xdocuheader  ? _F|defined(U|xdocuheader)
+..
+.. Initializations
+.formula U|xxtwrkbuff = "H"
+.formula U|xxtpipe = "|"
+.formula U|XXHEADERGRP = 1
+.copy U|xshellbuffer = G|FALSE
+.assign U|xdocuheader = ""
+..
+!HEADER: Read report header fop
+.input 'M|bkopf' ? _F|empty(M|bkopf)
+..
+!QUERY: Query database
+.select group 'M|grliste' 'M|select'
+..
+!HASNEXT
+.continue FOOTER  ? _G|mehr
+.continue SHELL   ? H|gruppe <> H|pugruppe
+.continue HEADREC ? H|gruppe = U|XXHEADERGRP
+.continue TABREC
+..
+!SHELL: Matching buffer is a shell
+.copy U|xshellbuffer = G|TRUE
+.continue ROWREC  ? H|selzeilenweise
+.continue HEADREC
+..
+!ROWREC: Matching buffer is a line by line loaded table row with an also loaded header.
+.select line 'H|selzeile'
+.continue NEXT ? _G|mehr
+..
+!TABREC: Loading record header to buffer 0 while matching table row is loaded
+.continue NEXT   ? _F|empty(M|kotyp) & M|kotyp <> H|kotypa
+.continue TABROW ? _F|empty(U|xdocuheader) & U|xdocuheader = H|kopf^id
+.load 0 add H|kopf
+.continue NEXT ? _G|mehr
+.assign U|xdocuheader = 0|id
+..
+!TABROW
+.input 'M|tab' ? _F|empty(M|tab)
+.continue NEXT
+..
+!HEADREC: Reloading record to buffer 0 while matching record header is loaded
+.continue NEXT ? _F|empty(M|kotyp) & M|kotyp <> H|typa
+.load 0 add H|id
+..
+.. Read group header fop
+.input 'M|grkopf' ? _F|empty(M|grkopf)
+.continue NOROWS ? F|empty(0|pos)
+..
+!NEXTROW: Read next row of header record
+.select line
+.continue GRPFOOT ? _G|mehr
+..
+!TABLE: Read table fop
+.input 'M|tab' ? _F|empty(M|tab)
+.continue NEXTROW
+..
+!NOROWS: Special for documents without rows e.g. opportunities
+.continue GRPFOOT ? 0|typ <> G|CHKO
+.input 'M|tab' ? _F|empty(M|tab)
+..
+!GRPFOOT: Read group footer fop
+.input 'M|grfuss' ? _F|empty(M|grfuss)
+..
+!NEXT: Read next record
+.select continue
+.continue HASNEXT
+..
+!FOOTER: Read report footer fop
+.input 'M|bfuss' ? _F|empty(M|bfuss)
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1: Filename is missing
+.error Keine Datenbank angegeben!
+.end 1

@@ -11,13 +11,34 @@
 import { useRef, useState, useCallback } from 'react';
 import type { TableDef } from '../../types/gherkin';
 import type { FopBinding } from '../../types/fop';
-import { parseTableCsv, parseTextDump, parseXlsx, mergeTableDefs, tablesNeedReimport } from '../../lib/csvTableParser';
-import { parseFopTxt, parseIsExportBindings, type IsBinding } from '../../lib/fopTxtParser';
+import { parseTableCsv, parseTextDump, parseXlsx, mergeTableDefs } from '../../lib/csvTableParser';
+import { parseFopTxt } from '../../lib/fopTxtParser';
+import { parseIsExportBindings, parseIsExportBindingsFromXlsx, type IsBinding } from '../../lib/isBindingsParser';
 import { useTranslation } from '../../i18n';
+import { IconUpload, IconInfo, IconClipboard, IconClose } from '../icons';
 import styles from './CsvUpload.module.css';
 
-const ABAS_QUERY_DB = '<(Company)> %,0:vmnr1==;0:nummer=;0:such=;0:name1=;0:name2=;1:vbed=;1:vbeds=;1:vitefff=;1:vms==;1:vname=;1:vnname=;1:vskip==;@gruppe=26;@ablageart=(Active);@zeilen=(Yes) <(View)>';
-const ABAS_QUERY_IS = '<(Infosystem)> %,0:nummer=;0:such=;0:name1=;0:name2=;1:vbed=;1:vbeds=;1:vitefff=;1:vms==;1:vname=;0:zwechsel=;0:zreinvo=;0:zreinna=;0:zrausvo=;0:zrausna=;0:zmark=;0:zbewvo=;0:zbewpruef=;0:zbewna=;0:maskabbr=;0:maskaus=;0:maskein=;0:maskende=;0:maskennr=;0:maskpruef=;0:bfuss=;1:buttonnach=;1:buttonvor=;1:feldaus=;1:feldfuell=;1:feldpruef=;@gruppe=1;@filingmode=(Active);@rows=(Yes) <(View)>';
+/**
+ * Reads a text file and decides the encoding automatically:
+ *   1. UTF-8 BOM present → strip and decode as UTF-8
+ *   2. Strict UTF-8 decode succeeds → use UTF-8 (covers modern abas exports)
+ *   3. Otherwise → fall back to Windows-1252 (legacy abas exports)
+ */
+async function readFileSmart(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+    return new TextDecoder('utf-8').decode(bytes.subarray(3));
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder('windows-1252').decode(bytes);
+  }
+}
+
+const ABAS_QUERY_DB = '<(Company)> %,0:vmnr1==;0:nummer=;0:such=;0:name1=;1:vbed=;1:vitefff=;1:vms==;1:vname=;1:vnname=;1:vskip==;1:vkt==;@gruppe=26;@ablageart=(Active);@zeilen=(Yes) <(View)>';
+const ABAS_QUERY_IS = '<(Infosystem)> %,0:nummer=;0:such=;0:name1=;1:vbed=;1:vitefff=;1:vms==;1:vname=;1:vkt==;0:zwechsel=;0:zreinvo=;0:zreinna=;0:zrausvo=;0:zrausna=;0:zmark=;0:zbewvo=;0:zbewpruef=;0:zbewna=;0:maskabbr=;0:maskaus=;0:maskein=;0:maskende=;0:maskennr=;0:maskpruef=;0:bfuss=;1:buttonnach=;1:buttonvor=;1:feldaus=;1:feldfuell=;1:feldpruef=;@gruppe=1;@filingmode=(Active);@rows=(Yes) <(View)>';
 
 interface CsvUploadProps {
   tables: TableDef[];
@@ -33,7 +54,7 @@ interface CsvUploadProps {
 }
 
 export function CsvUpload({ tables, onTablesChange, fopBindings, onFopBindingsChange, isBindings, onIsBindingsChange }: CsvUploadProps) {
-  const { t, lang } = useTranslation();
+  const { t } = useTranslation();
   const dbInputRef = useRef<HTMLInputElement>(null);
   const isInputRef = useRef<HTMLInputElement>(null);
   const fopTxtInputRef = useRef<HTMLInputElement>(null);
@@ -44,46 +65,38 @@ export function CsvUpload({ tables, onTablesChange, fopBindings, onFopBindingsCh
   const [isText, setIsText] = useState('');
   const [fopTxtText, setFopTxtText] = useState('');
 
-  const handleFile = (file: File) => {
+  const handleFile = async (file: File) => {
     const isXlsx = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
     setLoading(true);
-
-    if (isXlsx) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const buffer = e.target?.result as ArrayBuffer;
+    try {
+      if (isXlsx) {
+        const buffer = await file.arrayBuffer();
         const parsed = parseXlsx(buffer);
         if (parsed.length > 0) {
           onTablesChange(mergeTableDefs(tables, parsed));
         }
-        setLoading(false);
-      };
-      reader.readAsArrayBuffer(file);
-    } else {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const csv = e.target?.result as string;
+      } else {
+        const csv = await readFileSmart(file);
         const parsed = parseTableCsv(csv);
         if (parsed.length > 0) {
           onTablesChange(mergeTableDefs(tables, parsed));
         }
-        setLoading(false);
-      };
-      reader.readAsText(file, 'windows-1252');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleFopTxtFile = (file: File) => {
+  const handleFopTxtFile = async (file: File) => {
     setLoading(true);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
+    try {
+      const text = await readFileSmart(file);
       const bindings = parseFopTxt(text);
       onFopBindingsChange?.(bindings);
       setFopTxtText(text);
+    } finally {
       setLoading(false);
-    };
-    reader.readAsText(file, 'windows-1252');
+    }
   };
 
   const handleDbChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -92,27 +105,30 @@ export function CsvUpload({ tables, onTablesChange, fopBindings, onFopBindingsCh
     e.target.value = '';
   };
 
-  const handleIsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleIsChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) { e.target.value = ''; return; }
+    e.target.value = '';
+    if (!file) return;
     // Parse IS tables AND extract IS EFOP bindings from the same file
     const isXlsx = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
-    if (isXlsx) {
-      handleFile(file);
-    } else {
-      setLoading(true);
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const text = ev.target?.result as string;
+    setLoading(true);
+    try {
+      if (isXlsx) {
+        const buffer = await file.arrayBuffer();
+        const parsed = parseXlsx(buffer);
+        if (parsed.length > 0) onTablesChange(mergeTableDefs(tables, parsed));
+        const isBindingsExtracted = parseIsExportBindingsFromXlsx(buffer);
+        if (isBindingsExtracted.length > 0) onIsBindingsChange?.(isBindingsExtracted);
+      } else {
+        const text = await readFileSmart(file);
         const parsed = parseTableCsv(text);
         if (parsed.length > 0) onTablesChange(mergeTableDefs(tables, parsed));
         const isBindingsExtracted = parseIsExportBindings(text);
         if (isBindingsExtracted.length > 0) onIsBindingsChange?.(isBindingsExtracted);
-        setLoading(false);
-      };
-      reader.readAsText(file, 'windows-1252');
+      }
+    } finally {
+      setLoading(false);
     }
-    e.target.value = '';
   };
 
   const handleFopTxtChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -124,6 +140,7 @@ export function CsvUpload({ tables, onTablesChange, fopBindings, onFopBindingsCh
   const handleClear = () => {
     onTablesChange([]);
     onFopBindingsChange?.([]);
+    onIsBindingsChange?.([]);
     setDbText('');
     setIsText('');
     setFopTxtText('');
@@ -151,7 +168,6 @@ export function CsvUpload({ tables, onTablesChange, fopBindings, onFopBindingsCh
     setPasteOpen(false);
   }, [dbText, isText, fopTxtText, tables, onTablesChange, onFopBindingsChange]);
 
-  const fieldCount = tables.reduce((sum, t) => sum + t.fields.length, 0);
   const bindingsCount = fopBindings?.length ?? 0;
   const isBindingsCount = isBindings?.length ?? 0;
 
@@ -162,11 +178,9 @@ export function CsvUpload({ tables, onTablesChange, fopBindings, onFopBindingsCh
   const previewFieldCount = previewAll.reduce((sum, t) => sum + t.fields.length, 0);
   const previewBindings = fopTxtText.trim() ? parseFopTxt(fopTxtText) : [];
 
-  const fopTxtLabel = lang === 'de' ? 'FOP.txt hochladen' : 'Upload FOP.txt';
+  const fopTxtLabel = t('csv.uploadFopTxt');
   const fopTxtPasteLabel = 'FOP.txt';
-  const fopTxtPlaceholder = lang === 'de'
-    ? 'Inhalt von FOP.txt hier einfügen...'
-    : 'Paste FOP.txt content here...';
+  const fopTxtPlaceholder = t('csv.pasteFopPlaceholder');
 
   return (
     <div className={styles.container}>
@@ -198,7 +212,7 @@ export function CsvUpload({ tables, onTablesChange, fopBindings, onFopBindingsCh
           type="button"
           title={t('csv.exportHelpTitle')}
         >
-          ⓘ
+          <IconInfo />
         </button>
         <button
           className={styles.uploadBtn}
@@ -206,7 +220,7 @@ export function CsvUpload({ tables, onTablesChange, fopBindings, onFopBindingsCh
           disabled={loading}
           type="button"
         >
-          {loading ? t('csv.loading') : t('csv.uploadDb')}
+          <IconUpload />{loading ? t('csv.loading') : t('csv.uploadDb')}
         </button>
         <button
           className={styles.uploadBtn}
@@ -214,38 +228,33 @@ export function CsvUpload({ tables, onTablesChange, fopBindings, onFopBindingsCh
           disabled={loading}
           type="button"
         >
-          {loading ? t('csv.loading') : t('csv.uploadIs')}
+          <IconUpload />{loading ? t('csv.loading') : t('csv.uploadIs')}
         </button>
         <button
           className={styles.uploadBtn}
           onClick={() => fopTxtInputRef.current?.click()}
           disabled={loading}
           type="button"
-          title={lang === 'de' ? 'FOP.txt Ereigniskonfiguration hochladen' : 'Upload FOP.txt event configuration'}
+          title={t('csv.uploadFopEventConfig')}
         >
-          {fopTxtLabel}
+          <IconUpload />{fopTxtLabel}
         </button>
         <button
           className={pasteOpen ? styles.pasteToggleActive : styles.pasteToggle}
           onClick={() => setPasteOpen((p) => !p)}
           type="button"
         >
-          {t('csv.pasteText')}
+          <IconClipboard />{t('csv.pasteText')}
         </button>
-        {tablesNeedReimport(tables) && (
-          <span className={styles.reimportHint} title={t('csv.reimportHint')}>
-            ⓘ
-          </span>
-        )}
         <span style={{ flex: 1 }} />
         {(tables.length > 0 || bindingsCount > 0 || isBindingsCount > 0) && (
           <button
             className={styles.clearBtn}
             onClick={handleClear}
             type="button"
-            title={lang === 'de' ? 'Alle Stammdaten löschen' : 'Clear all data'}
+            title={t('csv.clearAllData')}
           >
-            {lang === 'de' ? 'Löschen' : 'Clear'}
+            <IconClose />{t('csv.clear')}
           </button>
         )}
       </div>
@@ -301,9 +310,7 @@ export function CsvUpload({ tables, onTablesChange, fopBindings, onFopBindingsCh
               <span className={styles.previewInfo}>
                 {previewAll.length > 0 && t('csv.parsedInfo', { tables: previewAll.length, fields: previewFieldCount })}
                 {previewAll.length > 0 && previewBindings.length > 0 && ' · '}
-                {previewBindings.length > 0 && (lang === 'de'
-                  ? `${previewBindings.length} Bindungen`
-                  : `${previewBindings.length} bindings`)}
+                {previewBindings.length > 0 && t('csv.bindingsCount', { count: previewBindings.length })}
               </span>
             )}
           </div>
@@ -322,9 +329,7 @@ export function CsvUpload({ tables, onTablesChange, fopBindings, onFopBindingsCh
             <code className={styles.helpQuery}>{ABAS_QUERY_IS}</code>
           </div>
           <div className={styles.helpNote} style={{ marginTop: '8px' }}>
-            {lang === 'de'
-              ? 'FOP.txt: Eventbindungs-Konfigurationsdatei der abas flexiblen Oberfläche.'
-              : 'FOP.txt: Event binding configuration file of the abas flexible surface.'}
+            {t('csv.fopHelpNote')}
           </div>
         </div>
       )}

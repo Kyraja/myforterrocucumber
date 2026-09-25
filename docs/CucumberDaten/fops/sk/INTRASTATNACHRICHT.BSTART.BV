@@ -1,0 +1,213 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : INTRASTATNACHRICHT.BSTART.BV
+..  Datum          : 03.01.2010
+..  Version        : 2010
+..  Autor          : cl
+..  Verantwortlich : cl
+..  Kontrolle      : tiwe
+..  Funktion       :
+..  Ablauf         :
+..
+..  includes       :
+..*****************************************************************************
+..
+.set trans -
+.type text    xekvk       ? _F|defined(U|xekvk)
+.type text    xevtyp      ? _F|defined(U|xevtyp)
+.type text    xtsel       ? _F|defined(U|xtsel)
+.type text    xselect     ? _F|defined(U|xselect)
+.type text    xtext       ? _F|defined(U|xtext)
+.type text    xsel        ? _F|defined(U|xsel)
+.type text    xstring     ? _F|defined(U|xstring)
+..
+.continue QV    ?  G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "buqv"
+.continue QN    ?  G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "buqn"
+.continue EDI   ? _F|empty(M|kvorgang)
+.continue INTRA ? _F|empty(M|textedi2)
+..
+!QV
+.continue END   ? F|empty(M|kvorgang) ; M|kvorgang^dnr = 4
+.continue ERSQV ? F|empty(M|versustid) ; M|versustid = "QN999999999999"
+.continue END
+..
+!ERSQV
+.protection -reset versustid 0
+.formula M|versustid = "QV999999999999"
+.colour -background 'M|farbe' versustid  ? _F|empty(M|versustid) & M|kvorgang^dnr = 3
+.protection versustid 0
+.continue END
+..
+!QN
+.continue END   ? F|empty(M|kvorgang) ; M|kvorgang^dnr = 4
+.continue ERSQN ? F|empty(M|versustid) ; M|versustid = "QV999999999999"
+.continue END
+..
+!ERSQN
+.protection -reset versustid 0
+.formula M|versustid = "QN999999999999"
+.colour -background 'M|farbe' versustid  ? _F|empty(M|versustid) & M|kvorgang^dnr = 3
+.protection versustid 0
+.continue END
+..
+!INTRA: Alle Positionen zur angegebenen Meldenummer anzeigen
+.input "is/TABLEEREN"
+.. erst die ids dazu auseinanderschnipfeln
+.protection kvorgang 0
+.protection intra 0
+.. 
+!SCHNEIDEN
+.select from 'M|textedi2' U|xstring
+.continue END ? _G|mehr
+.continue SCHNEIDEN ? 'U|xstring' <> 'M|edinachricht' & _F|empty(M|edinachricht)
+..
+!ONLYONE
+.load 3 edifact 'U|xstring'
+.continue END ? _G|mehr
+..
+!LINE
+.load 3 line
+.continue MAKELINE ? G|mehr
+.continue SCHNEIDEN
+..
+!MAKELINE
+.make screen line +O
+.assign M|edinummer = 3|id
+.formula M|zenrv  = 3|text24 
+.load 2 sales 'M|zenrv'         ? _F|empty(M|zenrv)
+.formula M|vtyp = '2|kotyp'     ? _F|empty(M|zenrv)
+.assign M|artex = 2|artikel     ? _F|empty(M|zenrv)
+.formula M|zenre = 3|text25
+.load 2 purchasing 'M|zenre'    ? _F|empty(M|zenre)
+.formula M|etyp = '2|kotyp'     ? _F|empty(M|zenre)
+.assign M|artex = 2|artikel
+.protection -reset le 'M|aktzeile'
+.formula M|le = 2|artikel^le
+.protection le 'M|aktzeile'
+.load 2
+.copy M|intrarel = G|TRUE
+.protection intrarel 'M|aktzeile'
+.formula M|iflow = "D" ? 3|text4 = "22"
+.formula M|iflow = "A" ? 3|text4 = "11"
+.formula M|kuerzel = "V" ? 3|text4 = "22"
+.formula M|kuerzel = "E" ? 3|text4 = "11"
+.. Versendungsland/Bestimmungsland
+.formula M|pvschl     = 3|text7
+.formula M|iregschl   = 3|text8
+.formula M|schl       = 3|text10
+.formula M|nrpahnum   = 3|text13
+.formula M|purschl    = 3|text14
+..
+.. Schl《sel aus Art des Gesch�fts
+.formula U|xsel = "$,,schl==" + M|schl + ";@gruppe=3"
+.load 5 company 'U|xsel'
+.formula M|pgart = 5|id ? G|mehr
+.protection pgart 'M|aktzeile'
+.load 5
+..
+.. Warennummer
+.formula U|xsel = "$,,ahnum==" + M|nrpahnum + ";@gruppe=3"
+.load 5 company 'U|xsel'
+.formula M|pahnum = 5|id ? G|mehr
+.protection pahnum 'M|aktzeile'
+.load 5
+..
+.. Schl《sel Ursprungs-/Bestimmungsregion
+.formula U|xsel = "$,,ischl==" + M|iregschl + ";typ=(Region);@gruppe=1"
+.load 5 regions 'U|xsel'
+.formula M|iregion = 5|id         ?  G|mehr
+.formula M|iregion = ""           ? _G|mehr
+.protection purland 'M|aktzeile'
+.protection iregion 'M|aktzeile'
+.load 5
+..
+.. Schl《sel Ursprungsland
+.formula U|xsel = "$,,iso2==" + M|purschl + ";typ=(Country);@gruppe=1"
+.load 5 regions 'U|xsel'
+.formula M|purland = 5|id      ?  G|mehr
+.load 5
+..
+.. Schl《sel Bestimmungs-/Versendungsland 
+.formula U|xsel = "$,,iso2==" + M|pvschl + ";typ=(Country);laart=(EUCountry);@gruppe=1"
+.load 5 regions 'U|xsel'
+.formula M|pvstaat = 5|id ? G|mehr
+.protection pvstaat 'M|aktzeile'
+.load 5
+..
+!SKIPLAND
+.formula M|gewicht    = 3|text16
+.protection gewicht 'M|aktzeile'
+.formula M|intramge   = 3|text17
+.protection intramge 'M|aktzeile'
+.formula M|nwert      = 3|text18
+.protection nwert 'M|aktzeile'
+.formula M|swert      = 3|text19
+.protection swert 'M|aktzeile'
+.formula M|schlvzweig = 3|text20
+.protection pvzweig 'M|aktzeile'
+..
+.continue LINE
+..
+!EDI
+.. 12 = zeigen, 15 = w�hlen 
+.continue FEHLER   ? _F|cmdpermitted(53, 12, ,0) ; _F|cmdpermitted(53, 15, ,0)
+.input "is/TABLEEREN"
+.formula U|xekvk = ""
+.formula M|inland       = G|inland
+.formula M|land         = M|kvorgang^land
+.formula M|versustid    = M|kvorgang^versustid         ? M|kvorgang^dnr = 3
+.formula M|versustid    = M|kvorgang^warenempf^ustid   ? F|empty(M|versustid) & M|kvorgang^dnr = 3
+.formula M|versustid    = M|kvorgang^warenempf^firma^ustid ? F|empty(M|versustid) & M|kvorgang^dnr = 3 & M|kvorgang^warenempf^gruppe = 2
+.colour -background 'M|fehlfarbe' versustid ?  F|empty(M|versustid) & M|kvorgang^dnr = 3
+.colour -background 'M|farbe' versustid     ? _F|empty(M|versustid) & M|kvorgang^dnr = 3
+.formula M|kkurs        = 1
+.formula M|kkurs        = M|kvorgang^ewkurs ? M|land <> M|inland
+..
+.. Edi-Nachricht leeren, dann passende suchen (Standard-Schl《sel auf bezobj)
+.formula M|edinachricht = ""
+.formula U|xtsel        = "$,,bezobj=" + M|kvorgang^id
+.formula U|xtsel        = U|xtsel + ";vorart=90;imex=EX"
+.formula U|xtsel        = U|xtsel + ";datenart=VK" ? M|kvorgang^dnr = 3
+.formula U|xtsel        = U|xtsel + ";datenart=EK" ? M|kvorgang^dnr = 4
+.formula U|xtsel        = U|xtsel + ";@ordnung=vorart,imex,status,num53"
+.load 2 edifact 'U|xtsel'
+.formula M|edinachricht = 2|id   ? G|mehr
+.formula M|versustid = 2|kdzeich ? G|mehr & F|empty(M|versustid)
+.colour -background 'M|farbe' versustid     ? _F|empty(M|versustid) & M|kvorgang^dnr = 3
+.colour -background 'M|fehlfarbe' versustid ?  F|empty(M|versustid) & M|kvorgang^dnr = 3
+.load 2
+..
+!VERK: sales / Verkauf
+.select sales 'M|kvorgang^id'
+.continue EINK    ? _G|mehr
+.formula U|xekvk  = "V"
+.continue KOPF
+..
+!EINK: purchasing / Einkauf
+.select purchasing 'M|kvorgang^id'
+.continue END    ? _G|mehr
+.formula U|xekvk = "E"
+.continue KOPF
+..
+!KOPF: Kopfvariablen des Vorganges
+.formula M|ustzus = ("000" + M|ustzus) >> 3
+.colour -background 'M|farbe' steunr
+.colour -background 'M|farbe' ustzus
+.colour -background 'M|farbe' ischl
+.formula U|xevtyp   = H|typ
+.formula M|datumbis = G|datum ? F|empty(M|datumbis)
+.. Datum aufbereiten  Monat / Jahr
+.formula M|monat = ('M|datumbis:8' >> -2) >> 2
+.colour -background 'M|farbe' monat
+.formula M|jahr  = ('M|datumbis:8' >> -4) >> 2
+.colour -background 'M|farbe' jahr
+..
+!TABELLE
+.input 'M|tab'
+..
+!END
+.continue
+..
+!FEHLER
+.error Keine EDI-Rechte vorhanden!
+.end 1

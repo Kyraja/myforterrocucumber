@@ -1,0 +1,374 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PDMCENTER.BA
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..include pdm/PDMCENTER.INIT
+..*****************************************************************************
+..
+.set trans -
+.type text xtempfile  ? _F|defined(U|xtempfile)
+.type text xmodel     ? _F|defined(U|xmodel)
+.type text xmodelpart ? _F|defined(U|xmodelpart)
+.type text xmodelbom  ? _F|defined(U|xmodelbom)
+.type text xmodelresp ? _F|defined(U|xmodelresp)
+.type text xmodelpdmresp ? _F|defined(U|xmodelpdmresp)
+.type text xsel       ? _F|defined(U|xsel)
+.type bool xtreffer   ? _F|defined(U|xtreffer)
+.type bool xbcalledi2 ? _F|defined(U|xbcalledi2)
+.type text xtcalljedi  ? _F|defined(U|xtcalljedi)
+.type text xtmpfile   ? _F|defined(U|xtmpfile)
+.type text xtout      ? _F|defined(U|xtout)
+.type text xterr      ? _F|defined(U|xterr)
+.type ID53 xid        ? _F|defined(U|xid)
+..
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+..mapping models are configurated in an I-FILE for individualization
+..
+.input "PDMCENTER.INIT"
+..
+.copy U|xtreffer = G|false
+..
+.. Header
+.continue STATSEL     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bustatus"
+.continue BSTART      ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+.continue EDILOG      ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "edilog"
+.continue CHECKTAB    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "freigeben"
+.continue CHECKTAB    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "abweisen"
+.continue ABLAGE      ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "ablage"
+..
+.. Table
+.continue TFREIGEBEN  ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tfreigeben"
+.continue ABWEISEN    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tabweisen"
+.continue END
+..
+!ABLAGE
+.set trans +
+.continue CHECKTAB ? M|status = "Fehlerhaft"
+.set trans -
+.continue ERROR12
+..
+!CHECKTAB
+.. We also remove export Errors to filed 
+.continue ERROR9  ? M|tzeilen = 0
+.select screen header
+.continue LINE   ? G|evtvar = "freigeben" ; G|evtvar = "abweisen"
+.continue DELETE ? G|evtvar = "ablage"
+..
+!DELETE
+.select screen line
+.continue END       ? _G|mehr & U|xtreffer
+.continue ERROR10   ? _G|mehr
+.continue LOESCH    ?  G|mehr & M|tmark
+.continue DELETE
+..
+!LOESCH
+.copy U|xtreffer = G|TRUE
+.select lock edifact 'M|pdm'
+.continue ERROR11  ? _G|mehr
+.continue NOSPERR  ? _G|gesperrt
+.copy U|xid = H|id
+.select
+.output new 'U|xtmpfile'
+input DATEI.F
+#!database=53
+#!action=modify
+#!charset=eks
+id;ablagef
+'M|pdm';1
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR15 ? _G|mehr
+..
+.copy M|tmark = G|FALSE
+.copy M|pdm = U|xid
+.continue DELETE
+..
+!LINE
+.select screen line
+.continue END       ? _G|mehr & U|xtreffer
+.continue ERROR10   ? _G|mehr
+.continue LINE      ?  G|mehr & M|tmark & M|tfreigebenz = "icon:clock"
+.continue KABWEISEN ?  G|mehr & M|tmark & M|tabweisenz  = "icon:ok" & G|evtvar = "abweisen"
+.continue FREIGEBEN ?  G|mehr & M|tmark & M|tfreigebenz = "icon:ok" & G|evtvar = "freigeben"
+.continue LINE
+..
+!KABWEISEN: Abweisen Åber Kopf-Button
+.copy U|xtreffer = G|TRUE
+.continue ERROR4 ? M|tabweisenz = "icon:lock"
+.continue ERROR7 ? F|empty(M|tabweisenz)
+.formula M|tfreigebenz = ""  ? M|import
+.file -tempname U|xtempfile
+.set trans +
+.output new 'U|xtempfile'
+öber Infosystem PDMCENTER abgewiesen.
+.output
+.set trans -
+.select lock edifact 'M|pdm'
+.continue ERROR5  ? _G|mehr
+.continue NOSPERR ? _G|gesperrt
+.. PDM-Datensatz auf "Fehler" setzen.
+.formula H|status = 5
+.formula H|fcode  = 99
+.formula H|ftext = U|xtempfile
+.rewrite
+.select
+.. PDM Request Response erzeugen
+..
+.formula U|xtcalljedi = F|formatstr("input de.abas.edi.JEdi.java -id {1} -exportid {2}", U|xmodelpdmresp, M|pdm^nummer)  ? _U|xbcalledi2
+.formula U|xtcalljedi = F|formatstr("input de.abas.edi2.JEdi.java -id {1} -exportid {2}", U|xmodelpdmresp, M|pdm^nummer) ?  U|xbcalledi2
+..
+.'U|xtcalljedi' ? _F|empty(U|xmodelpdmresp)
+..
+.formula M|tabweisenz = "icon:stop2"
+..
+.continue LINE
+..
+!FREIGEBEN: Freigabe Åber Kopf-Button
+.continue ERROR14 ? M|export
+.copy U|xtreffer = G|TRUE
+.formula M|tfreigebenz = "icon:lock"
+.formula M|tabweisenz  = ""
+..
+!FRIMPORT
+.formula U|xmodel = ""
+..
+.formula U|xmodel = U|xmodelpart ? M|bartikel
+.formula U|xmodel = U|xmodelbom  ? M|bfl
+.continue END ? F|empty(U|xmodel)
+..
+.formula U|xtcalljedi = F|formatstr("input de.abas.edi.JEdi.java -id {1} -edidbid {2} -forceParserErrors -allowEmptyFields", U|xmodel, M|pdm^nummer)  ? _U|xbcalledi2
+.formula U|xtcalljedi = F|formatstr("input de.abas.edi2.JEdi.java -id {1} -edidbid {2} -forceParserErrors", U|xmodel, M|pdm^nummer)                   ?  U|xbcalledi2
+..
+.'U|xtcalljedi'
+..
+.formula M|tfreigebenz = "icon:stop" ? G|status <> 0
+.continue LINE
+..
+!EDILOG: how the JEdi standard protocol
+.editing -readonly "java/log/edi/edi.log"
+.continue END
+..
+!STATSEL
+.input "is/TABLEEREN"
+.set trans +
+.menu Auswahl des Status
+Fehlerhaft                 >> .continue FEHL
+?Bereit zur Verarbeitung    >> .continue NEU  ? M|import
+Alles verarbeitet          >> .continue ERL
+?Warten auf Antwort         >> .continue ANTW  ? M|export
+.continue W2
+..
+!FEHL
+.set trans +
+.formula M|astatus   = "4!5"
+.formula M|status    = "Fehlerhaft"
+.continue W2
+..
+!ERL
+.set trans +
+.formula M|astatus   = "0"
+.formula M|status    = "Alles verarbeitet"
+.continue W2
+..
+!ANTW
+.set trans +
+.formula M|astatus   = "2"
+.formula M|status    = "Warten auf Antwort"
+.continue W2
+..
+!NEU
+.set trans +
+.formula M|astatus   = "2"
+.formula M|status    = "Bereit zur Verarbeitung"
+.continue W2
+..
+!W2
+.set trans -
+.continue END
+..
+!BSTART
+.continue ERROR2 ? _F|sysinfo(18)^pdm
+.continue ERROR1 ? _M|import & _M|export
+.copy M|bbom = G|FALSE
+..
+!SELECT: Item
+.set trans +
+.formula M|status = "Alles verarbeitet"        ? M|astatus   = "0"
+.formula M|status = "Bereit zur Verarbeitung"  ? M|astatus   = "2" & M|import
+.formula M|status = "Warten auf Antwort"       ? M|astatus   = "2" & M|export
+.formula M|status = "Fehlerhaft"               ? M|astatus   = "4!5"
+.set trans -
+..
+.formula M|select = "$,,"
+.formula M|select = M|select + "vorart=92"
+.formula M|select = M|select + ";imex=IM"             ?  M|import
+.formula M|select = M|select + ";imex=EX"             ?  M|export
+.formula M|select = M|select + ";status=" + M|astatus ? _F|empty(M|astatus)
+.formula M|select = M|select + ";erfass=" + 'M|erfassvon' + "!" + 'M|erfassbis' ? _F|empty(M|erfassvon) ; _F|empty(M|erfassbis)
+.formula M|select = M|select + ";@ordnung=nummer"
+.input "is/HOL.LISTE"
+.continue END  ? M|export
+..
+!NEWSELECT: BOM
+.formula M|select = "$,,"
+.formula M|select = M|select + "vorart=94"
+.formula M|select = M|select + ";imex=IM"             ?  M|import
+.formula M|select = M|select + ";imex=EX"             ?  M|export
+.formula M|select = M|select + ";status=" + M|astatus ? _F|empty(M|astatus)
+.formula M|select = M|select + ";erfass=" + 'M|erfassvon' + "!" + 'M|erfassbis' ? _F|empty(M|erfassvon) ; _F|empty(M|erfassbis)
+.formula M|select = M|select + ";@ordnung=nummer"
+.copy M|bbom = G|TRUE
+.input "is/HOL.LISTE"
+.continue END
+..
+!TFREIGEBEN: PDM-DatensÑtze freigeben
+.continue ERROR3  ? M|tfreigebenz = "icon:lock"
+.continue ERROR13 ? M|tfreigebenz = "icon:clock"
+.continue ERROR7  ? M|tfreigebenz = "icon:stop"
+.set trans +
+.continue ERROR3 ?  F|empty(M|tfreigebenz) & M|status = "Alles verarbeitet"
+.continue ERROR6 ?  F|empty(M|tfreigebenz) & M|status = "Fehlerhaft"
+.set trans -
+.formula M|tfreigebenz = "icon:lock"
+.formula M|tabweisenz = ""
+..
+.formula U|xmodel = ""
+.formula U|xmodel = U|xmodelpart ? M|bartikel
+.formula U|xmodel = U|xmodelbom  ? M|bfl
+.continue END ? F|empty(U|xmodel)
+..
+..
+.formula U|xtcalljedi = F|formatstr("input de.abas.edi.JEdi.java -id {1} -edidbid {2} -forceParserErrors -allowEmptyFields", U|xmodel, M|pdm^nummer)  ? _U|xbcalledi2
+.formula U|xtcalljedi = F|formatstr("input de.abas.edi2.JEdi.java -id {1} -edidbid {2} -forceParserErrors", U|xmodel, M|pdm^nummer)                   ?  U|xbcalledi2
+..
+.'U|xtcalljedi'
+..
+.continue ERRORVERARBEITEN ? G|status <> 0
+..
+.continue PARTNEW  ? M|partopen & (M|bartikel ; M|bfl) & M|bneu
+.continue PARTOPEN ? M|partopen & M|bartikel & M|bupdate
+.continue ISOPEN   ? M|isopen & M|bfl & M|bupdate
+.continue END
+..
+!PARTNEW: neuer Artikel -> Artikelmaske îffnen
+.formula U|xsel = "$,,nummer=" + M|anummer + ";gruppe=1;@ablageart=lebendig"
+.load 2 parts 'U|xsel'
+.continue ERROR8 ? _G|mehr
+.assign M|artikelnr = 2|id
+..
+!PARTOPEN: Artikelmaske îffnen
+.command -parallel 'F|formatstr("<(Part)>$,,;@gruppe=1;id=={1}<(View)>", M|artikelnr^id)'
+.continue END
+..
+!ISOPEN: automatisch Infosystem PDMBOMDIFF îffnen
+.command -parallel 'F|formatstr("<(Infosystem)>10447<(Call)>?artikel={1}|bstart=1", M|artikelnr^id)'
+.continue END
+..
+!ABWEISEN: PDM-DatensÑtze abweisen
+.continue ERROR4 ? M|tabweisenz = "icon:lock"
+.continue ERROR7 ? F|empty(M|tabweisenz)
+.formula M|tabweisenz = "icon:stop2"
+.formula M|tfreigebenz = ""
+.file -tempname U|xtempfile
+.set trans +
+.output new 'U|xtempfile'
+öber Infosystem PDMCENTER abgewiesen.
+.output
+.set trans -
+.select lock edifact 'M|pdm'
+.continue ERROR5  ? _G|mehr
+.continue NOSPERR ? _G|gesperrt
+.. PDM-Datensatz auf "Fehler" setzen.
+.formula H|status = 5
+.formula H|fcode  = 99
+.formula H|ftext = U|xtempfile
+.rewrite
+.select
+.. PDM Request Response erzeugen
+..
+.formula U|xtcalljedi = F|formatstr("input de.abas.edi.JEdi.java -id {1} -exportid {2}", U|xmodelpdmresp, M|pdm^nummer)  ? _U|xbcalledi2
+.formula U|xtcalljedi = F|formatstr("input de.abas.edi2.JEdi.java -id {1} -exportid {2}", U|xmodelpdmresp, M|pdm^nummer) ?  U|xbcalledi2
+..
+.'U|xtcalljedi'
+..
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR1
+.error Bitte Export oder Import wÑhlen!
+.end 1
+..
+!ERROR2
+.error Infosystem nicht ausfÅhrbar! PDM/PLM muss konfiguriert sein!
+.end 1
+..
+!ERROR3
+.error PDM-Datensatz wurde bereits freigegeben!
+.end 1
+..
+!ERROR4
+.error PDM-Datensatz wurde bereits abgewiesen!
+.end 1
+..
+!ERROR5
+.error PDM-Datensatz 'M|pdm' nicht vorhanden.
+.end 1
+..
+!ERROR6
+.error PDM-Datensatz ist fehlerhaft und kann nicht freigegeben werden!
+.end 1
+..
+!ERROR7
+.error Freigabe nicht mîglich!
+.end 1
+..
+!ERROR8
+.error Artikel nicht gefunden!
+.end 1
+..
+!ERROR9
+.error Tabelle ist leer!
+.end 1
+..
+!ERROR10
+.error Keine Zeile markiert!
+.end 1
+..
+!ERROR11
+.error PDM-Datensatz 'M|pdm' nicht vorhanden.
+.end 1
+..
+!ERROR12
+.error Nur bei feherhaften PDM-DatensÑtzen erlaubt.
+.end 1
+..
+!ERROR13
+.error Vor dieser Freigabe erst die Artikel freigeben.
+.end 1
+..
+!ERROR14
+.error Freigabe fÅr Export nicht mîglich!
+.end 1
+..
+!NOSPERR
+.error PDM-Datensatz 'M|pdm' konnte nicht gesperrt werden!
+.end 1
+..
+!ERRORVERARBEITEN
+.formula M|tfreigebenz = "icon:stop"
+.error Weiterverarbeitung von PDM-Datensatz 'M|pdm' gescheitert. Siehe Logdatei.
+.end 1
+..
+!ERROR15
+.input 'U|xterr'
+.error  PDM-Datensatz 'M|pdm' konnte nicht gelîscht werden!
+.end 1

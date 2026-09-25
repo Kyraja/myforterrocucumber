@@ -1,0 +1,99 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDIIMPPROCESS.ERZEUGEPOSTB
+.. Autor          : ok
+.. Verantwortlich : mh
+.. Kontrolle      : carue
+.. Funktion       : Versenden von ABAS-Post  (Legacy-Code)
+.. Functionality  : Send ABAS-mail  (Legacy-Code)
+...Includes       :
+..  include dfue/DFUE.POST.SENDEN
+..*****************************************************************************
+.set trans -
+..
+.. >> Erzeugen EKS-Post mit Protokoll ber:
+.. >> - Fehler (xistfehler = true)
+.. >> - Ergebnis (xistfehler = false)
+.. >>
+.. >> Parameter:
+.. >>
+.. >> Ein: - <EKS-Modul><Vorgang><Vorgangstyp> (xmmvvl)
+.. >>      - Schalter, ob Fehler (xistfehler)
+.. >>      - Name der Ergebnisprotokoll-Datei (xneprotokollerw)
+.. >>      - Name der Fehlerprotokoll-Datei (xnfprotokollerw)
+.. >>      - Name des DFUE-Programms (xdfueprog)
+.. >>      - EKS-Post-Betreff-Erweiterung (xPostBetreffErw)
+.. >>      - EKS-Post-Stichwort4-Erweiterung (xPostStichw4Erw)
+.. >>      - EKS-Post-Verteiler fr VDA import Ergebnisse (xPostEmpfOut)
+.. >>      - EKS-Post-Verteiler fr VDA import Fehler (xPostEmpfErr)
+.. >>
+.. >> Aus: - Erfolg Operation (xprocreturn)
+.. >>
+.. >> Interne Variablen: - Verteiler (xPostEmpf)
+.. >>                    - Betreff (xPostBetreff)
+.. >>                    - Protokoll-Datei (xPostFtext)
+.. >>                    - Stichworte
+.. >>                      (xPostStichw1, xPostStichw2, xPostStichw3, xPostStichw4)
+.. >>
+.. >> Init Rckgabewerte
+.. >> Erfolg der Operation
+..
+.type text xPostBetreffErw   ? _F|defined(U|xPostBetreffErw)
+.type text xPostStichw4Erw   ? _F|defined(U|xPostStichw4Erw)
+.type text xPostEmpf         ? _F|defined(U|xPostEmpf)
+.type text xsybefehl         ? _F|defined(U|xsybefehl)
+..
+.. Default Return value
+.copy U|xprocreturn = G|true
+..
+.continue EPOST ? _U|xistfehler
+.formula U|xPostEmpf    = xPostEmpfErr
+.formula U|xPostBetreff = xdfueprog + xPostBetreffErw
+.formula U|xPostFtext   = xnfprotokollerw
+.formula U|xPostStichw1 = "DFUE"
+.formula U|xPostStichw2 = xmmvvl
+.formula U|xPostStichw3 = "Eingang"
+.formula U|xPostStichw4 = xPostStichw4Erw
+.input "DFUE.POST.SENDEN" ? _F|empty(U|xPostEmpf)
+..
+!EPOST
+.. Ermitteln, ob neue Nachrichten eingetragen/verarbeitet sind
+.formula xsybefehl = "grep -s -E 'eingehender Lieferabruf VDA/ODETT/EDIFACT$' " + xneprotokollerw + " > ${DEVNULL:-/dev/null} 2>&1"
+.system 'U|xsybefehl' background
+.continue MEHR ? mehr
+.formula xsybefehl = "grep -s -E 'eingehender Feinabruf VDA/ODETT/EDIFACT$' " + xneprotokollerw + " > ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+.continue MEHR ? mehr
+.formula xsybefehl = "grep -s -E 'eingehender Feinabruf (Mais-Pick-Up-Sheet)$' " + xneprotokollerw + " > ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+.continue MEHR ? mehr
+.formula xsybefehl = "grep -s -E 'eingehende Gutschrift$' " + xneprotokollerw + " > ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+.continue NOMEHR ? _mehr
+..
+!MEHR
+.formula xPostEmpf = xPostEmpfOut
+.set trans +                   
+.formula xPostBetreff = xdfueprog + ": Operationen fehlerfei ausgefhrt (siehe Freitext 1)"
+.set trans -
+.formula xPostFtext = "XIAV.PO." + panummer + ".TMP"
+.formula xsybefehl = "grep -v '^#.*' " + xneprotokollerw + " > " + xPostFtext
+.system 'xsybefehl' background
+.formula xPostStichw1 = "DFUE"
+.formula xPostStichw2 = xmmvvl
+.formula xPostStichw3 = "Eingang"
+.formula xPostStichw4 = "Ergebnis"
+.continue UEB
+..
+!NOMEHR
+.formula U|xPostEmpf = ""
+..
+!UEB
+.input "DFUE.POST.SENDEN" ? _F|empty(U|xPostEmpf)
+.formula xsybefehl = "rm -f " + xPostFtext + " > ${DEVNULL:-/dev/null}" ? xPostEmpf<>""
+.system 'xsybefehl' background ? xPostEmpf<>""
+.continue END
+..
+..*****************************************************************************
+!END
+.continue

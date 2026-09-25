@@ -1,0 +1,990 @@
+..!interpreter english
+..@@BEGINHEAD
+..========================================================================
+..==
+..==  Name              : FABDIFF.DRUCK
+..==
+..==  Pfad              : dfue
+..==
+..==  Funktion          : Formatierung Differenzreport VDA-/ODETT-
+..==                      Feinabrufe
+..==
+..==  Erstellungsdatum  : 26.05.1998
+..==
+..==  Autor             : alltrotec© GmbH, Matthias Schrîder
+..==  Verantwortlich    : mh
+..==
+..==  notwendige Pfade  : dfue
+..==
+..==  Menuepunkte       :
+..==
+..==  Maskenprioritaet
+..==  bei EFOP          :
+..==
+..==  Besonderheiten    : Parameter aus FABDIFF:
+..==                      - Identnummer des EDI-Datensatzes des aktuell
+..==                        gewÑhlten letzten Feinabrufes zu einem
+..==                        Rahmenauftrag (num, Datensatz ist geholt !)
+..==
+..==  Aenderungshistorie:
+..#KOR#EDI-MODUL#DATUM#éNDERUNGS-INDEX#MitarbeiterkÅrzel#
+..#KOR#LAB#15.04.2002#1#ok# (EKS wurde entfernt)
+..==
+..========================================================================
+..@@ENDHEAD
+..
+.. include standard programs
+.input ARB
+..
+.. variable definitions
+..@@BEGINVARDEFS
+..====================================================
+.set trans -
+..... procedure stack pointer .....
+.. Folgende Zeile mu· bei Aufruf aus FABDIFF kommentiert werden
+..art int   xprocsp
+..>> Variablen fÅr Ausgabeformatierung
+.type text w x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15 x16 x17 x18 x19 x20
+.type text x21 x22 x23 x24 x26
+.type realx x25 x27
+..>> Abladestelle
+.type text       xablstelle
+..>> Bedarfsstatus
+.type text       xbstatus
+.type text       xbstatusact
+.type text       xbstatusprv
+..>> Datum (letzte zwei Ziffern des Jahres)
+.type integer    xdatumjj
+..>> EDI-Identnummer aktueller Abruf
+.type text       xediactnum
+..>> aktive EDI-Identnummer
+.type text       xedinum
+..>> EDI-Identnummer voriger Abruf
+.type text       xediprvnum
+..>> 1. SuchschlÅssel EDI
+.type text       xedisuchschluessel1
+..>> Erfassungsdatum
+.type date      xerfass
+..>> FZahl Fertigungsfreigabe aktueller Feinabruf
+.type integer    xffgfzahlact
+..>> FZahl Fertigungsfreigabe voriger Feinabruf
+.type integer    xffgfzahlprv
+..>> (Lieferanten-)Fortschrittszahl
+.type realx      xfzahl
+..>> Gesamt (xgesamt.xsaveerw)
+.type realx      xgesamtact
+.type realx      xgesamtprv
+..>> Identnummer Kunde beim Lieferanten
+.type text       xidkundeab
+..>> Identnummer Artikel aus -Rahmen
+.type text       xidrahart
+..>> Identnummer Auftrag aus -Rahmen
+.type text       xidrahvor
+..>> Schalter, ob ZeitrÑume verschlÅsselt
+.type bool       xistabrzeitraum
+..>> 1. Schalter, ob nach Holen Satz vorhanden
+.type bool       xistsatz1
+..>> 1. Schalter, ob nach Holen Ziele vorhanden
+.type bool       xistzeile1
+..>> temporÑre Integer-Variable
+.type integer    xitemp
+..>> Datum aktueller Feinabruf
+.type date      xlabrufdact
+..>> Datum voriger Feinabruf
+.type date      xlabrufdprv
+..>> Nummer aktueller Feinabruf
+.type text       xlabrufact
+..>> Nummer voriger Feinabruf
+.type text       xlabrufprv
+..>> Bedarf Materialfreigabe
+.type integer    xmfgfzahlact
+..>> Bedarf Fertigungsfreigabe
+.type integer    xmfgfzahlprv
+..>> Abrufmge
+.type realx      xmge
+..>> Menge letzer Lieferscheineingang
+.type realx      xmgellief
+..>> Bezeichnung Artikel
+.type text       xnaeksart
+..>> Bezeichnung Rahmenauftrag
+.type text       xnaeksrah
+..>> Bezeichnung Auftrag
+.type text       xnaeksvor
+..>> Name der temporÑren Differenz-Report-Datei
+.type text       xndiffreptemp
+..>> Name der temporÑren Differenz-Report-Datei (Sort)
+.type text       xndiffreptemp1
+..>> Erfolg Operation
+.type bool       xprocreturn
+..>> Abrufzeitraum
+.type text       xptext
+..>> RÅckstand (xrÅckst.xsaveerw)
+.type realx      xrÅckstact
+.type realx      xrÅckstprv
+..>> Endung Variable fÅr Speicherung RÅckstand, Gesamt
+.type text       xsaveerw
+..>> Suchwort Artikel
+.type text       xsueksart
+..>> Suchwort Rahmenauftrag
+.type text       xsueksrah
+..>> Suchwort Auftrag
+.type text       xsueksvor
+..>> Abruftermin (Woche)
+.type week      xterm
+..>> Abruftermin (Datum)
+.type date      xtterm
+..>> spÑtester Abruftermin des Abrufs
+.type date      xttermlast
+..>> Abrufdatum Wochentag
+.type integer    xttermwt
+..>> Abruftermin (Sicherung, Text)
+.type text       xtxttterm
+..>> VerwendungsschlÅssel
+.type text       xverwschl
+..>> 1. SuchschlÅssel Verkauf
+.type text       xvksuchschluessel1
+..>> Eintreffzeit
+.type time       xz
+..>> Variablen fÅr Ausgabeformatierung
+.type text xw xz1 xz2 xz3 xz4 xz5 xz6 xz7 xz8
+.type realx xzx
+..>> Werk des Kunden
+.type text       xwerk
+..>> EDI-Identnummer aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+.type text       xzedinumact
+..>> EDI-Identnummer vorige Zeile aus temporÑrer Differenz-Report-Datei
+.type text       xzedinumprv
+..>> Kunden-Fortschrittszahl aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+.type realx      xzeinfzahlact
+..>> Differenz Kunden-Fortschrittszahl aus temporÑrer Differenz-Report-Datei
+.type realx      xzeinfzahldif
+..>> Kunden-Fortschrittszahl vorige Zeile aus temporÑrer Differenz-Report-Datei
+.type realx      xzeinfzahlprv
+..>> Abrufmenge aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+.type realx      xzmgeact
+..>> gesamte Abrufmenge aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+.type realx      xzmgeactges
+..>> Differenz Abrufmenge aus temporÑrer Differenz-Report-Datei
+.type realx      xzmgedif
+..>> Abrufmenge vorige Zeile aus temporÑrer Differenz-Report-Datei
+.type realx      xzmgeprv
+..>> gesamte Abrufmenge vorige Zeile aus temporÑrer Differenz-Report-Datei
+.type realx      xzmgeprvges
+..>> Abruftermin aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+.type date      xzttermact
+..>> Abruftermin vorige Zeile aus temporÑrer Differenz-Report-Datei
+.type date      xzttermprv
+..>> Eintreffzeit aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+.type time       xzttimeact
+..>> Eintreffzeit vorige Zeile aus temporÑrer Differenz-Report-Datei
+.type time       xzttimeprv
+..====================================================
+..@@ENDVARDEFS
+..
+.. initialize procedure stack pointer
+..?? folgende Zeile mu· bei Aufruf aus FABDIFF kommentiert werden
+..fo xprocsp = 0
+.. alle variablen mÅssen definiert sein, sonst bricht das programm ab
+..?? folgende Zeile mu· bei Aufruf aus FABDIFF auskommentiert werden
+.set demand -
+..
+.. ----------------------------------------
+.continue EPROCDEF
+.. procedure definitions
+.. Prozedur: EKSHoleRahmenInfos
+..
+!PROC001: ----- EKSHoleRahmenInfos -----
+..>> Holen Informationen aus Rahmenauftrag:
+..>>
+..>> - Suchwort, Name des Auftrags
+..>> - Suchwort, Name des Kundenartikels
+..>> - Suchwort, Name des Rahmenauftrags
+..>> - (Lieferanten-)Fortschrittszahl der ersten Position des Kundenartikels
+..>>
+..>> Parameter:
+..>>
+..>> Ein: - Identnummer des Rahmenauftrags (xideksrah)
+..>>      - Identnummer der Rahmen-Artikels (xideksart)
+..>>      - Kundenartikelnummer (xkuartnr)
+..>>
+..>> Aus: - Erfolg Operation (xprocreturn)
+..>>      - (Lieferanten-)Fortschrittszahl (xfzahl)
+..>>      - Suchwort Artikel (xsueksart)
+..>>      - Bezeichnung Artikel (xnaeksart)
+..>>      - Suchwort Rahmenauftrag (xsueksrah)
+..>>      - Bezeichnung Rahmenauftrag (xnaeksrah)
+..>>      - Suchwort Auftrag (xsueksvor)
+..>>      - Bezeichnung Auftrag (xnaeksvor)
+..>>
+..>> Interne Variablen: - xistzeile1
+..>>                    - xidrahvor
+..>>                    - xidrahart
+..>>
+..
+.. >> Init RÅckgabewerte
+..>> Erfolg der Operation
+.formula xprocreturn = false
+..>> (Lieferanten-)Fortschrittszahl
+.formula xfzahl = -1
+..>>
+..
+.. >> Ermitteln Kundenartikel-Position in Rahmenauftrag
+..>> Test, ob Rahmenauftrag eingetragen
+..>>
+..
+..
+.continue EL001 ? _(xideksrah <> "")
+.. IF001
+..>> Testergebnis positiv:
+..>>
+..
+.. >> Initialisierung Variablen
+.formula xidrahvor = ""
+.formula xidrahart = ""
+..>>
+..
+.. >> Holen Rahmenauftrag
+.select sales 'xideksrah'
+..
+..??    .aus bild
+..??    6
+..??    .aus bild ...
+..
+..>> Test, ob Rahmenauftrag gefunden
+..>>
+..
+..
+.continue EL002 ? _(mehr)
+.. IF002
+..>> Testergebnis positiv:
+..>>
+..
+.. >> Merken Rahmen-Informationen
+..>>
+.formula xsueksrah = such
+.formula xnaeksrah = betreff
+.formula xidrahvor = lztabruf
+..
+.. >> Holen Artikel, wenn vorhanden und Merken Auftrags-Informationen
+..
+!REPT001: ==============================
+.. nÑchste Zeile im Rahmen
+.select line
+.formula T|xistzeile1 = T|mehr
+
+..
+..
+.continue EL003 ? _(T|mehr)
+.. IF003
+..
+.continue EL004 ? _(typ = arpos & H|artex^nummer = T|xideksart)
+.. IF004
+.formula T|xsueksart = H|artex^such
+.formula T|xnaeksart = H|artex^namebspr
+.formula T|xidrahart = H|artex^nummer
+..
+.formula T|xfzahl = H|fzahl
+..
+.formula T|xprocreturn = true
+..
+!EL004
+.. FI004
+..
+!EL003
+.. FI003
+..
+.continue REPT001 ? _((_(xistzeile1)) ; (xfzahl <> -1))
+..
+.. >> Holen Auftrag, wenn vorhanden und Merken Auftrags-Informationen
+..>> Test, ob Identnummer des Auftrages in Rahmenauftrag eingetragen
+..>>
+..
+..
+.continue EL005 ? _(xidrahvor <> "")
+.. IF005
+..>> Testergebnis positiv:
+..>>
+..
+.. >> Holen Auftrag
+..>>
+.select sales 'xidrahvor'
+..
+..>> Test, ob Auftrag nicht gefunden
+..>>
+..
+..
+.continue EL006 ? _(_(mehr))
+.. IF006
+.. >> Holen Auftrag aus Ablage
+..>>
+.formula xvksuchschluessel1 = "+" + xideksvor + "!" + xideksvor
+.select sales 'xvksuchschluessel1'
+..
+.continue FI006
+!EL006
+.. >> Testergebnis negativ: keine Aktion
+..>>
+..
+!FI006
+..
+..>> Test, ob Auftrag gefunden
+..>>
+..
+..
+.continue EL007 ? _(mehr)
+.. IF007
+.. >> Testergebnis positiv: Merken Auftrags-Informationen
+..>>
+.formula xsueksvor = such
+.formula xnaeksvor = betreff
+..
+.continue FI007
+!EL007
+.. >> Testergebnis negativ: keine Aktion
+..>>
+..
+!FI007
+..
+.continue FI005
+!EL005
+.. >> Testergebnis negativ: keine Aktion
+..>>
+..
+!FI005
+..
+.continue FI002
+!EL002
+.. >> Testergebnis negativ: keine Aktion
+..>>
+..
+!FI002
+..
+.continue FI001
+!EL001
+.. >> Testergebnis negativ: keine Aktion
+..>>
+..
+!FI001
+..
+.continue 'xprocst.xprocsp'
+..
+.. Prozedur: EDISchreibeFABDatenTMP
+..
+!PROC002: ----- EDISchreibeFABDatenTMP -----
+..>> Ausgabe Daten zu Feinabrufterminen
+..>>
+..>> Parameter:
+..>>
+..>> Ein: - Identnummer EDI-Datensatz (num, geholt)
+..>>      - Endung Variable fÅr Speicherung RÅckstand, Gesamt
+..>>        (xsaveerw)
+..>>
+..>> Aus: - RÅckstand (xrÅckst.xsaveerw)
+..>>      - Gesamt (xgesamt.xsaveerw)
+..>>
+..>> Interne Variablen: - Schalter, ob ZeitrÑume verschlÅsselt (xistabrzeitraum)
+..>>                    - Abrufmge (korrigiert, xmge)
+..>>                    - Abruftermin (xtterm)
+..>>                    - xtxttterm
+..>>                    - xterm
+..>>
+..
+.. >> Ausgabe Feinabrufdaten aus EDI-Datensatz
+.. >> Merken, ob aktueller EDI-Datensatz vorhanden
+..>>
+.formula xistsatz1 = num <> ""
+..
+..>> (Alibi-)Test, ob EDI-Datensatz gefunden
+..>>
+..
+..
+.continue EL008 ? _(xistsatz1)
+.. IF008
+..>> Testergebnis positiv:
+..>>
+..
+.. >> Merken Kopf-Variablen
+..>> Artikelnummer
+.formula xideksart = ideksart
+..>> Datum Feinabruf
+.formula xlabrufd = labrufd
+..>> Kunden-Fortschrittszahl
+.formula xzkdfzahlact = einfzahl
+..
+.. >> Holen erste Tabellenzeile
+.select line
+..
+..>> selektive Verarbeitung der einzelnen Tabellenzeilen des EDI-Datensatzes
+..>> (Abruftermine des Feinabrufs, Packmittel)
+..>> (Anmerkung: Rechnen mit Datum siehe Hilfe 9.1.5)
+..>>
+..
+.. >> Initialisieren: folgende Abrufe nicht fÅr Zeitraum
+..>>
+.formula xistabrzeitraum = false
+..
+.. >> Initialisieren: spÑtester Abruftermin des Abrufs
+..>>
+.formula xttermlast = "19810101"
+..
+..
+!LOOP001: ==============================
+.continue ELOP001 ? _(mehr)
+..>> Verzweigung entsprechend Satzkennzeichen
+..>>
+..
+..
+.. =====   CASE001   =====
+.continue BRK001 ? _(text1 = "821")
+.. >> 821, Abrufe
+.. >> Formatieren Parameter aus EDI-Datensatz
+..>> Abrufmenge
+.formula xmge = text5
+..>> Abrufdatum
+.formula xtterm = text4
+..>> Eintreffzeit
+.formula xz = text6
+..>> Bedarfsstatus
+.formula xbstatus = text7
+..
+.. >> Summieren Gesamtmenge
+..>>
+.formula xgesamt.xsaveerw = xgesamt.xsaveerw + xmge
+..
+..>> Test, ob Abrufmenge vorhanden
+..>>
+..
+..
+.continue EL009 ? _(xmge > 0)
+.. IF009
+.. >> Testergebnis positiv: Ausgabe Tabellenzeilen
+..>>
+'xtterm:8'#' xz'#' xedinum'#'xmge'#' xzkdfzahlact'#' xbstatus'#
+..
+.continue FI009
+!EL009
+.. >> Testergebnis negativ: keine Aktion
+..>>
+..
+!FI009
+..
+.continue ESAC001
+!BRK001
+.. >> sonst, (vorerst) nix zu tun
+..>> 000
+..>> 700
+..>> 800
+..>> 820
+..>> 822
+..>> 823
+..>> 824
+..>> 900
+..
+!ESAC001: =====   ENDCASE   =====
+..
+.. >> Holen nÑchste Tabellenzeile
+.select line
+..
+.continue LOOP001
+!ELOP001: ==============================
+..
+.continue FI008
+!EL008
+.. >> Testergebnis negativ: keine Aktion
+..>>
+..
+!FI008
+..
+.continue 'xprocst.xprocsp'
+..
+!EPROCDEF: ----- end procedure definitions -----
+.. ----------------------------------------
+..
+..
+.continue EL010 ? _(num <> "")
+.. IF010
+.. >> Testergebnis positiv: Erzeugen der Differenzliste
+..>> "X3VID"<Identnummer EDI-Datensatz>".TMP"
+.formula xndiffreptemp = "X3VID" + num + ".TMP"
+..>> "X3VIS"<Identnummer EDI-Datensatz>".TMP"
+.formula xndiffreptemp1 = "X3VIS" + num + ".TMP"
+..
+.output new 'xndiffreptemp'
+.length 1
+.right 299
+.tablerecord
+..
+.output new WERF.WEG
+..
+.reserve
+..
+.. >> Merken Parameter EDI-Datensatz aktueller Feinabruf
+..>> Erfassungsdatum
+.formula xerfass = erfass
+..>> Identnummer der Rahmen-Artikels
+.formula xideksart = ideksart
+..>> Identnummer des Auftrages
+.formula xideksvor = ideksvor
+..>> Identnummer des Rahmenauftrages
+.formula xideksrah = ideksrah
+..>> Identnummer Kunde beim Lieferanten
+.formula xidkundeab = idkundeab
+..>> EDI-Identnummer aktueller Abruf
+.formula xediactnum = num
+..>> Kundenartikelnummer
+.formula xkuartnr = kuartnr
+..>> Werk
+.formula xwerk = werk
+..>> Abladestelle
+.formula xablstelle = ablstelle
+..>> VerwendungsschlÅssel
+.formula xverwschl = verwschl
+..>> Abschlu·- / Bestell-Nummer
+.formula xabbenr = abbenr
+..>> Zeichen des Kunden
+.formula xkdzeich = kdzeich
+..>> Datum letzter Lieferschein
+.formula xleinlida = leinlida
+..>> Nummer letzter Lieferschein
+.formula xleinlief = leinlief
+..>> Menge letzter Lieferschein
+.formula xmgellief = mgellief
+..>> Kunden-Fortschrittszahl
+.formula xeinfzahl = einfzahl
+..>> Lief.-Eingang -Nummer / Datum
+.formula xlabrufact = labruf
+.formula xlabrufdact = labrufd
+..>> Freigabe Material / Fertigung:
+.formula xmfgfzahlact = mfgfzahl
+.formula xffgfzahlact = ffgfzahl
+..>> RÅckstand / Gesamt:
+.formula xrÅckstact = 0
+.formula xgesamtact = 0
+..>>
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+..
+.select
+..
+.output addedto 'xndiffreptemp'
+..
+.formula xedinum = num
+.formula xsaveerw = "act"
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC002
+!RET002
+.formula xprocsp = xprocsp - 1
+..
+.. >> Holen vorhergehenden Feinabruf in EDI-Datenbank
+.formula xedisuchschluessel1 = "$,,;@gruppe=0;@ablage=(1);@zeilen=(0);@ordnung=nummer.(1);vorart=3;imex=IM;sinhouse=800;fcode=0;status=0;nummer=!" + xedinum + ";ideksrah=" + xideksrah + ";idkundeab=" + xidkundeab
+.select edifact 'xedisuchschluessel1'
+..
+..
+.continue EL011 ? _(mehr)
+.. IF011
+.select edifact
+..
+!EL011
+.. FI011
+..
+..
+.continue EL012 ? _(mehr)
+.. IF012
+.. >> Merken Parameter EDI-Datensatz voriger Feinabruf
+..>> EDI-Identnummer voriger Abruf
+.formula xediprvnum = num
+..>> Lief.-Eingang -Nummer / Datum
+.formula xlabrufprv = labruf
+.formula xlabrufdprv = labrufd
+..>> Freigabe Material / Fertigung:
+.formula xmfgfzahlprv = mfgfzahl
+.formula xffgfzahlprv = ffgfzahl
+..>> RÅckstand / Gesamt:
+.formula xrÅckstprv = 0
+.formula xgesamtprv = 0
+..>>
+..
+.output addedto 'xndiffreptemp'
+..
+.formula xedinum = num
+.formula xsaveerw = "prv"
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC002
+!RET003
+.formula xprocsp = xprocsp - 1
+..
+.output new WERF.WEG
+..
+!EL012
+.. FI012
+..
+.. >> Sortieren temporÑre Differenz-Report-Datei
+..>>
+.formula xsybefehl = "sort " + xndiffreptemp + " > " + xndiffreptemp1 + " ; rm " + xndiffreptemp + " ; mv " + xndiffreptemp1 + " " + xndiffreptemp
+.system 'xsybefehl'
+..
+..
+.continue EL013 ? _(geraet <> "")
+.. IF013
+.output 'geraet'
+..
+.continue FI013
+!EL013
+.output terminal
+..
+!FI013
+..
+.input FABDIFF.F
+..
+.. >> Formatierung Ausgabekopf
+..>>
+.formula x1 = xidkundeab
+.formula w = xwerk
+.formula x2 = xablstelle
+.formula x3 = xverwschl
+.formula x4 = xideksvor
+.formula x5 = xsueksvor
+.formula x6 = xideksrah
+.formula x7 = xsueksrah
+.formula x8 = xerfass
+.formula x9 = xkdzeich
+.formula x10 = xleinlida
+.formula x11 = xleinlief
+.formula x12 = xmgellief
+.formula x13 = xeinfzahl
+.formula x14 = xediprvnum
+.formula x15 = xediactnum
+.formula x16 = xlabrufprv
+.formula x17 = xlabrufdprv
+.formula x18 = xlabrufact
+.formula x19 = xlabrufdact
+.formula x20 = xmfgfzahlprv
+.formula x21 = xffgfzahlprv
+.formula x22 = xmfgfzahlact
+.formula x23 = xffgfzahlact
+.formula x24 = xrÅckstprv
+.formula x25 = xgesamtprv
+.formula x26 = xrÅckstact
+.formula x27 = xgesamtact
+.page 1
+.up
+.set trans +
+'Mandant          '                          Feinabruf-Differenzliste                  '   datum'        Seite' sei'
+                                             ========================
+
+Kunden-Artikel-Nr: 'xkuartnr                    '   Kunde: 'x1    '   Werk: 'w '  Abladestelle: 'x2 '  Verwendungsschl.: 'x3'
+Artikel      : 'xideksart    ' 'xsueksart    '
+Rahmenauftrag:'x6    '           Liefer.-FZahl: ' xfzahl'
+                                 Kunden-FZahl : '    x13'
+E/A-Datum   : E 'x8    '         Bestell-Nr     : 'xabbenr   '        Besteller   : 'x9 '
+Letzte Lief.:   'x10   '         Lieferschein-Nr: 'x11   '            Liefer-Menge: 'x12    '
+
+EDI-Datensatz:                                      'x14     '                       'x15      '
+Feinabruf-Nummer / Datum:              '     x16' / 'x17   '            '     x18' / 'x19   '
+Gesamt:                                             'x25:0  '                        'x27:0  '
+
+                                          Alte Liefereinteilung            Neue Liefereinteilung                Differenz
+ Datum       Eintreffzeit     Menge         Endzahl Status     Menge         Endzahl Status       Menge         Endzahl
+-------------------------------------------------------------------------------------------------------------------------
+.set trans -
+..**ok,09.01.2002 (Angabe Woche aus PlatzgrÅnden fÅr die Bildschirmausgabe entfernt)
+..-----+-----------+-------------+---------+-----+---------+------+---------+-----+---------+------+-+---------+-----+---------
+..
+.. >> Holen Daten aus temporÑrer Differenz-Report-Datei und Formatierung Ausgabe
+.. >> Initialisierung Variablen
+..>> EDI-Identnummer aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzedinumact = ""
+..>> EDI-Identnummer vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzedinumprv = ""
+..>> Kunden-Fortschrittszahl aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzeinfzahlact = 0
+..>> Differenz Kunden-Fortschrittszahl aus temporÑrer Differenz-Report-Datei
+.formula xzeinfzahldif = 0
+..>> Kunden-Fortschrittszahl vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzeinfzahlprv = 0
+..>> Abruftermin aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzttermact = ""
+..>> Abruftermin vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzttermprv = ""
+..>> Eintreffzeit aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzttimeact = ""
+..>> Eintreffzeit vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzttimeprv = ""
+..>> Bedarfsstatus aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+.formula xbstatusact = ""
+..>> Bedarfsstatus vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xbstatusprv = ""
+..>> Abrufmenge aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzmgeact = 0
+..>> gesamte Abrufmenge aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzmgeactges = xeinfzahl
+..>> Differenz Abrufmenge Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzmgedif = 0
+..>> Abrufmenge vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzmgeprv = 0
+..>> gesamte Abrufmenge vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzmgeprvges = xeinfzahl
+..
+.select from
+..
+..
+!REPT002: ==============================
+.select from 'xndiffreptemp' xzttermact # xzttimeact # xzedinumact # xzmgeact # xzeinfzahlact # xbstatusact #
+..??    <'xzttermact'> <'xzttimeact'> <'xzedinumact'> <'xzmgeact'> <'xzeinfzahlact'> <'xbstatusact'>
+..
+.. >> Formatierung der Ausgabe in AbhÑngikeit von den Daten
+..>> Test, ob nicht 1. Zeile aus temporÑrer Differenz-Report-Datei
+..>>
+..
+..
+.continue EL014 ? _(xzedinumprv <> "")
+.. IF014
+..>> Testergebnis positiv:
+..>>
+..>> EDI-Identnummer vorige / aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+..??    <'xzedinumprv'> / <'xzedinumact'>
+..>> Kunden-Fortschrittszahl vorige / aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+..??    <'xzeinfzahlprv'> / <'xzeinfzahlact'>
+..>> Abruftermin vorige / aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+..??    <'xzttermprv'> / <'xzttermact'>
+..>> Abrufmenge vorige / aktuelle Zeile aus temporÑrer Differenz-Report-Datei
+..??    <'xzmgeprv'> / <'xzmgeact'>
+..??    .aus bild ...
+..>>
+..>> Test, ob:
+..>> - Identnummer Feinabruf aktuelle Zeile gleich
+..>>   Identnummer Feinabruf vorige Zeile
+..>> und
+..>> - Termin Feinabruf aktuelle Zeile gleich
+..>>   Termin Feinabruf vorige Zeile
+..>>
+..
+..
+.continue EL015 ? _((xzedinumact = xzedinumprv) & (xzttermprv = xzttermact) & (xzttimeprv = xzttimeact))
+.. IF015
+..>> Testergebnis positiv:
+..>>
+..>> Test, ob Identnummer Feinabruf vorige Zeile gleich aktueller Feinabruf
+..>>
+..
+..
+.continue EL016 ? _(xzedinumprv = xediactnum)
+.. IF016
+..>> Testergebnis positiv: "- - x x"
+..>>
+..>> Formatierung
+.formula xterm = xzttermprv
+.formula xw = 'xterm'
+.formula xz = xzttimeprv
+.formula xz1 = xzttermprv
+.formula xz2 = "-"
+.formula xz3 = "-"
+.formula xz4 = "-"
+.formula xz5 = 'xzmgeprv:0'
+.formula xzmgeactges = xzmgeactges + xzmgeprv
+.formula xzeinfzahlprv = xzmgeactges
+.formula xz6 = 'xzeinfzahlprv:0'
+.formula xz7 = xbstatusprv
+.formula xz8 = 'xzmgeprv:0'
+..??    xzeinfzahldif
+..??    .fo xz9 = xzeinfzahlprv - xfzahl
+.formula xzx = xzmgeactges - xzmgeprvges
+.formula xz9 = 'xzx:0'
+..
+.continue FI016
+!EL016
+..>> Testergebnis negativ: (x x - -)
+..>>
+..>> Formatierung
+.formula xterm = xzttermprv
+.formula xw = 'xterm'
+.formula xz = xzttimeprv
+.formula xz1 = xzttermprv
+.formula xz2 = 'xzmgeprv:0'
+.formula xzmgeprvges = xzmgeprvges + xzmgeprv
+.formula xzeinfzahlprv = xzmgeprvges
+.formula xz3 = 'xzeinfzahlprv:0'
+.formula xz4 = xbstatusprv
+.formula xz5 = "-"
+.formula xz6 = "-"
+.formula xz7 = "-"
+..??    xzmgedif
+.formula xzx = -1 * xzmgeprv
+.formula xz8 = 'xzx:0'
+..??    xzeinfzahldif
+..??    .fo xz9 = xzeinfzahlprv - xfzahl
+.formula xzx = xzmgeactges - xzmgeprvges
+.formula xz9 = 'xzx:0'
+..
+!FI016
+..
+.continue FI015
+!EL015
+..>> Testergebnis negativ:
+..>>
+..>> Test, ob Termin Feinabruf aktuelle Zeile ungleich Termin Feinabruf vorige Zeile
+..>>
+..
+..
+.continue EL017 ? _((xzttermact <> xzttermprv) ; (xzttimeact <> xzttimeprv))
+.. IF017
+..>> Testergebnis positiv:
+..>>
+..>> Test, ob Identnummer Feinabruf vorige Zeile gleich Identnummer aktueller Feinabruf
+..>>
+..
+..
+.continue EL018 ? _(xzedinumprv = xediactnum)
+.. IF018
+..>> Testergebnis positiv: "- - x x"
+..>>
+..>> Formatierung
+.formula xterm = xzttermprv
+.formula xw = 'xterm'
+.formula xz = xzttimeprv
+.formula xz1 = xzttermprv
+.formula xz2 = "-"
+.formula xz3 = "-"
+.formula xz4 = "-"
+.formula xz5 = 'xzmgeprv:0'
+.formula xzmgeactges = xzmgeactges + xzmgeprv
+.formula xzeinfzahlprv = xzmgeactges
+.formula xz6 = 'xzeinfzahlprv:0'
+.formula xz7 = xbstatusprv
+.formula xz8 = 'xzmgeprv:0'
+..??    xzeinfzahldif
+..??    .fo xz9 = xzeinfzahlprv - xfzahl
+.formula xzx = xzmgeactges - xzmgeprvges
+.formula xz9 = 'xzx:0'
+..
+.continue FI018
+!EL018
+..>> Testergebnis negativ: "x x - -"
+..>>
+..>> Formatierung
+.formula xterm = xzttermprv
+.formula xw = 'xterm'
+.formula xz = xzttimeprv
+.formula xz1 = xzttermprv
+.formula xz2 = 'xzmgeprv:0'
+.formula xzmgeprvges = xzmgeprvges + xzmgeprv
+.formula xzeinfzahlprv = xzmgeprvges
+.formula xz3 = 'xzeinfzahlprv:0'
+.formula xz4 = xbstatusprv
+.formula xz5 = "-"
+.formula xz6 = "-"
+.formula xz7 = "-"
+..??    xzmgedif
+.formula xzx = -1 * xzmgeprv
+.formula xz8 = 'xzx:0'
+..??    xzeinfzahldif
+..??    .fo xz9 = xzeinfzahlprv - xfzahl
+.formula xzx = xzmgeactges - xzmgeprvges
+.formula xz9 = 'xzx:0'
+..
+!FI018
+..
+.continue FI017
+!EL017
+..>> Testergebnis negativ: "x x x x"
+..>>
+..>> Formatierung
+.formula xterm = xzttermact
+.formula xw = 'xterm'
+.formula xz = xzttimeact
+.formula xz1 = xzttermact
+.formula xz2 = 'xzmgeprv:0'
+.formula xzmgeprvges = xzmgeprvges + xzmgeprv
+.formula xzeinfzahlprv = xzmgeprvges
+.formula xz3 = 'xzeinfzahlprv:0'
+.formula xz4 = xbstatusprv
+.formula xz5 = 'xzmgeact:0'
+.formula xzmgeactges = xzmgeactges + xzmgeact
+.formula xzeinfzahlact = xzmgeactges
+.formula xz6 = 'xzeinfzahlact:0'
+.formula xz7 = xbstatusact
+..??    xzmgedif
+.formula xzx = xzmgeact - xzmgeprv
+.formula xz8 = 'xzx:0'
+..??    xzeinfzahldif
+.formula xzx = xzeinfzahlact - xzeinfzahlprv
+.formula xz9 = 'xzx:0'
+..>>
+..>> nÑchste Zeile ist:
+..>> ==================
+..>> - erste Zeile von einem Zeilen-Paar fÅr vorigen und aktuellen Feinabruf
+..>> oder
+..>> - einzelne Zeile fÅr vorigen oder aktuellen Feinabruf
+..>>
+..>> ==>> Leeren aktuelle Parameter
+..>>
+..>> EDI-Identnummer vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzedinumact = ""
+..>> Kunden-Fortschrittszahl vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzeinfzahlact = 0
+..>> Abruftermin vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzttermact = ""
+..>> Eintreffzeit vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzttimeact = ""
+..>> Bedarfsstatus
+.formula xbstatusact = ""
+..>> Abrufmenge vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzmgeact = 0
+..
+!FI017
+..
+!FI015
+..
+..>> Ausgabe
+..                                        Alte Liefereinteilung            Neue Liefereinteilung                Differenz
+..oche   Datum       Eintreffzeit     Menge         Endzahl Status     Menge         Endzahl Status       Menge         Endzahl
+..-----+-----------+-------------+---------+----+----------+------+---------+----+----------+------+-+-----------+-+-----------
+..**ok,09.01.2002 (Angabe Woche aus PlatzgrÅnden fÅr die Bildschirmausgabe entfernt)
+ '   xz1'    ' xz'        '    xz2'      '     xz3' ' xz4' '    xz5'      '     xz6' ' xz7'   '      xz8'   '      xz9'
+..
+!EL014
+.. FI014
+..
+.. >> vorige Parameter gleich aktuelle Parameter
+..>> EDI-Identnummer vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzedinumprv = xzedinumact
+..>> Kunden-Fortschrittszahl vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzeinfzahlprv = xzeinfzahlact
+..>> Abruftermin vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzttermprv = xzttermact
+..>> Eintreffzeit vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzttimeprv = xzttimeact
+..>> Abrufmenge vorige Zeile aus temporÑrer Differenz-Report-Datei
+.formula xzmgeprv = xzmgeact
+..>> Bedarfsstatus
+.formula xbstatusprv = xbstatusact
+..>>
+..
+.continue REPT002 ? _(_(mehr))
+..
+.select from
+..
+.up
+..
+.formula xsybefehl = "rm -f " + xndiffreptemp + " 1> ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+..
+..>> (ZurÅck-)Holen gemerkten aktuellen Datensatz
+.select
+..
+!EL010
+.. FI010
+..
+.continue
+..

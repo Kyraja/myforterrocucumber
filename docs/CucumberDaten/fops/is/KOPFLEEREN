@@ -1,0 +1,69 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name          : KOPFLEEREN
+.. Autor         : bs
+.. Verantwortlich: fwester
+.. Kontrolle     :
+.. Funktion      : Die Maskenkopffelder in einem Infosystem leeren.
+.. Ausnahmen     : Buttons, Tabellenaufzaehlungen und Aufzaehlungen
+.. Ablauf        : Als Unterprogramm verwendbar
+.. Function      : Clears mask header fields of an infosystem.
+.. Except        : Buttons, table enumerations und enumerations
+.. Program flow  : Use as subroutine
+..*****************************************************************************
+.set trans -
+..
+.continue END ? F|empty(G|evtmaske)
+..
+.. Declarations
+.type text xtvarnam ? _F|defined(U|xtvarnam)
+..
+.. Load matching infosystem rows
+.select infosystem 'F|formatstr("$,,;nummer=={1};@gruppe=1", G|evtmaske)'
+.continue END ? _G|mehr
+..
+.select line "$,,vkt=0;inmask=1;vvs=1!2"
+!CHECK
+.continue END ? _G|mehr
+.continue NEXTROW ? F|regmatch(H|vitbezf, "^BU[0-9]$")
+.continue NEXTROW ? F|regmatch(H|vitbezf, "^BU[0-9][0-9]$")
+.continue NEXTROW ? F|regmatch(H|vitbezf, "^TAZ[0-9]$")
+.continue NEXTROW ? F|regmatch(H|vitbezf, "^TN$")
+.continue NEXTROW ? F|regmatch(H|vitbezf, "^TN[0-9]$")
+.continue NEXTROW ? F|regmatch(H|vitbezf, "^ARTF[0-9][0-9][0-9][0-9][0-9]$")
+..
+.. Get unqualified name of the item
+.formula U|xtvarnam = F|substr(H|vname, 3)
+.continue ASSIGN1 ? _F|empty(U|xtvarnam)
+..
+!NEXTROW: Load next row
+.select line
+.continue END ? _G|mehr
+.continue CHECK
+..
+!ASSIGN1: Assign with empty string and log if fails
+.continue CLRENUM ? F|regmatch(H|vitbezf, "^A.*")
+..
+!ASSIGN2
+.assign M|.U|xtvarnam = ""
+.continue LOGGING ? P|loglevel > 0 & _G|mehr
+.continue NEXTROW
+..
+!CLRENUM: Clear enumeration
+.continue NEXTROW ? _F|isvalue("", 'H|vitbezf')
+.continue ASSIGN2
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1: Not found!
+.error -message Das Infosystem 'G|evtmask' wurde nicht gefunden!
+.end 1
+..
+!LOGGING
+.set trans +
+.output terminal
+Die Variable 'U|xtvarnam' der Art 'H|vitbezf' kann nicht geleert werden!
+.output
+.continue NEXTROW

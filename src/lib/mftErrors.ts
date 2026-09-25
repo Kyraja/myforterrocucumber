@@ -6,23 +6,30 @@ export class TokenLimitError extends Error {
   }
 }
 
-/** Error patterns that indicate the MFT tenant is missing, invalid, or unauthorized. */
-const TENANT_ERROR_PATTERNS = [
-  'kein tenant',
-  'keine berechtigung',
-  'tenant',
-  'token abgelaufen',
-  'erneut einloggen',
-  'nicht eingeloggt',
+/**
+ * Thrown when the upstream model or gateway applies a per-minute rate limit.
+ * Distinct from `TokenLimitError` (daily quota) — callers should tell the user to
+ * wait a short moment and retry, rather than suggest coming back tomorrow.
+ */
+export class RateLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RateLimitError';
+  }
+}
+
+/** Patterns that indicate a temporary rate limit (not a daily quota). */
+const RATE_LIMIT_PATTERNS = [
+  'too many tokens',
+  'too many connections',
+  'too many requests',
+  'please wait before trying again',
+  'throttled',
+  'throttling',
 ];
 
-/**
- * Check whether an error is caused by a missing/broken MFT tenant or auth.
- * Used to decide whether to fall back to OpenRouter.
- */
-export function isMftTenantOrAuthError(err: unknown): boolean {
-  if (err instanceof TokenLimitError) return true;
-  if (!(err instanceof Error)) return false;
-  const msg = err.message.toLowerCase();
-  return TENANT_ERROR_PATTERNS.some(p => msg.includes(p));
+/** Returns true if the error message matches a known temporary rate-limit pattern. */
+export function isRateLimitMessage(msg: string): boolean {
+  const lower = msg.toLowerCase();
+  return RATE_LIMIT_PATTERNS.some(p => lower.includes(p));
 }

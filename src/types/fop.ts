@@ -401,31 +401,121 @@ export interface CacheManifest {
 /** Lifecycle state of a multi-step AI agent run (e.g. bulk FOP analysis). */
 export type AgentRunStatus = 'idle' | 'running' | 'done' | 'error' | 'paused';
 
-/** A single prompt/response pair within an agent run, displayed as a chat entry in the UI. */
+/** @deprecated legacy chat-bubble entry — replaced by WorkflowStep. Kept for migration. */
 export interface AgentExchange {
   label: string;
   input: string;
   output?: string;
 }
 
+// ── Workflow Timeline ─────────────────────────────────────────
+
+/** Lifecycle state of a single workflow step shown in the timeline. */
+export type WorkflowStepStatus = 'running' | 'done' | 'error';
+
+/**
+ * Discriminator identifying which workflow phase a step belongs to.
+ * Covers every AI workflow in the app (FOP analysis, Cucumber generation,
+ * prompt rating, agent chat, FOP→Cucumber deep-test, bulk).
+ */
+export type WorkflowPhase =
+  // FOP analysis
+  | 'fop-parsing' | 'fop-buffers' | 'fop-fields' | 'fop-local-check'
+  | 'fop-analyst' | 'fop-guidelines' | 'fop-cache-save'
+  // Cucumber from text
+  | 'cuc-table-id-local' | 'cuc-table-id-ai' | 'cuc-kb-extract' | 'cuc-kb-search'
+  | 'cuc-context-send' | 'cuc-kb-send'
+  | 'cuc-build-prompt' | 'cuc-generate' | 'cuc-deep-round' | 'cuc-parse'
+  | 'cuc-scenario-list' | 'cuc-scenario-single' | 'cuc-scenario-continue'
+  | 'cuc-feature-assemble'
+  // Prompt rating
+  | 'rating-input' | 'rating-call' | 'rating-parse'
+  // Agent free-chat
+  | 'agent-chat-response'
+  // FOP → Cucumber deep-test
+  | 'fop-cuc-table-id' | 'fop-cuc-build-prompt'
+  | 'fop-cuc-deep-round' | 'fop-cuc-force-final' | 'fop-cuc-parse'
+  // Bulk generation
+  | 'bulk-package-start' | 'bulk-package-end';
+
+interface WorkflowStepBase {
+  /** Stable identifier assigned on creation — used to update the step later. */
+  id: string;
+  phase: WorkflowPhase;
+  /** Localized, human-readable label (e.g. "Buffer-Tracking"). */
+  label: string;
+  /** Unix timestamp (ms) the step started. */
+  timestamp: number;
+  status: WorkflowStepStatus;
+  /** Groups steps belonging to the same item (FOP path, feature name, package id). */
+  itemKey?: string;
+  /** Parent step id for nested workflows (e.g. bulk → inner generation). */
+  parentId?: string;
+  /** Filled when the step transitions out of `running`. */
+  durationMs?: number;
+  /** Filled when `status === 'error'` — user-facing error summary. */
+  errorMessage?: string;
+}
+
+/** A step that runs entirely in local code (parsing, resolution, caching...). */
+export interface LocalStep extends WorkflowStepBase {
+  kind: 'local';
+  /** One-line summary, e.g. "12 Buffer-Operationen verfolgt". */
+  summary: string;
+  /** Full human-readable input (collapsible in UI). */
+  inputText?: string;
+  /** Full human-readable output (collapsible in UI). */
+  outputText?: string;
+}
+
+/** A step that makes a single AI/LLM call — records system + user prompt + raw response. */
+export interface AiStep extends WorkflowStepBase {
+  kind: 'ai';
+  /** Logical agent identifier, e.g. 'fop-analyst', 'rating', 'cucumber-generation'. */
+  agent: string;
+  /** Exact system prompt sent to the model. */
+  systemPrompt: string;
+  /** Exact user message / context sent to the model. */
+  userPrompt: string;
+  /** Raw response text — filled once the call returns. */
+  rawResponse?: string;
+  /** Model identifier (e.g. 'gpt-4o-mini'). */
+  model?: string;
+}
+
+export type WorkflowStep = LocalStep | AiStep;
+
 /**
  * Live state of an ongoing or completed agent run.
- * Tracks progress, current item, the streaming output so far, the full
- * exchange history for the current item, and the completed-item history.
+ * Tracks progress, current item, and the complete workflow step timeline.
  */
 export interface AgentRun {
-  agentType: 'cucumber' | 'fop-analyst' | 'fop-guidelines';
+  agentType: AgentType;
   agentLabel: string;
   status: AgentRunStatus;
   progress?: { current: number; total: number };
   currentItem?: string;
+  /** Authoritative timeline of every local/AI step in this run. */
+  steps: WorkflowStep[];
+  /** @deprecated kept for legacy UI code — will be removed. */
   inputSnapshot?: string;
+  /** @deprecated kept for legacy UI code — will be removed. */
   outputSoFar?: string;
-  /** Chat-like exchange history for the current item */
+  /** @deprecated kept for legacy UI code — will be removed. */
   exchanges: AgentExchange[];
   history: AgentRunHistoryItem[];
   startedAt?: number;
 }
+
+/** Identifies which AI agent/workflow a run belongs to. */
+export type AgentType =
+  | 'cucumber'
+  | 'fop-analyst'
+  | 'fop-guidelines'
+  | 'rating'
+  | 'bulk'
+  | 'fop-cucumber'
+  | 'agent-chat';
 
 /** Summary record appended to the run history once an item is completed or fails. */
 export interface AgentRunHistoryItem {

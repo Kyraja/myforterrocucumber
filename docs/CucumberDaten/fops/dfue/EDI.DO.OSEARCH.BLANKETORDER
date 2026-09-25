@@ -1,0 +1,108 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDI.DO.OSEARCH.BLANKETORDER
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : carue
+.. Functionality  : Finds blanket order for edi messages in abas, updates
+..                  edi message with number of blanket order
+..*****************************************************************************
+.set trans -
+..
+..<META H|='P53' >
+..<META 1|='P3' > 
+..<META 2|='P3' > 
+..
+.. Required: edi message in H buffer
+.continue NOEDI ? _F|defined(H|edinachr)
+.continue NOTYPE ? F|empty(H|edinachr)
+..
+.. Cannot find blanket order before fixing customer and product fcodes
+.continue END ? (F|empty(H|ideksart) ; F|empty(H|idkundesab)) & _F|empty(H|fcode)
+..
+.. Lock Edi message!
+.select lock edifact 'H|id'
+.continue NOLOCK ? _G|mehr ; _G|gesperrt
+..
+.. Argument from DFUE.IMP.INI
+.type bool U|xsRahmenmitABSCHLNR ? _F|defined(U|xsRahmenmitABSCHLNR)
+.. initializes as false if not defined
+..
+.. If verwschl is empty in the edi message, it must be empty in the blanket order as well
+.type NT2 verwschl ? _F|defined(U|verwschl) 
+.formula U|verwschl = H|verwschl
+.formula U|verwschl = "`" ? F|empty(H|verwschl)
+..
+.. Find blanket order - Query using verwschl and abschlnr
+.load 2 sales 'F|formatstr("$,,;@gruppe=2;kotyp=(BlanketOrder);ablagef=(No);status==`;artikel=={1};kunde=={2};zkuartnr=={3};kopf^verwschl=={4};kopf^abschlnr=={5}", H|ideksart, H|idkundesab, H|kuartnr, U|verwschl, H|abbenr)'
+.continue ZERO1 ? _G|mehr & U|xsRahmenmitABSCHLNR
+.continue NOABSCH ? _G|mehr
+.load 1 sales '2|id'
+.load 2 sales
+.continue DUPLI1 ? G|mehr
+.formula H|ideksrah = 1|kopf^nummer
+.continue VSPERR ? 1|kopf^vsperre
+.continue RETURN
+..
+..
+.. Find blanket order - Query WITHOUT using abschlnr, BUT using verwschl
+!NOABSCH
+.load 2 sales 'F|formatstr("$,,;@gruppe=2;kotyp=(BlanketOrder);ablagef=(No);status==`;artikel=={1};kunde=={2};zkuartnr=={3};kopf^verwschl={4}", H|ideksart, H|idkundesab, H|kuartnr, U|verwschl)'
+.continue ZERO2 ? _G|mehr
+.load 1 sales '2|id'
+.load 2 sales
+.continue DUPLI2 ? G|mehr
+.formula H|ideksrah = 1|kopf^nummer
+.continue VSPERR ? 1|kopf^vsperre
+.continue RETURN
+..
+..
+!ZERO1: no result when querying verwschl+abschlnr, and xsRahmenmitABSCHLNR is true
+.formula H|fcode=56
+.formula H|status = 4
+.continue RETURN
+..
+!ZERO2: no result when querying without verwschl+abschlnr
+.formula H|fcode = 55
+.formula H|status = 4
+.continue RETURN
+..
+!DUPLI1: duplicate results when querying with verwschl+abschlnr
+.formula H|fcode=57
+.formula H|status = 4
+.continue RETURN
+..
+!DUPLI2: duplicate results when querying without verwschl+abschlnr
+.formula H|fcode=59
+.formula H|status = 4
+.continue RETURN
+..
+!VSPERR: blanket order has process lock
+.formula H|fcode=62
+.formula H|status=4
+.continue RETURN
+..
+!RETURN
+.rewrite
+..
+..
+.. release buffers
+.load 1 ? F|defined(1|id)
+.load 2 ? F|defined(2|id)
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!NOLOCK
+.error Das Sperren des EDI-Datensatzes 'H|nummer' ist gescheitert.
+.end 1
+..
+!NOEDI
+.error Fehler bei Start der Objektsuche: Kein EDI-Datensatz angegeben.
+.end 1
+..
+!NOTYPE
+.error Fehler bei Start der Objektsuche: EDI-Datensatz 'H|nummer' hat keinen Nachrichten-Eintrag.
+.end 1

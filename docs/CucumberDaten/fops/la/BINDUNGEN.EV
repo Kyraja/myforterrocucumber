@@ -1,0 +1,197 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BINDUNGEN.EV
+.. Autor          : fwester/tiwe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Behandlung der Feld- und Zeilenereignisse.
+.. Ablauf         : Zentrales EFOP
+..
+.. Functionality  : Event handling for items and row events.
+.. Program flow   : Central efop
+..*****************************************************************************
+..Variablen
+.type text xtsel       ? _F|defined(U|xtsel)
+.type text xkomm       ? _F|defined(U|xkomm) 
+.type text xtaufrufid  ? _F|defined(U|xtaufrufid)
+.set trans -
+..
+.. Feldaustritt beweger
+.continue BEWEGER  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "beweger"
+.continue NEWMOVE  ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tbubeweger"
+.. Buttonnach fÅr Objekte anzeigen
+.formula U|xtaufrufid  = 'M|tfv^eres^id'   ? G|evtvar = "taflanz"
+.formula U|xtaufrufid  = 'M|tfv^id'        ? G|evtvar = "tfvbut"
+.formula U|xtaufrufid  = 'M|tbeweger^id'   ? G|evtvar = "tbewegerbut"
+.formula U|xtaufrufid  = 'M|tkblatt^id'    ? G|evtvar = "tkblattbut"
+.formula U|xtaufrufid  = 'M|tbew^id'       ? G|evtvar = "tbewbut"
+.formula U|xtaufrufid  = 'M|tjournal^id'   ? G|evtvar = "tjournalbut"
+.continue SHOW    ? G|evtartengl = "BUTTON_AFTER"        
+.. Table
+
+.continue END
+..
+!SHOW:
+.continue ERROR4 ? F|empty(U|xtaufrufid)       
+.formula U|xkomm = "<(Object)>" + U|xtaufrufid + "<(View)>"
+.command -parallel 'U|xkomm'
+.continue END
+..
+!BEWEGER: field exit occurs for a document
+.formula M|idmover = "(0,0,0)"
+.continue CLRTOP1 ? F|empty(M|beweger)
+..
+.. What kind of document do we have?
+.assign M|bewegerdnr = M|beweger^dnr
+.assign M|bewegergrp = M|beweger^gruppe
+.continue SALES   ? M|bewegerdnr = M|verkauf
+.continue PURCHAS ? M|bewegerdnr = M|einkauf
+.continue MANUFAC ? M|bewegerdnr = M|betrauftrag
+.continue FATAL
+..
+!SALES: which group of sales do we have?
+.continue DOCUMNT ? M|bewegergrp = M|kopf
+.continue POSITIN ? M|bewegergrp = M|position
+.continue FATAL
+..
+!DOCUMNT: we have a header of a document of sales or purchasing
+.assign M|bewegertyp = M|beweger^typa
+.assign M|kvom = M|beweger^vom
+.continue SELBAR
+..
+!POSITIN
+.assign M|bewegertyp = M|beweger^kotypa
+.assign M|bewegertyp = M|beweger^typa  ? F|empty(M|beweger^kotypa) 
+.assign M|ekvkkopf = M|beweger^kopf
+.assign M|kvom = M|ekvkkopf^vom
+.copy M|khe = M|beweger^he
+.copy M|lehe = M|beweger^lehe
+.continue NOAUFT _F|equals(M|beweger^kotypa , "(SalesOrder)")
+.formula U|xtsel = "$,,artikel="+M|kartikel^id+";kotypa==(PackingSlip);orig="+M|beweger^id+";@gruppe=2;"
+.select sales 'U|xtsel'
+.continue NOAUFT ? _G|mehr
+.select sales
+.continue ERROR3 ? G|mehr
+..hier gibt es nur eine LS-Position
+.formula U|xtsel = "$,,artikel="+M|kartikel^id+";kotypa==(PackingSlip);orig="+M|beweger^id+";@gruppe=2;"
+.select sales 'U|xtsel'
+.continue NOAUFT ? _G|mehr
+.formula M|idmover = H|id
+!NOAUFT
+..
+!DETAILS: details
+.assign M|kartikel = M|beweger^artex
+.copy M|kle = M|kartikel^le
+.assign M|limge = M|beweger^limge
+.assign M|mge = M|beweger^mge
+.continue JOURNAL ? M|lehe = 1.0 ; M|lehe = 0.0
+.formula M|limge = M|lehe * M|limge
+.formula M|mge = M|lehe * M|mge
+.continue JOURNAL
+..
+!PURCHAS: which group of purchasing do we have?
+.continue DOCUMNT ? M|bewegergrp = M|kopf
+.continue POSITIN ? M|bewegergrp = M|position
+.continue RESERVE ? M|bewegergrp = M|reservierung
+.continue SUGGEST ? M|bewegergrp = M|vorschlag
+.continue FATAL
+..
+!RESERVE
+.assign M|ekvkkopf = ""
+.continue POSITIN
+..
+!SUGGEST
+.assign M|ekvkkopf = ""
+.continue POSITIN
+..
+!SELBAR: we need a certain position from the document
+.formula M|select = "%,,;pnum=;artex=;.artex^gruppe==1;tename=;mge=;he=;.kopf==" + M|beweger^id
+.formula M|select = M|select + ";@datenbank=" + 'M|bewegerdnr' + ";@gruppe=" + 'M|position'
+.formula M|select = M|select + ";@autostart=" + 'G|TRUE' + ";@.bereich=" + 'G|TRUE'
+.formula M|select = M|select + ";@dschutz=" + 'G|TRUE' + ";@gschutz=" + 'G|TRUE'
+.select object 'M|select'
+.continue BREAK ? _G|mehr
+.assign M|beweger = H|id
+.select
+.continue BEWEGER
+..
+!MANUFAC: we have a completion confirmation
+.assign M|limge = 0.0
+.assign M|mge = 0.0
+.assign M|kle = ""
+.assign M|khe = ""
+.assign M|lehe = 0.0
+.assign M|ekvkkopf = ""
+.load 0 add M|beweger
+.continue ERROR2 ? _G|mehr
+.assign M|bewegertyp = '0|grbez'
+.assign M|kvom = 0|vom
+.copy M|kartikel = 0|art
+.copy M|kle = M|kartikel^le
+.load 0 line
+.continue JOURNAL ? _G|mehr
+.assign M|mge = 0|gutmge
+.type P9:1 xbarm
+.assign U|xbarm = 0|barm
+.continue JOURNAL ? _G|mehr
+.assign M|limge = U|xbarm^mge
+.load 0
+.continue JOURNAL
+..
+!JOURNAL: get the journal entry of the mover
+.type VID19 xmover
+.copy U|xmover = M|beweger
+.formula U|xmover = M|idmover  ? M|idmover <> "(0,0,0)"
+.type P2:1 xartikel
+.formula U|xartikel = M|kartikel^id
+.input "is/GET.JOURNAL"
+.copy M|kjournal = U|xjournal
+.formula M|zuab  = M|zugangicon  ? _F|empty(M|kjournal) & F|equals(M|kjournal^buarta, "(Receipt)")
+.formula M|zuab  = M|abgangicon  ? _F|empty(M|kjournal) & F|equals(M|kjournal^buarta, "(Issue)")
+.continue CLRTAB
+..
+!BREAK: No position selected -> clear mover
+.assign M|beweger = ""
+.continue CLRTOP1
+..
+!CLRTOP1: clear output header items while inserting an empty document
+.assign M|beweger = ""
+.assign M|bewegertyp = ""
+.assign M|kartikel = ""
+.assign M|limge = 0.0
+.assign M|mge = 0.0
+.assign M|kle = ""
+.assign M|khe = ""
+.assign M|ekvkkopf = ""
+.assign M|lehe = 0.0
+.continue CLRTAB
+..
+!NEWMOVE: Get mover of this row as new input
+.continue ERROR1 ? F|empty(tbeweger)
+.assign M|beweger = M|tbeweger^id
+.continue BEWEGER
+..
+!CLRTAB: clear table
+.make screen line -- ? M|tzeilen > 0
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!FATAL
+.error -number 1111
+.end 1
+..
+!ERROR1
+.error -line 'M|aktzeile' -field M|tbeweger -message Der Vorgang bzw. die Position dieser Zeile kann nicht selektiert werden!
+.end 1
+..
+!ERROR2
+.error -line 0 -field M|beweger -message Der Vorgang bzw. die Position wurde nicht gefunden!
+.end 1
+!ERROR3
+.error Aus dieser Auftragsposition sind mehrere Lieferscheinpositionen entstanden. Lieferscheinposition wÑhlen.
+.end 1
+!ERROR4
+.error ôffnen des Vorgangs nicht mîglich.
+.end 1

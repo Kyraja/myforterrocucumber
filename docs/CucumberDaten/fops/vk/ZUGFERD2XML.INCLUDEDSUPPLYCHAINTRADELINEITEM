@@ -1,0 +1,191 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : ZUGFERD2XML.INCLUDEDSUPPLYCHAINTRADELINEITEM
+..  Autor          : saac
+..  Verantwortlich : teamreport
+..  Kontrolle      : cl
+..  Funktion       : XML-Datengenerator des Infosystems ev/EVVORGANG zur Erzeugung
+..                   der Rechnungsdaten im ZUGFERD2-Format
+..  Functionality  : XML data generator for the Infosystem ev/EVVORGANG to build
+..                   invoice date for ZUGFERD2
+..*****************************************************************************
+..
+.type text xcurrencyID                    ? _F|defined(U|xcurrencyID)
+.type GL6 xLineID                         ? _F|defined(U|xLineID)
+.type text xNoteContent                   ? _F|defined(U|xNoteContent)
+.type text xNoteContentCode               ? _F|defined(U|xNoteContentCode)
+.type text xNoteSubjectCode               ? _F|defined(U|xNoteSubjectCode)
+.type R xChargeAmountGros                 ? _F|defined(U|xChargeAmountGros)
+.type R xBasisQuantity                    ? _F|defined(U|xBasisQuantity)
+.type text xIndicator                     ? _F|defined(U|xIndicator)
+.type R13:2 xCalculationPercent           ? _F|defined(U|xCalculationPercent)
+.type R xActualAmount                     ? _F|defined(U|xActualAmount)
+.type R xChargeAmountNet                  ? _F|defined(U|xChargeAmountNet)
+.type R xBilledQuantity                   ? _F|defined(U|xBilledQuantity)
+.type text xTypeCode                      ? _F|defined(U|xTypeCode)
+.type text xExemptionReason               ? _F|defined(U|xExemptionReason)
+.type text xCategoryCode                  ? _F|defined(U|xCategoryCode)
+.type R13.2 xRateApplicablePercent            ? _F|defined(U|xRateApplicablePercent)
+.type R13:2 xLineTotalAmount              ? _F|defined(U|xLineTotalAmount)
+.type text xGlobalID                      ? _F|defined(U|xGlobalID)
+.type text xSellerAssignedID              ? _F|defined(U|xSellerAssignedID)
+.type text xBuyerAssignedID               ? _F|defined(U|xBuyerAssignedID)
+.type text xName                          ? _F|defined(U|xName)
+.type text xOriginTradeCountry            ? _F|defined(U|xOriginTradeCountry)
+.type text xunitCode                      ? _F|defined(U|xunitCode)
+.type text xNoteContent                   ? _F|defined(U|xNoteContent)
+.type text xNoteContentF                  ? _F|defined(U|xNoteContentF)
+.type text xNoteContentCode               ? _F|defined(U|xNoteContentCode)
+.type text xNoteSubjectCode               ? _F|defined(U|xNoteSubjectCode)
+.type text xNoteFText                     ? _F|defined(U|xNoteFText)
+..
+.set trans -
+..
+.select screen header
+..*****************************************************************************
+!NEXTROW
+..*****************************************************************************
+.select screen line
+.continue END ? _G|mehr
+..
+.continue NEXTROW ? F|equals(M|vktypa, "(Subtotal)")
+.continue NEXTROW ? F|equals(M|vktypa, "(NetTotalItem)")
+.continue NEXTROW ? F|equals(M|vktypa, "(Total)")
+.continue NEXTROW ? F|equals(M|vktypa, "(SumTotal)")
+.continue NEXTROW ? F|equals(M|vktypa, "(VATInputTaxItem)")
+.continue NEXTROW ? F|equals(M|vktypa, "(VATInputTaxItemInclusive)")
+.continue NEXTROW ? F|equals(M|vktypa, "(SeparatingItem)")
+.continue NEXTROW ? F|equals(M|vktypa, "(Para)")
+.continue NEXTROW ? F|equals(M|vktypa, "(Page)")
+.continue NEXTROW ? F|equals(M|vktypa, "(Text)")
+.continue NEXTROW ? F|equals(M|vktypa, "(EmptyEntry)")
+.continue NEXTROW ? F|equals(M|vktypa, "(PercentageItem)")
+..
+.assign U|xLineID = M|znummer
+.copy U|xNoteContent = M|ptext
+.assign U|xNoteContentF = M|zftext
+.assign U|xNoteContentCode = ""
+.assign U|xNoteSubjectCode = ""
+..
+.copy U|xChargeAmountGros = M|epreis
+.assign U|xBasisQuantity = 1.0
+.assign U|xBasisQuantity = M|position^pehe ? _F|empty(M|position^pehe) & M|position^pehe <> 0
+.formula U|xChargeAmountGros = F|round(M|gpreis / M|mge, 4) ? M|epreis = 0.0 & M|mge <> 0.0
+.formula U|xChargeAmountGros = M|epreis ? F|equals(M|zptyp, "(MinimumOrderValueItem)")
+.formula U|xChargeAmountGros = M|gpreis ? M|agruppe = 4 & _F|equals(M|zptyp, "(MaterialSurcharge)")
+..
+.assign U|xunitCode = ""
+.copy U|xunitCode = "LS" ? F|empty(heinheit) & M|mge = 0.0 & M|agruppe = 4
+.copy U|xunitCode = "LS" ? M|epreis = 0.0 & M|gpreis <> 0.0 & M|agruppe <> 4
+.continue ENDAMTGROS ? _F|empty(U|xunitCode)
+.copy U|xunitCode = "C62"
+.continue ENDAMTGROS ? F|empty(M|heinheit)
+.load 1 unit 'F|formatstr("$,,;@gruppe=1;gruppe=1;einheitbspr=={1}", M|heinheit)'
+.continue ENDAMTGROS ? _G|mehr
+.copy U|xunitCode = 1|eiso
+.copy U|xunitCode = "C62" ? U|xunitCode = "PCE"
+..
+!ENDAMTGROS
+..
+.copy U|xBilledQuantity = M|mge
+.assign U|xBilledQuantity = 1.0 ? F|empty(U|xBilledQuantity)
+.continue INDICATOR ? U|xChargeAmountGros >= 0.0
+.formula U|xChargeAmountGros = F|abs(U|xChargeAmountGros)
+.formula U|xBilledQuantity = U|xBilledQuantity * -1
+..
+!INDICATOR
+.formula U|xCalculationPercent = 0.0
+.formula U|xChargeAmountNet = U|xChargeAmountGros
+.continue POSTAX ? M|agruppe = 4
+.continue POSTAX ? F|equals(M|vktypa, "(PercentageItem)")
+.copy U|xIndicator = "true" ? M|proz > 0
+.copy U|xIndicator = "false" ? M|proz < 0
+.copy U|xCalculationPercent = F|abs(M|proz)
+.formula U|xActualAmount = F|abs(F|round(M|ezuschlag, 4))
+.formula U|xChargeAmountNet = F|abs(F|round(M|ebetragnet, 4)) ? _F|empty(M|ebetragnet)
+.formula U|xChargeAmountNet = U|xChargeAmountNet / M|position^pehe ? _F|empty(M|position^pehe) & M|position^pehe <> 0
+..
+!POSTAX
+.copy U|xTypeCode = "VAT"
+.copy U|xCategoryCode = "S"
+.copy U|xCategoryCode = "E"  ? M|stsatz = 0.0 & _F|equals(M|vorgang^stlaart, "(EUCountry)")
+.copy U|xCategoryCode = "IC" ? M|stsatz = 0.0 &  F|equals(M|vorgang^stlaart, "(EUCountry)")
+.copy U|xCategoryCode = "AE" ? F|equals(M|position^tustart, "(TaxFreeWithTaxLines)")
+.assign U|xExemptionReason = M|prtsthinwname ? M|stsatz = 0.0 & _F|empty(M|prtsthinwname)
+.copy U|xRateApplicablePercent = M|stsatz
+.copy U|xLineTotalAmount = M|gpreis
+..
+.copy U|xGlobalID = M|gtin
+.copy U|xSellerAssignedID = M|artikel
+.copy U|xBuyerAssignedID = M|zkuartnr
+.copy U|xName = M|vbez
+.copy U|xName = M|ptext ? F|empty(U|xName)
+..
+.copy U|xOriginTradeCountry = ""
+.copy U|xOriginTradeCountry = M|position^purland^iso2      ? F|sysinfo(18)^intra
+..
+..*****************************************************************************
+!OUTPUT
+..*****************************************************************************
+        <ram:IncludedSupplyChainTradeLineItem>
+            <ram:AssociatedDocumentLineDocument>
+                <ram:LineID>'U|xLineID'</ram:LineID>
+.input "ZUGFERD2XML.INCLUDEDNOTE"
+.copy U|xNoteFText = U|xNoteContentF
+.continue ENDLINDOC ? F|empty(U|xNoteFText)
+.input "ZUGFERD2XML.INCLUDEDNOTE"
+!ENDLINDOC
+            </ram:AssociatedDocumentLineDocument>
+            <ram:SpecifiedTradeProduct>
+?                <ram:GlobalID schemeID="0088">'U|xGlobalID'</ram:GlobalID>? _F|empty(U|xGlobalID)
+?                <ram:SellerAssignedID>'U|xSellerAssignedID'</ram:SellerAssignedID>? _F|empty(U|xSellerAssignedID)
+?                <ram:BuyerAssignedID>'U|xBuyerAssignedID'</ram:BuyerAssignedID>? _F|empty(U|xBuyerAssignedID)
+                <ram:Name>'U|xName'</ram:Name>
+            </ram:SpecifiedTradeProduct>
+            <ram:SpecifiedLineTradeAgreement>
+                <ram:GrossPriceProductTradePrice>
+                    <ram:ChargeAmount>'U|xChargeAmountGros:4'</ram:ChargeAmount>
+?                    <ram:BasisQuantity unitCode="'U|xunitCode'">'U|xBasisQuantity:4'</ram:BasisQuantity>? _F|empty(U|xBasisQuantity)
+.continue ENDGROSSPRICE ? U|xCalculationPercent = 0.0
+                    <ram:AppliedTradeAllowanceCharge>
+..EXTENDED
+..                        <ram:ChargeIndicator>
+..                            <udt:Indicator>'U|xIndicator'</udt:Indicator>
+..                        </ram:ChargeIndicator>
+                        <ram:ActualAmount>'U|xActualAmount:4'</ram:ActualAmount>
+                    </ram:AppliedTradeAllowanceCharge>
+!ENDGROSSPRICE
+                </ram:GrossPriceProductTradePrice>
+                <ram:NetPriceProductTradePrice>
+                    <ram:ChargeAmount>'U|xChargeAmountNet:4'</ram:ChargeAmount>
+?                    <ram:BasisQuantity unitCode="'U|xunitCode'">'U|xBasisQuantity:4'</ram:BasisQuantity>? _F|empty(U|xBasisQuantity)
+                </ram:NetPriceProductTradePrice>
+            </ram:SpecifiedLineTradeAgreement>
+            <ram:SpecifiedLineTradeDelivery>
+?                <ram:BilledQuantity unitCode="'U|xunitCode'">'U|xBilledQuantity:4'</ram:BilledQuantity>? _F|empty(U|xBilledQuantity)
+..EXTENDED
+..input "ZUGFERD2XML.DELIVERYNOTEREFERENCEDDOCUMENT"
+            </ram:SpecifiedLineTradeDelivery>
+            <ram:SpecifiedLineTradeSettlement>
+                <ram:ApplicableTradeTax>
+                    <ram:TypeCode>'U|xTypeCode'</ram:TypeCode>
+..EXTENDED
+..?                   <ram:ExemptionReason>'U|xExemptionReason'</ram:ExemptionReason>? _F|empty(U|xExemptionReason)
+                    <ram:CategoryCode>'U|xCategoryCode'</ram:CategoryCode>
+                    <ram:RateApplicablePercent>'U|xRateApplicablePercent'</ram:RateApplicablePercent>
+                </ram:ApplicableTradeTax>
+                <ram:SpecifiedTradeSettlementLineMonetarySummation>
+                    <ram:LineTotalAmount>'U|xLineTotalAmount'</ram:LineTotalAmount>
+                </ram:SpecifiedTradeSettlementLineMonetarySummation>
+            </ram:SpecifiedLineTradeSettlement>
+.continue ENDITEM ? F|empty(U|xOriginTradeCountry)
+            <ram:OriginTradeCountry>
+                <ram:ID>'U|xOriginTradeCountry'</ram:ID>
+            </ram:OriginTradeCountry>
+!ENDITEM
+        </ram:IncludedSupplyChainTradeLineItem>
+..
+.continue NEXTROW
+..*****************************************************************************
+!END
+.continue

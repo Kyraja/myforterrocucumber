@@ -1,0 +1,340 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..
+..  FOP-Name       : ev/GRWECHSEL
+..  Datum          : 04.02.2004
+..  Version        : 2003
+..  Autor          : es
+..  Verantwortlich : cl
+..  Kontrolle      : tiwe
+..
+..  Funktion       : Gruppenwechsel in Ein-/Verkaufpositionen feststellen
+..
+..  Schnittstelle  : GRWECHSEL liefert die Text-Variablen:
+..                   -------------------------------------
+..                   xtorigin1, xtorigin2, xtorigin3 und xorigin
+..
+..                   und die ID-Variable:
+..                   ------------------------------------
+..                   xoriginid
+..
+..                   Falls sie nicht leer sind, enthalten sie einen
+..                   Hinweis auf den Wechsel des Originaldokumentes
+..                   (2 Variablen, da in Rechnungen sowohl der zugehoerige
+..                   Auftrag (xtorigin2), als auch der zugehoerige
+..                   Lieferschein (xtorigin1) genannt wird. In allen anderen
+..                   Faellen bleibt xtorigin2 stets leer)
+..                   ("Auftrag xxxxxxx vom xx.xx.xx",
+..                    "Lieferschein zzzzzzzz, Lieferung vom xx.xx.xx",
+..                    "Lieferscheine vom xx.xx.xx bis yy.yy.yy")
+..
+..                   In xorigin steht die Identnummer des Vorg�ngers
+..                   In xoriginid steht die ID des Vorg�ngers
+..
+..
+..                   GRWECHSEL erwartet folgende Parameter:
+..                   -----------------------------------------
+..                   xspr   (text)  Sprache, in der die Ausgabe erfolgen soll
+..                   xbthis (bool)  Wenn TRUE, dann wird auf Positionen, die
+..                                  erst im aktuellen Dokument erfasst wurden,
+..                                  also keinen orig-Verweis haben gesondert
+..                                  hingewiesen. Andernfalls laufen diese
+..                                  Positionen einfach unter dem letzten
+..                                  Originalvorgang mit.
+..                   xbauls (bool)  Wenn TRUE, dann wird in Rechnungen ueber
+..                                  *Auftragspositionen* auch auf alle Liefer-
+..                                  scheine hingewiesen, die schon ueber
+..                                  die jeweilige Auftragsposition geschrieben
+..                                  und nicht getrennt fakturiert wurden
+..                                  (das ist nur sinnvoll, wenn niemals
+..                                  Teilrechnungen gestellt werden, weil
+..                                  sonst die Zuordnung zwischen den Liefer-
+..                                  scheinen und der Rechnung nicht eindeutig
+..                                  hergestellt werden kann).
+..                                  Wenn FALSE (oder nicht definiert), dann
+..                                  werden bei Rechnungen ueber Auftraege nur
+..                                  auf die Auftraege, aber nicht auf die
+..                                  Lieferscheine hingewiesen.
+..
+..  Ablauf         : Dieses Unterprogramm kann bei der Ausgabe aller
+..                   Ein-/Verkaufsvorgaenge dazu verwendet werden, um den
+..                   Wechsel der Originalvorgaenge beim Durchlaufen der
+..                   Positionen anzuzeigen:
+..
+..                   kotyp            Originalvorgang
+..                   ------------------------------------------------
+..                   ANKO             -
+..                   ABKO             ANKO
+..                   LIKO             ABKO
+..                   REKO             ABKO, LIKO
+..
+..                   Das Unterprogramm muss(!) im Kopfteil des Vorgangs
+..                   (zur Initialisierung) und vor jeder Positionsausgabe
+..                   einmal aufgerufen werden.
+..
+..                   Der aktuelle Vorgang liegt im H-Puffer (M-Puffer
+..                   sollte nicht verwendet werden, weil dort die
+..                   orig-Verzeigerung meist noch nicht aktualisiert ist).
+..
+..                   Verwendet werden:
+..                   * Der Lade-Puffer 9
+..                   * Der D-Puffer
+..
+..*****************************************************************************
+..
+..  Functionality : Find group-change in sales- and purchasing-items
+..
+..  Interface     : GRWECHSEL will give you the text-variables
+..                  xtorigin1, xtorigin2 and xorigin
+..                  If they are not empty, they will contain infos about a
+..                  change of the original document
+..                  (2 variables, because invoices includes corresponding
+..                  sales order (xtorigin2) and corresponding delivery note
+..                  (xtorigin1). In all other cases xtorigin2 is always empty
+..                  ("sales order xxxxxxx from xx.xx.xx",
+..                   "delivery notes zzzzzzzz, delivery from xx.xx.xx",
+..                   "delivery notes from xx.xx.xx until yy.yy.yy")
+..
+..  program flow  : The subroutine must be called up in the header-process
+..                  (to initialise) and before output of each item
+..
+..                  The current process is located in the H-buffer
+..
+..                  Used are:
+..                  * The load-buffer 9
+..                  * The D-buffer
+..
+..*****************************************************************************
+.set trans -
+.end .                            ?  G|txname / "*GRWECHSEL"
+.type GL    xtporigin1            ? _F|defined(U|xtporigin1)
+.type GL    xtporigin2            ? _F|defined(U|xtporigin2)
+.type GL    xtporigin3            ? _F|defined(U|xtporigin3)
+.type GL    xtorigin1             ? _F|defined(U|xtorigin1)
+.type GL    xtorigin2             ? _F|defined(U|xtorigin2)
+.type GL    xtorigin3             ? _F|defined(U|xtorigin3)
+.type GL    xtorigsel             ? _F|defined(U|xtorigsel)
+.type GL    xtevgrtxt             ? _F|defined(U|xtevgrtxt)
+.type GL    xtliefer              ? _F|defined(U|xtliefer)
+.type GL20  xtretto               ? _F|defined(U|xtretto)
+.type GD    xdfirstd              ? _F|defined(U|xdfirstd)
+.type GD    xdlastd               ? _F|defined(U|xdlastd)
+.type GD    xdthisd               ? _F|defined(U|xdthisd)
+.type GD    xdocdate              ? _F|defined(U|xdocdate)
+.type bool  xbthis                ? _F|defined(U|xbthis)
+.type bool  xbauls                ? _F|defined(U|xbauls)
+.type IP1   xiorig                ? _F|defined(U|xiorig)
+.type GL20  xspr                  ? _F|defined(U|xspr)
+.type GL20  xorigin               ? _F|defined(U|xorigin)
+.type VID10 xoriginid             ? _F|defined(U|xoriginid)
+..
+...copy U|xbauls = G|TRUE
+.formula U|xspr = G|kspr          ? F|empty(U|xspr)
+.formula U|xspr = P|spr           ? F|defined(U|xbdeffspr)
+.formula U|xtorigin1 = ""
+.formula U|xtorigin2 = ""
+.formula U|xtorigin3 = ""
+.. Zustand der vorherigen Position / Status of prior item
+.. Im Kopf des Vorgangs erstmal zuruecksetzen
+.formula U|xtporigin1 = ""        ? H|gruppe<>2
+.formula U|xtporigin2 = ""        ? H|gruppe<>2
+.formula U|xtporigin3 = ""        ? H|gruppe<>2
+..
+.. Eingangsvoraussetzungen pruefen / check conditions
+.continue           ?  H|gruppe <> 2
+.continue           ?  H|typ <> G|ARPOS & H|typ <> G|ZUPOS
+.continue           ?  H|typ = G|ARPOS & H|mge = 0.0
+.continue           ? _U|xbthis & F|empty(orig) & _(H|kotyp = 3 & _F|empty(H|zrahmen))
+.continue           ?  H|typ = G|ZUPOS & H|pwert = 0.0 & F|empty(orig)
+..
+.continue ABKO      ?  H|kotyp = G|ABKO ; H|kotyp = G|SBKO ; H|kotyp = G|SRKO
+.continue TWOVORG   ?  H|kotyp = G|LIKO & (F|equals(H|kopf^lsart, "(ReturnPackingSlip)"))
+.continue LIKO      ?  H|kotyp = G|LIKO
+.continue TWOVORG   ?  H|kotyp = G|REKO & (F|equals(H|kopf^vorgang, "(CreditNoteCommercial)") ; F|equals(H|kopf^vorgang, "(CancelationCreditNoteCommercial)") ; F|equals(H|kopf^vorgang, "(CanceledCreditNoteCommercial)"))
+.continue REKO      ?  H|kotyp = G|REKO
+.continue
+..
+!ABKO: current process ia an Sales-order: View Quotation-/blanket order-change
+.. akt. Vorgang ist ein Auftrag:      Angebots-/Rahmenauftragswechsel anzeigen
+!LIKO: current process is an delivery note: View Sales-order-change
+.. akt. Vorgang ist ein Lieferschein: Auftragswechsel anzeigen
+.. akt. Vorgang ist ein R…klieferschein: Lieferschein und Auftrag anzeigen
+!THIS: There is no original process: View Reference of the process
+.. Vorgang hat kein Original:         Verweis auf Vorgang selber anzeigen
+..
+.add
+.formula U|xiorig = 1
+.formula U|xtretto = "ORIGCHG"
+.continue ORIG
+..
+!TWOVORG: VK: akt. Vorgang ist eine Kaufm�nnische Gutschrift: Auftrag, Lieferschein, R…knahmeschein anzeigen
+.. akt. Vorgang ist eine R…klieferschein: Lieferschein, Auftrag anzeigen
+.. Auftrag
+.add orig^orig 
+.continue THIS                        ? _G|mehr
+.. Kaufm. Gutschrift ｜er Rechnung / Lieferschein / Auftrag -> T|xtorigin3
+.continue KGREKO1                      ? 'D|okopf' = ""
+.formula U|xiorig = 3
+.formula U|xtretto = "KGREKO1"
+.continue ORIG
+..
+!KGREKO1: Lieferschein -> xtorigin2
+.add
+.add orig
+.continue THIS                        ? _G|mehr
+.formula U|xiorig = 2
+.formula U|xtretto = "KGLS"
+.continue ORIG
+..
+!KGLS: R…klieferschein -> xtorigin1
+.add
+.formula U|xiorig = 1
+.formula U|xtretto = "ORIGCHG"
+.continue ORIG
+..
+!REKO: current process is a invoice: View sales-order- and delivery note-change
+.. akt. Vorgang ist eine Rechnung:    Auftrags- und Lieferscheinwechsel anzeigen
+.add orig
+.continue THIS                        ? _G|mehr
+.continue REKOAB                      ?  D|kotyp = G|ABKO ; D|kotyp = G|SBKO ; D|kotyp = G|SRKO
+.. Rechnung ueber Lieferschein / Auftrag- > T|xtorigin2
+.continue REKO1                       ? 'D|okopf' = ""
+.formula U|xiorig = 2
+.formula U|xtretto = "REKO1"
+.continue ORIG
+..
+!REKO1: Lieferschein -> xtorigin1
+.add
+.formula U|xiorig = 1
+.formula U|xtretto = "ORIGCHG"
+.continue ORIG
+..
+!REKOAB: Rechnung ueber Auftrag / Lieferscheine -> xtorigin1 (optional: xbauls)
+.continue REKOAB1                     ? _U|xbauls
+.formula U|xiorig = 1
+.formula U|xtretto = "REKOAB1"
+.continue ORIG2
+..
+!REKOAB1: Auftrag- > xtorigin2
+.add
+.formula U|xiorig = 2
+.formula U|xtretto = "ORIGCHG"
+.continue ORIG
+..
+.. Prozedur: Originalvorgang xtorigin.xiorig ermitteln, dazu okopf-Verweis verfolgen
+..           Wenns keinen Originalvorgang gibt, dann ist es der Vorgang selber
+.. Procedure: Determine original process xtorigin.xiorig. follow okopf-reference
+..
+!ORIG:
+.formula U|xtorigin.U|xiorig = ""
+.. orig und okopf je nach Vorgangstyp entweder im H- oder im D-Puffer, daher
+.. keine Pufferqualifikation moeglich!
+.load 9 add zrahmen ?   F|empty(orig) & kotyp = 3 & _F|empty(zrahmen)
+.load 9 add okopf   ? _(F|empty(orig) & kotyp = 3 & _F|empty(zrahmen))
+.load 9 add kopf                               ? _G|mehr & U|xtporigin.U|xiorig <> ""
+.continue ORIGEX                               ? _G|mehr
+.text U|xtevgrtxt 'U|xspr' Chance              ? 9|typ = G|CHKO
+.text U|xtevgrtxt 'U|xspr' Angebot             ? 9|typ = G|ANKO & 9|dnr = 3
+.text U|xtevgrtxt 'U|xspr' Anfrage             ? 9|typ = G|ANKO & 9|dnr = 4
+.text U|xtevgrtxt 'U|xspr' Serviceangebot      ? 9|typ = G|SNKO
+.text U|xtevgrtxt 'U|xspr' Kostenvoranschlag   ? 9|typ = G|KVKO & 9|dnr = 3
+.text U|xtevgrtxt 'U|xspr' Rahmenauftrag       ? 9|typ = G|RAKO
+.text U|xtevgrtxt 'U|xspr' Auftragsbestдigung ? (9|typ = G|ABKO ; 9|typ = G|SRKO ; 9|typ = G|SBKO) & 9|dnr = 3
+.text U|xtevgrtxt 'U|xspr' Bestellung          ? 9|typ = G|ABKO & 9|dnr = 4
+.text U|xtevgrtxt 'U|xspr' Lieferschein        ? 9|typ = G|LIKO
+.text U|xtevgrtxt 'U|xspr' R…knahmeschein     ? 9|typ = G|LIKO & M|ekvk = 3 & 9|buart = 1
+.text U|xtevgrtxt 'U|xspr' Kundenanlieferung   ? 9|typ = G|LIKO & M|ekvk = 3 & F|equals(9|lsart, "(CustomerDelivery)")
+.text U|xtevgrtxt 'U|xspr' R…klieferschein    ? 9|typ = G|LIKO & M|ekvk = 4 & 9|buart = 1
+.text U|xtevgrtxt 'U|xspr' Lieferstornierung   ? 9|typ = G|LIKO & 9|buart = 2
+.text U|xtevgrtxt 'U|xspr' Rechnung            ? 9|typ = G|REKO
+.text U|xtliefer  'U|xspr' Lieferung
+.continue ORIGEX                       ? F|empty(U|xtevgrtxt)
+.formula U|xorigin = ""
+.formula U|xorigin = 9|ebeleg  ? _F|empty(M|ebeleg) & M|ekvk = 4 & (9|typ = G|LIKO ; 9|typ = G|REKO)
+.formula U|xorigin = 9|nummer  ?  F|empty(U|xorigin) ; 'U|xtevgrtxt' = "R…klieferschein"
+.assign U|xoriginid = 9|id
+.formula U|xtorigin.U|xiorig = U|xtevgrtxt + " " + U|xorigin
+.text U|xtevgrtxt 'U|xspr' vom
+.formula U|xdocdate = 9|vom
+.formula U|xtorigin.U|xiorig = U|xtorigin.U|xiorig + "," + " " + U|xtliefer + " " + U|xtevgrtxt + " " + 'U|xdocdate(L=U|xspr)'  ? 9|typ = G|LIKO & '9|vom' <> ""
+.formula U|xtorigin.U|xiorig = U|xtorigin.U|xiorig + " " + U|xtevgrtxt + " " + 'U|xdocdate(L=U|xspr)'  ? '9|vom' <> "" & 9|typ <> G|LIKO
+..
+!ORIGEX
+.formula U|xtorigin.U|xiorig  = ""                  ? U|xtorigin.U|xiorig = U|xtporigin.U|xiorig
+.formula U|xtporigin.U|xiorig = U|xtorigin.U|xiorig ? U|xtorigin.U|xiorig <> ""
+.make screen line +O                            ? U|xtorigin.U|xiorig  <> "" & U|xgrwzeile
+.formula M|textgrwechsel = U|xtorigin.U|xiorig  ? U|xtorigin.U|xiorig  <> "" & U|xgrwzeile
+..
+.continue CONTINUE ? M|tzeilen = 0
+.formula M|ueb = U|xueb      ? U|xgrwzeile
+.formula M|vueb = U|xvueb    ? U|xgrwzeile
+.continue CONTINUE ? _F|equals(M|position^kopf^vorgang, "(CreditNoteCommercial)")
+.formula M|ueb = M|ueb * (-1)   ? U|xgrwzeile
+.formula M|vueb = M|vueb * (-1) ? U|xgrwzeile
+..
+!CONTINUE
+.continue 'U|xtretto'
+..
+.. Prozedur: Originalvorgang xtorigin.xiorig ermitteln
+.. akt. Vorgang ist eine Auftragsposition. Dazu alle nicht getrennt fakturierten
+.. Lieferscheine auswerten, die auf dieses Auftragsposition verweisen
+..
+.. Procedure: Determine original process xtorigin.xiorig
+.. current process ia an sales order item. All not invoicing delivery notes must be evaluated
+..
+!ORIG2:
+.. Ausgangsobjekt je nach Vorgangstyp entweder im H- oder im D-Puffer, daher
+.. keine Pufferqualifikation moeglich!
+.formula U|xtorigin.U|xiorig = ""
+.formula U|xdfirstd = ""
+.formula U|xdlastd = ""
+.continue ORIGEX                   ? typ <> G|ARPOS ; (kotyp <> G|ABKO & kotyp <> G|SBKO & kotyp <> G|SRKO) ; mge = 0.0
+.formula U|xtorigsel = "$,,orig=" + id + ";@ablageart=(Both);@gruppe=2"
+.load 9 sales 'U|xtorigsel'        ? dnr = 3
+.load 9 purchasing 'U|xtorigsel'   ? dnr = 4
+..
+!ORIG21:
+.continue ORIGEX               ? _G|mehr
+.continue ORIG2NXT             ?  9|kotyp <> G|LIKO
+.add 9|kopf
+.continue ORIG2NXT             ?  _F|empty(D|stornopartnervorg)
+.continue ORIG2NXT             ?  D|fakt ; D|aeob ; 9|mge = 0.0 ; D|vom > H|kovom
+.formula U|xdthisd =  D|vom
+.continue ORIG22               ?  U|xtorigin.U|xiorig <> ""
+.. erster Lieferschein / first delivery note
+.text U|xtevgrtxt 'U|xspr' Lieferschein
+.text U|xtevgrtxt 'U|xspr' R…knahmeschein      ? M|ekvk = 3 & D|buart = 1
+.text U|xtevgrtxt 'U|xspr' Kundenanlieferung    ? M|ekvk = 3 & F|equals(D|lsart, "(CustomerDelivery)")
+.text U|xtevgrtxt 'U|xspr' R…klieferschein     ? M|ekvk = 4 & D|buart = 1
+.text U|xtevgrtxt 'U|xspr' Lieferstornierung    ? D|buart = 2
+..
+.text U|xtliefer  'U|xspr' Lieferung
+.formula U|xtorigin.U|xiorig = U|xtevgrtxt + " " + D|nummer
+.formula U|xdfirstd = U|xdthisd
+.formula U|xdlastd = U|xdthisd
+.text U|xtevgrtxt 'U|xspr' vom
+.formula U|xtorigin.U|xiorig = U|xtorigin.U|xiorig + "," + " " + U|xtliefer + " " + U|xtevgrtxt + " " + 'U|xdthisd(L=U|xspr)' ? 'U|xdthisd' <> ""
+.continue ORIG2NXT
+..
+!ORIG22: weitere Lieferscheine / other delivery notes
+.formula U|xdfirstd = U|xdthisd      ? 'U|xdfirstd' = "" ; U|xdfirstd > U|xdthisd
+.formula U|xdlastd = U|xdthisd       ? U|xdlastd < U|xdthisd
+.text U|xtevgrtxt 'U|xspr' Lieferscheine
+.text U|xtevgrtxt 'U|xspr' R…knahmescheine    ? M|ekvk = 3 & D|buart = 1
+.text U|xtevgrtxt 'U|xspr' Kundenanlieferung   ? M|ekvk = 3 & F|equals(D|lsart, "(CustomerDelivery)")
+.text U|xtevgrtxt 'U|xspr' R…klieferscheine   ? M|ekvk = 4 & D|buart = 1
+.text U|xtevgrtxt 'U|xspr' Lieferstornierungen ? D|buart = 2
+..
+.formula U|xtorigin.U|xiorig = U|xtevgrtxt
+.text U|xtevgrtxt 'U|xspr' vom
+.formula U|xtorigin.U|xiorig = U|xtorigin.U|xiorig + " " + U|xtevgrtxt + " " + 'U|xdfirstd(L=U|xspr)' ? 'U|xdfirstd' <> ""
+.text U|xtevgrtxt 'U|xspr' bis
+.formula U|xtorigin.U|xiorig = U|xtorigin.U|xiorig + " " + U|xtevgrtxt + " " + 'U|xdlastd(L=U|xspr)'  ? U|xdfirstd < U|xdlastd
+..
+!ORIG2NXT:
+.add
+.load 9 continue
+.continue ORIG21
+..
+!ORIGCHG: Gruppenwechsel anzeigen / view group-change
+.continue

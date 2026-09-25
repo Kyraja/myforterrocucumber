@@ -1,0 +1,211 @@
+..!interpreter english translate
+..*****************************************************************************
+.. FOP-Name       : PRODLIST.FREI
+.. Datum          : 01.10.2004
+.. Autor          : jn
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Infosystem, Fertigungsvorschl„ge,
+..                  Betriebsauftr„ge freigeben
+..*****************************************************************************
+.type text xtdat1 xtdat xterr xterr1 xterr2 xtdat2
+.type integer  xifreigeben ? _F|defined(U|xifreigeben)
+.type integer  xibetrieb   ? _F|defined(U|xibetrieb)
+.type bool xbfreigeben ? _F|defined(U|xbfreigeben)
+..
+.set trans -
+.file -tempname U|xtdat
+.file -tempname U|xtdat1
+.file -tempname U|xtdat2
+.file -tempname U|xterr
+.file -tempname U|xterr1
+.file -tempname U|xterr2
+..
+.copy U|xbfreigeben = G|FALSE
+.continue FVFREIG ?  G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bufreigeben"
+.continue BOX3    ?  M|frgmge   = 0
+.continue BOX1    ?  _F|empty(M|order)
+.continue BOX2    ?  F|empty(M|releasez)
+.. restriktiv gesperrte Artikel nicht freigeben
+.continue BOX2    ?  M|releasez = M|lnreleaz
+.continue         ? _M|kenn2/"/+-/*"
+.continue         ? _F|empty(M|order)
+..
+.continue ERROR          ? F|empty(M|kstelle) & (M|bew ; M|fkkonfig)
+..
+!LOCK: FV-Verweis
+.select add M|vorgang^id
+.continue BOX2           ? _G|mehr
+.continue BOX2           ?  F|empty(M|aufzu)
+..
+.select modificationlock waitshort object 'H|id'  
+.continue BOX2      ? _G|mehr
+.. Žndernsperre nicht bekommen, dann zu SPERR
+.continue SPERR     ? _G|gesperrt
+.continue ERROR2    ? _H|disponiert
+..
+.select -
+..
+.continue HEADER         ? U|xbfreigeben
+.continue FRGMGEN        ? M|mge < M|frgmge
+.continue FREIGEBEN      ? F|empty(M|kstelle) & (_M|bew & _M|fkkonfig)
+.continue FREIGEBEN      ? M|bkost
+.continue AENDERN
+..
+!FRGMGEN: Fertigungsvorschlag erst „ndern, dann freigeben
+.output new 'U|xtdat2'
+.input "DATEI.F"
+sn;zeile;mge
+'M|vorgang^id';1;'M|frgmge'
+.output terminal
+.formula U|xtsys = "edpimport.sh -I " + U|xtdat2 + " -u -p " + G|einmalpw + " -Z sn:zeile" + " 2>" + U|xterr2
+.system 'U|xtsys' background
+.continue FEHLER2 ? _G|mehr
+.continue FREIGEBEN
+..
+!AENDERN: Fertigungsvorschlag „ndern: Kostenstelle/Kostentr„ger eintragen
+.output new 'U|xtdat1'
+.input "DATEI.F"
+sn;zeile;kstelle
+'M|vorgang^id';1;'M|kstelle^id'
+.output terminal
+.formula U|xtsys = "edpimport.sh -I " + U|xtdat1 + " -u -p " + G|einmalpw + " -Z sn:zeile" + " 2>" + U|xterr1
+.system 'U|xtsys' background
+.continue FEHLER1 ? _G|mehr
+..
+!FREIGEBEN: Fertigungsvorschlag freigeben
+.continue ERLFEHLER ?  _M|bfreierlaub
+.output new 'U|xtdat'
+.input "DATEI.F"
+sn;zeile;binoloe;frgmge
+'M|vorgang^id';1;'M|noloesch(L="0")';'M|frgmge'
+.output terminal
+.formula U|xtsys = "edpimport.sh -c EKS -a RELEASE -p " + G|einmalpw + " -I "+ U|xtdat + " -Z sn:zeile" + " 2>" + U|xterr
+.system 'U|xtsys' background
+.continue ERROR1                          ? _G|mehr
+..
+.load 0 object 'M|vorgang^id'
+.continue FEHLER                          ? _G|mehr
+.. kein rot, kein gruen, wenn kein ba
+.formula M|buchenz = ""
+.add 0|ba
+.continue FEHLER                          ? _G|mehr
+.formula M|order    = D|id
+.formula M|druckz   = M|ldruckz
+.formula M|compz    = M|lcompz
+.formula M|fbuz     = "icon:product"
+.formula M|noloesch = 0|binoloe
+.protection noloesch 'M|aktzeile'           ? _F|empty(M|order)
+.add D|barm
+.continue DBARM                           ? G|mehr
+.formula M|buchenz  = ""
+.. ba-Puffer schlieáen
+.add
+.continue ZURUECK ? U|xbfreigeben
+.continue AKTU
+..
+!DBARM
+.formula M|barm     = D|id
+.formula M|buchenz  = M|lbuchenz
+.. barm-Puffer schlieáen
+.add
+.continue AKTU
+..
+!AKTU: Tabelle aktualisieren
+.make screen line -- ? M|tzeilen > 0
+.input "is/HOL.LISTE"
+.continue
+..
+!FEHLER
+.box
+Freigabe nicht m”glich!
+Fertigungsvorschlag gesperrt oder gel”scht!
+.continue
+..
+!FEHLER1
+.set trans +
+.output terminal
+Eingabedatei:
+.input 'U|xtdat1'
+Fehlerdatei:
+.set trans -
+.input 'U|xterr1'
+.error Eintragen der Kostensteller/Kostentr„ger hat nicht funktioniert!
+.end 1
+..
+!FEHLER2
+.output terminal
+.set trans +
+Eingabedatei:
+.input 'U|xtdat2'
+Fehlerdatei:
+.set trans -
+.input 'U|xterr2'
+.error Das Erh”hen der Freigabemenge hat nicht funktioniert!
+.end 1
+..
+!ERROR
+.box
+Freigabe nicht m”glich!
+Bitte Kostenstelle/Kostentr„ger eintragen!
+.continue
+..
+!ERROR1
+.output terminal
+.set trans +
+Eingabedatei:
+.input 'U|xtdat'
+Fehlerdatei:
+.set trans -
+.input 'U|xterr'
+.error Freigabe nicht m”glich!
+.end 1
+!ERROR2: Freigabe vor Disposition nicht m”glich
+.error Freigabe ist erst nach Starten der Disposition m”glich!
+.end 1
+..
+!ERLFEHLER
+.error Eine Freigabe ist nicht erlaubt!
+.end 1
+..
+!BOX1
+.box
+Freigabe bereits erfolgt!
+.continue
+..
+!BOX2
+.box
+Freigabe nicht m”glich!
+.continue
+..
+!BOX3
+.box
+Bitte Freigabemenge eintragen!
+.cursor frgmge
+.continue
+..
+!FVFREIG
+.continue BOX4        ? M|tzeilen = 0
+.copy U|xbfreigeben = G|TRUE
+..
+!ZEILE
+.select screen line
+.continue AKTU        ? _G|mehr
+.continue LOCK        ? M|release = M|lreleaz & M|freigeben
+..
+!HEADER
+.continue FRGMGEN     ?  M|freigeben & F|empty(M|order) & (M|mge < M|frgmge)
+.continue FREIGEBEN   ?  M|freigeben & F|empty(M|order)
+..
+!ZURUECK
+.protection freigeben 'M|aktzeile'
+.continue ZEILE
+..
+!BOX4
+.box
+Bitte erst Tabelle laden!
+.continue
+..
+!SPERR: FV konnte nicht gesperrt werden!
+.continue ZEILE            ? U|xbfreigeben
+.continue

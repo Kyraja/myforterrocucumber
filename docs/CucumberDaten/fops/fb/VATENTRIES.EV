@@ -1,0 +1,138 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : VATENTRIES.EV
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Allgemeines Event-FOP des Infosystems fb/VATENTRIES
+.. Functionality  : Common event FOP of the Infosystem fb/VATENTRIES
+..
+..include fb/VATENTRIES.SCRCTX
+..*****************************************************************************
+..
+.set trans -
+..
+.continue TAB     ? G|evtzeile > 0
+.continue CHECK   ? G|evtartengl = "FIELD_VALIDATION"
+.make screen line --
+.continue PERIOD  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "ajahr"
+.continue PERIOD  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "amonat"
+.continue PERIOD  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "adatum"
+.continue PERIOD  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "ejahr"
+.continue PERIOD  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "emonat"
+.continue PERIOD  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "edatum"
+.continue SETCTX  ? G|evtartengl = "FIELD_EXIT" & G|evtvar / "*grp"
+.continue START   ? G|evtvar = "bstart"
+.continue END
+..
+..*****************************************************************************
+!TAB
+..*****************************************************************************
+.continue DD  ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "tdrilldown"
+.continue END
+..
+..*****************************************************************************
+!CHECK
+..*****************************************************************************
+.continue MAXGRP  ? G|evtvar / "*grp"
+.continue NOTEMPT ? G|evtvar = "bukreis"
+.continue NOTEMPT ? G|evtvar = "amonat"
+.continue NOTEMPT ? G|evtvar = "emonat"
+.continue NOTEMPT ? G|evtvar = "ajahr"
+.continue NOTEMPT ? G|evtvar = "ejahr"
+.continue NOTEMPT ? G|evtvar = "adatum"
+.continue NOTEMPT ? G|evtvar = "edatum"
+.continue END
+..
+..*****************************************************************************
+!MAXGRP
+..*****************************************************************************
+.end 1 ? M|.G|evtvar > 5
+.continue END
+..
+..*****************************************************************************
+!SETCTX
+..*****************************************************************************
+.input "fb/VATENTRIES.SCRCTX"
+.continue END
+..
+..*****************************************************************************
+!NOTEMPT
+..*****************************************************************************
+.end 1 ? F|empty(M|.G|evtvar)
+.continue END
+..
+..*****************************************************************************
+!PERIOD: period changed
+..*****************************************************************************
+.type text xxtsmon xxtemon xxtsyear xxteyear xxtfromd xxttod
+.formula U|xxtsmon  = "amonat"
+.formula U|xxtemon  = "emonat"
+.formula U|xxtsyear = "ajahr"
+.formula U|xxteyear = "ejahr"
+.formula U|xxtfromd = "adatum"
+.formula U|xxttod   = "edatum"
+.input "fb/IS.SETPERIOD"
+.continue END
+..
+..*****************************************************************************
+!DD
+..*****************************************************************************
+.continue END ? _M|summen
+.type text xtsys
+.formula U|xtsys = 'G|kkomname38' + " " + M|isref^such + " " + M|isref^arb + " ? "
+.formula U|xtsys = U|xtsys + "ajahr="      + 'M|ajahr'          + "|"
+.formula U|xtsys = U|xtsys + "amonat="     + 'M|amonat'         + "|"
+.formula U|xtsys = U|xtsys + "adatum="     + 'M|adatum'         + "|"
+.formula U|xtsys = U|xtsys + "ejahr="      + 'M|ejahr'          + "|"
+.formula U|xtsys = U|xtsys + "emonat="     + 'M|emonat'         + "|"
+.formula U|xtsys = U|xtsys + "edatum="     + 'M|edatum'         + "|"
+.formula U|xtsys = U|xtsys + "konto="      + 'M|tkonto^id'      + "|"
+.formula U|xtsys = U|xtsys + "bukreis="    + 'M|bukreis^id'     + "|"
+.formula U|xtsys = U|xtsys + "ustart="     + 'M|tustart(L="0")' + "|"
+.formula U|xtsys = U|xtsys + "steuer="     + 'M|tsteuer^id'     + "|"
+.formula U|xtsys = U|xtsys + "buwaehr="    + 'M|tbuwaehr^id'    + "|"
+.formula U|xtsys = U|xtsys + "ustva="      + 'M|tustva^id'      + "|"
+.formula U|xtsys = U|xtsys + "strgl="      + 'M|strgl^id'       + "|"
+.formula U|xtsys = U|xtsys + "kontogrp=0"  + "|"
+.formula U|xtsys = U|xtsys + "ustartgrp=0" + "|"
+.formula U|xtsys = U|xtsys + "steuergrp=0" + "|"
+.formula U|xtsys = U|xtsys + "buwaehrgrp=0" + "|"
+.formula U|xtsys = U|xtsys + "ustvagrp=0" + "|"
+.formula U|xtsys = U|xtsys + "bstart="
+.command -parallel 'U|xtsys'
+.continue END
+..
+..*****************************************************************************
+!START
+..*****************************************************************************
+.formula   M|select = "$,@gruppe=0;gruppe=0"
+.formula   M|select = M|select + ";@zeilen=(1)"
+.formula   M|select = M|select + ";0:kvnextrakt=1"
+.formula   M|select = M|select + ";0:konto^gruppe=1;konto^dnr=5"    ?  F|empty(M|konto)
+.formula   M|select = M|select + ";0:sortgjgm=" + F|fysortdat(M|ajahr, M|amonat) + "!" + F|fysortdat(M|ejahr, M|emonat)
+.formula   M|select = M|select + ";0:budat=" + M|adatum:8 + "!" + M|edatum:8
+.formula   M|select = M|select + ";1:bukreis="  + M|bukreis^id
+.formula   M|select = M|select + ";0:iwbu="     + M|buwaehr^id      ? _F|empty(M|buwaehr)
+.formula   M|select = M|select + ";0:konto="    + M|konto^id        ? _F|empty(M|konto)
+.formula   M|select = M|select + ";0:ustart="   + 'M|ustart(L="0")' ? _F|empty(M|ustart)
+.formula   M|select = M|select + ";0:steuer="   + M|steuer^id       ? _F|empty(M|steuer)
+.formula   M|select = M|select + ";0:ustva="    + M|ustva^id        ? _F|empty(M|ustva)
+.formula   M|select = M|select + ";0:strgl="    + M|strgl^id        ? _F|empty(M|strgl)
+.continue FETCH ? M|summen
+.formula   M|select = M|select + ";@ordnung="
+.formula   M|select = M|select + "konto^nummer," ? F|empty(M|konto)
+.formula   M|select = M|select + "ustart,steuer,budat"
+.continue FETCH
+..
+..*****************************************************************************
+!FETCH
+..*****************************************************************************
+.input "is/HOL.LISTE"
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue
+

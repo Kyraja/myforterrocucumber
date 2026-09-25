@@ -1,0 +1,77 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EKLAB.TBUKEINBEDARF.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Erstellt eine Keinbedarfmeldung
+.. Functionality  : Creates a no-demand forecast
+...Includes       :
+..  include     ek/EKLAB.BSTART.BV
+..*****************************************************************************
+..<META M|='ek/EKLAB'>
+.set trans -
+..
+.. blanket order is not unique
+.continue ERRSTOP ?  M|tbstop
+..
+.. No transaction type for forcasts defined
+.continue ERRTYPE ? F|empty(M|kvorart)
+..
+.. create no-demand-forecast using an edp script
+.type text   xtsystem            ? _F|defined(U|xtsystem)
+.type text   xtkeinbedarfedp     ? _F|defined(U|xtkeinbedarfedp)
+.type text   xtkeinbedarfedpout  ? _F|defined(U|xtkeinbedarfedpout)
+.type text   xtkeinbedarfedperr  ? _F|defined(U|xtkeinbedarfedperr)
+..
+.file -tempname U|xtkeinbedarfedp
+.file -tempname U|xtkeinbedarfedpout
+.file -tempname U|xtkeinbedarfedperr
+..
+.output new 'U|xtkeinbedarfedp'
+.input "DATEI.F"
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+
+?#!EDP_FOPMODE=1     ?  M|kbcfnoreqcre
+?#!EDP_FOPMODE=0     ? _M|kbcfnoreqcre
+
+#!action=new
+#!database=4:22
+#!dontchange=~
+
+lief;rahmen;druck\
+    artex;mge;pftext;pwert;labnr;zrahmenpos;0:vorgart
+
+'M|tlief^id' ; 'M|tprahmen^id' ; 0\
+    'M|tartikel^id'   ; 0 ; 'M|ktextkeinbedarf' ; ~ ; 'M|tprahmenpos^labnr' ; 'M|tprahmenpos^id' ; ~ \
+    'M|kkbartikel^id' ; ~ ; 'M|ktextkeinbedarf' ; 0 ; ~                     ; ~ ; ~ \
+    ~ ; ~ ; ~ ; ~ ; ~ ; ~ ; 'M|kvorart^id'
+
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+.output
+..
+.formula U|xtsystem = "edpimport.sh -p " + 'G|einmalpw' + " -c EKS -I " + 'U|xtkeinbedarfedp' + " >> " + 'U|xtkeinbedarfedpout' + " 2>> " + 'U|xtkeinbedarfedperr'
+.system 'U|xtsystem'  background
+.continue ERROR   ? _G|mehr
+..
+..
+!SUCCESS
+.input "EKLAB.BSTART.BV"       ?  M|kbzeileakt
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR
+.error Beim Anlegen der Keinbedarfmeldung ist ein Fehler aufgetreten.
+.editing -readonly 'U|xtkeinbedarfedperr'
+.end 1
+..
+!ERRSTOP
+.error Zu Lieferant und Artikel sind mehrere Rahmenauftragsposition vorhanden.
+.end 1
+..
+!ERRTYPE
+.error Die Vorgangsart Lieferabruf ist nicht definiert.
+.cursor kvorart 0
+.end 1
+

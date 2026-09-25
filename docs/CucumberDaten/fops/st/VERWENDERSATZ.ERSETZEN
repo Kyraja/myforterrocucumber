@@ -1,0 +1,136 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : VERWENDERSATZ.ERSETZEN
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : amk
+.. Funktion       : Tauscht in AbhÑngigkeit von der Stufe das Original durch
+.. den Ersatz aus: Stufe 0 fÅr die ganze Tabelle, 1 fÅr das Bauteil und 2 fÅr
+.. eine Verwendung.
+.. Ablauf         : Unterprogramm
+..
+.. Functionality  : Depending on the level this will change original into
+.. substitution. Level 0 changes the whole table, 1 the component and 2 a using.
+.. Program flow   : Subroutine
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type text   xcmmd       ? _F|defined(U|xcmmd)
+.type P128:1 xfertliste  ? _F|defined(U|xfertliste)
+.type ZAE1   xflversionn ? _F|defined(U|xflversionn)
+.type text   xneuzeile   ? _F|defined(U|xneuzeile)
+.type integer    xersetz     ? _F|defined(U|xersetz)
+.type integer    xbauters    ? _F|defined(U|xbauters)
+..
+.. Initializations
+.copy M|erfolgreich = G|FALSE
+.assign U|xcmmd = ""
+.assign U|xneuzeile = ""
+.assign U|xfertliste = ""
+.assign U|xflversionn = ""
+.formula U|xersetz = 0
+..
+.continue ERROR1 ? _F|cmdpermitted(128, 13,,1)
+.continue ERROR3 ? M|origversion <> M|original^versionn
+.continue ERROR4 ? M|ersversion <> M|ersatz^versionn
+..
+.. What should be replaced?
+.continue INIT   ? M|stufe = 0 ; M|stufe = 1
+.continue EDPUSE ? M|stufe = 2
+.continue FATAL
+..
+!EDPUSE
+.select screen line 'M|bauteilzeile'
+.continue INIT
+..
+!USE: Replace single use by EDP
+.select screen line 'G|evtzeile'
+.continue DATAROW
+..
+!INIT: Initialize file for EDP script
+.input "DATEI.F"
+.output new 'M|edpscript'
+id\
+zeilenop#elex
+.continue EDPBODY ? M|stufe = 1
+.continue HEADER  ? M|stufe = 2
+..
+.. Replace all uses in the table
+.select screen header
+.select screen line
+..
+!EDPBODY
+.continue NEXT   ? _M|tersetzbar
+.continue HEADER ? M|istbauteil
+..
+!DATAROW: Data row
+.formula U|xneuzeile = 'M|zeile' + "#" + 'M|ersatz^id'
+..
+.. Do we have to add a consecutive line separator?
+.formula U|xersetz = U|xersetz + 1
+.formula U|xneuzeile = U|xneuzeile + "\" ? U|xersetz < U|xbauters ; M|stufe = 2
+'U|xneuzeile'
+.continue EDPEND ? M|stufe = 2
+.continue NEXT
+..
+!HEADER: print header row for a component
+.formula U|xersetz = 0
+.copy U|xfertliste = M|tfertliste
+.copy U|xflversionn = M|tflversionn
+.continue ERROR2 ? U|xflversionn <> U|xfertliste^versionn
+.copy U|xbauters = M|bauteilers
+$,,;id=='M|tfertliste^id';versionn=='M|tflversionn'\
+.continue USE ? M|stufe = 2
+.continue NEXT
+..
+!NEXT
+.select screen line
+.continue EDPEND ? _G|mehr
+.continue EDPEND ? M|stufe = 1 & M|istbauteil
+.continue EDPBODY
+..
+!EDPEND
+.output terminal
+.continue COMMAND
+..
+!COMMAND
+.formula U|xcmmd = "rm -f " + M|error + ";"
+.formula U|xcmmd = U|xcmmd + "edpimport.sh -p " + G|APOSTROPH + G|einmalpw + G|APOSTROPH
+.formula U|xcmmd = U|xcmmd + " -T -b 128:1 -u -t#"
+.formula U|xcmmd = U|xcmmd + " -o UPDATEMODE=ERRABORT -o LOCKBEHAVIOR=WAIT:8"
+.formula U|xcmmd = U|xcmmd + " -I " + M|edpscript
+.formula U|xcmmd = U|xcmmd + " >>" + M|error + " 2>>" + M|error
+.system 'U|xcmmd' background
+.copy M|erfolgreich = G|mehr
+.continue END
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+!FATAL
+.error -number 1111
+.end 1
+..
+..
+!ERROR1
+.error -message Die Funktion ist nicht erlaubt. Dem Bediener fehlt die Erlaubnis: Fertigungsliste Ñndern.
+.end 1
+..
+!ERROR2
+.set trans +
+.assign M|errortext = F|formatstr("Die Funktion wurde abgebrochen! Die Fertigungsliste {1} wurde inzwischen verÑndert.", M|tfertliste)
+.set trans -
+.continue END
+..
+!ERROR3
+.set trans +
+.assign M|errortext = "Die Funktion wurde abgebrochen! Das Original wurde inzwischen verÑndert."
+.set trans -
+.continue END
+..
+!ERROR4
+.set trans +
+.assign M|errortext = "Die Funktion wurde abgebrochen! Der Ersatz wurde inzwischen verÑndert."
+.set trans -
+.continue END

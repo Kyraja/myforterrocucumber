@@ -1,0 +1,140 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : BATCHTRACE.TAB
+.. Autor          : fwester
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Erzeugt eine Tabellenzeile in der Chargenverfolgung.
+.. Ablauf         : Tabellen-EFOP
+..
+.. Functionality  : Creates a table row in the batch trace.
+.. Program flow   : Table efop
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type bool  xabbruch    ? _F|defined(U|xabbruch)
+.type bool  xzeigen     ? _F|defined(U|xzeigen)
+.type I9    xrekursion  ? _F|defined(U|xrekursion)
+.type P59:0 xvcharge    ? _F|defined(U|xvcharge)
+.type P59:0 xncharge    ? _F|defined(U|xncharge)
+..
+.. Get selected row
+.load 0 line '0|selzeile'
+.continue END ? _G|mehr
+.continue BATCH ? M|ktyp = M|typcharge
+..
+.. Element is a booking
+.formula M|kbaumstat = ""
+.continue TRANS ? _F|empty(0|ncharge) & _F|empty(0|vcharge)
+.formula M|kbaumicon = M|abbuchpfad ? M|vorwaerts
+.formula M|kbaumicon = M|zubuchpfad ? _M|vorwaerts
+.continue MAKEROW
+..
+!TRANS: Booking is a transfer between lots
+.formula M|kbaumicon = M|abumbuchpfad ? M|vorwaerts
+.formula M|kbaumicon = M|zuumbuchpfad ? _M|vorwaerts
+.continue MAKEROW
+..
+!BATCH: Element is a batch
+.formula M|kbaumstat = "+"
+.continue ICON ? M|stufe < M|anzstufen
+.. Preview for parenthood while current level is maximum level
+.copy U|xvcharge = M|vchargeauf
+.copy U|xncharge = M|nchargeauf
+.assign M|vchargeauf = 0|ncharge ?  M|vorwaerts
+.assign M|nchargeauf = 0|vcharge ? _M|vorwaerts
+.input 'M|beforeresolv' ? M|beforeresolv <> ""
+.copy M|vchargeauf = U|xvcharge
+.copy M|nchargeauf = U|xncharge
+.load 1 journal 'M|select'
+.continue ICON ? G|mehr
+.formula M|kbaumstat = "="
+..
+!ICON
+.formula M|kbaumicon    = M|minuspfad ? M|vorwaerts
+.formula M|kbaumicon    = M|pluspfad ? _M|vorwaerts
+.copy U|xrekursion = M|tzeilen
+.copy U|xzeigen    = G|FALSE
+..
+!CYCLE1: Is this batch already shown?
+.select screen line 'U|xrekursion'
+.continue MAKEROW ? _G|mehr
+.formula U|xrekursion = U|xrekursion - 1
+.continue NEXT ? M|tbaumstat = ""
+.formula U|xabbruch = M|tvcharge^nummer = 0|ncharge^nummer ?  M|vorwaerts
+.formula U|xabbruch = M|tncharge^nummer = 0|vcharge^nummer ? _M|vorwaerts
+.continue ZEIGEN ? U|xabbruch
+..
+!NEXT
+.continue CYCLE1 ? U|xrekursion > 0
+.continue MAKEROW
+..
+!ZEIGEN: Should this recursive batch be shown?
+.. Unique hits must have a different father
+.continue END ?  M|vorwaerts & M|tvatercharge^nummer = 0|vcharge^nummer
+.continue END ? _M|vorwaerts & M|tvatercharge^nummer = 0|ncharge^nummer
+.. A recursive batch should have an opened brother
+.continue NEXT ? M|tbaumstat = "="
+.formula M|kbaumstat = "="
+.formula M|kbaumicon = M|rekurspfad
+..
+!MAKEROW
+.select screen line 'M|fuellzeile'
+.continue END ? _G|mehr
+..
+.make screen line +O
+.formula M|fuellzeile   = M|fuellzeile + 1
+.copy M|tbaumstufe = M|stufe
+.formula M|tbaumstat    = M|kbaumstat
+.copy M|ttyp       = M|ktyp
+.copy M|tbaumicon  = M|kbaumicon
+.copy M|tbauminfo  = M|kbauminfo
+.assign M|tbuchung   = 0|id
+.continue BOOKING ? M|ktyp = M|typbuchung
+.continue LOTFWD ? M|vorwaerts
+..
+.. Backward
+.assign M|tncharge     = 0|vcharge
+.copy M|tnexnum      = 0|vcharge^exnum
+.assign M|tvatercharge = 0|ncharge
+.formula M|tbaumtext      = M|tncharge^nummer + ": " + 'M|tncharge^artikel^such'
+.continue END
+..
+!LOTFWD: Forward
+.assign M|tvcharge     = 0|ncharge
+.copy M|tvexnum      = 0|ncharge^exnum
+.assign M|tvatercharge = 0|vcharge
+.formula M|tbaumtext      = M|tvcharge^nummer + ": " + 'M|tvcharge^artikel^such'
+.continue END
+..
+!BOOKING: Booking only
+.assign M|tvcharge     = 0|vcharge
+.copy M|tvexnum      = 0|vcharge^exnum
+.assign M|tncharge     = 0|ncharge
+.copy M|tnexnum      = 0|ncharge^exnum
+.assign M|tbudat       = 0|budat
+.assign M|tvom         = 0|vom
+.assign M|tursache     = 0|ursache
+.assign M|tlief        = 0|kl
+.assign M|tartikel     = 0|art
+.copy M|tstorniert     = 0|storniert
+.copy M|tstornolj      = 0|stornolj
+.assign M|tfert        = 0|fert
+.copy M|tmge         = F|adr("0", "mge", 0)
+.copy M|trueckmge    = 0|rueckmge
+.copy M|trestmge     = 0|restmge
+.copy M|tle          = 0|le
+.continue BOOKFWD ? M|vorwaerts
+..
+.. Backward
+.formula M|tbaumtext = M|tncharge + ": " + '0|mge' + " " + 0|le ? F|empty(M|tvcharge)
+.formula M|tbaumtext = M|tncharge + " <- " + M|tvcharge + ": " + '0|mge' + " " + 0|le ? _F|empty(M|tvcharge)
+.continue END
+..
+!BOOKFWD: Forward
+.formula M|tbaumtext = M|tvcharge + ": " + '0|mge' + " " + 0|le ? F|empty(M|tncharge)
+.formula M|tbaumtext = M|tvcharge + " -> " + M|tncharge + ": " + '0|mge' + " " + 0|le ? _F|empty(M|tncharge)
+..*****************************************************************************
+!END
+.continue

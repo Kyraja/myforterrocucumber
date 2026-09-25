@@ -1,0 +1,117 @@
+..!interpreter english translate noabbrev
+..!meta M|=dfue/EDLGES
+..*****************************************************************************
+.. Name           : EDLGES.BSTART.BV
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : 
+.. Functionality  : Start button, query origin packing slips items, and 
+..                  find matching withdrawal packing slip items
+...Includes       :
+..  include  dfue/EDLGES.TAB.ORIGIN
+..  include  dfue/EDLGES.TAB.WITHDRAW
+..  include  dfue/EDLGES.TAB.SUM
+..*****************************************************************************
+.set trans -
+..
+.type text xEntnahme
+.type text xUrsprung
+.type text xSumme
+..
+.set trans +
+.formula T|xEntnahme = "Entnahme"
+.formula T|xUrsprung = "Ursprung"
+.formula T|xSumme = "Summe"
+.set trans -
+..
+.. Start empty
+.make screen line -- ? M|tzeilen > 0
+..
+.. 4 Queries !
+.type text queryOriginHeads ? _F|defined(U|queryOriginHeads)
+.type text queryOriginRows ? _F|defined(U|queryOriginRows)
+.type text queryWithdrawalHeads ? _F|defined(U|queryWithdrawalHeads)
+.type text queryWithdrawalRows ? _F|defined(U|queryWithdrawalRows)
+..
+.. Set colours
+.input "is/ABASFARBEN.DEF"
+..
+!OHEADS: Query origin packing slip heads
+.formula U|queryOriginHeads = "$,,;@ablageart=(Both);@gruppe=1;ktyp=(PackingSlip);ursplsnr=`;edl<>`"
+.formula U|queryOriginHeads = U|queryOriginHeads + ";edl=" + 'M|kedl^id' ? _F|empty(M|kedl)
+.formula U|queryOriginHeads = U|queryOriginHeads + ";vom=" + 'M|kdvom' + "!" + 'M|kdbis' ? _F|empty(M|kdvom) ; _F|empty(M|kdbis)
+.formula U|queryOriginHeads = U|queryOriginHeads + ";kunde=" + 'M|kkunde^id' ? _F|empty(M|kkunde)
+.formula U|queryOriginHeads = U|queryOriginHeads + ";kunde2=" + 'M|kkunde2^id' ? _F|empty(M|kkunde2)
+.formula U|queryOriginHeads = U|queryOriginHeads + ";werk=" + M|kwerk ? _F|empty(M|kwerk)
+.formula U|queryOriginHeads = U|queryOriginHeads + ";ablstelle=" + M|kablstelle ? _F|empty(M|kablstelle)
+.. 
+.load 1 sales 'U|queryOriginHeads'
+.continue END ? _G|mehr
+.. 
+!OROWS: Query rows for one origin packing slip
+.formula U|queryOriginRows = "$,,;@ablageart=(Both);@gruppe=2;kotyp=(PackingSlip)"
+.formula U|queryOriginRows = U|queryOriginRows + ";kopf=" + 1|id
+.formula U|queryOriginRows = U|queryOriginRows + ";kopf^edl=" + 1|edl^id
+.formula U|queryOriginRows = U|queryOriginRows + ";kunde=" + 1|kunde^id
+.formula U|queryOriginRows = U|queryOriginRows + ";kovom=" + '1|vom'
+.formula U|queryOriginRows = U|queryOriginRows + ";artex^gruppe=1;mge<>0"
+.formula U|queryOriginRows = U|queryOriginRows + ";artex^packmit=(No)" ? _M|kmitpack & F|empty(M|kartikel)
+.formula U|queryOriginRows = U|queryOriginRows + ";artex=" + 'M|kartikel^id' ? _F|empty(M|kartikel)
+.. 
+.load 2 sales 'U|queryOriginRows'
+.continue NXOHEAD ? _G|mehr
+.. 
+!ORIGIN
+.input "EDLGES.TAB.ORIGIN"
+.. 
+!WHEADS: Query withdraw heads that match the origin packing slip
+.formula U|queryWithdrawalHeads = "$,,;@ablageart=(Both);@gruppe=1;ktyp=(PackingSlip)"
+.formula U|queryWithdrawalHeads = U|queryWithdrawalHeads + ";ursplsnr==" + 1|nummer
+.formula U|queryWithdrawalHeads = U|queryWithdrawalHeads + ";edl=" + 1|edl^id
+.formula U|queryWithdrawalHeads = U|queryWithdrawalHeads + ";kunde=" + 1|kunde^id
+.formula U|queryWithdrawalHeads = U|queryWithdrawalHeads + ";kunde2=" + 1|kunde2^id
+..
+.load 3 sales 'U|queryWithdrawalHeads'
+.continue SUMOROW ? _G|mehr 
+.. 
+!WROWS: Query rows in withdraw packing slip that match the origin row
+.formula T|queryWithdrawalRows = "$,,;@ablageart=(Both);@gruppe=2;kotyp=(PackingSlip)"
+.formula T|queryWithdrawalRows = T|queryWithdrawalRows + ";kopf=" + '3|id'
+.formula U|queryWithdrawalRows = U|queryWithdrawalRows + ";kopf^edl=" + 1|edl^id
+.formula U|queryWithdrawalRows = U|queryWithdrawalRows + ";kunde=" + '3|kunde^id'
+.formula U|queryWithdrawalRows = U|queryWithdrawalRows + ";kovom=" + '3|vom'
+.formula T|queryWithdrawalRows = T|queryWithdrawalRows + ";artikel=" + '2|artikel^id'
+.formula T|queryWithdrawalRows = T|queryWithdrawalRows + ";charge=" + '2|charge^id' ? _F|empty(2|charge)
+.. 
+.load 4 sales 'U|queryWithdrawalRows'
+.continue NXWHEAD ? _G|mehr
+.. 
+!WITHDRA
+.input "EDLGES.TAB.WITHDRAW"
+.. 
+!NXWROW
+.load 4 sales
+.continue NXWHEAD ? _G|mehr
+.continue WITHDRA  
+.. 
+!NXWHEAD
+.load 3 sales
+.continue SUMOROW ? _G|mehr
+.continue WROWS
+.. 
+!SUMOROW: Show sum after each origin row
+.input "EDLGES.TAB.SUM"
+.. 
+!NXOROW: Read next origin row
+.load 2 sales
+.continue NXOHEAD ? _G|mehr
+.continue ORIGIN  
+.. 
+!NXOHEAD
+.load 1 sales
+.continue END ? _G|mehr
+.continue OROWS
+..
+..*****************************************************************************
+!END
+.continue

@@ -57,6 +57,17 @@ export async function loadKBChunksByDocId(docId: string): Promise<KBChunk[]> {
   });
 }
 
+export async function clearAllKBDocuments(): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([IDB_KB_DOCS_STORE, IDB_KB_CHUNKS_STORE], 'readwrite');
+    tx.objectStore(IDB_KB_DOCS_STORE).clear();
+    tx.objectStore(IDB_KB_CHUNKS_STORE).clear();
+    tx.oncomplete = () => { db.close(); resolve(); };
+    tx.onerror = () => { db.close(); reject(tx.error); };
+  });
+}
+
 export async function deleteKBDocument(docId: string): Promise<void> {
   const db = await openDb();
   return new Promise((resolve, reject) => {

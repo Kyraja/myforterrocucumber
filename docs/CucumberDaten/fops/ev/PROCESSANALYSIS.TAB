@@ -1,0 +1,131 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name          : PROCESSANALYSIS.TAB
+.. Verantwortlich: cl
+.. Kontrolle     : tiwe
+.. Funktion      : Erzeugt eine Tabellenzeile in der Vorgangskette
+.. Ablauf        : Unterprogramm von PROCESSANALYSIS.BSTART.BN
+..*****************************************************************************
+.set trans -
+.type realx    xamount     ? _F|defined(U|xamount)
+.type realx    xrkurs      ? _F|defined(U|xrkurs)
+.type ID94:1   xland       ? _F|defined(U|xland)
+.type ID94:1   xiwbu       ? _F|defined(U|xiwbu)
+.type RP7.6    xrate       ? _F|defined(U|xrate)
+.type IP1      xrundung    ? _F|defined(U|xrundung)
+.type bool     xiststorno  ? _F|defined(U|xiststorno)
+..
+.copy U|xiststorno = G|FALSE
+.copy U|xiststorno = G|TRUE ? H|kotyp = 4 & (F|equals(H|tlsart, "(CanceledCustomerDelivery)") ; F|equals(H|tlsart, "(CancelationCustomerDelivery)") ; F|equals(H|tlsart, "(CancelationReturnPackingSlip)") ; F|equals(H|tlsart, "(CanceledReturnPackingSlip)") ; F|equals(H|tlsart, "(PackingSlipCanceled)") ; F|equals(H|tlsart, "(PackingSlipReversal)"))
+.copy U|xiststorno = G|TRUE ? H|kotyp = 5 & (F|equals(H|treart, "(CanceledDownpayment)") ; F|equals(H|treart, "(CancelationDownpayment)") ; F|equals(H|treart, "(CanceledCreditNoteCommercial)") ; F|equals(H|treart, "(CancelationCreditNoteCommercial)") ; F|equals(H|treart, "(CashPaymentReversal)") ; F|equals(H|treart, "(CashPaymentCanceled)") ; F|equals(H|treart, "(InvoiceCanceled)") ; F|equals(H|treart, "(InvoiceReversal)"))
+..
+.continue END ?  U|xiststorno & _M|mitstorno
+..
+!WEITER
+.continue MACH ? M|tzeilen = 0 ; _F|empty(M|stufe)
+.assign U|xamount = 0.0
+..
+.. Create empty row
+.make screen line +O
+.formula M|tstufe  = "----"
+.formula M|vart    = "------------------------------"
+.formula M|pnum    = "------"
+.formula M|artname = ""
+.assign M|land  = ""
+..
+!MACH: Create row
+.make screen line +O
+.formula M|tstufe = 'M|stufe'
+.. Vorgang/Vorgangsart/Position
+.assign M|tvorgang = U|xtid
+.assign M|tvorgang = M|tvorgang^kopf       ? M|tvorgang^gruppe = 2
+.copy M|gebucht = _M|tvorgang^uebertr
+.copy M|tvom = M|tvorgang^vom
+.formula M|tvorp = H|id
+.formula M|vart = M|tvorgang^typa
+.copy M|wahrsch = M|tvorgang^wahrsch
+.copy M|tnoablage = M|tvorgang^noablage
+.copy M|tausschr = M|tvorgang^ausschr
+.assign M|stornopartnervorg = M|tvorgang^stornopartnervorg
+..reart: 'M|tvorp^treart' zn: 'M|zn' typ:'M|tvorgang^typ'
+..lsart: 'M|tvorp^tlsart' 'M|zn'
+.formula M|vart = M|tvorp^tlsart     ? M|tvorgang^typ = 4
+.formula M|vart = M|tvorp^treart     ? M|tvorgang^typ = 5
+.. Artikeldaten ueber Verweis
+.assign M|artikel = H|art^id
+.assign M|konto = H|konto
+.continue ERROR01 ? _G|mehr
+..
+.. Positionsnummer, Preisdaten und alle Mengen
+.formula M|pnum  = H|pnum
+.formula M|ebeleg = H|kopf^ebeleg ? H|dnr = 4 & (F|equals(H|kotyp, "(PackingSlip)") ; F|equals(H|kotyp, "(Invoice)"))
+.copy M|alternativpos = H|alternativpos
+.formula M|mge   = H|mge
+.copy M|the = H|he
+.formula M|pwert  = H|pwert
+.formula M|pwert  = H|fktaplanpos^anzpwert ? H|kotyp = G|ABKO & F|equals(H|kategorie, "(Downpayment)")
+.formula M|ipwert = M|pwert
+.assign U|xamount = H|pwert
+.assign U|xamount = H|fktaplanpos^anzpwert ? H|kotyp = G|ABKO & F|equals(H|kategorie, "(Downpayment)")
+.assign U|xrkurs  = M|tvorgang^kurs
+.copy U|xland     = M|tvorgang^land
+.copy U|xiwbu     = M|tvorgang^iwbu
+..
+.formula U|xamount = U|xamount/U|xrkurs ? 'M|inlwaehr^id' <> 'U|xland'
+.formula U|xamount = U|xamount          ? 'M|inlwaehr^id' = 'U|xland'
+.formula U|xamount = F|round(U|xrate*U|xamount,U|xrundung) ? 'M|inlwaehr^id'<>'U|xland' & 'M|inlwaehr^id'<>'U|xiwbu'
+.formula M|ipwert = U|xamount
+.copy M|land = H|kopf^land
+.copy M|tinlwaehr = M|inlwaehr
+.formula M|proz  = H|proz
+.formula M|bmge  = H|bmge
+.formula M|limge = H|limge
+.formula M|lifrg = H|lifrg
+.formula M|remge = H|remge
+.formula M|refrg = H|refrg
+.formula M|preis = H|pwert / H|mge ? H|mge <> 0
+.formula M|bestellung   = M|ipwert ? (M|tvorgang^typ = 3 ; M|tvorgang^typ = 34) & _F|equals(M|tvorp^kategorie, "(Downpayment)")
+.formula M|lieferschein = M|ipwert ? F|equals(M|tvorgang^lsart, "(PackingSlip)") ; ((F|equals(M|tvorp^treart, "(CashPayment)") ; F|equals(M|tvorp^treart, "(Invoice)") ; F|equals(M|tvorp^treart, "(Downpayment)")) & M|tvorgang^fakt & M|tvorgang^typ = 5) 
+.formula M|kundenls     = M|ipwert ? F|equals(M|tvorgang^lsart, "(CustomerDelivery)")
+.formula M|rechnung     = M|ipwert ? (F|equals(M|tvorp^treart, "(CashPayment)") ; F|equals(M|tvorp^treart, "(Invoice)") ; F|equals(M|tvorp^treart, "(Downpayment)")) & M|tvorgang^typ = 5 & _F|equals(M|tvorp^tlsart, "(CustomerDelivery)") & _F|equals(M|tvorp^tlsart, "(ReturnPackingSlip)")
+.formula M|rueckls      = M|ipwert ? F|equals(M|tvorp^tlsart, "(ReturnPackingSlip)") & M|tvorgang^typ = 4
+.formula M|gutschrift   = M|ipwert ? (F|equals(M|tvorp^treart, "(CreditNoteCommercial)") ; F|equals(M|tvorp^tlsart, "(ReturnPackingSlip)") ; F|equals(M|tvorp^tlsart, "(CustomerDelivery)")) & M|tvorgang^typ = 5 
+.formula M|remenge = H|remge
+.formula M|offwert = M|remenge * M|preis
+..
+.continue SAVE ? _M|gebucht
+..
+!SUM: Summen bilden (nur gebuchte Vorg„nge)
+.formula M|sumbestellung = M|sumbestellung + M|bestellung       
+.formula M|sumlieferschein = M|sumlieferschein + M|lieferschein  ?  M|tvorgang^typ = 4
+.formula M|sumrechnung = M|sumrechnung + M|rechnung             
+.formula M|sumrueckls = M|sumrueckls + M|rueckls
+.formula M|sumgutschrift = M|sumgutschrift + M|gutschrift
+.formula M|sumkundenls = M|sumkundenls + M|kundenls
+.formula M|sumkonto = M|sumrechnung + M|sumgutschrift
+..
+!SAVE: Save original
+.continue ITEM ? F|empty(H|okopf)
+.assign M|tnvorg = H|okopf
+.continue ERROR01 ? _G|mehr
+..
+!ITEM: Save parent item
+.continue SEARCH ? F|empty(H|orig)
+.assign M|tnvorp = H|orig
+.continue ERROR01 ? _G|mehr
+..
+!SEARCH: Set flag for tracking
+.. Forward
+.formula M|tbvverfolg = (M|stufe >= 0)
+..
+.. Backward
+.formula M|tbverfolg = G|TRUE  ? _F|empty(M|tnvorp) ; _F|empty(M|tnvorg)
+.formula M|tbverfolg = G|FALSE ? M|stufe < 0
+.. ****************************************************************************
+!END
+.continue
+.. ****************************************************************************
+..
+!ERROR01
+.error -message Zuweisung gescheitert!
+.end 1

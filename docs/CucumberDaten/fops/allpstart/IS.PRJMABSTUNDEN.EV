@@ -1,0 +1,613 @@
+..!interpreter english declaration noabbrev
+.. at 2017-03-20, 17:08
+.set trans -
+..========================================================================
+..==  Name              : IS.PRJMABSTUNDEN.EV
+..==  Pfad              : allpstart
+..==  Funktion          :
+..==  Erstellungsdatum  : 10.05.2011
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF"
+..====================================================
+.type text    xtsys xtsel xykoobjekt xtid xtftext xtext xtkstelle
+.type text    xtedpdat xtedpout xtedpmsg xtedperr xysel
+.type real    xrarbzeit xrfaktzeit xrmaschzeit xrzeit
+.type integer xianz
+.type GD19    xdvon xdbis
+.type GD      xddat xdatum
+.type bool    xyberlaubt xbmehr xbpmerllmaendfakt
+.type integer xprocsp      ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Stundenzettel_pruefen -----
+.continue EL001 ? _(F|sysinfo(10)^ykonfigprjm^yartstdfreigabek <> "")
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ypersonal==" +  M|ypersonal^id
+.formula U|xtsel = U|xtsel + ";ymonat=="    + 'F|month(U|xdatum)'
+.formula U|xtsel = U|xtsel + ";yjahr=="     + 'F|year(U|xdatum)
+.formula U|xtsel = U|xtsel + ";@ablageart=lebendig;@zeilen=nein"
+.load 0 group 'U|xydbgrstundenzettel' 'U|xtsel'
+.continue EL002 ? _(G|mehr)
+.continue EL003 ? _(_(0|ybgesabschluss))
+.continue EL004 ? _(F|sysinfo(10)^ykonfigprjm^yartstdfreigabek = "KST")
+.continue EL005 ? _(F|empty(M|yaufgabe))
+.formula U|xtkstelle = M|ykstelle^id
+.formula U|xtkstelle = M|ypersonal^kstelle^id  ? F|empty(M|ykstelle)
+.continue FI005
+!EL005
+.formula U|xtkstelle = M|yaufgabe^yverantwkst^id                ?  F|empty(M|yaufgabe^yprojekt)
+.formula U|xtkstelle = M|yaufgabe^yprojekt^yverantwkst^id       ? _F|empty(M|yaufgabe^yprojekt)
+!FI005
+!EL004
+.load 0 line
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL006 ? _(((F|sysinfo(10)^ykonfigprjm^yartstdfreigabek = "PROJ") & (0|yprojekt^id = M|yaufgabe^yprojekt^id) & (0|ybfreigabe)) ; ((F|sysinfo(10)^ykonfigprjm^yartstdfreigabek = "KST") & (0|ykstelle^id = U|xtkstelle) & (0|ybfreigabe)))
+.continue EL007 ? _(G|evtvar = "bstart")
+.protection -LINE 'M|aktzeile'
+.continue FI007
+!EL007
+.set TRANS +
+.box Hinweis
+?Der Stundenzettel fÅr das Projekt '0|yprojekt' im Monat '0|ymonat'/'0|yjahr' wurde bereits freigegeben.        ? F|sysinfo(10)^ykonfigprjm^yartstdfreigabek = "PROJ"
+?Der Stundenzettel fÅr die Kostenstelle '0|ykstelle' im Monat '0|ymonat'/'0|yjahr' wurde bereits freigegeben.   ? F|sysinfo(10)^ykonfigprjm^yartstdfreigabek = "KST"
+Weitere Leistungsmeldungen dÅrfen fÅr diesen Zeitraum nicht mehr erfasst werden.
+.set TRANS -
+.error
+.end 1
+!FI007
+!EL006
+.load 0 line
+.continue LOOP001
+!ELOP001: ==============================
+.continue FI003
+!EL003
+.continue EL008 ? _(G|evtvar = "bstart")
+.protection -LINE 'M|aktzeile'
+.continue FI008
+!EL008
+.set TRANS +
+.box Hinweis
+Der Stundenzettel fÅr den Monat '0|ymonat'/'0|yjahr' wurde bereits freigegeben.
+Weitere Leistungsmeldungen dÅrfen fÅr diesen Zeitraum nicht mehr erfasst werden.
+.set TRANS -
+.error
+.end 1
+!FI008
+!FI003
+!EL002
+!EL001
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Tabelle_laden -----
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"
+.copy U|xbpmerllmaendfakt = G|TRUE
+.continue EL009 ? _((_(F|empty(5|ypmerllmaendfakt))) & (F|sysinfo(18)^allppro))
+.input "allppro/FOP.PRJM.UP.GETPERMISSIONS"
+.copy U|xbpmerllmaendfakt = F|defined(F|map(U|xypermissions, '5|ypmerllmaendfakt^id'))
+.load 1
+!EL009
+.file -TEMPNAME U|xtftext
+.input DATEI.F
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt==" +  M|yprojekt^id
+.formula U|xtsel = U|xtsel + ";yaufgabe==" +  M|yaufgabe^id
+.formula U|xtsel = U|xtsel + ";yadatum="   + 'M|ystdvondatum' + "!" + 'M|ystdbisdatum'
+.formula U|xtsel = U|xtsel + ";@ablageart=lebendig;@ordnung=yaufgabe,yadatum"
+.select group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.make screen line +O
+.formula M|ylm           = H|id
+.formula M|ypersonal     = H|ypersonal^id
+.formula M|yadatum       = H|yadatum
+.formula M|yarbzeit      = H|yarbzeit
+.formula M|yfaktzeit     = H|yfaktzeit
+.formula M|ymaschzeit    = H|ymaschzeit
+.assign M|yvkartikel  = H|yvkartikel^id
+.protection yvkartikel 'M|aktzeile'     ? _F|empty(M|yaufgabe^yvkartikel)
+.assign M|ymaschvkart = H|ymaschvkart^id
+.protection ymaschvkart 'M|aktzeile'    ? _F|empty(M|yaufgabe^ymaschvkart)
+.protection yfaktzeit   'M|aktzeile'    ? _U|xbpmerllmaendfakt
+.continue EL010 ? _(_(F|empty(H|ybeschint)))
+.output NEW 'U|xtftext'
+.input -TEXT 'H|ybeschint'
+.formula M|ybeschint = U|xtftext
+.select from 'M|ybeschint' M|ytextint^
+.protection ytextint 'M|aktzeile'
+!EL010
+.continue EL011 ? _(_(F|empty(H|ybeschext)))
+.output NEW 'U|xtftext'
+.input -TEXT 'H|ybeschext'
+.formula M|ybeschext = U|xtftext
+.select from 'M|ybeschext' M|ytextext
+.protection ytextext 'M|aktzeile'
+!EL011
+.continue EL012 ? _(((_(H|yaufgabe^ystatusk = "01")) & (_(H|yaufgabe^ystatusk = "02")) & (_(H|yaufgabe^ystatusk = "03"))) ; (_(F|empty(H|ytransaktion))))
+.protection -LINE 'M|aktzeile'
+!EL012
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.select continue
+.continue LOOP002
+!ELOP002: ==============================
+.continue 'xprocst.xprocsp'
+!PROC003: ----- EDP_FehlerprÅfung -----
+.continue EL013 ? _(G|mehr)
+.continue EL014 ? _(F|empty(U|xtedpout))
+!REPT001: ==============================
+.set TRANS +
+.menu
+-                 -
+Bei der Aktualisierung der VorgÑnge sind Fehler aufgetreten:
+
+EDP Befehl: 'U|xtsys'
+
+EDP Datei:        'U|xtedpdat'  >>.edit "'U|xtedpdat'"
+?EDP Hinweisdatei: 'U|xtedpmsg'  >>.edit "'U|xtedpmsg'" ?  F|fileexists(U|xtedpmsg)
+?EDP Fehlerdatei:  'U|xtedperr'  >>.edit "'U|xtedperr'" ?  F|fileexists(U|xtedperr)
+?EDP Ausgabedatei: 'U|xtedpout'  >>.edit "'U|xtedpout'" ?  F|fileexists(U|xtedpout)
+.set TRANS -
+.continue REPT001 ? _(G|menue = 0)
+.continue
+!EL014
+.continue FI013
+!EL013
+!REPT002: ==============================
+.set TRANS +
+.menu
+-                 -
+Bei der Aktualisierung der VorgÑnge sind Fehler aufgetreten:
+
+EDP Befehl: 'U|xtsys'
+
+EDP Datei:        'U|xtedpdat'  >>.edit "'U|xtedpdat'"
+?EDP Hinweisdatei: 'U|xtedpmsg'  >>.edit "'U|xtedpmsg'" ?  F|fileexists(U|xtedpmsg)
+?EDP Fehlerdatei:  'U|xtedperr'  >>.edit "'U|xtedperr'" ?  F|fileexists(U|xtedperr)
+?EDP Ausgabedatei: 'U|xtedpout'  >>.edit "'U|xtedpout'" ?  F|fileexists(U|xtedpout)
+.set TRANS -
+.continue REPT002 ? _(G|menue = 0)
+.continue
+!FI013
+.continue 'xprocst.xprocsp'
+!PROC004: ----- LM_speichern -----
+.file -TEMPNAME U|xtedpdat
+.file -TEMPNAME U|xtedpout
+.file -TEMPNAME U|xtedpmsg
+.file -TEMPNAME U|xtedperr
+.input DATEI.F
+.set SEPARATOR
+.set SUBSTITUTION "+LX,&,&amp;, ,<,&lt;, ,>,&gt;,"
+.output NEW 'U|xtedpdat' -ENCODING UTF-8
+<?xml version="1.0" encoding="UTF-8"?>
+<?edp lang d?>
+<?edp updatemode strict?>
+<ABASData reftype="ref">
+  <RecordSet>
+.select screen header
+.select screen line
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.continue EL015 ? _(M|ytbspeichern)
+.formula U|xianz       = 1
+.formula U|xrarbzeit   = M|yarbzeit
+.formula U|xrfaktzeit  = M|yfaktzeit
+.formula U|xrmaschzeit = M|ymaschzeit
+!REPT003: ==============================
+?        <Record database="'U|xydblnachweis'" group="'U|xygrlnachweis'" action="NEW"                   >        ?  F|empty(M|ylm) ; U|xianz > 1
+?        <Record database="'U|xydblnachweis'" group="'U|xygrlnachweis'" action="UPDATE" id="'M|ylm^id'">        ? _F|empty(M|ylm) & U|xianz = 1
+?          <Field name="such">'M|yaufgabe^such'</Field>                                                         ?  F|empty(M|ylm) ; U|xianz > 1
+?          <Field name="namebspr">'M|yaufgabe^namebspr'</Field>                                                 ?  F|empty(M|ylm) ; U|xianz > 1
+?          <Field name="yaufgabe">'M|yaufgabe^id'</Field>                                                       ?  F|empty(M|ylm) ; U|xianz > 1
+?          <Field name="yadatum">'M|yadatum:8'</Field>          ? M|yadatum        <> M|ylm^yadatum
+?          <Field name="yedatum">'M|yadatum:8'</Field>          ? M|yadatum        <> M|ylm^yedatum
+?          <Field name="ypersonal">'M|ypersonal^id'</Field>     ? M|ypersonal^id   <> M|ylm^ypersonal^id
+?          <Field name="yvkartikel">'M|yvkartikel^id'</Field>   ? M|yvkartikel^id  <> M|ylm^yvkartikel^id
+?          <Field name="ymaschvkart">'M|ymaschvkart^id'</Field> ? M|ymaschvkart^id <> M|ylm^ymaschvkart^id
+.formula U|xrzeit      = U|xrarbzeit                    ? U|xrarbzeit   <= 99.99 & U|xrarbzeit   >= -99.99
+.formula U|xrzeit      =  99.99                         ? U|xrarbzeit   >  99.99
+.formula U|xrzeit      = -99.99                         ? U|xrarbzeit   < -99.99
+.formula U|xrarbzeit   = U|xrarbzeit - U|xrzeit
+          <Field name="yarbzeit">'U|xrzeit'</Field>
+.formula U|xrzeit      = U|xrfaktzeit                   ? U|xrfaktzeit  <= 99.99 & U|xrfaktzeit  >= -99.99
+.formula U|xrzeit      =  99.99                         ? U|xrfaktzeit  >  99.99
+.formula U|xrzeit      = -99.99                         ? U|xrfaktzeit  < -99.99
+.formula U|xrfaktzeit  = U|xrfaktzeit - U|xrzeit
+?          <Field name="yfaktzeit">'U|xrzeit'</Field>           ? _F|protected(M|yfaktzeit, M|aktzeile)
+.formula U|xrzeit      = U|xrmaschzeit                  ? U|xrmaschzeit <= 99.99 & U|xrmaschzeit >= -99.99
+.formula U|xrzeit      =  99.99                         ? U|xrmaschzeit >  99.99
+.formula U|xrzeit      = -99.99                         ? U|xrmaschzeit < -99.99
+.formula U|xrmaschzeit = U|xrmaschzeit - U|xrzeit
+          <Field name="ymaschzeit">'U|xrzeit'</Field>
+.formula U|xianz = U|xianz + 1
+.continue EL016 ? _(_(F|empty(M|ybeschint)))
+.assign U|xbmehr = G|FALSE
+.select from 'M|ybeschint' xtext^
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.continue EL017 ? _(U|xbmehr)
+'U|xtext'
+.continue FI017
+!EL017
+.assign U|xbmehr = G|TRUE
+<Field name="ybeschint">'U|xtext'
+!FI017
+.select from 'M|ybeschint' xtext^
+.continue LOOP004
+!ELOP004: ==============================
+?</Field>       ? U|xbmehr
+.continue FI016
+!EL016
+          <Field name="ybeschint">'M|ytextint'</Field>
+!FI016
+.continue EL018 ? _(_(F|empty(M|ybeschext)))
+.assign U|xbmehr = G|FALSE
+.select from 'M|ybeschext' xtext^
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.continue EL019 ? _(U|xbmehr)
+'U|xtext'
+.continue FI019
+!EL019
+.assign U|xbmehr = G|TRUE
+<Field name="ybeschext">'U|xtext'
+!FI019
+.select from 'M|ybeschext' xtext^
+.continue LOOP005
+!ELOP005: ==============================
+?</Field>       ? U|xbmehr
+.continue FI018
+!EL018
+          <Field name="ybeschext">'M|ytextext'</Field>
+!FI018
+        </Record>
+.continue REPT003 ? _((U|xrarbzeit   = 0) & (U|xrfaktzeit  = 0) & (U|xrmaschzeit = 0))
+!EL015
+.select screen line
+.continue LOOP003
+!ELOP003: ==============================
+  </RecordSet>
+</ABASData>
+.set SUBSTITUTION
+.output NEW WERF.WEG
+.system 'F|expr("test -x $HOMEDIR/bin/xmlimport.sh")' BACKGROUND
+.formula U|xtsys = "xmlimport.sh"                               ?  G|mehr
+.formula U|xtsys = "java de.abas.etl.load.EDPImportMain"        ? _G|mehr
+.formula U|xtsys = U|xtsys + " -p " + G|einmalpw + " -o UPDATEMODE=STRICT -r NUM -T -H " + U|xtedpmsg + " -I " + U|xtedpdat + " >" + U|xtedpout + " 2>" + U|xtedperr
+.system 'U|xtsys' BACKGROUND
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC003
+!RET002
+.formula xprocsp = xprocsp - 1
+.continue EL020 ? _(G|evtvar = "ybuspeichern")
+.make screen line --O
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC002
+!RET003
+.formula xprocsp = xprocsp - 1
+!EL020
+.continue 'xprocst.xprocsp'
+!PROC005: ----- Pruefung_ob_speichern -----
+.select screen header
+.select screen line
+.assign U|xbmehr = G|mehr
+!LOOP006: ==============================
+.continue ELOP006 ? _(U|xbmehr)
+.continue EL021 ? _(M|ytbspeichern)
+.continue EL022 ? _((G|evtart = "maskpruef") ; (G|evtvar = "ybuspeichern"))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC004
+!RET004
+.formula xprocsp = xprocsp - 1
+.continue FI022
+!EL022
+!REPT004: ==============================
+.menu (0,0,3) Achtung
+Es wurden noch nicht alle Leistungsmeldungen gespeichert!
+
+speichern
+ohne speichern fortfahren
+.end 1          ? G|menue = 0 & _G|evtart = "maskabbr"
+.continue REPT004 ? _((G|menue = 3) ; (G|menue = 4))
+.continue EL023 ? _(G|menue = 3)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC004
+!RET005
+.formula xprocsp = xprocsp - 1
+!EL023
+!FI022
+.assign U|xbmehr = G|FALSE
+.continue FI021
+!EL021
+.select screen line
+.assign U|xbmehr = G|mehr
+!FI021
+.continue LOOP006
+!ELOP006: ==============================
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskein")
+.input 'U|xtupprjmsel'
+.formula U|xdvon        = "<M+1M-1Y"
+.formula M|ystdvondatum = U|xdvon
+.formula U|xdbis        = ">M"
+.formula m|ystdbisdatum = U|xdbis
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "maskpruef")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC005
+!RET006
+.formula xprocsp = xprocsp - 1
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtart = "maskabbr")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC005
+!RET007
+.formula xprocsp = xprocsp - 1
+.continue ESAC001
+!BRK003
+.continue BRK004 ? _(G|evtart = "feldfuell")
+.continue BRK005 ? _(G|evtvar = "yaufgabe")
+.formula U|xysel = ""
+.formula U|xysel = U|xysel + ";yvkartikel="
+.formula U|xysel = U|xysel + ";yvkartikel^namebspr="
+.formula U|xysel = U|xysel + ";ypersonal="
+.formula U|xysel = U|xysel + ";ysollstd="
+.formula U|xysel = U|xysel + ";yiststd="
+.formula U|xysel = U|xysel + ";ystatus="
+.formula U|xysel = U|xysel + ";ystatus^katego=!05"
+.input "allpstart/FOP.PRJM.UP.SELCHECK.FF"
+.continue ESAC002
+!BRK005
+.continue BRK006 ? _(G|evtvar = "yvkartikel")
+.input 'U|xtupprojleistkat' ? F|sysinfo(18)^allpstd
+.continue ESAC002
+!BRK006
+.continue BRK007 ? _(G|evtvar = "ymaschvkart")
+.input 'U|xtupprojleistkat' ? F|sysinfo(18)^allpstd
+.continue ESAC002
+!BRK007
+.continue BRK008 ? _(G|evtvar = "yadatum")
+.assign U|xdatum = G|evtfeldneu
+.continue EL024 ? _(G|mehr)
+.continue EL025 ? _(_(F|empty(U|xdatum)))
+.continue EL026 ? _(F|empty(M|ypersonal))
+.set TRANS +
+.box Fehler
+Bitte zuerst den Bearbeiter angeben.
+.set TRANS -
+.cursor ypersonal 'M|aktzeile'
+.formula G|evtfeldneu = ""
+.continue FI026
+!EL026
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC001
+!RET008
+.formula xprocsp = xprocsp - 1
+!FI026
+!EL025
+!EL024
+.continue ESAC002
+!BRK008
+!ESAC002: =====   ENDCASE   =====
+.continue EL027 ? _(G|evtzeile = 0)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC005
+!RET009
+.formula xprocsp = xprocsp - 1
+!EL027
+.continue ESAC001
+!BRK004
+.continue BRK009 ? _(G|evtart = "feldaus")
+.continue BRK010 ? _(G|evtvar = "yprojekt")
+.input 'U|xtupprjmsel'
+.formula M|yaufgabe         = ""
+.formula M|yaufgname        = ""
+.formula M|ysollstd         = 0
+.formula M|yiststd          = 0
+.formula M|ypvorgang        = ""
+.formula M|yklassifizierung = ""
+.formula M|ykvkartikelname  = ""
+.formula M|ykmaschvkartname = ""
+.continue ESAC003
+!BRK010
+.continue BRK011 ? _(G|evtvar = "ystdvondatum")
+.formula U|xdbis     = ">" + 'F|year(M|ystdvondatum)' + "Y" + 'F|month(M|ystdvondatum)' + "M"
+.formula M|ystdbisdatum = U|xdbis
+.continue ESAC003
+!BRK011
+.continue BRK012 ? _(G|evtvar = "ystdbisdatum")
+.continue EL028 ? _(M|ystdbisdatum < M|ystdvondatum)
+.formula U|xdbis     = ">" + 'F|year(M|ystdvondatum)' + "Y" + 'F|month(M|ystdvondatum)' + "M"
+.formula M|ystdbisdatum = U|xdbis
+!EL028
+.continue ESAC003
+!BRK012
+.continue BRK013 ? _(G|evtvar = "yaufgabe")
+.continue EL029 ? _(_(F|empty(M|yaufgabe)))
+.copy    M|yprojekt = M|yaufgabe^yprojekt
+!EL029
+.continue EL030 ? _((M|yaufgabe^ystatusk <> "01") & (M|yaufgabe^ystatusk <> "02") & (M|yaufgabe^ystatusk <> "03"))
+.assign M|yaufgabe = ""
+!EL030
+.formula M|ysollstd         = M|yaufgabe^ysollstd
+.formula M|yiststd          = M|yaufgabe^yiststd
+.copy    M|ypvorgang        = M|yaufgabe^ypvorgang
+.copy    M|yklassifizierung = M|ypvorgang^yklassifizierung
+.copy    M|ykvkartikelname  = M|yaufgabe^yvkartikel
+.copy    M|ykmaschvkartname = M|yaufgabe^ymaschvkart
+.continue ESAC003
+!BRK013
+.continue BRK014 ? _(G|evtvar = "yarbzeit")
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"   ? _F|defined(5|yupuebbuch)
+.input '5|yupuebbuch'                       ? _F|empty(5|yupuebbuch) & F|fileexists(F|foppath(5|yupuebbuch))
+.formula M|yfaktzeit = M|yarbzeit
+.continue ESAC003
+!BRK014
+.continue BRK015 ? _(G|evtvar = "ymaschzeit")
+.continue EL031 ? _(M|ymaschzeit > M|yarbzeit)
+.set TRANS +
+.box Hinweis
+Die Maschinenzeit darf die Istzeit nicht Åbersteigen.
+.set TRANS -
+.formula M|ymaschzeit = M|yarbzeit
+!EL031
+.continue ESAC003
+!BRK015
+.continue EL032 ? _(G|evtzeile = 0)
+.input 'U|xtupprjmsel'
+!EL032
+!ESAC003: =====   ENDCASE   =====
+.continue EL033 ? _(G|evtzeile = 0)
+.make screen line --O
+.continue FI033
+!EL033
+.assign M|ytbspeichern = G|TRUE         ? _G|evtvar = "ytbspeichern"
+.colour -BACKGROUND "-1 -1 -1" 'M|aktzeile'
+!FI033
+.continue ESAC001
+!BRK009
+.continue BRK016 ? _(G|evtart = "buttonvor")
+.continue BRK017 ? _(G|evtvar = "bstart")
+.continue EL034 ? _((_(F|empty(M|yprojekt))) & (_(F|empty(M|yaufgabe))))
+.make screen line --O
+.continue FI034
+!EL034
+.set TRANS +
+.box Hinweis
+Bitte zuerst ein Projekt und eine Arbeitsaufgabe angeben.
+.set TRANS -
+.error
+.end 1
+!FI034
+.continue ESAC004
+!BRK017
+!ESAC004: =====   ENDCASE   =====
+.continue ESAC001
+!BRK016
+.continue BRK018 ? _(G|evtart = "buttonnach")
+.continue BRK019 ? _(G|evtvar = "bstart")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC002
+!RET010
+.formula xprocsp = xprocsp - 1
+.continue ESAC005
+!BRK019
+.continue BRK020 ? _(G|evtvar = "ybuspeichern")
+.continue EL035 ? _(M|tzeilen > 0)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC005
+!RET011
+.formula xprocsp = xprocsp - 1
+!EL035
+.continue ESAC005
+!BRK020
+.continue BRK021 ? _(G|evtvar = "ybeschint")
+.continue EL036 ? _(_(F|empty(M|ybeschint)))
+.select from 'M|ybeschint' M|ytextint^
+.protection ytextint 'M|aktzeile'
+.continue FI036
+!EL036
+.formula M|ytextint = ""
+.protection -RESET ytextint 'M|aktzeile'
+!FI036
+.assign M|ytbspeichern = G|TRUE         ? _G|evtvar = "ytbspeichern"
+.colour -BACKGROUND "-1 -1 -1" 'M|aktzeile'
+.continue ESAC005
+!BRK021
+.continue BRK022 ? _(G|evtvar = "ybeschext")
+.continue EL037 ? _(_(F|empty(M|ybeschext)))
+.select from 'M|ybeschext' M|ytextext^
+.protection ytextext 'M|aktzeile'
+.continue FI037
+!EL037
+.formula M|ytextext = ""
+.protection -RESET ytextext 'M|aktzeile'
+!FI037
+.assign M|ytbspeichern = G|TRUE         ? _G|evtvar = "ytbspeichern"
+.colour -BACKGROUND "-1 -1 -1" 'M|aktzeile'
+.continue ESAC005
+!BRK022
+!ESAC005: =====   ENDCASE   =====
+.continue ESAC001
+!BRK018
+.continue BRK023 ? _(G|evtart = "zeileeinvor")
+.continue EL038 ? _((F|empty(M|yprojekt)) & (F|empty(M|yaufgabe)))
+.error
+.end 1
+.continue FI038
+!EL038
+.continue EL039 ? _(F|empty(M|yaufgabe))
+.set TRANS +
+.box Hinweis
+Neue Leistungsmeldungen kînnen nur erfasst werden, wenn im Kopf eine Arbeitsaufgabe angegeben ist.
+.set TRANS -
+.error
+.end 1
+.continue FI039
+!EL039
+.continue EL040 ? _((_(M|yaufgabe^ystatusk = "01")) & (_(M|yaufgabe^ystatusk = "02")) & (_(M|yaufgabe^ystatusk = "03")))
+.set TRANS +
+.box Hinweis
+Die Arbeitsaufgabe hat den Status 'M|yaufgabe^ystatus'
+Die Erfassung von Leistungsmeldungen ist nicht mîglich.
+.set TRANS -
+.error
+.end 1
+!EL040
+!FI039
+!FI038
+.continue ESAC001
+!BRK023
+.continue BRK024 ? _(G|evtart = "zeileeinnach")
+.assign M|yvkartikel  = M|yaufgabe^yvkartikel^id
+.protection yvkartikel'M|aktzeile'      ? _F|empty(M|yaufgabe^yvkartikel)
+.assign M|ymaschvkart = M|yaufgabe^ymaschvkart^id
+.protection ymaschvkart 'M|aktzeile'    ? _F|empty(M|yaufgabe^ymaschvkart)
+.continue ESAC001
+!BRK024
+.continue BRK025 ? _(G|evtart = "zeileloevor")
+.continue EL041 ? _(_(F|empty(M|ylm)))
+.error
+.end 1
+!EL041
+.continue ESAC001
+!BRK025
+!ESAC001: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJMABSTUNDEN.EV")'      ? F|fileexists(F|foppath("IFOP.IS.PRJMABSTUNDEN.EV"))
+.continue

@@ -1,0 +1,189 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EKLAB.KBUVORSCHLAG.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Versucht die BestellvorschlÑge zu "optimieren",
+..                  z.B. abgelaufene Termine auf heute setzten,
+..                  Mengen fÅr gleichen Termin zusammenlegen.
+.. Functionality  : tries to optimize purchase order suggestions,
+..                  e.g. old dates are set to today, quantities for same
+..                  date are merged.
+...Includes       :
+..  include     ek/EKLAB.BSTART.BV
+..*****************************************************************************
+..<META M|='ek/EKLAB'>
+.set trans -
+..
+.. nothing to do
+.continue END     ?  M|ozeilen = 0
+..
+.. nothing to do
+.continue END     ? _M|kbcmbeltterm  & _M|kbtermzusammen
+..
+.. current supplier / product
+.type P1     xvlief          ? _F|defined(U|xvlief)
+.type P2     xvartikel       ? _F|defined(U|xvartikel)
+.type P4     xvzrahmenpos    ? _F|defined(U|xvzrahmenpos)
+..
+.. merge demand for same product+supplier AND date into ONE purchase order
+.. suggestion
+.type P4     xvbv            ? _F|defined(U|xvbv)
+.type M9.3   xrmge           ? _F|defined(U|xrmge)
+.type bool   xbgruppestart   ? _F|defined(U|xbgruppestart)
+..
+.. files for edp script
+.type text   xtsystem        ?  _F|defined(U|xtsystem)
+.type text   xtvorschlag     ?  _F|defined(U|xtvorschlag)
+.type text   xtvorschlagout  ?  _F|defined(U|xtvorschlagout)
+.type text   xtvorschlagerr  ?  _F|defined(U|xtvorschlagerr)
+..
+.. two options for optimizing purchase order suggestions
+.continue RUECK   ?  M|kbcmbeltterm
+.continue ZUSAMM  ?  M|kbtermzusammen
+.continue END
+..
+..*****************************************************************************
+!RUECK
+..  move outdate delivery dates to today
+..  setting: kbcmbeltterm = true
+..
+.. initialize
+.formula U|xvlief = ""
+.formula U|xvartikel = ""
+..
+.. new files
+.file -tempname U|xtvorschlag
+.file -tempname U|xtvorschlagout
+.file -tempname U|xtvorschlagerr
+..
+.output new 'U|xtvorschlag'
+.input "DATEI.F"
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+?#!EDP_FOPMODE=1     ?  M|kbcfconvertpop
+?#!EDP_FOPMODE=0     ? _M|kbcfconvertpop
+
+#!action=update
+#!database=4:2
+#!dontchange=~
+
+id\
+    zn ; mge ; tterm ; zrahmenpos ; fix
+
+.select screen header
+.continue RUEND   ? _G|mehr
+!RUNEXT
+.select screen line
+.continue RUEND   ? _G|mehr
+.continue RUNEXT  ?  M|tbstop
+.continue RUNEXT  ?  M|ttyp <> M|ktypvorschlag
+.continue RUNEXT  ?  F|empty(M|tbv)
+.continue RUNEXT  ?  M|tbv^ablagef
+.continue RUNEXT  ?  M|tliterm > G|datum
+
+'M|tbv^id'  \
+    1  ;  'M|tmge' ; 'G|datum:8' ; 'M|tbv^zrahmenpos^id' ; 'M|tbv^fix'
+
+.continue RUNEXT
+!RUEND
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+.output
+..
+.formula U|xtsystem = "edpimport.sh -p " + 'G|einmalpw' + " -c EKS -I " + 'U|xtvorschlag' + " >> " + 'U|xtvorschlagout' + " 2>> " + 'U|xtvorschlagerr'
+.system 'U|xtsystem'  background
+.continue ERROR   ? _G|mehr
+..
+.. must refresh table!
+.. otherwise combining purchase order suggestions on same date will "mess up"
+.input "EKLAB.BSTART.BV"
+..*****************************************************************************
+..
+.continue END     ? _M|kbtermzusammen
+..
+..*****************************************************************************
+!ZUSAMM
+..  combine purchase order suggestions on same date
+..  setting: kbtermzusammen = true
+..
+.. initialize
+.formula U|xvlief = ""
+.formula U|xvartikel = ""
+.formula U|xvzrahmenpos = ""
+..
+.. new files
+.file -tempname U|xtvorschlag
+.file -tempname U|xtvorschlagout
+.file -tempname U|xtvorschlagerr
+..
+.output new 'U|xtvorschlag'
+.input "DATEI.F"
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+?#!EDP_FOPMODE=1     ?  M|kbcfconvertpop
+?#!EDP_FOPMODE=0     ? _M|kbcfconvertpop
+
+#!action=update
+#!database=4:2
+#!dontchange=~
+
+id\
+    zn ; mge ; tterm ; zrahmenpos ; fix
+
+.select screen header
+.continue ZUEND   ? _G|mehr
+!ZUNEXT
+.select screen line
+.continue ZUEND   ? _G|mehr
+.continue ZUNEXT  ?  M|tbstop
+.continue ZUNEXT  ?  M|ttyp <> M|ktypvorschlag
+.continue ZUNEXT  ?  F|empty(M|tbv)
+.continue ZUNEXT  ?  M|tbv^ablagef
+.continue ZUNEXT  ? _M|tbstatusabrufbaremenge
+.. default: join purchase order suggestions
+.formula U|xbgruppestart = false
+.. keep separate purchase order suggestion, if product or supplier differ
+.formula U|xbgruppestart = true  ?  U|xvlief^id <> M|tlief^id  ;  U|xvartikel^id <> M|tartikel^id ; U|xvzrahmenpos^id <> M|tprahmenpos^id
+.. keep separate purchase order suggestion, if it is set to "fix"(ed).
+.formula U|xbgruppestart = true  ?  M|tbv^fix ; U|xvbv^fix
+.. keep separate purchase order suggestion, if dates differ
+.formula U|xbgruppestart = true  ?  M|tliterm <> U|xvbv^tterm
+..
+.continue ZUJOIN  ? _U|xbgruppestart
+!ZUSTART
+.. start of new purchase order suggestion group (no change):
+.. remember current supplier, product, purchase order suggsetion, init sum of quantities
+.formula U|xvlief    = M|tlief^id
+.formula U|xvartikel = M|tartikel^id
+.formula U|xvzrahmenpos = M|tprahmenpos^id
+.formula U|xvbv      = M|tbv^id
+.formula U|xrmge     = M|tmge
+.continue ZUNEXT
+!ZUJOIN
+.. join purchase orders which have matching porduct + supplier + date:
+.. add to sum of quantity
+.formula U|xrmge  = U|xrmge + M|tmge
+
+'U|xvbv^id'  \
+    1  ;  'U|xrmge' ; ~ ; 'M|tbv^zrahmenpos^id' ; 'U|xvbv^fix'
+'M|tbv^id'  \
+    1  ;  0.0       ; ~ ; ~ ; ~
+
+.continue ZUNEXT
+!ZUEND
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+.output
+..
+.formula U|xtsystem = "edpimport.sh -p " + 'G|einmalpw' + " -c EKS -I " + 'U|xtvorschlag' + " >> " + 'U|xtvorschlagout' + " 2>> " + 'U|xtvorschlagerr'
+.system 'U|xtsystem'  background
+.continue ERROR   ? _G|mehr
+..
+.. refresh table for user
+.input "EKLAB.BSTART.BV"
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR
+.error Beim Optimieren der BestellvorschlÑge ist ein Fehler aufgetreten.
+.editing -readonly 'U|xtvorschlagerr'
+.end 1

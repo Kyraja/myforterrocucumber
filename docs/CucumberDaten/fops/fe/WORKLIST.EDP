@@ -1,0 +1,238 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : WORKLIST.EDP
+.. Author         : tiwe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Function       : Auftragszeiten 17:2 per EDP anlegen
+.. Functionality  : EDP - order time clocking in an off
+..                  
+..  Includes       :
+..
+.. <META M| = 'fe/WORKLIST'>
+..*****************************************************************************
+.. Variablen
+.type text xtwork   ? _F|defined(U|xtwork)
+.type text xtmld    ? _F|defined(U|xtmld)
+.type text xterr    ? _F|defined(U|xterr)
+.type text xtevent  ? _F|defined(U|xtevent)
+.type text xtcmd    ? _F|defined(U|xtcmd)
+.type bool xbbuchen ? _F|defined(U|xbbuchen)
+.type text xtfertstatus ? _F|defined(U|xtfertstatus)
+..
+.. M|iev = 1 = "R《ten anfangen"
+.. M|iev = 2 = "R《ten abmelden"
+.. M|iev = 3 = "Produktion anfangen"
+.. M|iev = 4 = "Abbruch"
+.. M|iev = 5 = "Unterbrechung"
+.. M|kiev = 6 = "Stillstand"
+.. M|iev = 7 = "Komplettr…kmeldung mit Dialog"
+.. M|iev = 8 = "Komplettr…kmeldung ohne Dialog"
+.. M|iev = 9 = "Teilr…kmeldung"
+.. M|iev = 10  = "Kurzlеfer"
+.. M|iev = 11  = "Fertigungstatus aktualisieren"  
+.. M|iev = 12  = "Beenden"
+.. M|kiev = 13 = Maschinenstatus der Maschinengruppe - Stillstand setzen
+.. M|kiev = 14 = Maschinenstatus der Maschinengruppe - Stillstand entfernen
+..
+.. Initialisierung
+.set trans -
+.copy U|xbbuchen = M|durchbuchen
+.formula U|xtevent = "STILL"    ? M|kiev = 6
+.formula U|xtevent = "MGRSTAT"  ? M|kiev = 13 ; M|kiev = 14
+.continue STILL ? G|evtvar = "bustopmastill" ; G|evtvar = "bumastill"
+.formula U|xtevent = "RUESTAN"  ? M|iev = 1
+.formula U|xtevent = "RUESTAB"  ? M|iev = 2
+.formula U|xtevent = "PRODAN"   ? M|iev = 3
+.formula U|xtevent = "ABBRUCH"  ? M|iev = 4
+.formula U|xtevent = "UNTBRECH"  ? M|iev = 5
+.formula U|xtevent = "STILL"    ? M|kiev = 6
+.formula U|xtevent = "KOMPMD"   ? M|iev = 7
+.formula U|xtevent = "KOMPOD"   ? M|iev = 8
+.formula U|xtevent = "TEIL"     ? M|iev = 9
+.formula U|xtevent = "KURZL"    ? M|iev = 10
+.formula U|xtevent = "FSTATUS"  ? M|iev = 11
+.formula U|xtevent = "BEENDEN"  ? M|iev = 12
+.continue STILL                 ? M|kiev = 6 ; M|kiev = 13 ; M|kiev = 14
+.continue SUBSC                 ? M|iev = 7 ; M|iev = 9
+..
+!ALL
+.formula U|xtwork = "rmtmp/"+'xtevent'+"."+'M|taschein'+".EDP"
+.formula U|xtmld  = "rmtmp/"+'xtevent'+"."+'M|taschein'+".MLD"
+.formula U|xterr  = "rmtmp/"+'xtevent'+"."+'M|taschein'+".ERR"
+.continue DATEI
+..
+!STILL
+.formula U|xtwork = "rmtmp/"+'xtevent'+".EDP"
+.formula U|xtmld  = "rmtmp/"+'xtevent'+".MLD"
+.formula U|xterr  = "rmtmp/"+'xtevent'+".ERR"
+.continue DATEI
+..
+!SUBSC:  da man hier in Submaske ist, hei疸 hier Arbeitschein aschein
+.formula U|xtwork = "rmtmp/"+'xtevent'+"."+'M|aschein'+".EDP"
+.formula U|xtmld  = "rmtmp/"+'xtevent'+"."+'M|aschein'+".MLD"
+.formula U|xterr  = "rmtmp/"+'xtevent'+"."+'M|aschein'+".ERR"
+...
+!DATEI
+.input "DATEI.F"
+.output new 'U|xtwork'
+..
+.continue STILL2  ?  M|kiev = 6
+.continue MGRSTAT ?  M|kiev = 13 ; M|kiev = 14
+.continue ANMELD  ?  M|iev = 1
+.continue ANMELD  ?  M|iev = 3
+.continue RUESTAB ?  M|iev = 2
+.continue CANCEL  ?  M|iev = 4 ; M|iev = 5 ; M|iev = 12
+.continue TEIL    ?  M|iev = 9
+.continue KOMPMD  ?  M|iev = 7
+.continue KOMPOD  ?  M|iev = 8
+.continue KURZL   ?  M|iev = 10
+.continue FSTATUS ?  M|iev = 11
+.continue END
+..
+!ANMELD: Anmelden: R《ten anfangen / Produktion anfangen
+#!database=17:2
+#!action=new
+#!password='G|einmalpw'
+asma;fertstatus;ma;anfdat;anfzeit;
+?'M|taschein';(Setup);'M|mitarb';'G|datum';'G|zeit';             ? M|iev = 1
+?'M|taschein';(StartProcessing);'M|mitarb';'G|datum';'G|zeit';   ? M|iev = 3
+.formula U|xtcmd = "edpimport.sh -I "+'U|xtwork'+" -P"
+.formula U|xtcmd = 'U|xtcmd' + " 1> "+'U|xtmld'
+.formula U|xtcmd = 'U|xtcmd' + " 2> "+'U|xterr'
+.system 'U|xtcmd' background 
+.continue ERROR ? _G|mehr
+.continue END
+..
+!RUESTAB: R《ten abmelden
+#!database=17:2
+#!action=update
+#!password='G|einmalpw'
+#!edp_lockbehavior=nowait
+id;endzeit;enddat;sofort
+'H|id';'G|zeit';'G|datum';'U|xbbuchen'
+.formula U|xtcmd = "edpimport.sh -I "+'U|xtwork'+" -P"
+.formula U|xtcmd = 'U|xtcmd' + " 1> "+'U|xtmld'
+.formula U|xtcmd = 'U|xtcmd' + " 2> "+'U|xterr'
+.system 'U|xtcmd' background 
+.continue ERROR ? _G|mehr
+.continue END
+..
+!CANCEL: Abbruch / Unterbrechung / Beenden
+#!database=17:2
+#!action=update
+#!password='G|einmalpw'
+#!edp_lockbehavior=nowait
+?id;endzeit;enddat;ugrund;sofort;                         ? M|iev = 4 ; M|iev = 5
+?'H|id';'G|zeit';'G|datum';'M|ugrund(L="0")';'U|xbbuchen';  ? M|iev = 4 ; M|iev = 5
+?id;endzeit;enddat;sofort;                               ? M|iev = 12
+?'H|id';'G|zeit';'G|datum';'U|xbbuchen';                 ? M|iev = 12
+.formula U|xtcmd = "edpimport.sh -I "+'U|xtwork'+" -P"
+.formula U|xtcmd = 'U|xtcmd' + " 1> "+'U|xtmld'
+.formula U|xtcmd = 'U|xtcmd' + " 2> "+'U|xterr'
+.system 'U|xtcmd' background 
+.continue ERROR ? _G|mehr
+.continue END
+..
+!STILL2: Maschinenstillstand
+#!database=17:2
+#!action=update
+#!password='G|einmalpw'
+#!edp_lockbehavior=nowait
+?id;endzeit;enddat;sgrund;sofort;                     ? M|kiev = 6
+?'H|id';'G|zeit';'G|datum';'M|sgrund(L="0")';'U|xbbuchen';   ? M|kiev = 6
+.formula U|xtcmd = "edpimport.sh -I "+'U|xtwork'+" -P"
+.formula U|xtcmd = 'U|xtcmd' + " 1> "+'U|xtmld'
+.formula U|xtcmd = 'U|xtcmd' + " 2> "+'U|xterr'
+.system 'U|xtcmd' background 
+.continue ERROR ? _G|mehr
+.continue END
+!MGRSTAT: Maschinenstatus der Maschinengruppe aktualisieren
+#!database=8:2
+#!action=modify
+#!password='G|einmalpw'
+#!edp_lockbehavior=nowait
+id;mgrstatus;
+?'H|id';(Downtime);     ? M|kiev = 13
+?'H|id';(EmptyEntry);   ? M|kiev = 14
+.formula U|xtcmd = "edpimport.sh -I "+'U|xtwork'+" -P"
+.formula U|xtcmd = 'U|xtcmd' + " 1> "+'U|xtmld'
+.formula U|xtcmd = 'U|xtcmd' + " 2> "+'U|xterr'
+.system 'U|xtcmd' background 
+.continue ERROR ? _G|mehr
+.continue END
+..
+!TEIL: Teilr…kmeldung
+#!database=17:2
+#!action=update
+#!password='G|einmalpw'
+#!edp_lockbehavior=nowait
+id;endzeit;enddat;istmge;ausmge;agrund;namge;ngrund;charge;sofort;
+'H|id';'G|zeit';'G|datum';'M|istmge(L="0")';'M|ausmge(L="0")';'M|agrund(L="0")';'M|namge(L="0")';'M|ngrund(L="0")';'M|charge';'U|xbbuchen';
+.formula U|xtcmd = "edpimport.sh -I "+'U|xtwork'+" -P"
+.formula U|xtcmd = 'U|xtcmd' + " 1> "+'U|xtmld'
+.formula U|xtcmd = 'U|xtcmd' + " 2> "+'U|xterr'
+.system 'U|xtcmd' background 
+.continue ERROR ? _G|mehr
+.continue END
+..
+!KOMPMD: Komplettr…kmeldung mit Dialog
+#!database=17:2
+#!action=update
+#!password='G|einmalpw'
+#!edp_lockbehavior=nowait
+id;endzeit;enddat;istmge;ausmge;agrund;namge;ngrund;charge;sofort;
+'H|id';'G|zeit';'G|datum';'M|ofmge(L="0")';'M|ausmge(L="0")';'M|agrund(L="0")';'M|namge(L="0")';'M|ngrund(L="0")';'M|charge';'U|xbbuchen';
+.formula U|xtcmd = "edpimport.sh -I "+'U|xtwork'+" -P"
+.formula U|xtcmd = 'U|xtcmd' + " 1> "+'U|xtmld'
+.formula U|xtcmd = 'U|xtcmd' + " 2> "+'U|xterr'
+.system 'U|xtcmd' background 
+.continue ERROR ? _G|mehr
+.continue END
+..
+!KOMPOD: Komplettr…kmeldung ohne Dialog
+#!database=17:2
+#!action=update
+#!password='G|einmalpw'
+#!edp_lockbehavior=nowait
+id;endzeit;enddat;istmge;korr;sofort;
+'H|id';'H|anfzeit';'H|anfdat';'M|tofmge(L="0")';'U|xzendezeit';'U|xbbuchen';
+.formula U|xtcmd = "edpimport.sh -I "+'U|xtwork'+" -P"
+.formula U|xtcmd = 'U|xtcmd' + " 1> "+'U|xtmld'
+.formula U|xtcmd = 'U|xtcmd' + " 2> "+'U|xterr'
+.system 'U|xtcmd' background 
+.continue ERROR  ? _G|mehr
+.continue END
+..
+!KURZL: Kurzlеfer erfassen
+#!database=17:4
+#!action=new
+#!password='G|einmalpw'
+ma;asma;anfdat;anfzeit;istzeit;istmge;ausmge;namge;agrund;ngrund;charge;sofort;
+'M|mitarb';'M|taschein';'G|datum';'G|zeit';'M|istzeit';'M|istmge(L="0")';'M|ausmge(L="0")';'M|namge(L="0")';'M|agrund(L="0")';'M|ngrund(L="0")';'M|charge';'U|xbbuchen';
+.formula U|xtcmd = "edpimport.sh -I "+'U|xtwork'+" -P"
+.formula U|xtcmd = 'U|xtcmd' + " 1> "+'U|xtmld'
+.formula U|xtcmd = 'U|xtcmd' + " 2> "+'U|xterr'
+.system 'U|xtcmd' background 
+.continue ERROR  ? _G|mehr
+.continue END
+!FSTATUS: Fertigungstatus im Arbeitschein aktualisieren
+#!database=9:1
+#!action=update
+#!password='G|einmalpw'
+#!edp_lockbehavior=nowait
+id;fertstatus;
+'H|id';'U|xtfertstatus';
+.formula U|xtcmd = "edpimport.sh -I "+'U|xtwork'+" -P"
+.formula U|xtcmd = 'U|xtcmd' + " 1> "+'U|xtmld'
+.formula U|xtcmd = 'U|xtcmd' + " 2> "+'U|xterr'
+.system 'U|xtcmd' background 
+.continue ERROR  ? _G|mehr
+.continue END
+!ERROR
+.error Buchung nicht erfolgreich! 'U|xterr' beachten.
+.end 1
+..
+!END
+.continue
+

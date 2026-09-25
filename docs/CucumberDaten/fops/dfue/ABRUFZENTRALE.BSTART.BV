@@ -1,0 +1,54 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ABRUFZENTRALE.BSTART.BV
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : Start query across recent edi messages type forecast
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.make screen line --
+.formula M|kchartzeile = 0
+..
+.chart -INIT
+.chart -SHOW kchart 0
+..
+.. Missing required field
+.continue NODATE ? F|empty(M|kstichtag)
+..
+.. Read  EDI messages type forecast, order by blanket order / product
+.formula M|kerstertermin = M|kstichtag - M|kzeitraum
+.formula M|kletztertermin = M|kstichtag - M|kmaxzeitraum
+.load 0 edifact 'F|formatstr("$,,;@gruppe=0;vorart<>0;erfass={1}!{2};status==0;edinachr=2101!2104;ideksrah={3};ideksart={4};@ordnung=ideksrah,ideksart,nummer", M|kerstertermin, M|kstichtag, M|krahmen^nummer, M|kartikel^nummer)'
+.continue END  ?  _G|mehr
+..
+.. Query blanket orders
+!BLANKET
+.continue NEXTEDI ?  F|empty(0|ideksrah)
+.continue NEXTEDI ?  F|empty(0|ideksart)
+.select sales 'F|formatstr("$,,;@gruppe=1;ktyp=(BlanketOrder);nummer={1}", 0|ideksrah)'
+.continue NEXTEDI ? _G|mehr
+.continue NEXTEDI ?  H|betreuer^id<>M|kbetreuer^id  & _F|empty(M|kbetreuer)
+.continue NEXTEDI ?  H|kunde^id<>M|kkunde^id & H|kunde2^id<>M|kkunde^id & H|kunde3^id<>M|kkunde^id  & _F|empty(M|kkunde)
+.select line sales 'F|formatstr("$,,;@gruppe=2;kotyp=(BlanketOrder);kopf={1};artex={2}", H|id, 0|ideksart)'
+.continue NEXTEDI ? _G|mehr
+.input 'M|tab'
+..
+.. Read next EDI messages type forecast, skip same blanket orders / product
+!NEXTEDI
+.load 0 edifact
+.continue END ? _G|mehr
+.continue BLANKET ? _F|defined(H|artex)
+.continue NEXTEDI ?  H|kopf^nummer=0|ideksrah & H|artex^nummer=0|ideksart
+.continue BLANKET
+..
+..*****************************************************************************
+!END
+.continue
+..
+!NODATE
+.error Geben Sie den Stichtag fÅr den Auswertungszeitraum an!
+.end 1
+

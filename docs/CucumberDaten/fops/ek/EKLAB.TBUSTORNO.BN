@@ -1,0 +1,165 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EKLAB.TBUSTORNO.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Storniert einen Lieferabruf (oder Keinbedarfmeldung)
+.. Functionality  : Cancels one forecast or no-demand forecast
+...Includes       :
+..  include     ek/EKLAB.BSTART.BV
+..*****************************************************************************
+..<META M|='ek/EKLAB'>
+.set trans -
+.type text xtmpfile ? _F|defined(U|xtmpfile)
+.type text xtout    ? _F|defined(U|xtout)
+.type text xterr    ? _F|defined(U|xterr)
+..
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+.. nothing to do
+.continue FORBID  ?  F|empty(M|tlab)
+.continue FORBID  ?  M|ttyp = M|ktyprahmenpos
+.continue FORBID  ?  M|ttyp = M|ktypvorschlag
+.continue FORBID  ?  M|ttyp = M|ktyplieferschein
+.continue FORBID  ? _M|tbgltstatus
+..
+.. blanket order is not unique
+.continue ERRSTOP ?  M|tbstop
+..
+.type bool   xbstorno    ? _F|defined(xbstorno)
+.type bool   xbende      ? _F|defined(xbende)
+.type integer    xi          ? _F|defined(xi)
+.type integer    xistorno    ? _F|defined(xistorno)
+.formula U|xbstorno = false
+.formula U|xbende = false
+.formula U|xi = 0
+.formula U|xistorno = 0
+..
+.. cancel forecast using an edp script
+.type text   xtsystem        ? _F|defined(xtsystem)
+.type text   xtstornoedp     ? _F|defined(xtstornoedp)
+.type text   xtstornoedpout  ? _F|defined(xtstornoedpout)
+.type text   xtstornoedperr  ? _F|defined(xtstornoedperr)
+..
+.file -tempname U|xtstornoedp
+.file -tempname U|xtstornoedpout
+.file -tempname U|xtstornoedperr
+..
+.output new 'U|xtstornoedp'
+.input "DATEI.F"
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+
+?#!EDP_FOPMODE=1     ?  M|kbcfnoreqdel  &  M|ttyp = M|ktypkeinbedarf
+?#!EDP_FOPMODE=0     ? _M|kbcfnoreqdel  &  M|ttyp = M|ktypkeinbedarf
+?#!EDP_FOPMODE=1     ?  M|kbcfcancelpo  &  M|ttyp = M|ktyplieferabruf
+?#!EDP_FOPMODE=0     ? _M|kbcfcancelpo  &  M|ttyp = M|ktyplieferabruf
+
+#!EDP_LOCKBEHAVIOR=NOWAIT
+
+#!action=update
+#!database=4
+#!dontchange=~
+
+id;druck\
+    zn;status
+
+'M|tlab^id' ; 0 \
+..
+.load 1 purchasing 'M|tlab^id'
+.continue ENDEDP  ? _G|mehr
+!FIRST
+.load 1 line
+.continue ENDEDP  ? _G|mehr
+.. check lifrg for deliveries
+.formula U|xbstorno = F|empty(1|status)  &  1|lifrg = 0
+!NEXT
+.load 1 line
+.formula U|xbende = _G|mehr
+!ROW
+.formula U|xi = U|xi + 1
+.formula U|xistorno = U|xistorno + 1   ? U|xbstorno
+?   'U|xi'  ; C \           ? _U|xbende  &  U|xbstorno
+?   'U|xi'  ; ~ \           ? _U|xbende  & _U|xbstorno
+?   'U|xi'  ; C             ?  U|xbende  &  U|xbstorno
+?   'U|xi'  ; ~             ?  U|xbende  & _U|xbstorno
+.continue ENDEDP  ?  U|xbende
+.formula U|xbstorno =  F|empty(1|status)  &  1|lifrg = 0
+.continue NEXT
+!ENDEDP
+
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+.output
+.load 1
+..
+.. nothing to do?
+.continue SUCCESS  ?  U|xistorno = 0
+..
+..
+.. a lock during edpimport creates a huge error file
+.select lock purchasing  'M|tlab^id'
+.select
+..
+..
+.formula U|xtsystem = "edpimport.sh -p " + 'G|einmalpw' + " -c EKS -I " + 'U|xtstornoedp' + " >> " + 'U|xtstornoedpout' + " 2>> " + 'U|xtstornoedperr'
+.system 'U|xtsystem'  background
+.continue ERROR   ? _G|mehr
+..
+..
+.. file edi message
+.continue EEDI    ?  F|empty(M|tedi)
+.continue EEDI    ?  M|tedi^status = -9  ;  M|tedi^status = -10
+.select edifact 'M|tedi^id'
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=53
+#!action=modify
+#!charset=eks
+id;status
+.continue STATUS0 ?  H|status =  0
+'H|id';-9
+.continue OUTPUT
+!STATUS0
+'H|id';-8
+.continue OUTPUT
+..
+!OUTPUT
+.output
+..
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR2 ? _G|mehr
+.continue EEDI
+..
+!EEDI
+.. throw away possibly not-yet-sent files
+.formula U|xtsystem = "rm -f " + M|kdstdir + "/eklab_" + 'M|tlab^nummer'
+.system 'U|xtsystem'  background
+.continue ERROR   ? _G|mehr
+..
+..
+!SUCCESS
+.input "EKLAB.BSTART.BV"       ?  M|kbzeileakt
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR
+.error Beim Stornieren ist ein Fehler aufgetreten.
+.editing -readonly 'U|xtstornoedperr'
+.end 1
+..
+!FORBID
+.error Das kann hier nicht storniert werden.
+.end 1
+..
+!ERRSTOP
+.error Zu Lieferant und Artikel sind mehrere Rahmenauftragsposition vorhanden.
+.end 1
+..
+!ERROR2
+.input 'U|xterr'
+.error ZurÅckschreiben gescheitert!
+.end 1
+

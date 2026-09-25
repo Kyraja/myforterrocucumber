@@ -1,0 +1,132 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PRINTQUEUE.BSTART.BV
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Setzt das Selektionsmuster fuer die Druckschlange im EK oder
+..                  VK nach den Eingabefeldern zusammen.
+.. Ablauf         : Button-vor-EFOP
+..
+.. Functionality  : Creates selection pattern of the print queue from purchase or sales
+..                  by analyzing the values of the input fields.
+.. Program flow   : Before button efop
+..*****************************************************************************
+.set trans -
+..
+.continue DECLARE ? F|empty(M|ktransaction)
+..
+.. Load single reference
+.formula M|select = M|ktransaction^id
+.continue CLRTAB
+..
+!DECLARE: Declarations
+.continue ERROR01 ? F|empty(M|doctype)
+.type integer  xfrom xto
+.type AS193 xfilingmode
+..
+.. Initializations
+.assign M|select = "$,,"
+.copy U|xfilingmode = M|filingmode
+.continue DOCDATE ? F|empty(M|docfrom) & F|empty(M|docto)
+..
+.type VP10 xcheck
+.assign U|xcheck = "$,,;@gruppe=1;@numsuch=" + M|docfrom + "!" + M|docto + ";@lesen=" + 'G|FALSE'
+.continue ERROR02 ? _G|mehr
+.formula M|select = M|select + ";@numsuch=" + M|docfrom + "!" + M|docto
+..
+!DOCDATE: check range of document date
+.continue BOOKDAT ? F|empty(M|docdatefrom) & F|empty(M|docdateto)
+.assign U|xfrom = 'M|docdatefrom:8'
+.assign U|xto = 'M|docdateto:8'
+.assign U|xfrom = 19810101 ? U|xfrom <= 0
+.assign U|xto =  20801231 ? U|xto <= 0
+.continue ERROR03 ? U|xto < U|xfrom
+.formula M|select = M|select + ";vom=" + 'U|xfrom' + "!" + 'U|xto'
+..
+!BOOKDAT: check range of booking date
+.continue REVIEW ? _M|bookdatedoc
+.continue REVIEW ? F|empty(M|bookdatefrom) & F|empty(M|bookdateto)
+.assign U|xfrom = 'M|bookdatefrom:8'
+.assign U|xto = 'M|bookdateto:8'
+.assign U|xfrom = 19810101 ? U|xfrom <= 0
+.assign U|xto =  20801231 ? U|xto <= 0
+.continue ERROR04 ? U|xto < U|xfrom
+.formula M|select = M|select + ";budat=" + 'U|xfrom' + "!" + 'U|xto'
+..
+!REVIEW: check range of review date
+.continue PARTNER ? F|empty(M|reviewfrom) & F|empty(M|reviewto)
+.assign U|xfrom = 'M|reviewfrom:8'
+.assign U|xto = 'M|reviewto:8'
+.assign U|xfrom = 19810101 ? U|xfrom <= 0
+.assign U|xto =  20801231 ? U|xto <= 0
+.continue ERROR05 ? U|xto < U|xfrom
+.formula M|select = M|select + ";tterm=" + 'U|xfrom' + "!" + 'U|xto'
+..
+!PARTNER
+.continue SALES ? M|sales
+..
+.. Purchasing
+.formula M|select = M|select + ";kl==" + M|ekdocpartner^id ? _F|empty(M|ekdocpartner)
+.formula M|select = M|select + ";resteller==" + M|ekpayment^id ? _F|empty(M|ekpayment)
+.formula M|select = M|select + ";ausschr==" + M|ausschr^id ? _F|empty(M|ausschr)
+.continue OPERATE
+..
+!SALES
+.formula M|select = M|select + ";kl==" + M|vkdocpartner^id ? _F|empty(M|vkdocpartner)
+.formula M|select = M|select + ";reempf==" + M|vkpayment^id ? _F|empty(M|vkpayment)
+.formula M|select = M|select + ";warenempf==" + M|vkshipping^id ? _F|empty(M|vkshipping)
+.formula M|select = M|select + ";erechok=1;uebertr=0" ? M|vkerechnung
+.formula M|select = M|select + ";erechok=0" ? _M|vkerechnung
+..
+!OPERATE
+.continue DOCTYPE ? F|empty(M|operator)
+.formula M|select = M|select + ";zeich==" + M|operator
+..
+!DOCTYPE
+.formula M|select = M|select + ";ktyp==" + 'M|doctype'
+..
+!FILED: documents filed or not
+.continue PRINT ? U|xfilingmode = "(Both)"
+.formula M|select = M|select + ";ablagef==" + 'G|FALSE' ? U|xfilingmode = "(Active)"
+.formula M|select = M|select + ";ablagef==" + 'G|TRUE' ? U|xfilingmode = "(Filed)"
+..
+!PRINT: printables
+.formula M|select = M|select + ";druck==" + 'G|FALSE' ? _M|printqueue
+.formula M|select = M|select + ";druck==" + 'G|TRUE'  ?  M|printqueue
+.continue FILING ? _M|unlockeddocuments
+.formula M|select = M|select + ";vsperre==" + 'G|false'
+..
+!FILING: filing mode and group
+.formula M|select = M|select + ";gruppe=1;@gruppe=1;@ablageart=" + M|filingmode
+..
+!CLRTAB: clear table
+.make screen line -- ? M|tzeilen > 0
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR01: Missing type of document!
+.error -line 0 -field M|salestype -message Bitte mindestens eine Belegart ausw„hlen! ?  M|sales
+.error -line 0 -field M|purchtype -message Bitte mindestens eine Belegart ausw„hlen! ? _M|sales
+.continue BREAK
+..
+!ERROR02: Wrong date!
+.error
+.cursor docfrom 0
+.continue BREAK
+..
+!ERROR03: Wrong date!
+.error -line 0 -field M|docdatefrom -message Untergrenze ist gr”áer als Obergrenze.
+.continue BREAK
+..
+!ERROR04: Wrong date!
+.error -line 0 -field bookdatefrom -message Untergrenze ist gr”áer als Obergrenze.
+.continue BREAK
+..
+!ERROR05: Wrong date!
+.error -line 0 -field M|reviewfrom -message Untergrenze ist gr”áer als Obergrenze.
+..
+!BREAK
+.end 1

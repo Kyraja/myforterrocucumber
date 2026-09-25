@@ -1,0 +1,119 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : TAXRULES3.EV
+.. Author         : ankn
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  : Common event FOP of the Infosystem fb/TAXRULES3
+..*****************************************************************************
+..
+..
+.set trans -
+..
+.continue ACCSET          ? (G|evtartengl = "FIELD_EXIT"  )  & (G|evtvar = "kontovon") ; (G|evtvar = "kontobis")
+.continue ACCSETCHANGED   ? (G|evtartengl = "FIELD_EXIT"  )  & (G|evtvar = "konto")
+.continue CHANGED         ? (G|evtartengl = "FIELD_EXIT"  )  & (G|evtvar = "ktoustpos"); (G|evtvar = "datum")
+.continue START           ? (G|evtartengl = "BUTTON_BEFORE") & (G|evtvar = "bstart")
+..
+..*****************************************************************************
+!CHANGED: 
+..*****************************************************************************
+.make screen line --
+.continue END
+..
+..*****************************************************************************
+!ACCSET: 
+..*****************************************************************************
+.make screen line --
+.formula M|konto    = ""
+.copy    M|kontobis = M|kontovon ? (G|evtvar = "kontovon") & F|empty(M|kontobis)
+.continue END
+..
+..*****************************************************************************
+!ACCSETCHANGED: 
+..*****************************************************************************
+.make screen line --
+.formula M|kontovon = ""
+.formula M|kontobis = ""
+.continue END
+..
+..*****************************************************************************
+!START: Infosystem start
+..*****************************************************************************
+.make screen line --
+.type GL30 xpvon ? _F|defined(U|xpvon)
+.type GL30 xpbis ? _F|defined(U|xpbis)
+.formula U|xpvon = "kontovon"
+.formula U|xpbis = "kontobis"
+.input "is/RANGECHECK"
+.formula M|select = "$,"
+.formula M|select = M|select + ";@numsuch=" + M|kontovon + "!" + M|kontobis 
+.formula M|select = M|select + ";@gruppe=1"
+.formula M|select = M|select + ";@ordnung=" + F|condexpr(U|xxbisnum ; (F|empty(M|kontovon) & F|empty(M|kontobis)), "nummer", "such")
+.select 'G|hdatname5' 'M|select'
+.select add M|konto ? _F|empty(M|konto)
+..
+..*****************************************************************************
+!LOOP: Account Loop
+..*****************************************************************************
+.continue END ? _G|mehr
+..
+..*****************************************************************************
+!LOAD34: Select Accounttaxrule and Taxrule
+..*****************************************************************************
+.continue NEXT ? F|empty(H|ktostrgl)
+.load 3 'G|hdatname58' 'F|formatstr("$,kopf=={1};@gruppe=16", H|ktostrgl^id)'
+.continue NEXT ? _G|mehr 
+..
+.continue NEXT ?  F|empty(3|strgl)
+..
+.load 4 'G|hdatname58' 'F|formatstr("$,kopf=={1};@gruppe=15", 3|strgl^id)'
+.continue NEXT ? _G|mehr
+..
+.continue LOOP1
+..
+..*****************************************************************************
+!LOOP1:
+..*****************************************************************************
+.continue INPUT ? (G|mehr & (M|ktoustpos=4|ktoustpos) & (M|datum < 4|gbis)) ; F|empty(M|ktoustpos)
+.continue DATUM ? (M|datum > 4|gbis)
+.continue LOAD3
+..
+..*****************************************************************************
+!INPUT: Input TAXRULES.TAB
+..*****************************************************************************
+.make screen line +O
+.input 'M|tab'
+.continue NEXT
+..
+..*****************************************************************************
+!LOAD3: Accounttaxrule Loop
+..*****************************************************************************
+.load 3 continue
+.continue LOOP2 ? G|mehr
+.continue NEXT ? _G|mehr
+..
+..*****************************************************************************
+!LOOP2: Taxrule Loop
+..*****************************************************************************
+.load 4 'G|hdatname58' 'F|formatstr("$,kopf=={1};@gruppe=15", 3|strgl^id)'
+.continue LOOP1 ? G|mehr
+.continue NEXT
+..
+..*****************************************************************************
+!DATUM: New period
+..*****************************************************************************
+.load 4 continue
+.continue LOAD3 ? _G|mehr
+.continue LOOP1
+..
+..*****************************************************************************
+!NEXT: Select next Account
+..*****************************************************************************
+.select continue
+.continue LOOP
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

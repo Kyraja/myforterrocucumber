@@ -1,0 +1,66 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : BSTATUS.EDP
+.. Author         : tiwe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Function       : Setzen der Beschaffungsart in der Auftragsfertigungsliste
+..
+..************************************************************
+.. Variablen
+.set trans -
+.type text U|xtwork ? _F|defined(xtwork)
+.type text U|xterr  ? _F|defined(xterr)
+.type text U|xtcmd  ? _F|defined(xtcmd)
+..
+.file -tempname U|xtwork
+.file -tempname U|xterr
+.output new 'U|xtwork'
+.input "DATEI.F"
+.continue AFL     ? _F|equals(M|reserv^vor^typa,"(SOPOItemPOS)") 
+.continue AUFTRAG ?  F|equals(M|reserv^vor^typa,"(SOPOItemPOS)") 
+!AFL: Auftragsfertigungsliste per edp bearbeiten
+#!action=get
+#!database=4
+#!password='G|einmalpw'
+id;\
+?zid;elbsart;              ? _F|equals(M|elbsart,"(Relocation)") 
+?zid;elbsart;umllg;        ? F|equals(M|elbsart,"(Relocation)") 
+'M|reserv^vor^id';\
+?'M|reserv^id';'M|elbsart';                   ? _F|equals(M|elbsart,"(Relocation)") 
+?'M|reserv^id';'M|elbsart';'M|umllg^id';       ?  F|equals(M|elbsart,"(Relocation)")
+.continue EDPEXEC
+!AUFTRAG: Verkaufsauftrag per edp bearbeiten
+#!action=update
+#!database=3:22
+#!password='G|einmalpw'
+id;\
+?zid;bsart;              ? _F|equals(M|elbsart,"(Relocation)") 
+?zid;bsart;umllg;        ? F|equals(M|elbsart,"(Relocation)") 
+'M|reserv^vor^kopf^id';\
+?'M|reserv^vor^id';'M|elbsart';                ? _F|equals(M|elbsart,"(Relocation)") 
+?'M|reserv^vor^id';'M|elbsart';'M|umllg^id';    ?  F|equals(M|elbsart,"(Relocation)")
+.continue EDPEXEC
+!EDPEXEC
+.formula U|xtcmd = "edpimport.sh -c EKS -P -I " +'U|xtwork'
+.formula U|xtcmd = 'U|xtcmd' + " 2> "+'U|xterr'
+.system 'U|xtcmd' background
+.continue EDPOK  ? G|mehr
+..Die Auftragsfertigungsliste konnte nicht ver„ndert werden
+.continue ERR01 
+!EDPOK
+.box
+Beschaffungsart ge„ndert.
+..
+.continue ENDE
+..************************************************************
+.. Programmende
+..************************************************************
+!ENDE
+.continue
+..************************************************************
+.. Fehlerhandling
+..************************************************************
+!ERR01: EDP-Fehler Datei anzeigen
+.editing 'U|xterr'
+.continue ENDE

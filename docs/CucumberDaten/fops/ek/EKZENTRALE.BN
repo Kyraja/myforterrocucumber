@@ -1,0 +1,135 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EKZENTRALE.BN
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       :
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type realx  xramount    ? _F|defined(U|xramount)
+.type realx  xbetrag     ? _F|defined(U|xbetrag)
+.type realx  xrkurs      ? _F|defined(U|xrkurs)
+.type ID94:1 xiwbu       ? _F|defined(U|xiwbu)
+.type ID94:1 xland       ? _F|defined(U|xland)
+.type ID94:1 xauswaehr   ? _F|defined(U|xauswaehr)
+.type RP7.6  xrate       ? _F|defined(U|xrate)
+.type IP1    xrundung    ? _F|defined(U|xrundung)
+.type realx  xiwbuamount ? _F|defined(U|xiwbuamount)
+.type bool   xnoload     ? _F|defined(U|xnoload)
+..
+.make screen line +O
+.assign M|ttrans = 7|kopf^id
+.continue START ? G|evtvar = "exp" ; G|evtvar = "coll"
+.assign P|maskkontextfop = ""
+.assign P|maskkontextfop = "Lieferschein"  ?  F|equals(M|ektyp, "(PackingSlip)")
+.assign P|maskkontextfop = "Ausschreibung" ?  7|kopf^typ = G|ANKO
+.assign M|tausschr  = 7|ausschr            ?  7|kopf^typ = G|ANKO
+..
+!START
+.copy M|bsart = 7|bsart
+.formula M|tstufe  = U|xistufe
+.continue MINUS                         ? M|tstufe > M|stufe
+.formula M|topen = M|iopen              ? M|tstufe > 0
+.copy M|tfold = G|TRUE
+.formula M|ttyp2 = M|typ2a   ? 7|kopf^typ = G|ANKO & _7|kopf^ablagef 
+.formula M|ttyp2 = M|typ2b   ? 7|kopf^typ = G|ANKO &  7|kopf^ablagef 
+.formula M|ttyp2a = M|typ2a  ? 7|kopf^typ = G|RAKO & _7|kopf^ablagef
+.formula M|ttyp2a = M|typ2b  ? 7|kopf^typ = G|RAKO &  7|kopf^ablagef
+.formula M|ttyp3 = M|typ2a   ? 7|kopf^typ = 3  & _7|kopf^ablagef
+.formula M|ttyp3 = M|typ2b   ? 7|kopf^typ = 3  &  7|kopf^ablagef
+.formula M|ttyp4 = M|typ2a   ? 7|kopf^typ = 4  & _7|kopf^ablagef
+.formula M|ttyp4 = M|typ2b   ? 7|kopf^typ = 4  &  7|kopf^ablagef
+.copy M|tlsart = 7|tlsart     ? 7|kopf^typ = 4
+.formula M|ttyp5 = M|typ2a   ? 7|kopf^typ = 5  & _7|kopf^ablagef
+.formula M|ttyp5 = M|typ2b   ? 7|kopf^typ = 5  &  7|kopf^ablagef
+.copy M|tvorganga = 7|treart  ?  7|kopf^typ = 5
+.formula M|ttyp4 = M|storno    ? M|ttrans^typ = 4 & (F|equals(7|tlsart, "(PackingSlipReversal)") ; F|equals(7|tlsart, "(CancelationReturnPackingSlip)"))
+.formula M|ttyp4 = M|storniert ? M|ttrans^typ = 4 & (F|equals(7|tlsart, "(PackingSlipCanceled)") ; F|equals(7|tlsart, "(CanceledReturnPackingSlip)"))
+.formula M|ttyp5 = M|storno    ? M|ttrans^typ = 5 & (F|equals(7|treart, "(CancelationCreditNoteCommercial)") ; F|equals(7|treart, "(InvoiceReversal)"))
+.formula M|ttyp5 = M|storniert ? M|ttrans^typ = 5 & (F|equals(7|treart, "(CanceledCreditNoteCommercial)") ; F|equals(7|treart, "(InvoiceCanceled)"))
+.assign M|stornopartnervorg = 7|kopf^stornopartnervorg
+.protection brerelease 'M|aktzeile'   ? 7|kopf^typ <> 3 & 7|kopf^typ <> 34
+.protection brerelease 'M|aktzeile'   ? (7|kopf^typ = 3 ; 7|kopf^typ = 34)  & 7|kopf^ablagef
+.formula M|uebertr = 7|kopf^uebertr
+.copy M|noablage = 7|kopf^noablage
+.formula M|wahrsch = 7|kopf^wahrsch   ? 7|kopf^typ = 36
+.assign M|ablehngrund = 7|ablehngrund ? 7|kopf^typ = 36
+.formula M|tref = 7|kopf^frzeich
+.formula M|ebeleg = 7|kopf^ebeleg ? F|defined(7|kopf^ebeleg)
+.formula M|tzeich = 7|kopf^zeich
+.formula M|tbetreff = 7|kopf^betreff
+.copy M|tauswaehr = M|auswaehr
+.formula M|tdate = 7|kopf^vom
+.assign M|tkuli = 7|kopf^lief
+.assign M|treku = 7|kopf^resteller
+.. Icon setzen
+.load 5 purchasing  'F|formatstr("$,,;@gruppe=2;okopf={1};@ablageart=(Both)", M|ttrans^id)'
+.formula M|topen = ""                    ? _G|mehr
+.load 5
+..
+.. Umrechnungen
+.formula U|xramount = 0
+.formula U|xrundung = M|auswaehr^nkst
+.assign U|xrkurs = 7|kopf^kurs
+.copy U|xiwbu = 7|kopf^iwbu
+.copy U|xland = 7|kopf^land
+.copy U|xauswaehr = M|auswaehr
+.formula U|xrate = F|fxrate(M|auswaehr,7|kopf^budat,7|kopf^iwbu)
+..
+.formula U|xramount = 7|kopf^sumnetto
+.formula U|xiwbuamount = U|xramount/U|xrkurs
+.formula U|xramount = U|xiwbuamount         ? U|xauswaehr = U|xiwbu & U|xiwbu <> U|xland
+.formula U|xramount = U|xramount            ? U|xauswaehr = U|xland
+.formula U|xramount = U|xrate*U|xiwbuamount ? U|xauswaehr<>U|xland & U|xauswaehr<>U|xiwbu
+.formula M|teprice = U|xramount
+.formula M|tdetail = M|detail1
+.formula M|trelease = M|release          ? _7|kopf^ablagef
+.formula M|trelease = ""                 ?  7|kopf^typ = 5
+.formula M|trelease = ""                 ?  7|kopf^typ = 4  &  7|aeob
+.formula M|trelease = ""                 ?  7|kopf^typ = 31 &  7|kopf^vsperre
+.formula M|tpost = ""
+.formula M|tpost = M|show                ? _7|kopf^ablagef
+.formula M|tpost = M|post                ?  7|kopf^uebertr
+..
+.continue LINE
+..
+!ZEILE
+.load 7 purchasing
+.copy U|xnoload = G|FALSE
+.continue CONTINUE       ? _G|mehr
+.copy U|xnoload = G|TRUE ?  7|kopf^id <> M|ttrans^id
+.continue CONTINUE       ?  U|xnoload
+..
+!LINE
+.. Bruttorechnungen sind bei Endsumme zu ende
+.continue ZEILE ? 7|ablagef
+.continue ZEILE ? 7|art^gruppe <> 1
+.continue ZEILE ? 7|kotyp <> 4
+.continue ZEILE ? 7|mge >= 0
+..
+.. wenn LS bereits gebucht, dann keine Kontrolle auf Lagerplatz n”tig
+.continue ZEILE ? 7|kopf^uebertr = G|FALSE
+..
+.. Platzmenge
+.formula M|select = "$,,"
+.formula M|select = M|select + ";artikel=" + 7|art^id
+.formula M|select = M|select + ";platz="   + 7|platz^id
+.formula M|select = M|select + ";@ordnung=artikel,platz"
+.formula M|select = M|select + ";@ablageart=(Active)"
+.load 0 group "40:3" 'M|select'
+.continue KEINLMGE ?  _G|mehr
+.continue KEINLMGE ?  (0|bestand + 7|mge) < 0
+.continue ZEILE
+..
+!KEINLMGE: Lagerbestand kleiner als Liefermenge
+.formula M|tshort = M|short
+.continue ZEILE
+..
+!CONTINUE
+.continue
+..
+!MINUS
+.make screen line -O
+.continue

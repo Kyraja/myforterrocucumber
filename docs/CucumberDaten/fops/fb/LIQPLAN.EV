@@ -1,0 +1,222 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LIQPLAN.EV
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Allgemeines Event-FOP
+.. Functionality  : Common event FOP
+.. include fb/CASHMGMT.SELECT
+.. include fb/LIQPLAN.READ.DATA
+.. include fb/CASHMGMT.IS.COMMON.INIT
+.. include fb/CASHMGMT.MESSAGES
+.. include fb/CASHMGMT.MESSAGES.DEF
+..*****************************************************************************
+..
+.set trans -
+..
+.. init messages
+.input "fb/CASHMGMT.MESSAGES.DEF"
+.input "fb/CASHMGMT.MESSAGES"
+..
+.continue EVTTAB   ? G|evtzeile > 0
+..
+.continue PTYPE    ? G|evtvar = "zeiteinheit" & G|evtartengl = "FIELD_VALIDATION"
+.continue CHKSTART ? G|evtvar = "stichtag"    & G|evtartengl = "FIELD_VALIDATION"
+.continue PRESTART ? G|evtvar = "bstart"      & G|evtartengl = "BUTTON_BEFORE"
+.continue END      ? G|evtartengl = "FIELD_VALIDATION"
+..
+.input "is/TABLEEREN"
+.formula   M|klnutzabs = 0
+.formula   M|klnutzrel = 0
+..
+.continue START    ? G|evtvar = "bstart"      & G|evtartengl = "BUTTON_AFTER"
+.continue PERIODS  ? G|evtvar = "kzyklus"     & G|evtartengl = "FIELD_EXIT"
+.continue PERIODS  ? G|evtvar = "zeiteinheit" & G|evtartengl = "FIELD_EXIT"
+.continue PERIODS  ? G|evtvar = "stichtag"    & G|evtartengl = "FIELD_EXIT"
+.continue ICSEPA   ? G|evtvar = "icgetrennt"  & G|evtartengl = "FIELD_EXIT"
+.continue IC       ? G|evtvar = "intercompany" & G|evtartengl = "FIELD_EXIT"
+.continue CATEGORY ? G|evtvar = "kategorieauswert" & G|evtartengl = "FIELD_EXIT"
+.continue END
+..
+..*****************************************************************************
+!EVTTAB
+..*****************************************************************************
+.continue SETPERIOD ? F|regmatch(G|evtvar, "twertnachws[0-9]+") & G|evtartengl = "BUTTON_BEFORE"
+.continue SETPERIOD ? F|regmatch(G|evtvar, "twertnachw[0-9]+") & G|evtartengl = "BUTTON_BEFORE"
+.continue DETAILS   ? F|regmatch(G|evtvar, "twertnachw[0-9]+") & G|evtartengl = "BUTTON_AFTER"
+.continue END
+..
+..*****************************************************************************
+!CHKSTART
+..*****************************************************************************
+.continue ERR03 ? M|stichtag < G|datum
+.continue END
+..
+..*****************************************************************************
+!PRESTART
+..*****************************************************************************
+.continue ERR03 ? M|stichtag < G|datum
+.continue ERR02 ? F|empty(M|planszenario)
+.continue END
+..
+..*****************************************************************************
+!IC
+..*****************************************************************************
+.copy M|icgetrennt = G|false ? _F|empty(M|intercompany)
+.continue ICSEPA
+.. 
+..*****************************************************************************
+!ICSEPA
+..*****************************************************************************
+.formula P|maskkontextfop = P|maskkontextfop + " " + "IC_SEPARATELY" ? M|icgetrennt
+.formula P|maskkontextfop = F|regreplace(P|maskkontextfop, "IC_SEPARATELY", "") ? _M|icgetrennt
+.formula M|intercompany   = "" ? M|icgetrennt
+.continue END
+
+..*****************************************************************************
+!CATEGORY
+..*****************************************************************************
+.formula P|maskkontextfop = P|maskkontextfop + " " + "WITH_CATEGORY" ? M|kategorieauswert
+.formula P|maskkontextfop = F|regreplace(P|maskkontextfop, "WITH_CATEGORY", "") ? _M|kategorieauswert
+.continue END
+..
+..*****************************************************************************
+!SETPERIOD
+..*****************************************************************************
+.formula   M|nachwaufrufparam = ""
+.type integer xiindex
+.assign U|xiindex = F|regreplaceall(F|expr(G|evtvar), "^[^0-9]+", "")
+.end 1 ? _G|mehr
+.formula   M|nachwperiodevon  = U|xiindex
+.copy M|nachwperiodebis  = M|nachwperiodevon
+.. Spezialfall: Periode 1 enthaelt auch Ueberfaellige (Periode 0, kumuliert)
+.formula   M|nachwperiodevon  = 0 ? M|nachwperiodevon = 1
+.copy M|nachwperstart = M|perstart.M|nachwperiodevon
+.copy M|nachwperend   = M|perend.M|nachwperiodebis
+.formula   M|nachwperanfgm = F|getfm(M|perstart.U|xiindex, G|TRUE)
+.formula   M|nachwperanfgj = F|getfy(M|perstart.U|xiindex)
+.formula   M|nachwperendgm = F|getfm(M|perend.U|xiindex, G|TRUE)
+.formula   M|nachwperendgj = F|getfy(M|perend.U|xiindex)
+.copy M|nachwdaten = M|daten
+.formula   M|nachwaufrufparam = "52763" ? M|tdetail
+.formula   M|nachwaufrufparam = "52771" ? M|tpositions = "(LiquidAssetsOpeningBalance)" & M|nachwperiodevon <= 1 & M|nachwperiodebis = 1
+.continue ERR04 ? F|empty(M|nachwaufrufparam)
+.. as sub editor?
+.continue DETAILS ? F|regmatch(G|evtvar, "twertnachws[0-9]+")
+.continue END
+..
+..*****************************************************************************
+!DETAILS
+..*****************************************************************************
+.continue ERR04 ? F|empty(M|nachwaufrufparam)
+.type P87:9 xcallparam
+.copy U|xcallparam = M|nachwaufrufparam
+.input "st/CALLPARAM.EXEC"
+.continue END
+..
+..*****************************************************************************
+!PTYPE
+..*****************************************************************************
+.continue END ? 'M|.G|evtvar(L=":")' = "(Day)"
+.continue END ? 'M|.G|evtvar(L=":")' = "(Week)"
+.continue END ? 'M|.G|evtvar(L=":")' = "(Month)"
+.continue END ? 'M|.G|evtvar(L=":")' = "(Quarter)"
+.continue END ? 'M|.G|evtvar(L=":")' = "(Year)"
+.continue ERR01
+..
+..*****************************************************************************
+!PERIODS: Set periods
+..*****************************************************************************
+.formula M|zefaktor = F|condexpr(F|empty(M|kzyklus), 1, M|kzyklus^zefaktor)
+.copy M|zeiteinheit = M|kzyklus^zeiteinheit ? G|evtvar = "kzyklus" & _F|empty(M|kzyklus)
+.input "fb/CASHMGMT.IS.COMMON.INIT"
+.continue END
+..
+..*****************************************************************************
+!START
+..*****************************************************************************
+.type text xtinitfop
+.formula U|xtinitfop = "fb/CASHMGMT.IS.COMMON.INIT"
+.type bool xbselobcash
+.type bool xbseloi
+.type bool xbsellioek
+.type bool xbselreoek
+.type bool xbselliovk
+.type bool xbselreovk
+.type bool xbselbvor
+.type bool xbsellfvor
+.type bool xbselvat
+.type bool xbselppay
+.type bool xbselcredit
+.copy U|xbselobcash = G|TRUE
+.copy U|xbseloi     = G|TRUE
+.copy U|xbsellioek  = G|TRUE
+.copy U|xbselreoek  = G|TRUE
+.copy U|xbselliovk  = G|TRUE
+.copy U|xbselreovk  = G|TRUE
+.copy U|xbselbvor   = G|TRUE
+.copy U|xbsellfvor  = G|TRUE
+.copy U|xbselvat    = G|TRUE
+.copy U|xbselppay   = G|TRUE
+.copy U|xbselcredit = G|TRUE
+.. remove all temporary files derived from primary data (grouped data etc.))
+.system 'F|formatstr("rm -f $(dirname {1})/*", M|daten)' background
+.input "fb/CASHMGMT.SELECT"
+.input "fb/LIQPLAN.READ.DATA"
+..Nachlauf fr Liquidit„tsplanung Dashboard
+.select screen header
+.select screen line
+.continue END ? _G|mehr
+!LINELOP
+.continue ZAHLMIT ? F|equals(M|tposition,"(CashHoldingsClosingBalance)")
+.select screen line
+.continue LINELOP ? G|mehr
+.continue END
+!ZAHLMIT: Zeile mit Zahlungsmittel (EB)
+.formula M|zmeb1 = M|twert1
+.formula M|zmeb2 = M|twert2
+.formula M|zmeb3 = M|twert3
+.formula M|zmeb4 = M|twert4
+.formula M|zmeb5 = M|twert5
+.continue END
+..
+..*****************************************************************************
+!ERR01
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.formula U|xmsgno = 7
+.formula U|xmsgpcnt = 0
+.continue END
+..
+..*****************************************************************************
+!ERR02
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.cursor planszenario
+.formula U|xmsgno = 3
+.formula U|xmsgpcnt = 0
+.continue END
+..
+..*****************************************************************************
+!ERR03
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.formula U|xmsgno = 6
+.formula U|xmsgpcnt = 0
+.continue END
+..
+..*****************************************************************************
+!ERR04
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.formula U|xmsgno = 10
+.formula U|xmsgpcnt = 0
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.input "fb/CASHMGMT.MESSAGES"
+.continue
+

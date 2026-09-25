@@ -1,0 +1,99 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BELTECH.TAB
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Zeilenfuell EFOP
+.. Functionality  : fill row efop
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.type text  xtsel
+.type bool  xbmehr
+.type date xdtag
+.type bool  xbwende
+.type GW2   xwwtkw
+.type date xdvon
+.type date xdbis
+..
+.. Farben fÅr Zeilenausgabe laden
+.input "is/ABASFARBEN.DEF"
+..
+.. Ausgabe fÅr Zeitraum M|kvon bis M|kbis
+.. In T|xdtag steht der Tag fÅr die aktuelle Zeile, pro Tag wird mindestens eine Zeile ausgegeben
+.. bei mehr als einer Reservierung am selben Tag wird pro Reservierung eine Zeile ausgegeben
+.assign T|xdtag = M|kvon
+..
+!NEXTDAY: Kalenderdaten fÅr einen Tag zusammentragen
+.copy T|xbwende = _F|isworkday(M|ktechniker, F|sysinfo(10)^intlgruppe, U|xdtag)
+..
+.. Servicereservierungen lesen mit Start "bis Tag x" und Ende "ab Tag x"
+.formula T|xtsel = "$,,;@ordnung=techniker,termvon,termbis;techniker=" + 'H|id' + ";termvon=!" + 'T|xdtag' + ";termbis=" + 'T|xdtag' + "!"
+.load 9 servicereservation 'xtsel'
+.assign T|xbmehr = T|mehr
+.continue NEWROW  ?  T|xbmehr
+.continue NEWROW  ?  M|aktzeile = 0
+.continue NEWROW  ?  M|twtdat <> T|xdtag
+.continue ENDDAY
+..
+!NEWROW: Ausgabedaten vorhanden, oder fÅr diesen Tag keine Daten gefunden -> mindestens eine Zeile pro Tag
+.make screen line +O
+.colour -background -1 -1 -1 -foreground  -1 -1 -1 tuhrzvon 'M|aktzeile'
+.colour -background -1 -1 -1 -foreground  -1 -1 -1 tuhrzbis 'M|aktzeile'
+.assign M|twtdat     = T|xdtag
+.assign M|twtdat     = T|xdtag
+.assign M|twtname    = T|xdtag // 1
+.formula U|xwwtkw       = T|xdtag
+.assign M|twtkw      = 'T|xwwtkw'         ? (T|xdtag // 7) = 1 ; M|aktzeile = 1
+.assign M|twende     = T|xbwende
+.colour -background 'U|xabasblue' -foreground 'U|xabaswhite' 'M|aktzeile'  ?  M|twende
+.colour -background 'U|xabasyellow' -foreground -1 -1 -1    'M|aktzeile'   ?  M|twende  &  U|xbmehr
+.colour -background -1 -1 -1 -foreground -1 -1 -1 'M|aktzeile'             ? _M|twende
+.continue ENDDAY     ? _T|xbmehr
+..
+!FILLROW: Zeile mit Daten fÅllen
+.assign M|treserv    = 9|id
+.assign M|tresname   = 9|sucherw
+.assign M|tresart    = 9|resart
+.assign M|tanrm      = 9|emittel^id
+.assign M|tauftrag   = 9|servaupos^kopf^id
+.assign M|tkunde     = 9|kunde^id                 ? _F|empty(9|kunde)
+.assign M|tkunde     = 9|servaupos^kopf^kunde^id  ?  F|empty(9|kunde)
+.assign M|ttequalif  = 9|serqual^id
+.assign M|tanreidl   = 9|dienstl^id
+.. Termin und Uhrzeit: Termine die Åber den aktuellen Tag (T|xdtag) hinausreichen werden farbig kenntlich gemacht
+.assign M|ttermvon   = 9|termvon
+.assign M|ttermbis   = 9|termbis
+.assign T|xdvon      = 9|termvon
+.assign T|xdbis      = 9|termbis
+.assign M|tuhrzvon   = "0000"
+.assign M|tuhrzbis   = "2359"
+.copy M|ganztag      = 9|ganztag
+.. Zeitpunkt GD19 zu sortierfÑhigem/sprachneutralem GD14 machen, Zeit extrahieren und Sekunden wegwerfen
+.assign M|tuhrzvon   = F|substr('9|termvon:14',9,4) ? +'9|termvon:14' > 9 & T|xdvon = T|xdtag
+.assign M|tuhrzbis   = F|substr('9|termbis:14',9,4) ? +'9|termbis:14' > 9 & T|xdbis = T|xdtag
+.colour -background 'U|xabaslightgreen' -foreground  'U|xabasblack' tuhrzvon 'M|aktzeile'     ?  'M|tuhrzvon' = "0:00"
+.colour -background 'U|xabaslightgreen' -foreground  'U|xabasblack' tuhrzbis 'M|aktzeile'     ?  'M|tuhrzbis' = "23:59"
+.assign M|datumvon = 9|datumvon
+.assign M|zzvon = 9|zzvon
+.assign M|datumbis = 9|datumbis     
+.assign M|zzbis = 9|zzbis
+.assign M|anreisedatumvon = 9|anreisedatumvon
+.assign M|anreisezvon = 9|anreisezvon
+.assign M|abreisedatumbis = 9|abreisedatumbis
+.assign M|abreisezbis = 9|abreisezbis
+.copy M|banreise = G|TRUE ? _F|empty(M|anreisedatumvon) ; _F|empty(M|abreisedatumbis)
+.. NÑchste Servicereservierung lesen
+.load 9 servicereservation
+.assign T|xbmehr     = T|mehr
+.continue NEWROW  ? T|xbmehr
+..
+!ENDDAY: Dieser Tag ist abgeschlossen, weiter zum nÑchsten Tag
+.load 9
+.assign T|xdtag = T|xdtag + 1
+.continue NEXTDAY ? T|xdtag < (M|kbis + 1)
+..*****************************************************************************
+!END
+.continue

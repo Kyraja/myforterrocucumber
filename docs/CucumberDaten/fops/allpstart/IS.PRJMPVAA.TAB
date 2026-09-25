@@ -1,0 +1,267 @@
+..!interpreter english declaration noabbrev
+.. at 2017-06-19, 15:31
+.set TRANS -
+..========================================================================
+..==  Name              : IS.PRJMPVAA.TAB
+..==  Pfad              : allpstart
+..==  Funktion          : Anlage eines Projektplanes / Arbeitsaufgaben - Tabellen FOP
+..==  Erstellungsdatum  : 08.04.2011
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+..====================================================
+.type text    xtsys xtsel xtcmd xtedpdat xtedpout xtedperr xtedpmsg xykoobjekt
+.type text    xtftext xtext xtid
+.type real    xrplan xrsoll
+.type integer xizeile xi1
+.type bool    xbmehr xbpvok xbaaok xbaktiv xbsetz xyberlaubt
+.type integer xprocsp   ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Lade_Projekt -----
+.formula U|xtsel = "$,,
+.formula U|xtsel = U|xtsel + ";yprojekt=="       +  H|id
+.formula U|xtsel = U|xtsel + ";yarbpaket=="      +  M|yarbpaket^id                          ? _F|empty(M|yarbpaket)
+.formula U|xtsel = U|xtsel + ";yverantw=="       +  M|yverantw^id                           ? _F|empty(M|yverantw)
+.formula U|xtsel = U|xtsel + ";ypersonal=="      +  M|ypersonal^id                          ? _F|empty(M|ypersonal)
+.formula U|xtsel = U|xtsel + ";yprojteam=="      +  M|yprojteam^id                          ? _F|empty(M|yprojteam)
+.formula U|xtsel = U|xtsel + ";ykstelle=="       +  M|ykstelle^id                           ? _F|empty(M|ykstelle)
+.formula U|xtsel = U|xtsel + ";ystatus="         +  M|ypvstatus^id                          ? _F|empty(M|ypvstatus) &  M|ybpvstatus
+.formula U|xtsel = U|xtsel + ";ystatus^katego<=" +  M|ypvstatus^katego                      ? _F|empty(M|ypvstatus) & _M|ybpvstatus
+.formula U|xtsel = U|xtsel + ";yadatum="         +  M|ypvdatumvon:8 + "!" + M|ypvdatumbis:8 ? _F|empty(M|yvondatum) ; _F|empty(M|ybisdatum)
+.formula U|xtsel = U|xtsel + ";yistblatt==1"
+.formula U|xtsel = U|xtsel + ";@ablageart=(Active);@ordnung=ysort,nummer"
+.load 0 group 'U|xydbgrpvorgang' 'U|xtsel'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.make screen line +O
+.copy    M|ytprojekt     = 0|yprojekt
+.formula M|ytprojname    = H|namebspr
+.copy    M|ytarbpaket    = 0|yarbpaket
+.formula M|ytapname      = 0|yarbpaket^namebspr
+.assign  M|ypvorgang     = 0|id
+.formula M|ytpvname      = 0|namebspr
+.assign  M|yaufgabe      = 0|yrefid       ? _F|empty(0|yrefid)
+.copy    M|ytpersonal    = 0|ypersonal
+.formula M|ytpersname    = 0|ypersonal^namebspr
+.copy    M|ytprojteam    = 0|yprojteam
+.formula M|ytpteamname   = 0|yprojteam^namebspr
+.copy    M|ytkstelle     = 0|ykstelle
+.formula M|ytkstname     = 0|ykstelle^namebspr
+.copy    M|ytverantwkst  = H|yverantwkst
+.formula M|ytverkstname  = H|yverantwkst^name
+.copy    M|ytverantw     = 0|yverantw
+.formula M|ytverantwname = 0|yverantw^namebspr
+.formula M|ytsollstd     = 0|ypvsollstd
+.formula M|ytplanstd     = 0|ypvplanstd
+.formula M|ytiststd      = 0|ypviststd
+.formula M|ytforecaststd = 0|ypvforecaststd
+.formula M|ytfaktstd     = 0|ypvfaktstd
+.assign  M|yadatum      = 0|yadatum
+.assign  M|yttatsterm    = M|yaufgabe^ytatsterm
+.assign  M|yedatum      = 0|yedatum
+.copy    M|yvkartikel    = 0|yvkartikel
+.copy    M|ymaschvkart   = 0|ymaschvkart
+.copy    M|ystatus      = 0|ystatus
+.copy    M|ytprojleit    = H|yprojleit
+.formula M|ytplname      = H|yprojleit^namebspr
+.assign  M|yvorvp        = 0|yvorpos
+.formula M|yvornum       = 0|yvornum
+.formula M|yposnum       = 0|yposnum
+.copy M|ytsperre = G|FALSE
+.continue EL001 ? _((0|ysperre) & (_(F|empty(0|yaufrufernr))))
+.formula U|xytaufrufernr = 0|yaufrufernr
+.input "allpstart/GET.CALLERNO"
+.copy    M|ytsperre = G|TRUE    ? U|xytzeitstempel = 0|yaufruferzp
+!EL001
+.continue EL002 ? _((_(M|ytsperre)) & (_(F|empty(M|yaufgabe))) & (M|yaufgabe^ysperre) & (_(F|empty(M|yaufgabe^yaufrufernr))))
+.formula U|xytaufrufernr = H|yaufrufernr
+.input "allpstart/GET.CALLERNO"
+.copy    M|ytsperre = G|TRUE    ? U|xytzeitstempel = M|yaufgabe^yaufruferzp
+!EL002
+.continue EL003 ? _(_(M|ytsperre))
+.reserve
+.select lock nowait add M|ypvorgang
+.continue EL004 ? _(G|mehr)
+.continue EL005 ? _(G|gesperrt)
+.copy    H|ysperre     = G|TRUE
+.copy    H|ysperrzp    = G|zeitpunkt
+.copy    H|ysperrzeich = G|bzeichen
+.formula H|yaufrufernr = G|aufrufernr
+.formula H|yaufruferzp = U|xtsperrstempel
+.rewrite
+.copy M|ytsperre = G|TRUE
+.continue EL006 ? _(_(F|empty(M|yaufgabe)))
+.select lock nowait add M|yaufgabe
+.continue EL007 ? _(G|mehr)
+.continue EL008 ? _(G|gesperrt)
+.copy    H|ysperre     = G|TRUE
+.copy    H|ysperrzp    = G|zeitpunkt
+.copy    H|ysperrzeich = G|bzeichen
+.formula H|yaufrufernr = G|aufrufernr
+.formula H|yaufruferzp = U|xtsperrstempel
+.rewrite
+.continue FI008
+!EL008
+.copy M|ytsperre = G|FALSE
+!FI008
+.continue FI007
+!EL007
+.copy M|ytsperre = G|FALSE
+!FI007
+.continue EL009 ? _(_(M|ytsperre))
+.select lock nowait add M|ypvorgang
+.continue EL010 ? _(G|mehr)
+.copy H|ysperre     = G|FALSE
+.rewrite
+!EL010
+!EL009
+!EL006
+!EL005
+!EL004
+.select
+.continue FI003
+!EL003
+.copy M|ytsperre = G|FALSE
+!FI003
+.continue EL011 ? _(_(0|ybstdvert))
+.continue EL012 ? _(_(0|ypvzugstd = 0))
+.protection ytpersonal 'M|aktzeile' ? _F|empty(0|yprojteam) ; _F|empty(0|ykstelle)
+.protection ytprojteam 'M|aktzeile'
+.protection ytkstelle  'M|aktzeile'
+.continue FI012
+!EL012
+.protection -reset ytpersonal 'M|aktzeile'
+.protection -reset ytprojteam 'M|aktzeile'
+.protection -reset ytkstelle  'M|aktzeile'
+!FI012
+!EL011
+.protection -line 'M|aktzeile'          ?  0|yablage ; _M|ytsperre
+.load 0 continue
+.continue LOOP001
+!ELOP001: ==============================
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Pruefung_anlegen -----
+.continue EL013 ? _((M|ytbaenderung) ; (U|xbsetz))
+.assign U|xbpvok = G|TRUE
+.assign U|xbaaok = G|TRUE
+.continue EL014 ? _((_(M|ytprojekt^ystatusk = "AKT")) & (_(F|empty(M|ytprojekt))) & (1=2))
+.continue EL015 ? _(_(U|xbsetz))
+.continue EL016 ? _(M|ybaaanlegen)
+.set trans +
+.formula U|xttitel = "Fehler"
+.formula U|xttext1 = F|formatstr("Das Projekt {1} hat den Status {2}{3}{2}.", M|yprojekt^such, G|dblquote, M|yprojekt^ystatus)
+.formula U|xttext2 = "Nur zu aktiven Projekten dÅrfen Arbeitsaufgaben erfasst oder geÑndert werden."
+.set trans -
+.box 'U|xttitel'
+'U|xttext1'
+'U|xttext2'
+.error
+.end 1
+!EL016
+!EL015
+.assign U|xbaaok      = G|FALSE
+!EL014
+.continue EL017 ? _((F|empty(M|ytpersonal)) & (F|empty(M|ytkstelle)) & (F|empty(M|ytprojteam)))
+.continue EL018 ? _(_(U|xbsetz))
+.continue EL019 ? _(_(F|empty(M|yaufgabe)))
+.set TRANS +
+.box Fehler
+Zur Arbeitsaufgabe muss der Bearbeiter, die Kostenstelle oder ein Projektteam eingetragen sein.
+.set TRANS -
+.error
+.cursor ytpersonal 'M|aktzeile'
+.end 1
+.assign U|xbaaok      = G|FALSE
+!EL019
+!EL018
+.continue FI017
+!EL017
+.formula U|xi1 = 0
+.formula U|xi1 = U|xi1 + 1      ? _F|empty(M|ytpersonal)
+.formula U|xi1 = U|xi1 + 1      ? _F|empty(M|ytkstelle)
+.formula U|xi1 = U|xi1 + 1      ? _F|empty(M|ytprojteam)
+.continue EL020 ? _(U|xi1 > 1)
+.continue EL021 ? _(_(U|xbsetz))
+.set TRANS +
+.box Fehler
+Es darf nur eines der Felder Bearbeiter, Kostenstelle oder Projektteam gefÅllt sein.
+.set TRANS -
+.error
+.cursor ytpersonal 'M|aktzeile'
+.end 1
+!EL021
+.assign U|xbpvok      = G|FALSE
+.assign U|xbaaok      = G|FALSE
+!EL020
+!FI017
+.continue EL022 ? _(F|empty(M|ytverantw))
+.continue EL023 ? _(_(U|xbsetz))
+.set TRANS +
+.box Fehler
+Zur Anlage eines Projektvorgangs muss der Verantwortliche bekannt sein.
+Bitte den Verantwortlichen eintragen.
+.set TRANS -
+.error
+.cursor ytverantw 'M|aktzeile'
+.end 1
+!EL023
+.assign U|xbpvok      = G|FALSE
+.assign U|xbaaok      = G|FALSE
+!EL022
+.continue EL024 ? _((F|empty(M|yadatum)) ; (F|empty(M|yedatum)))
+.continue EL025 ? _(_(U|xbsetz))
+.set TRANS +
+.box Fehler
+Start- und Enddatum mÅssen gefÅllt sein.
+Bitte eintragen.
+.set TRANS -
+.error
+.cursor yadatum 'M|aktzeile'           ? F|empty(M|yedatum)
+.cursor yedatum 'M|aktzeile'           ? F|empty(M|yedatum)
+.end 1
+!EL025
+.assign U|xbpvok      = G|FALSE
+.assign U|xbaaok      = G|FALSE
+!EL024
+.continue EL026 ? _(M|yedatum < M|yadatum)
+.continue EL027 ? _(_(U|xbsetz))
+.set TRANS +
+.box Fehler
+'M|yadatum' - 'M|yedatum' ist kein gÅltiger Zeitraum.
+.set TRANS -
+.error
+.cursor yadatum 'M|aktzeile'
+.end 1
+!EL027
+.assign U|xbpvok      = G|FALSE
+.assign U|xbaaok      = G|FALSE
+!EL026
+!EL013
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.input "is/ABASFARBEN.DEF"
+.continue EL028 ? _(U|xypmrepruefktr)
+.formula U|xykoobjekt = M|yprojekt^yktr^id
+.input 'U|xypmrepruefktrprog'
+!EL028
+.continue EL029 ? _(U|xypmrepruefind)
+.input 'U|xypmrepruefindprog'
+!EL029
+.continue EL030 ? _((U|xyberlaubt) ; ((_(U|xypmrepruefktr)) & (_(U|xypmrepruefind))))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+!EL030
+.input 'F|foppath("IFOP.IS.PRJMPVAA.TAB")'      ? F|fileexists(F|foppath("IFOP.IS.PRJMPVAA.TAB"))
+.continue

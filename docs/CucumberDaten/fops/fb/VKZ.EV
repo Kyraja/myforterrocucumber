@@ -1,0 +1,268 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : VKZ.EV
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  : Common event FOP of the Infosystem fb/VKZ
+..
+.. include fb/VKZ.INIT
+.. include fb/VKZ.SELECT
+.. include fb/VKZ.SCRCTX
+..*****************************************************************************
+.type text   xtmpfile  ? _F|defined(U|xtmpfile)
+.type text   xtmpfile2 ? _F|defined(U|xtmpfile2)
+.type text   xtsys     ? _F|defined(U|xtsys)
+.type VP0    x1        ? _F|defined(U|x1)
+.type text   x2        ? _F|defined(U|x2)
+.type R13.2  x3        ? _F|defined(U|x3)
+.type PS94:1 x4        ? _F|defined(U|x4)
+..
+.set trans -
+..
+.continue SORT    ? G|evtartengl = "FIELD_EXIT"   &  G|evtvar = "sortdash"
+.continue SELEC   ? G|evtartengl = "BUTTON_AFTER" &  G|evtvar = "bselect0"
+.continue SELEC   ? G|evtartengl = "BUTTON_AFTER" &  G|evtvar = "bselect1"
+.continue SELEC   ? G|evtartengl = "BUTTON_AFTER" &  G|evtvar = "bselect11"
+.continue RMOVED  ? G|evtartengl = "ROW_MOVED_BEFORE"
+.continue RMOVED  ? G|evtartengl = "ROW_MOVED_AFTER"
+..
+.input "fb/VKZ.INIT"
+..
+.continue START    ? G|evtartengl = "BUTTON_BEFORE"  &  G|evtvar = "bstart"
+.continue PER1     ? G|evtvar = "jahr" ; G|evtvar = "jahr1"
+.continue PER1     ? G|evtvar = "von"  ; G|evtvar = "von1"
+.continue PER1     ? G|evtvar = "bis"  ; G|evtvar = "bis1"
+.continue PER2     ? G|evtvar = "jahr2"
+.continue PER2     ? G|evtvar = "von2"
+.continue PER2     ? G|evtvar = "bis2"
+.continue RGEFROM  ? G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "bervon"
+.continue RGETO    ? G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "berbis"
+.continue SOB      ? G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "bukreis"
+.continue CURRENC  ? G|evtartengl = "FIELD_EXIT"    & (G|evtvar = "buwaehr" ; G|evtvar = "auswaehr")
+.continue GRPING   ? G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "grpnachstaat"
+.continue GRPING   ? G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "grpnachverd"
+.continue GRPING   ? G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "keineeinzel"
+.continue UMSATZ   ? G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "mitumsatz"
+.continue BUUMSATZ ? G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "mitbuumsatz"
+.continue SCRCTX   ? G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "mitgvkz"
+.continue ACCOUNTS ? G|evtartengl = "FIELD_EXIT" & (G|evtvar = "kunden" ; G|evtvar = "lieferanten" ; G|evtvar = "mitarbeiter")
+.continue ACRGE    ? G|evtartengl = "FIELD_EXIT" &  G|evtvar = "pkber"
+.continue VORJAHR  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "vorjahr"
+.continue PLANUMS  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "bmitplanumsatz"
+.continue END
+..
+..*****************************************************************************
+!PLANUMS
+.copy M|mitumsatz = G|TRUE ? M|bmitplanumsatz
+.continue UMSATZ           ? M|mitumsatz
+.input "is/TABLEEREN"
+.continue END
+..
+!VORJAHR
+.continue DEFAULT ? _M|vorjahr
+.formula M|jahr1 = F|prevfy(M|jahr1)
+.copy M|sortdash = G|FALSE
+.input "is/TABLEEREN"
+.continue END
+..
+!DEFAULT
+.copy M|sortdash = G|FALSE
+.input "is/TABLEEREN"
+.continue END
+..
+!SORT
+.continue END ? _M|sortdash
+.file -tempname U|xtmpfile
+.file -tempname U|xtmpfile2
+.select screen header
+.continue END ? _G|mehr
+.output new 'U|xtmpfile'
+.input "DATEI.F"
+..
+!SELLINE
+.select screen line
+.continue END    ?  M|tzeilen=0
+.continue SSORT  ? _G|mehr
+.output addedto 'U|xtmpfile'
+'M|tkonto'#'M|tbezeichnung'#'M|tumsatz1'#'M|tauswaehr'         
+.output
+.continue SELLINE
+..
+!SSORT
+.input "is/TABLEEREN"
+.formula xtsys="sort -t# -r +2n " + U|xtmpfile + " >>" + U|xtmpfile2
+.system 'xtsys' background
+.continue ERROR1 ? _G|mehr
+..
+!SSELLINE
+.select from 'U|xtmpfile2' x1 # x2 # x3 # x4 
+.continue END ? _G|mehr
+.make screen line +O
+.copy M|tkonto = U|x1
+.formula M|tbezeichnung = U|x2
+.formula M|tumsatz1 = U|x3
+.copy M|tauswaehr = U|x4
+.continue END ? M|zn = 10
+.continue SSELLINE
+..
+..*****************************************************************************
+!UMSATZ
+..*****************************************************************************
+.copy M|mitbuumsatz = G|FALSE ? M|mitbuumsatz
+.copy M|bmitplanumsatz = G|FALSE ? _M|mitumsatz
+.continue SCRCTX
+..
+..*****************************************************************************
+!BUUMSATZ
+..*****************************************************************************
+.copy M|mitumsatz = G|FALSE ? M|mitumsatz
+.continue SCRCTX
+..
+..*****************************************************************************
+!ACCOUNTS
+..*****************************************************************************
+.formula M|pkber = ""
+.continue SCRCTX
+..
+..*****************************************************************************
+!ACRGE
+..*****************************************************************************
+.copy M|kunden      = G|FALSE ? _F|empty(M|pkber)
+.copy M|lieferanten = G|FALSE ? _F|empty(M|pkber)
+.copy M|mitarbeiter = G|FALSE ? _F|empty(M|pkber)
+.formula   M|bervon      = ""      ? _F|empty(M|pkber)
+.formula   M|berbis      = ""      ? _F|empty(M|pkber)
+.input "fb/VKZ.SCRCTX"
+.continue END
+..
+..*****************************************************************************
+!START
+..*****************************************************************************
+.type text xpvon xpbis
+.formula U|xpvon = "bervon"
+.formula U|xpbis = "berbis"
+.input "is/RANGECHECK"
+.set setofbooks 'M|bukreis^bknr'
+..
+.. set start and end date of period
+.select year 'M|jahr1' 'M|von1' 'M|bis1'
+.formula M|adatum1 = G|adatum
+.formula M|edatum1 = G|edatum
+..
+.input "fb/VKZ.SELECT"
+.continue END
+..
+..*****************************************************************************
+!GRPING
+..*****************************************************************************
+.formula M|keineeinzel  = G|FALSE ? _M|grpnachstaat & G|evtvar = "grpnachstaat"
+.formula M|keineeinzel  = G|FALSE ? _M|grpnachverd  & G|evtvar = "grpnachverd"
+.formula M|grpnachstaat = G|FALSE ?  M|grpnachverd  & G|evtvar = "grpnachverd"
+.formula M|grpnachverd  = G|FALSE ?  M|grpnachstaat & G|evtvar = "grpnachstaat"
+.continue SCRCTX
+..
+..*****************************************************************************
+!RMOVED
+..*****************************************************************************
+.end 1 ? (M|grpnachstaat ; M|grpnachverd) & _M|keineeinzel
+.continue
+..
+..*****************************************************************************
+!SELEC:
+..*****************************************************************************
+.type integer xdnr
+.formula U|xdnr = 0  ? G|evtvar = "bselect0"
+.formula U|xdnr = 1  ? G|evtvar = "bselect1"
+.formula U|xdnr = 11 ? G|evtvar = "bselect11"
+.formula M|datnr = U|xdnr
+.formula M|bervon   = ""
+.formula M|berbis   = ""
+.formula G|evtfeldneu = "%,,nummer=;such=;name=;@gruppe=1;@dschutz=ja;@gschutz=ja"
+.input "is/AUSWAHL"
+.copy M|select.U|xdnr = M|select
+.formula M|selectcheck.U|xdnr = M|select.U|xdnr <> "!"
+.input "fb/VKZ.INIT" ? M|selectcheck.U|xdnr
+.copy M|kunden      = G|TRUE ? U|xdnr = 0
+.copy M|lieferanten = G|TRUE ? U|xdnr = 1
+.copy M|mitarbeiter = G|TRUE ? U|xdnr = 11
+.formula M|pkber = ""
+.continue END
+..
+..*****************************************************************************
+!RGEFROM: Range from
+..*****************************************************************************
+.copy M|selectcheck0  = G|false
+.copy M|selectcheck1  = G|false
+.copy M|selectcheck11 = G|false
+.formula M|pkber = ""
+.continue END                 ? F|empty(M|bervon)
+.formula M|berbis = M|bervon ? F|empty(M|berbis)
+.continue END
+..
+..*****************************************************************************
+!RGETO: Range to
+..*****************************************************************************
+.formula M|selectcheck0  = G|false
+.formula M|selectcheck1  = G|false
+.formula M|selectcheck11 = G|false
+.formula M|pkber = ""
+.continue END
+..
+..*****************************************************************************
+!SOB: Set of books changed
+..*****************************************************************************
+.copy M|bukreis = G|bukreis^id ? F|empty(M|bukreis)
+.continue END
+..
+..*****************************************************************************
+!CURRENC: Posting currency changed
+..*****************************************************************************
+.copy M|.G|evtvar = G|inland ? F|empty(M|.G|evtvar)
+.copy M|ausfrwaehr = M|buwaehr^id <> M|auswaehr^id
+.continue END
+..
+..*****************************************************************************
+!PER1: period 1 changed
+..*****************************************************************************
+.type text xxtemon xxtsmon xxtsyear xxteyear xxtfromd xxttod
+.formula U|xxtsmon = "von1"
+.formula U|xxtemon = "bis1"
+.formula U|xxtsyear= "jahr1"
+.formula U|xxteyear= U|xxtsyear
+.formula U|xxtfromd= "adatum1"
+.formula U|xxttod  = "edatum1"
+.input "fb/IS.SETPERIOD"
+.formula M|jahr2 = "" ? _M|mitvorjahr
+.continue END ? _M|mitvorjahr
+.input "fb/VKZ.VJ"
+.continue END
+..
+..*****************************************************************************
+!PER2: period 2 changed
+..*****************************************************************************
+.type text xxtemon xxtsmon xxtsyear xxteyear xxtfromd xxttod
+.formula U|xxtsmon = "von2"
+.formula U|xxtemon = "bis2"
+.formula U|xxtsyear= "jahr2"
+.formula U|xxteyear= U|xxtsyear
+.formula U|xxtfromd= "adatum2"
+.formula U|xxttod  = "edatum2"
+.input "fb/IS.SETPERIOD"
+.continue END
+..
+..*****************************************************************************
+!SCRCTX
+..*****************************************************************************
+.input "fb/VKZ.SCRCTX"
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue
+..
+!ERROR1
+.error Das Sortieren der Vorg„nge ist gescheitert!
+.end 1
+

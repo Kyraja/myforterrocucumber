@@ -1,0 +1,98 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : PRICEMAINTENANCE.INCREASE.ALL
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  : According to the global changing instructions in the header
+.. of the infosystem this increases price or discount values in all table rows.
+.. The method of increase is specified through the items absolute, percentual or
+.. roundingfactor. The target items which will be increased are defined by the
+.. items setsurcharge, setscaledprice, setnewscaledprice, setpreprodprice,
+.. setnewpreprodprice, setunitprice and setnewunitprice. Values will be changed
+.. only if old value was not zero. Increases which will set preproduction and unit
+.. prices to zero are irgnored.
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type realx   roundingfactor
+.type realx   basevalue
+.type realx   valueofincrease
+.type bool    percentual
+..
+.formula U|roundingfactor = M|roundingfactor
+.formula U|valueofincrease = M|absolute
+.copy U|percentual = G|true ? _F|empty(M|percentual)
+.formula U|valueofincrease = M|percentual ? U|percentual
+.select screen line
+!BREAK
+.continue END ? _G|mehr
+.continue HEADER  ?  M|tbaumstufe = M|headerlevel
+.continue PRICE   ? _M|ktyprabatt
+..
+.. Change surcharge in discount row if configured
+.continue END ? _M|setsurcharge
+.formula U|basevalue = M|mproz
+.input 'M|increase' ? _F|empty(M|increase)
+.input 'M|rounding' ? _F|empty(M|rounding) ; F|empty(M|roundingfactor) ; F|empty(U|basevalue)
+.formula M|mprozneu = U|basevalue
+.continue NEXTROW
+..
+!PRICE: Change scaled price in row
+.continue ALSCALE ? _M|setscaledprice
+.formula U|basevalue = M|mpreis
+.input 'M|increase' ? _F|empty(M|increase)
+.input 'M|rounding' ? _F|empty(M|rounding) ; F|empty(M|roundingfactor) ; F|empty(U|basevalue)
+.formula M|mpreisneu = U|basevalue
+..
+!ALSCALE: Change alternative scaled price in row
+.continue NEXTROW ? _M|setnewscaledprice
+.formula U|basevalue = M|mnpreis
+.input 'M|increase' ? _F|empty(M|increase)
+.input 'M|rounding' ? _F|empty(M|rounding) ; F|empty(M|roundingfactor) ; F|empty(U|basevalue)
+.formula M|mnpreisneu = U|basevalue
+.continue NEXTROW
+..
+!HEADER: Change values in header
+.continue NEXTROW ?  M|ktyprabatt
+.continue NEXTROW ?  M|gruppenprneu
+..
+.. Change preproduction price if required and not empty
+.continue ALPREPP ? _M|setpreprodprice ; F|empty(rpreis)
+.formula U|basevalue = M|rpreis
+.input 'M|increase' ? _F|empty(M|increase)
+.input 'M|rounding' ? _F|empty(M|rounding) ; F|empty(M|roundingfactor) ; F|empty(U|basevalue)
+.formula M|rpreisneu = U|basevalue ? U|basevalue >= 0.0
+..
+!ALPREPP: Change alternative preproduction price if required and not empty
+.continue UNITP ? _M|setnewpreprodprice ; F|empty(nrpreis)
+.formula U|basevalue = M|nrpreis
+.input 'M|increase' ? _F|empty(M|increase)
+.input 'M|rounding' ? _F|empty(M|rounding) ; F|empty(M|roundingfactor) ; F|empty(U|basevalue)
+.formula M|nrpreisneu = U|basevalue ? U|basevalue >= 0.0
+..
+!UNITP: Change unit price if required and not empty
+.continue ALUNITP ? _M|setunitprice ; F|empty(spreis) ; _F|modifiable(M|spreisneu)
+.formula U|basevalue = M|spreis
+.input 'M|increase' ? _F|empty(M|increase)
+.input 'M|rounding' ? _F|empty(M|rounding) ; F|empty(M|roundingfactor) ; F|empty(U|basevalue)
+.formula M|spreisneu = U|basevalue ? U|basevalue >= 0.0
+..
+!ALUNITP: Change unit price if required and not empty
+.continue NEXTROW ? _M|setnewunitprice ; F|empty(nspreis) ; _F|modifiable(M|nspreisneu)
+.formula U|basevalue = M|nspreis
+.input 'M|increase' ? _F|empty(M|increase)
+.input 'M|rounding' ? _F|empty(M|rounding) ; F|empty(M|roundingfactor) ; F|empty(U|basevalue)
+.formula M|nspreisneu = U|basevalue ? U|basevalue >= 0.0
+..
+!NEXTROW
+.continue READROW ? M|tbaumstufe = M|headerlevel
+.input 'M|setrowremoval' ? _F|empty(M|setrowremoval)
+..
+!READROW
+.select screen line
+.continue BREAK
+..*****************************************************************************
+!END
+.continue

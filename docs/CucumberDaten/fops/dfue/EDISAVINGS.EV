@@ -1,0 +1,259 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDISAVINGS.EV
+.. Autor          : tg
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Eventhandling Kopf + Tabelle
+.. Functionality  : Eventhandling header fields + table
+..*****************************************************************************
+.set trans -
+..
+.type text   xtsys
+.type text   xtdat
+.type text   xtdat2
+.type text   xtnum
+.type text   xtsel
+.type date  xdadatum
+.type date  xdedatum
+.type integer    xizeile
+.type integer    xizeile2
+.type integer xidatjahr
+.type real   xrmgrenze
+.type text   xtverkaufpreisliste
+.type text   xdatumeintragen
+.type bool   xbsavings
+.type text   xtmpfile      ? _F|defined(U|xtmpfile)
+.type text   xtout         ? _F|defined(U|xtout)
+.type text   xterr         ? _F|defined(U|xterr)
+..
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+.set trans +
+.formula T|xdatumeintragen = "Bitte Datum eintragen"
+.set trans -
+..
+.input "is/ABASFARBEN.DEF"
+..
+.. event evaluation
+.. ----------- ----- Header events ---------------------------------------------
+.continue RAHMEN  ? (evtartengl ="FIELD_EXIT")   & (evtvar ="kkpg")
+.continue TABINIT ? (evtartengl ="FIELD_EXIT")   & (evtvar ="kkkunde")
+.continue TABINIT ? (evtartengl ="FIELD_EXIT")   & (evtvar ="kartpg")
+.continue TABINIT ? (evtartengl ="FIELD_EXIT")   & (evtvar ="kartikel")
+.continue TABINIT ? (evtartengl ="FIELD_EXIT")   & (evtvar ="kvon")
+.continue TABINIT ? (evtartengl ="FIELD_EXIT")   & (evtvar ="kbis")
+.continue TABINIT ? (evtartengl ="FIELD_EXIT")   & (evtvar ="ksaktion")
+.. ----------- ----- Header buttons --------------------------------------------
+.continue NPREIS  ? (evtartengl ="BUTTON_BEFORE") & (evtvar ="bunpreis")
+.continue INSERT  ? (evtartengl ="BUTTON_BEFORE") & (evtvar ="buinsert")
+.continue UPDATE  ? (evtartengl ="BUTTON_BEFORE") & (evtvar ="bupdate")
+.. ----------- ----- Table events ----------------------------------------------
+.continue PREIS   ? (evtartengl ="FIELD_EXIT")   & (evtvar ="tpreis")
+.continue TSAKT   ? (evtartengl ="BUTTON_BEFORE") & (evtvar ="tsakt")
+.continue TSDAKT  ? (evtartengl ="BUTTON_BEFORE") & (evtvar ="tsdakt")
+.continue TDAT    ? (evtartengl ="FIELD_EXIT")   & (evtvar ="tbis")
+.continue TDAT    ? (evtartengl ="FIELD_EXIT")   & (evtvar ="tvon")
+.. ----------- ---------- ---------- -------------------------------------------
+.continue FORBID  ? T|evtartengl = "ROW_MOVE_BEFORE"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+!TABINIT: a key field was changed, remove old rows
+.make screen line -- ? M|tzeilen > 0
+.continue END
+..
+!RAHMEN
+.assign M|kkunde  = M|kkpg^kunde^id
+.formula M|werk      = M|kkpg^werk
+.formula M|ablstelle = M|kkpg^ablstelle
+.continue TABINIT ?  F|empty(M|kkpg)
+.. verify if savings are enabled
+.formula T|xbsavings = false
+.select sales 'M|kkpg^id'
+!ZRAHMEN
+.select line
+.continue ERAHMEN ? _T|mehr
+.formula T|xbsavings = true      ?  H|savings
+.continue ZRAHMEN
+!ERAHMEN
+.continue NOSAVS  ? _T|xbsavings
+.continue TABINIT
+..
+!INSERT
+.select screen line
+!INSLOOP
+.continue END ? _G|mehr
+.continue INSERT      ? M|tdb
+.continue INSERT      ? 'M|tklpg' = ""
+.formula xtdat  = "rmtmp/" + "X." + "PREISSAV." + T|sekundenz + "." + pid + "." + 'M|aktzeile' + ".TMP"
+.formula xtdat2 = "rmtmp/" + "X." + "PREISSAV.OUT." + T|sekundenz + "." + pid + 'M|aktzeile' + ".TMP"
+.formula xizeile = M|aktzeile
+..
+.output new 'xtdat'
+.input "DATEI.F"
+#!database=82
+#!group=1
+#!action=new
+such;typ;artpg;klpg;gltvon;gltbis;kenn\
+mgrenze;mpreis
+'M|tsuch';(49);'M|tartpg';'M|tklpg';'M|tvon';'M|tbis';'M|tkunde'\
+999999;'M|tpreis'
+..
+!EDP
+.output new WERF.WEG
+.formula xtsys = "edpimport.sh -P -I " + xtdat + " -r REF 1> " + 'xtdat2' + " 2> " +  "OUT"
+.system 'xtsys' password background
+..
+.formula  xizeile2 = M|aktzeile
+.select from 'xtdat2' xtnum
+.select screen line 'xizeile'
+.formula M|tnum = xtnum
+.formula M|tdb  = true
+.select screen line 'xizeile2'
+..Stehe in der letzten Zeile
+.continue END ? _G|mehr
+.continue INSLOOP
+..
+..Erstaml nur GÅltigkeit updaten
+!UPDATE
+.select screen line
+.continue END ? _G|mehr
+.continue UPDATE ? M|tbtab ; _M|tdb
+.continue ERRDAT ? M|tbis < M|tvon
+.select pricing 'M|tnum^id'
+.. Preise/Rabatte
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=82:1
+#!action=modify
+#!edp_lockbehavior=nowait
+#!charset=eks
+id;gltvon;gltbis
+'H|id';'M|tvon';'M|tbis'
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue UPDATE
+..
+!NPREIS
+.continue ERRKPG  ?  F|empty(M|kkpg)
+.continue ERRKUN  ?  F|empty(M|kkunde)
+.continue ERRART  ?  F|empty(M|kartpg)
+.select screen line 'M|tzeilen'
+.make screen line +O
+.formula M|tklpg  = M|kkpg
+.formula M|tartpg = M|kartpg^vprg
+.formula M|tartpg = M|kartpg^nummer ? F|empty(M|tartpg) & _F|sysinfo(18)^swziffern
+.formula M|tartpg = M|kartpg^such   ? F|empty(M|tartpg) &  F|sysinfo(18)^swziffern
+.formula M|tkunde = M|kkunde
+.formula M|ttyp   = "(SalesPriceList)"
+.formula M|tsuch  = M|savingsprefix + "_" + 'M|kkpg^nummer' + "_" + 'M|tartpg' + "_" +'M|werk' + "_" + 'M|ablstelle'
+.continue END     ? _M|kbj
+.. calculate year
+.formula T|xidatjahr =  F|year(M|kldat) +  M|kij
+.assign T|xdedatum  = 'T|xidatjahr' + 'M|kldat:8' >> 4
+.formula T|xdedatum  = 'T|xidatjahr' + "0228" >> 4  ? _T|mehr
+.formula M|tvon  = M|kldat + 1
+.formula M|tbis  = T|xdedatum
+.formula M|kldat = T|xdedatum
+.continue END
+..
+!PREIS
+.colour -foreground -1 -1 -1 -background -1 -1 -1 tpreis 'M|aktzeile'
+.continue END
+..
+!TSAKT
+.continue MELD2   ?  M|tsaktion
+.continue END     ?  M|tbtab  ;  M|tsaktion  ;  F|empty(M|tnum)
+.formula T|xtsel = "$,,;@gruppe=1;typ=(SalesPriceList);saktion=(Yes);artpg=" + M|tartpg + ";klpg=" + M|kkpg^nummer
+.select pricing 'xtsel'
+.continue MELD    ? T|mehr
+.. update price
+.select pricing 'M|tnum^id'
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=82:1
+#!action=modify
+#!edp_lockbehavior=nowait
+#!charset=eks
+id;saktion;gltbis
+'H|id';1;
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.formula M|tsaktion = true
+.formula M|tbis     = ""
+.colour -foreground -1 -1 -1 -background 'T|xabasgreen' tpreis 'M|aktzeile'
+.continue END
+..
+!TDAT
+.continue END     ?  F|empty(M|tbis)
+.colour -foreground -1 -1 -1 -background -1 -1 -1  tvon 'M|aktzeile'
+.colour -foreground -1 -1 -1 -background -1 -1 -1  tbis 'M|aktzeile'
+.continue ERRDAT  ?  M|tvon > M|tbis
+.continue END
+..
+!TSDAKT
+.continue END     ?  M|tbtab  ; _M|tsaktion  ;  F|empty(M|tnum)
+.select pricing 'M|tnum^id'
+..
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=82:1
+#!action=modify
+#!edp_lockbehavior=nowait
+#!charset=eks
+id;saktion
+'H|id';0
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.note 'T|xdatumeintragen'
+.formula  M|tsaktion = false
+.colour -foreground 'T|xabasblack' -background 'T|xabasred' tbis 'M|aktzeile'
+.colour -foreground -1 -1 -1 -background -1 -1 -1 tpreis 'M|aktzeile'
+.continue END
+..
+!FORBID: an event was triggered, which is not allowed
+.error
+.end 1
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERRKPG
+.error Bitte Rahmenauftrag eintragen!
+.cursor kkpg 0
+.end 1
+..
+!ERRKUN
+.error Bitte Kunde eintragen!
+.cursor kkunde 0
+.end 1
+..
+!ERRART
+.error Bitte Artikel eintragen!
+.cursor kartpg 0
+.end 1
+..
+!MELD2
+.error Preisfindung bereits aktiviert !
+.end 1
+..
+!ERRDAT
+.error Bis-Datum ist kleiner als Vom-Datum !
+.colour -foreground 'T|xabasblack' -background 'T|xabasyellow' tvon 'M|aktzeile'
+.colour -foreground 'T|xabasblack' -background 'T|xabasyellow' tbis 'M|aktzeile'
+.end 1
+..
+!MELD
+.box
+Es ist bereits eine Preisfindung mit
+Sonderaktion mit der Nummer 'H|nummer' vorhanden.
+Bitte diese zuerst zurÅcksetzen.
+.end 0
+..
+!NOSAVS
+.error Dieser Rahmenauftrag hat keine Zeile mit aktivem Savings-Eintrag.
+.end 1

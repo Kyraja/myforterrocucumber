@@ -1,0 +1,151 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SPEDWHG.TAB.VDA.4902.FO
+.. Author         : calbayrak
+.. Verantwortlich : mh
+.. Kontrolle      : 
+.. Functionality  : fill data fields for label VDA 4902
+..*****************************************************************************
+.set trans -
+..
+..<META M|='vk/SPEDWHG' >
+..
+.. sales item with packaging mateiral
+..<META H|='P3:2' >
+.. sales item for product
+..<META 2|='P3:2' >
+.. blanket order item for product
+..<META 3|='P3:1.2' >
+.. sales header (packing slip)
+..<META 5|='P3:1' > 
+.. shipping order
+..<META 7|='P55:1' > 
+..
+..
+..*****************************************************************************
+.. FIELD DATA
+..*****************************************************************************
+..
+.input "SPEDWHG.TAB.VDA.DATA.FO"
+..
+..
+..*****************************************************************************
+.. BARCODES
+..*****************************************************************************
+..
+.. Check barcode data
+.. args for CODE39.PRUEF
+.type text   xt39pruefcode ? _F|defined(U|xt39pruefcode)
+.type bool   xb39fehler ? _F|defined(U|xb39fehler)
+.type text   xt39fehler ? _F|defined(U|xt39fehler)
+..
+..  skipp if not a VDA label
+..  if no label is specified default is VDA
+.continue EBAR    ? _( F|empty(M|tlayname) ; -M|tlayname / "*VDA*" )
+.. check bar code: customer product number
+.formula U|xt39pruefcode = M|tartkuartcode
+.input "dfue/CODE39.PRUEF"
+.continue ERRBAR  ?  U|xb39fehler
+.. check bar code: our supplier number
+.formula U|xt39pruefcode = M|tliefnr
+.input "dfue/CODE39.PRUEF"
+.continue ERRLINR ?  U|xb39fehler
+.. check all other barcodes for illegal characters
+.formula U|xt39pruefcode = M|tlscode + M|tlsfuecode + M|tliartcode + M|tpackkuartcode + M|tlspckcode + M|tlschgcode
+.input "dfue/CODE39.PRUEF"
+.continue ERRBAR2 ?  U|xb39fehler
+!EBAR
+..
+..  Data Matrix Code -- VDA 4902 --
+..
+.continue NOVDA  ?  F|empty(M|tlsnr)
+..
+..  Data Identifiers:
+..    2K    Delivery note number
+..    P     Customer product number
+..    Q     Filling quantity in single package
+..    30S   Vendor's product number
+..    B     Customer product number for packaging material
+..    20S   Production number
+..    V     Vendor number
+..    16D   Date of production
+..    12D   Date of shipping (replaces 16D)
+..    14D   Date of expiration (replaces 16D)
+..    2P    Amendment version
+..    3S    Package number
+..    1T    Lot number
+..    13Z   Checksum (mod 43)
+..
+.. Control characters are converted to controls in jasper!
+.type text xtfact ? _F|defined(U|xtfact)
+.type text xtrs   ? _F|defined(U|xtrs)
+.type text xtgs   ? _F|defined(U|xtgs)
+.type text xteot  ? _F|defined(U|xteot)
+.formula U|xtfact = "06"
+.formula U|xtrs   = "-RS-"
+.formula U|xtgs   = "-GS-"
+.formula U|xteot  = "-EOT-"
+..
+.. PrÅfziffer wird noch Åber die neue Funktion befÅttert   
+..
+.. Compose barcode data
+.type text xt ? _F|defined(U|xt)
+.formula U|xt = U|xtrs + U|xtfact
+.formula U|xt = U|xt + U|xtgs + "2K"  +  M|tlsnr^nummer
+.formula U|xt = U|xt + U|xtgs + "P"   +  M|tartkuartnr
+.formula U|xt = U|xt + U|xtgs + "Q"   + 'M|tfmenge'
+.formula U|xt = U|xt + U|xtgs + "30S" +  M|tliartnr
+.formula U|xt = U|xt + U|xtgs + "B"   +  M|tpackkuartnr
+.formula U|xt = U|xt + U|xtgs + "20S" +  M|prodnummer         ? _F|empty(M|prodnummer)
+.formula U|xt = U|xt + U|xtgs + "V"   +  M|tliefnr
+.formula U|xt = U|xt + U|xtgs + "16D" +  M|proddat            ? _F|empty(M|proddat)
+.formula U|xt = U|xt + U|xtgs + "12D" +  M|versdat            ? _F|empty(M|versdat)
+.formula U|xt = U|xt + U|xtgs + "14D" +  M|verfalldat         ? _F|empty(M|verfalldat)
+.formula U|xt = U|xt + U|xtgs + "2P"  +  M|tartzei            ? _F|empty(M|tartzei)
+.formula U|xt = U|xt + U|xtgs + "3S"  +  M|tlspcknr
+.formula U|xt = U|xt + U|xtgs + "1T"  +  M|tlsartchg          ? _F|empty(M|tlsartchg)
+..
+.. Hide control values when displaying in info system
+.type text xtregex ? _F|defined(U|xtregex)
+.formula U|xtregex = U|xtrs+U|xtfact+"|"+U|xtrs+"|"+U|xtgs+"|"+U|xteot
+..
+.continue DMCSIZE                                                              ? +U|xt > 255
+.formula M|tvda4902dmccode = U|xt
+.formula M|tvda4902dmc = F|regreplaceall(U|xt, U|xtregex, "")
+.formula M|pruefziffer = 'F|checkdigitvda4902(M|tvda4902dmc)
+.formula M|tvda4902dmc =  M|tvda4902dmc + "13Z" +  M|pruefziffer
+..
+.formula U|xt = U|xt + U|xtgs + "13Z" +  M|pruefziffer
+.formula U|xt = U|xt + U|xtrs + U|xteot
+.formula M|tvda4902dmccode = U|xt
+..
+!NOVDA
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERRSPED
+.error Fehler beim Schreiben der PackstÅcknummer
+.end 1
+..
+..
+!DMCSIZE
+.error Die Daten fÅr den Data Matrix Code sind zu lang.      
+.end 1
+..
+!ERRBAR
+.type text xtfehler ? _F|defined(U|xtfehler)
+.formula U|xtfehler = F|formatstr("Fehler fÅr Barcode Typ Code39: die Kundenartikelnummer {1}{2}{1} enthÑlt das nicht zulÑssige Zeichen {1}{3}{1}.", G|dblquote, U|xt39pruefcode, U|xt39fehler)
+.error 'U|xtfehler'
+.end 1
+..
+!ERRBAR2
+.formula U|xtfehler = F|formatstr("Fehler fÅr Barcode Typ Code39: der WarenanhÑnger enthÑlt das nicht zulÑssige Zeichen {1}{2}{1}.", G|dblquote, U|xt39fehler)
+.error 'U|xtfehler'
+.end 1
+..
+!ERRLINR
+.formula U|xtfehler =  F|formatstr("Fehler fÅr Barcode Typ Code39: die Kundenlieferantennummer {1}{2}{1} enthÑlt das nicht zulÑssige Zeichen {1}{3}{1}.", G|dblquote, U|xt39pruefcode, U|xt39fehler)
+.error 'U|xtfehler'
+.end 1

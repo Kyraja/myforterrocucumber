@@ -14,27 +14,36 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import type { Step, StepKeyword, StepAction, ActionType, EditorCommand, TableDef } from '../../types/gherkin';
 import type { CreatedRecord } from '../../lib/recordTracker';
 import { useTranslation } from '../../i18n';
-import { stepTextFromAction, ACTION_LABELS, ACTION_HELP, createDefaultAction, EDITOR_COMMANDS } from '../../lib/actionText';
+import { stepTextFromAction, getActionLabel, getActionHelp, createDefaultAction, EDITOR_COMMANDS } from '../../lib/actionText';
 import { FieldCombobox, TableCombobox } from '../TableFieldSelect/TableFieldSelect';
 import { DataTableEditor } from '../DataTableEditor/DataTableEditor';
 import styles from './StepRow.module.css';
 
 const KEYWORDS: StepKeyword[] = ['Given', 'When', 'Then', 'And', 'But'];
-const KEYWORD_LABELS: Record<StepKeyword, string> = {
+const KEYWORD_LABELS_DE: Record<StepKeyword, string> = {
   Given: 'Gegeben',
   When: 'Wenn',
   Then: 'Dann',
   And: 'Und',
   But: 'Aber',
 };
+const KEYWORD_LABELS_EN: Record<StepKeyword, string> = {
+  Given: 'Given',
+  When: 'When',
+  Then: 'Then',
+  And: 'And',
+  But: 'But',
+};
 const ACTION_TYPES: ActionType[] = [
   'freetext',
   'editorOeffnen', 'editorOeffnenSuche', 'editorOeffnenMenue',
   'feldSetzen', 'feldPruefen', 'feldLeer', 'feldAenderbar',
   'editorSpeichern', 'editorSchliessen', 'editorWechseln',
-  'zeileAnlegen', 'zeilenAnfuegen', 'buttonDruecken', 'subeditorOeffnen',
+  'zeileAnlegen', 'zeilenAnfuegen', 'buttonDruecken', 'subeditorOeffnen', 'subeditorSchliessen', 'subeditorSpeichern',
   'infosystemOeffnen', 'tabelleZeilen',
   'exceptionSpeichern', 'exceptionFeld', 'dialogBeantworten',
+  'boxMeldung',
+  'editorOeffnenTipp',
 ];
 
 /** Props for {@link StepRow}. */
@@ -57,6 +66,9 @@ interface StepRowProps {
   currentTableRef?: string;
   /** Records created by earlier steps — shown in the record picker dropdown. */
   createdRecords: CreatedRecord[];
+  /** Editor names opened by earlier steps in this scenario — used for the
+   *  "Quell-Editor" dropdown on `editorOeffnen*` chaining variants. */
+  priorEditorNames: string[];
 }
 
 /**
@@ -68,9 +80,10 @@ interface StepRowProps {
  * the data table when required (e.g. `zeilenAnfuegen` always gets a 2-row table;
  * switching to `feldSetzen` clears any leftover table from a previous type).
  */
-export function StepRow({ step, onChange, onRemove, onDuplicate, tables, currentTableRef, createdRecords }: StepRowProps) {
-  const { t } = useTranslation();
+export function StepRow({ step, onChange, onRemove, onDuplicate, tables, currentTableRef, createdRecords, priorEditorNames }: StepRowProps) {
+  const { t, lang } = useTranslation();
   const isAction = step.action.type !== 'freetext';
+  const keywordLabels = lang === 'en' ? KEYWORD_LABELS_EN : KEYWORD_LABELS_DE;
 
   // Fields from the currently active table (inferred from preceding editorOeffnen)
   const currentFields = tables.find((t) => t.tableRef === currentTableRef)?.fields ?? [];
@@ -126,10 +139,10 @@ export function StepRow({ step, onChange, onRemove, onDuplicate, tables, current
           value={step.action.type}
           onChange={(e) => handleActionTypeChange(e.target.value as ActionType)}
           aria-label={t('step.actionType')}
-          title={ACTION_HELP[step.action.type]}
+          title={getActionHelp(step.action.type, lang)}
         >
           {ACTION_TYPES.map((at) => (
-            <option key={at} value={at} title={ACTION_HELP[at]}>{ACTION_LABELS[at]}</option>
+            <option key={at} value={at} title={getActionHelp(at, lang)}>{getActionLabel(at, lang)}</option>
           ))}
         </select>
         <select
@@ -139,7 +152,7 @@ export function StepRow({ step, onChange, onRemove, onDuplicate, tables, current
           aria-label={t('step.keyword')}
         >
           {KEYWORDS.map((kw) => (
-            <option key={kw} value={kw}>{KEYWORD_LABELS[kw]}</option>
+            <option key={kw} value={kw}>{keywordLabels[kw]}</option>
           ))}
         </select>
         {!isAction && (
@@ -168,6 +181,7 @@ export function StepRow({ step, onChange, onRemove, onDuplicate, tables, current
             tables={tables}
             currentFields={currentFields}
             createdRecords={createdRecords}
+            priorEditorNames={priorEditorNames}
             onToggleMultiField={toggleMultiField}
             hasDataTable={!!step.dataTable && step.dataTable.length > 0}
           />
@@ -232,6 +246,8 @@ interface ActionParamsProps {
   /** Fields available for the currently active table (derived from `currentTableRef`). */
   currentFields: { name: string; description: string }[];
   createdRecords: CreatedRecord[];
+  /** Editor names opened by earlier steps in this scenario. */
+  priorEditorNames: string[];
   /** Callback to toggle the `feldSetzen` multi-field mode on/off. */
   onToggleMultiField?: (multi: boolean) => void;
   /** When true, hides single-field inputs for `feldPruefen` (data table takes over). */
@@ -239,8 +255,8 @@ interface ActionParamsProps {
 }
 
 /** Returns paramInput class, adding paramRequired when value is empty */
-function reqClass(value: string) {
-  return `${styles.paramInput} ${!value.trim() ? styles.paramRequired : ''}`;
+function reqClass(value: string | undefined) {
+  return `${styles.paramInput} ${!value?.trim() ? styles.paramRequired : ''}`;
 }
 
 /**
@@ -370,6 +386,90 @@ function RecordPicker({ records, onSelect }: {
   );
 }
 
+/**
+ * Dropdown listing editor names opened by earlier steps in the same scenario.
+ *
+ * Acts as a companion to the chain-source free-text input: the consultant can
+ * still type any name, but the visible ↓ button advertises the available
+ * source editors and makes selection one click. Hidden when no prior editors
+ * exist so the UI stays clean for plain opens.
+ */
+function PriorEditorPicker({ priorEditorNames, onSelect }: {
+  priorEditorNames: string[];
+  onSelect: (name: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  if (priorEditorNames.length === 0) return null;
+
+  return (
+    <div className={styles.recordPicker} ref={ref}>
+      <button
+        type="button"
+        className={styles.recordPickerBtn}
+        onClick={() => setOpen(!open)}
+        title={t('step.recordFromEditor')}
+      >
+        &darr;
+      </button>
+      {open && (
+        <ul className={styles.recordDropdown}>
+          {priorEditorNames.map((name) => (
+            <li
+              key={name}
+              className={styles.recordOption}
+              onClick={() => { onSelect(name); setOpen(false); }}
+            >
+              <span className={styles.recordWord}>{name}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Free-text input for the chain-source editor name, paired with a visible
+ * dropdown of previously opened editors in the scenario.
+ *
+ * The Gherkin form `for record from editor "<name>"` is only emitted when this
+ * value is non-empty. Freetext is allowed (scenarios imported from outside the
+ * UI may reference editor names that aren't visible locally), while the picker
+ * makes the in-scenario options discoverable.
+ */
+function RecordFromEditorInput({ value, onChange, priorEditorNames }: {
+  value: string;
+  onChange: (v: string) => void;
+  priorEditorNames: string[];
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className={styles.valueWithPicker}>
+      <input
+        className={styles.paramInput}
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={t('step.recordFromEditorPlaceholder')}
+        title={t('step.recordFromEditor')}
+        aria-label={t('step.recordFromEditor')}
+      />
+      <PriorEditorPicker priorEditorNames={priorEditorNames} onSelect={onChange} />
+    </div>
+  );
+}
+
 /** Value input with record picker */
 function ValueInput({ value, onChange, placeholder, records, required = true }: {
   value: string;
@@ -392,10 +492,11 @@ function ValueInput({ value, onChange, placeholder, records, required = true }: 
   );
 }
 
-function ActionParams({ action, onChange, tables, currentFields, createdRecords, onToggleMultiField, hasDataTable }: ActionParamsProps) {
+function ActionParams({ action, onChange, tables, currentFields, createdRecords, priorEditorNames, onToggleMultiField, hasDataTable }: ActionParamsProps) {
   const { t, lang } = useTranslation();
   switch (action.type) {
-    case 'editorOeffnen':
+    case 'editorOeffnen': {
+      const chained = !!action.recordFromEditor;
       return (
         <div className={styles.paramCol}>
           <EditorFields
@@ -403,15 +504,25 @@ function ActionParams({ action, onChange, tables, currentFields, createdRecords,
             onChange={(u) => onChange({ ...action, ...u })}
             tables={tables}
           />
-          <input
-            className={styles.paramInput}
-            type="text"
-            value={action.record}
-            onChange={(e) => onChange({ ...action, record: e.target.value })}
-            placeholder={t('step.recordOptional')}
-          />
+          <div className={styles.paramRow}>
+            <input
+              className={styles.paramInput}
+              type="text"
+              value={action.record}
+              onChange={(e) => onChange({ ...action, record: e.target.value, recordFromEditor: '' })}
+              placeholder={t('step.recordOptional')}
+              disabled={chained}
+              title={chained ? t('step.recordFromEditor') : undefined}
+            />
+            <RecordFromEditorInput
+              value={action.recordFromEditor ?? ''}
+              onChange={(v) => onChange({ ...action, recordFromEditor: v, record: v ? '' : action.record })}
+              priorEditorNames={priorEditorNames}
+            />
+          </div>
         </div>
       );
+    }
 
     case 'editorOeffnenSuche':
       return (
@@ -431,7 +542,10 @@ function ActionParams({ action, onChange, tables, currentFields, createdRecords,
         </div>
       );
 
-    case 'editorOeffnenMenue':
+    case 'editorOeffnenMenue': {
+      const chained = !!action.recordFromEditor;
+      // Record is required unless chaining from another editor
+      const recordCls = chained ? styles.paramInput : reqClass(action.record);
       return (
         <div className={styles.paramCol}>
           <EditorFields
@@ -441,11 +555,18 @@ function ActionParams({ action, onChange, tables, currentFields, createdRecords,
           />
           <div className={styles.paramRow}>
             <input
-              className={reqClass(action.record)}
+              className={recordCls}
               type="text"
               value={action.record}
-              onChange={(e) => onChange({ ...action, record: e.target.value })}
+              onChange={(e) => onChange({ ...action, record: e.target.value, recordFromEditor: '' })}
               placeholder={t('step.record')}
+              disabled={chained}
+              title={chained ? t('step.recordFromEditor') : undefined}
+            />
+            <RecordFromEditorInput
+              value={action.recordFromEditor ?? ''}
+              onChange={(v) => onChange({ ...action, recordFromEditor: v, record: v ? '' : action.record })}
+              priorEditorNames={priorEditorNames}
             />
             <input
               className={reqClass(action.menuChoice)}
@@ -457,6 +578,7 @@ function ActionParams({ action, onChange, tables, currentFields, createdRecords,
           </div>
         </div>
       );
+    }
 
     case 'feldSetzen':
       return (
@@ -578,6 +700,8 @@ function ActionParams({ action, onChange, tables, currentFields, createdRecords,
 
     case 'editorSpeichern':
     case 'editorSchliessen':
+    case 'subeditorSchliessen':
+    case 'subeditorSpeichern':
     case 'zeileAnlegen':
     case 'zeilenAnfuegen':
       return null;
@@ -755,6 +879,48 @@ function ActionParams({ action, onChange, tables, currentFields, createdRecords,
             onChange={(e) => onChange({ ...action, dialogId: e.target.value })}
             placeholder={t('step.dialogId')}
           />
+        </div>
+      );
+
+    case 'boxMeldung':
+      return (
+        <div className={styles.paramRow}>
+          <input
+            className={reqClass(action.messageText)}
+            type="text"
+            value={action.messageText}
+            onChange={(e) => onChange({ ...action, messageText: e.target.value })}
+            placeholder={t('step.boxMessage')}
+          />
+        </div>
+      );
+
+    case 'editorOeffnenTipp':
+      return (
+        <div className={styles.paramCol}>
+          <div className={styles.paramRow}>
+            <input
+              className={reqClass(action.editorName)}
+              type="text"
+              value={action.editorName}
+              onChange={(e) => onChange({ ...action, editorName: e.target.value })}
+              placeholder="Editor-Name (z.B. dispo)"
+            />
+            <input
+              className={reqClass(action.tipCommand)}
+              type="text"
+              value={action.tipCommand}
+              onChange={(e) => onChange({ ...action, tipCommand: e.target.value })}
+              placeholder="Tippkommando (z.B. (Scheduling))"
+            />
+            <input
+              className={styles.paramInput}
+              type="text"
+              value={action.arguments}
+              onChange={(e) => onChange({ ...action, arguments: e.target.value })}
+              placeholder="Argumente (leer lassen wenn keine)"
+            />
+          </div>
         </div>
       );
 

@@ -1,0 +1,446 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PACKUSAGE.START.BA.FO2
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : drpf
+.. Functionality  : ..
+..*****************************************************************************
+
+..<META M|='dfue/PACKUSAGE'>
+..<META H|='P106:1'>
+..<META 1|='P106:1'>
+
+def main() {
+    .set trans -
+
+    .type bool noProcessCheckboxMarked
+    .type P2:1 packMaterial
+    .type P106:1 packInstruction
+    
+    .. Start empty
+    .make screen line --  ?  M|tzeilen > 0
+    
+    .. Nothing marked means all marked
+    .formula U|noProcessCheckboxMarked = _(M|kbartikel ; M|kbkuart ; M|kbrahmen ; M|kbauftrag ; M|kbliefer ; M|kbvplan ; M|kbpackanw ; M|kbfertigungsliste ; M|kbkonto)
+    
+    .. Query usage of single pack instruction
+    if (M|kbpackanweisungen) {
+        .copy U|packInstruction = M|kpackanw
+        .call queryPackInstructionUsages()
+    }    
+    
+    .. Query usage of all pack instructions that contain a pack material 
+    .. note: Checkbox kbanwzupackmit is not visible on default screen
+    if (M|kbpackmittel & M|kbanwzupackmit) {
+        .select packinginstructions 'F|formatstr("$,,;@gruppe=1;@zeilen=(Yes);artikel={1}", M|kpackmit^id)'
+        while (G|mehr) {
+            .formula U|packInstruction = H|id
+            .call addPackInstructionRowForPackMaterial()
+            .call queryPackInstructionUsages()
+            .select packinginstructions
+        }
+    }
+    
+    .. Query usage of a pack material
+    if (M|kbpackmittel & _M|kbanwzupackmit) {
+        .copy U|packMaterial = M|kpackmit
+        .call queryPackMaterialUsage()
+    }    
+}
+ 
+def addPackInstructionRowForPackMaterial() {
+    .make screen line +O
+    .colour -background 'U|xabasstructuretop' 'M|aktzeile'
+    .formula M|tkopf = H|id
+    .formula M|tvorgang = 'H|objgrbez'
+    .formula M|tpackanw = H|id
+    .select head
+    .select line
+    .formula M|tpackm = H|artikel^id
+    .copy M|tblager = G|false 
+    .copy M|tbversand = G|false 
+} 
+     
+def queryPackInstructionUsages( ) { 
+    .call readProductsForStoragePackInstruction()
+    .call readProductsForShippingPackInstruction()
+    .call readCustomerProductsForStoragePackInstruction()
+    .call readCustomerProductsForShippingPackInstruction()
+    .call readBlanketOrdersForPackInstruction()
+    .call readOrdersForPackInstruction()
+    .call readShippingPlanningForPackInstruction()
+    .call readPackingSlipsForPackInstruction()
+    .call readWorkOrderSuggestionForPackInstruction()
+} 
+
+def queryPackMaterialUsage( ) { 
+    .call readPackInstructionsForPackMaterial()
+    .call readProductionListForPackmaterial()
+    .call readContainerAccountsForPackmaterial()
+    .call readBlanketOrdersForPackMaterial()
+    .call readOrdersForPackMaterial()    
+    .call readPackingSlipForPackMaterial()
+} 
+
+def readProductsForStoragePackInstruction( ) { 
+    ..<META 2|='P2:1'>
+    if (U|noProcessCheckboxMarked ; M|kbartikel) {
+        .load 2 nolock parts 'F|formatstr("$,,;@gruppe=1;packanwstdla={1}", U|packInstruction^id)'
+        while (G|mehr) {
+            .make screen line +O
+            .colour -background -1 -1 -1 'M|aktzeile'
+            .formula M|tkopf = 2|id
+            .formula M|tvorgang = '2|objgrbez'
+            .formula M|tartikel = 2|id 
+            .formula M|tfmenge = 2|fmengestdla 
+            .formula M|tle = 2|le
+            .load 1 nolock packinginstructions '2|packanwstdla^id'
+            .load 1 nolock line
+            if (G|mehr) {
+                .formula M|tpackanw = 1|id 
+                .formula M|tpackm = 1|artikel^id 
+            }
+            .copy M|tblager = G|true
+            .copy M|tbversand = G|false
+            .load 2 nolock parts
+        }
+    }
+} 
+
+def readProductsForShippingPackInstruction( ) { 
+    ..<META 2|='P2:1'>
+    if (U|noProcessCheckboxMarked ; M|kbartikel) {
+        .load 2 nolock parts 'F|formatstr("$,,;@gruppe=1;packanwstdversand={1}", U|packInstruction^id)'
+        while (G|mehr) {
+            .make screen line +O
+            .colour -background -1 -1 -1 'M|aktzeile'
+            .formula M|tkopf = 2|id
+            .formula M|tvorgang = '2|objgrbez'
+            .formula M|tartikel = 2|id 
+            .formula M|tfmenge = 2|fmengestdversand 
+            .formula M|tle = 2|le
+            .load 1 nolock packinginstructions '2|packanwstdversand^id'
+            .load 1 nolock line
+            if (G|mehr) {
+                .formula M|tpackanw = 1|id 
+                .formula M|tpackm = 1|artikel^id 
+            }
+            .copy M|tblager = G|false
+            .copy M|tbversand = G|true
+            .load 2 nolock parts
+        }        
+    }
+} 
+
+def readCustomerProductsForStoragePackInstruction() {
+    ..<META 2|='P2:6'>
+    if (U|noProcessCheckboxMarked ; M|kbkuart) {
+        .load 2 nolock parts 'F|formatstr("$,,;@gruppe=6;packanwla={1}", U|packInstruction^id)'
+        while (G|mehr) {
+            .make screen line +O
+            .colour -background -1 -1 -1 'M|aktzeile'
+            .formula M|tkopf = 2|artikel^id
+            .formula M|tpos = 2|id
+            .formula M|tvorgang = '2|objgrbez'
+            .formula M|tpartner = 2|kl^id
+            .formula M|tartikel = 2|artikel^id
+            .formula M|tfmenge = 2|fmengela 
+            .formula M|tle = 2|artikel^le
+            .copy M|tpackanw = 2|packanwla
+            .load 1 nolock packinginstructions '2|packanwla^id'
+            .load 1 nolock line
+            .formula M|tpackm = 1|artikel^id ?  G|mehr
+            .copy M|tblager = G|true
+            .copy M|tbversand = G|false            
+            .load 2 nolock parts 
+        } 
+    }
+}
+
+def readCustomerProductsForShippingPackInstruction() {
+    ..<META 2|='P2:6'>
+    if (U|noProcessCheckboxMarked ; M|kbkuart) {
+        .load 2 nolock parts 'F|formatstr("$,,;@gruppe=6;packanw={1}", U|packInstruction^id)'
+        while (G|mehr) {
+            .make screen line +O
+            .colour -background -1 -1 -1 'M|aktzeile'
+            .formula M|tkopf = 2|artikel^id
+            .formula M|tpos = 2|id
+            .formula M|tvorgang = '2|objgrbez'
+            .formula M|tpartner = 2|kl^id
+            .formula M|tartikel = 2|artikel^id
+            .formula M|tfmenge = 2|fmenge 
+            .formula M|tle = 2|artikel^le
+            .copy M|tpackanw = 2|packanw
+            .load 1 nolock packinginstructions '2|packanw^id'
+            .load 1 nolock line
+            .formula M|tpackm = 1|artikel^id ?  G|mehr
+            .copy M|tblager = G|false
+            .copy M|tbversand = G|true            
+            .load 2 nolock parts 
+        } 
+    }
+}
+
+def readBlanketOrdersForPackInstruction() {
+    ..<META 2|='P3:2'>
+    if (U|noProcessCheckboxMarked ; M|kbrahmen) {
+        .load 2 nolock sales 'F|formatstr("$,,;@gruppe=2;packanw={1};kotyp=(BlanketOrder)", U|packInstruction^id)'
+        while (G|mehr) {
+            .make screen line +O
+            .colour -background -1 -1 -1 'M|aktzeile'
+            .formula M|tkopf = 2|kopf^id
+            .formula M|tpos = 2|id
+            .formula M|tvorgang = '2|objgrbez'
+            .formula M|tpartner = 2|kopf^kunde^id
+            .formula M|tartikel = 2|artikel^id
+            .formula M|tfmenge = 2|fmenge
+            .formula M|tle = 2|he
+            .copy M|tpackanw = 2|packanw
+            .load 1 nolock packinginstructions '2|packanw^id'
+            .load 1 nolock line
+            .formula M|tpackm = 1|artikel^id ?  G|mehr
+            .copy M|tblager = G|false
+            .copy M|tbversand = G|true             
+            .load 2 nolock sales
+        }
+    }
+}
+
+
+def readOrdersForPackInstruction() {
+    ..<META 2|='P3:2'>
+    if (U|noProcessCheckboxMarked ; M|kbauftrag) {
+        .load 2 nolock sales 'F|formatstr("$,,;@gruppe=2;packanw={1};kotyp=(SalesOrder)", U|packInstruction^id)'
+        while (G|mehr) {
+            .make screen line +O
+            .colour -background -1 -1 -1 'M|aktzeile'
+            .formula M|tkopf = 2|kopf^id
+            .formula M|tpos = 2|id
+            .formula M|tvorgang = '2|objgrbez'
+            .formula M|tpartner = 2|kopf^kunde^id
+            .formula M|tartikel = 2|artikel^id
+            .formula M|tfmenge = 2|fmenge
+            .formula M|tle = 2|he
+            .copy M|tpackanw = 2|packanw
+            .load 1 nolock packinginstructions '2|packanw^id'
+            .load 1 nolock line
+            .formula M|tpackm = 1|artikel^id ?  G|mehr
+            .copy M|tblager = G|false
+            .copy M|tbversand = G|true             
+            .load 2 nolock sales
+        }
+    }
+}
+
+def readShippingPlanningForPackInstruction() {
+    ..<META 2|='P119:1'>
+    if (U|noProcessCheckboxMarked ; M|kbvplan) {
+        .load 2 nolock shippingplanning 'F|formatstr("$,,;@gruppe=1;@zeilen=(Yes);packanw={1})", U|packInstruction^id)'
+        while (G|mehr) {
+            .load 2 line '2|selzeile'
+            .make screen line +O
+            .colour -background -1 -1 -1 'M|aktzeile'
+            .formula M|tkopf = 2|id
+            .formula M|tpos = 2|id
+            .formula M|tvorgang = '2|objgrbez'
+            .formula M|tpartner = 2|kunde^id
+            .formula M|tartikel = 2|artikel^id
+            .formula M|tfmenge = 2|fmenge
+            .formula M|tle = 2|le
+            .copy M|tpackanw = 2|packanw
+            .load 1 nolock packinginstructions '2|packanw^id'
+            .load 1 nolock line
+            .formula M|tpackm = 1|artikel^id ?  G|mehr
+            .copy M|tblager = G|false
+            .copy M|tbversand = G|true             
+            .load 2 nolock shippingplanning
+        }
+    }
+}
+
+def readPackingSlipsForPackInstruction() {
+    ..<META 2|='P3:2'>
+    if (U|noProcessCheckboxMarked ; M|kbliefer) {
+        .load 2 nolock sales 'F|formatstr("$,,;@gruppe=2;packanw={1};kotyp=(PackingSlip)", U|packInstruction^id)'
+        while (G|mehr) {
+            .make screen line +O
+            .colour -background -1 -1 -1 'M|aktzeile'
+            .formula M|tkopf = 2|kopf^id
+            .formula M|tpos = 2|id
+            .formula M|tvorgang = '2|objgrbez'
+            .formula M|tpartner = 2|kopf^kunde^id
+            .formula M|tartikel = 2|artikel^id
+            .formula M|tfmenge = 2|fmenge
+            .formula M|tle = 2|he
+            .copy M|tpackanw = 2|packanw
+            .load 1 nolock packinginstructions '2|packanw^id'
+            .load 1 nolock line
+            .formula M|tpackm = 1|artikel^id ?  G|mehr
+            .copy M|tblager = G|false
+            .copy M|tbversand = G|true             
+            .load 2 nolock sales
+        }
+    }
+}
+
+def readWorkOrderSuggestionForPackInstruction() { 
+    ..<META 2|='P4:5'>
+    if (U|noProcessCheckboxMarked ; M|kbfertigungsliste) {
+        .load 2 nolock purchasing 'F|formatstr("$,,;@gruppe=5;packanw={1})", U|packInstruction^id)'
+        while (G|mehr) {
+            .make screen line +O
+            .colour -background -1 -1 -1 'M|aktzeile'
+            .formula M|tkopf = 2|id
+            .formula M|tpos = 2|id
+            .formula M|tvorgang = '2|objgrbez'
+            .formula M|tartikel = 2|artikel^id
+            .formula M|tfmenge = 2|fmenge
+            .formula M|tle = 2|artikel^le
+            .copy M|tpackanw = 2|packanw
+            .load 1 nolock packinginstructions '2|packanw^id'
+            .load 1 nolock line
+            .formula M|tpackm = 1|artikel^id ?  G|mehr
+            .copy M|tblager = G|true
+            .copy M|tbversand = G|false             
+            .load 2 nolock purchasing
+        }
+    }
+} 
+
+def readPackInstructionsForPackMaterial() { 
+    ..<META H|='P106:1'>
+    if (U|noProcessCheckboxMarked ; M|kbpackanw) {
+        .select packinginstructions 'F|formatstr("$,,;@gruppe=1;@zeilen=(Yes);artikel={1}", M|kpackmit^id)'
+        while (G|mehr) {
+            .make screen line +O
+            .colour -background -1 -1 -1 'M|aktzeile'
+            .formula M|tkopf = H|id
+            .formula M|tvorgang = 'H|objgrbez'
+            .formula M|tpackanw = H|id
+            .select head
+            .select line
+            .formula M|tpackm = H|artikel^id
+            .copy M|tblager = G|false 
+            .copy M|tbversand = G|false 
+
+            .select packinginstructions
+        } 
+    } 
+}
+
+
+def readProductionListForPackmaterial() {
+    ..<META 2|='P2:1'>
+    if (U|noProcessCheckboxMarked ; M|kbfertigungsliste) {
+        .load 2 nolock parts 'F|formatstr("$,,;@gruppe=1;@zeilen=(Yes);elex={1}", U|packMaterial^id)'
+        while (G|mehr) {
+            .make screen line +O
+            .colour -background -1 -1 -1 'M|aktzeile'
+            .formula M|tkopf = 2|id
+            .formula M|tvorgang = '2|objgrbez'
+            .formula M|tartikel = 2|id
+            .formula M|tle = 2|le
+            .load 2 nolock parts
+        }
+    }
+}
+
+def readContainerAccountsForPackmaterial() {
+    ..<META 2|='P158:1'>
+    if (U|noProcessCheckboxMarked ; M|kbkonto) {
+        .load 2 nolock containeraccount 'F|formatstr("$,,;@gruppe=1;artikel={1}", U|packMaterial^id)'
+        while (G|mehr) {
+            .make screen line +O
+            .colour -background -1 -1 -1 'M|aktzeile'
+            .formula M|tkopf = 2|id
+            .formula M|tvorgang = '2|objgrbez'
+            .formula M|tpartner = 2|partner^id
+            .copy M|tblager = G|false
+            .copy M|tbversand = G|false             
+            .load 2 nolock containeraccount
+        }
+    }
+}
+
+def readBlanketOrdersForPackMaterial() {
+    ..<META 2|='P3:2'>
+    if (U|noProcessCheckboxMarked ; M|kbrahmen) {
+        .load 2 nolock sales 'F|formatstr("$,,;@gruppe=2;artikel={1};kotyp=(BlanketOrder)", U|packMaterial^id)'
+        while (G|mehr) {
+            .make screen line +O
+            .colour -background -1 -1 -1 'M|aktzeile'
+            .formula M|tkopf = 2|kopf^id
+            .formula M|tpos = 2|id
+            .formula M|tvorgang = '2|objgrbez'
+            .formula M|tpartner = 2|kopf^kunde^id
+            .formula M|tpackmit = 2|artikel^id
+            .formula M|tfmenge = 2|fmenge
+            .formula M|tle = 2|he
+            .copy M|tpackanw = 2|packanw
+            if ( _F|empty(M|tpackanw)) {
+                .load 1 nolock packinginstructions '2|packanw^id'
+                .load 1 nolock line
+                .formula M|tpackm = 1|artikel^id ?  G|mehr
+            }
+            .copy M|tblager = G|false
+            .copy M|tbversand = G|true             
+            .load 2 nolock sales
+        }
+    }
+}
+
+def readOrdersForPackMaterial() {
+    ..<META 2|='P3:2'>
+    if (U|noProcessCheckboxMarked ; M|kbauftrag) {
+        .load 2 nolock sales 'F|formatstr("$,,;@gruppe=2;artikel={1};kotyp=(SalesOrder)", U|packMaterial^id)'
+        while (G|mehr) {
+            .make screen line +O
+            .colour -background -1 -1 -1 'M|aktzeile'
+            .formula M|tkopf = 2|kopf^id
+            .formula M|tpos = 2|id
+            .formula M|tvorgang = '2|objgrbez'
+            .formula M|tpartner = 2|kopf^kunde^id
+            .formula M|tpackmit = 2|artikel^id
+            .formula M|tfmenge = 2|fmenge
+            .formula M|tle = 2|he
+            .copy M|tpackanw = 2|packanw
+            if ( _F|empty(M|tpackanw)) {
+                .load 1 nolock packinginstructions '2|packanw^id'
+                .load 1 nolock line
+                .formula M|tpackm = 1|artikel^id ?  G|mehr
+            }
+            .copy M|tblager = G|false
+            .copy M|tbversand = G|true             
+            .load 2 nolock sales
+        }
+    }
+}
+    
+def readPackingSlipForPackMaterial() {
+    ..<META 2|='P3:2'>
+    if (U|noProcessCheckboxMarked ; M|kbliefer) {
+        .load 2 nolock sales 'F|formatstr("$,,;@gruppe=2;artikel={1};kotyp=(PackingSlip)", U|packMaterial^id)'
+        while (G|mehr) {
+            .make screen line +O
+            .colour -background -1 -1 -1 'M|aktzeile'
+            .formula M|tkopf = 2|kopf^id
+            .formula M|tpos = 2|id
+            .formula M|tvorgang = '2|objgrbez'
+            .formula M|tpartner = 2|kopf^kunde^id
+            .formula M|tpackmit = 2|artikel^id
+            .formula M|tfmenge = 2|fmenge
+            .formula M|tle = 2|he
+            .copy M|tpackanw = 2|packanw
+            if ( _F|empty(M|tpackanw)) {
+                .load 1 nolock packinginstructions '2|packanw^id'
+                .load 1 nolock line
+                .formula M|tpackm = 1|artikel^id ?  G|mehr
+            }
+            .copy M|tblager = G|false
+            .copy M|tbversand = G|true             
+            .load 2 nolock sales
+        }
+    }
+}

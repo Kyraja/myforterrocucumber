@@ -1,0 +1,181 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BELEGVORKOMMEN.BSTART.BN
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Ausfuehren der Anfragen und Behandlung der Treffer.
+.. Functionality  : Does queries and handles hits.
+..*****************************************************************************
+.set trans -
+..
+.. Nothing to do
+.continue END ? M|startstufe < M|minstufe
+.continue END ? M|endstufe > M|maxstufe
+..
+.. Clear table and report
+.input "ev/BELEGVORKOMMEN.BK"
+.input "is/TABLEEREN"
+..
+.. Initialize
+.formula M|stufe = M|startstufe
+..
+!CHECKLV: Check level
+.assign M|aktvktyp = ""
+.assign M|aktektyp = ""
+.assign M|aktvklsart = ""
+.assign M|akteklsart = ""
+.assign M|aktreart = ""
+.assign M|aktekreart = ""
+.continue FOOTER ? M|stufe > M|endstufe
+..
+!CTRLLV: Which type of document?
+.copy M|select = M|preselect
+..
+.continue OPPORTY   ? M|stufe = M|chkostufe & M|chko
+.continue BLANKET   ? M|stufe = M|rahmenstufe & M|rahmen
+.continue OFFER     ? (M|stufe = M|ekankostufe & M|ekanko) ; (M|stufe = M|vkankostufe & M|vkanko)
+.continue WEBORD    ? M|stufe = M|wakostufe & M|wako
+.continue PSORDER   ? (M|stufe = M|ekabkostufe & M|ekabko) ; (M|stufe = M|vkabkostufe & M|vkabko)
+.continue PCKSLIP   ? M|stufe = M|likostufe & M|liko
+.continue INVOICE   ? M|stufe = M|rekostufe & M|reko
+.continue PSRET     ? M|stufe = M|ruelistufe & M|rueli
+.continue CDELIV    ? M|stufe = M|kulistufe & M|kuli
+.continue CRNOTECOM ? M|stufe = M|kaufgutstufe & M|kaufgut
+.continue CASH      ? M|stufe = M|barstufe & M|bar
+.continue DOWNPAY   ? M|stufe = M|anzstufe & M|anz
+..
+!ITERATE: Iterate level
+.formula M|stufe = M|stufe + 1
+.continue CHECKLV
+..
+!OPPORTY: Complete query for opportunities
+.copy M|aktvktyp = M|chkotxt
+.assign M|aktektyp = ""
+.formula M|select = F|formatstr(M|preselect, M|chkotxt)
+.continue QUERY
+..
+!BLANKET: Complete query for blanket orders
+.copy M|aktvktyp = M|rahmentxt
+.assign M|aktektyp = 'M|aktvktyp'
+.formula M|select = F|formatstr(M|preselect, M|rahmentxt)
+.continue QUERY
+..
+!OFFER: Complete query for offers or requests
+.copy M|aktvktyp = M|vkankotxt
+.copy M|aktektyp = M|ekankotxt
+.formula M|select = F|formatstr(M|preselect, M|vkankotxt) ? F|equals(M|abteilung, "(Sales)")
+.formula M|select = F|formatstr(M|preselect, M|ekankotxt) ? F|equals(M|abteilung, "(Purchasing)")
+.continue QUERY
+..
+!WEBORD: Complete query for web orders
+.copy M|aktvktyp = M|wakotxt
+.assign M|aktektyp = ""
+.formula M|select = F|formatstr(M|preselect, M|wakotxt)
+.continue QUERY
+..
+!PSORDER: Complete query for sales or purchase orders
+.copy M|aktvktyp = M|vkabkotxt
+.copy M|aktektyp = M|ekabkotxt
+.formula M|select = F|formatstr(M|preselect, M|vkabkotxt) ? F|equals(M|abteilung, "(Sales)")
+.formula M|select = F|formatstr(M|preselect, M|ekabkotxt) ? F|equals(M|abteilung, "(Purchasing)")
+.continue QUERY
+..
+!PCKSLIP: Complete query for packing slips
+.copy M|aktvktyp = M|likotxt
+.copy M|aktektyp = F|tovalue('M|likotxt', F|typeof(M|aktektyp)) ? F|isvalue('M|likotxt', F|typeof(M|aktektyp))
+.copy M|aktvklsart = F|tovalue('M|likotxt', F|typeof(M|aktvklsart)) ? F|isvalue('M|likotxt', F|typeof(M|aktvklsart))
+.copy M|akteklsart = F|tovalue('M|likotxt', F|typeof(M|akteklsart)) ? F|isvalue('M|likotxt', F|typeof(M|akteklsart))
+.formula M|select = F|formatstr(M|preselect, M|likotxt)
+.formula M|select = M|select + ";lsart==" + 'M|likotxt'
+.continue QUERY
+..
+!INVOICE: Complete query for invoicess
+.copy M|aktvktyp = M|rekotxt
+.copy M|aktektyp = F|tovalue('M|rekotxt', F|typeof(M|aktektyp)) ? F|isvalue('M|rekotxt', F|typeof(M|aktektyp))
+.copy M|aktreart = F|tovalue('M|rekotxt', F|typeof(M|aktreart)) ? F|isvalue('M|rekotxt', F|typeof(M|aktreart))
+.copy M|aktekreart = F|tovalue('M|rekotxt', F|typeof(M|aktekreart)) ? F|isvalue('M|rekotxt', F|typeof(M|aktekreart))
+.formula M|select = F|formatstr(M|preselect, M|rekotxt)
+.formula M|select = M|select + ";vorganga==" + 'M|rekotxt'
+.continue QUERY
+..
+!PSRET: Complete query for packingslip return
+.copy M|aktvktyp = M|likotxt
+.copy M|aktektyp = F|tovalue('M|likotxt', F|typeof(M|aktektyp)) ? F|isvalue('M|likotxt', F|typeof(M|aktektyp))
+.copy M|aktvklsart = F|tovalue('M|ruelitxt', F|typeof(M|aktvklsart)) ? F|isvalue('M|ruelitxt', F|typeof(M|aktvklsart))
+.copy M|akteklsart = F|tovalue('M|ruelitxt', F|typeof(M|akteklsart)) ? F|isvalue('M|ruelitxt', F|typeof(M|akteklsart))
+.formula M|select = F|formatstr(M|preselect, M|likotxt)
+.formula M|select = M|select + ";lsart==" + 'M|ruelitxt'
+.continue QUERY
+..
+!CDELIV: Complete query for customer delivery
+.copy M|aktvktyp = M|likotxt
+.assign M|aktektyp = ""
+.copy M|aktvklsart = F|tovalue('M|kulitxt', F|typeof(M|aktvklsart)) ? F|isvalue('M|kulitxt', F|typeof(M|aktvklsart))
+.assign M|akteklsart = ""
+.formula M|select = F|formatstr(M|preselect, M|likotxt)
+.formula M|select = M|select + ";lsart==" + 'M|kulitxt'
+.continue QUERY
+..
+!CRNOTECOM: Complete query for credit note commercial
+.copy M|aktvktyp = M|rekotxt
+.copy M|aktektyp = F|tovalue('M|rekotxt', F|typeof(M|aktektyp)) ? F|isvalue('M|rekotxt', F|typeof(M|aktektyp))
+.copy M|aktreart = F|tovalue('M|kaufguttxt', F|typeof(M|aktreart)) ? F|isvalue('M|kaufguttxt', F|typeof(M|aktreart))
+.copy M|aktekreart = F|tovalue('M|kaufguttxt', F|typeof(M|aktekreart)) ? F|isvalue('M|kaufguttxt', F|typeof(M|aktekreart))
+.formula M|select = F|formatstr(M|preselect, M|rekotxt)
+.formula M|select = M|select + ";vorganga==" + 'M|kaufguttxt'
+.continue QUERY
+..
+!CASH
+.copy M|aktvktyp = M|rekotxt
+.copy M|aktektyp = F|tovalue('M|rekotxt', F|typeof(M|aktektyp)) ? F|isvalue('M|rekotxt', F|typeof(M|aktektyp))
+.copy M|aktreart = F|tovalue('M|bartxt', F|typeof(M|aktreart)) ? F|isvalue('M|kaufguttxt', F|typeof(M|aktreart))
+.copy M|aktekreart = F|tovalue('M|bartxt', F|typeof(M|aktekreart)) ? F|isvalue('M|kaufguttxt', F|typeof(M|aktekreart))
+.formula M|select = F|formatstr(M|preselect, M|rekotxt)
+.formula M|select = M|select + ";typ==" + 'M|aktvktyp' + ";vorganga==" + 'M|bartxt'
+.continue QUERY
+..
+!DOWNPAY
+.copy M|aktvktyp = M|rekotxt
+.copy M|aktektyp = F|tovalue('M|rekotxt', F|typeof(M|aktektyp)) ? F|isvalue('M|rekotxt', F|typeof(M|aktektyp))
+.copy M|aktreart = F|tovalue('M|anztxt', F|typeof(M|aktreart)) ? F|isvalue('M|anztxt', F|typeof(M|aktreart))
+.copy M|aktekreart = F|tovalue('M|anztxt', F|typeof(M|aktekreart)) ? F|isvalue('M|anztxt', F|typeof(M|aktekreart))
+.formula M|select = F|formatstr(M|preselect, M|rekotxt)
+.formula M|select = M|select + ";vorganga==" + 'M|anztxt'
+.continue QUERY
+..
+!QUERY: Create empty row and query database
+.make screen line +O
+.copy M|tselect = M|select
+.copy M|tinland = M|inland
+.copy M|tabseinheit = M|abseinheit
+.continue SALES ? F|equals(M|abteilung, "(Sales)")
+.copy M|tektypa = F|value(M|aktektyp, "AS162")
+.copy M|teklsart = F|value(M|akteklsart, "AS327")
+.copy M|treart = F|value(M|aktekreart, "AS11")
+.continue QUERYDB
+..
+!SALES
+.copy M|tvktypa = F|value(M|aktvktyp, "AS163")
+.copy M|tvklsart = F|value(M|aktvklsart, "AS327")
+.copy M|treart = F|value(M|aktreart, "AS11")
+..
+!QUERYDB: Query database
+.input "is/HOL.LISTE"
+.continue REPSUMS ? M|stufe <> M|startstufe
+..
+.. Initialize max and min
+.copy M|absmax = M|tabsvorkommen
+.copy M|absmin = M|tabsvorkommen
+..
+!REPSUMS: Report sums
+.formula M|absvorkommen = M|absvorkommen + M|tabsvorkommen
+.copy M|absmax = M|tabsvorkommen ? M|tabsvorkommen > M|absmax
+.copy M|absmin = M|tabsvorkommen ? M|tabsvorkommen < M|absmin
+.continue ITERATE
+..
+!FOOTER: Nothing found!
+.input "is/NICHTS.GEFUNDEN.BF"
+..*****************************************************************************
+!END
+.continue

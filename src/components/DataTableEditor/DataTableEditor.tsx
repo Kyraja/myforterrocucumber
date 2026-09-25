@@ -12,6 +12,7 @@
 import { useId } from 'react';
 import type { Language } from '../../i18n';
 import { useTranslation } from '../../i18n';
+import { IconClose, IconPlus } from '../icons';
 import styles from './DataTableEditor.module.css';
 
 function fieldDesc(f: { name: string; description: string; descriptionDe?: string; descriptionEn?: string }, lang: Language): string {
@@ -99,7 +100,7 @@ export function DataTableEditor({ table, onChange, columnHeaders, fixedColumns, 
                   title={t('dataTable.removeRow')}
                   disabled={table.length <= 1}
                 >
-                  &times;
+                  <IconClose />
                 </button>
               </td>
             </tr>
@@ -115,16 +116,16 @@ export function DataTableEditor({ table, onChange, columnHeaders, fixedColumns, 
       )}
       <div className={styles.actions}>
         <button className={styles.addBtn} onClick={addRow} type="button">
-          {t('dataTable.addRow')}
+          <IconPlus />{t('dataTable.addRow')}
         </button>
         {!fixedColumns && (
           <>
             <button className={styles.addBtn} onClick={addColumn} type="button">
-              {t('dataTable.addColumn')}
+              <IconPlus />{t('dataTable.addColumn')}
             </button>
             {table.length > 0 && table[0].length > 1 && (
               <button className={styles.addBtn} onClick={removeColumn} type="button">
-                {t('dataTable.removeColumn')}
+                <IconClose />{t('dataTable.removeColumn')}
               </button>
             )}
           </>

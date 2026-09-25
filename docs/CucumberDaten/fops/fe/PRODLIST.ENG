@@ -1,0 +1,75 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : PRODLIST.ENG
+..  Datum          : 01.10.2004
+..  Autor          : cl
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..  Funktion       : Infosystem, Liste der Fertigungsvorschl„ge
+..                   Kapazit„tsengpass aus Reservierung
+..  Ablauf         : Tabellenzeigfop
+..*****************************************************************************
+.set trans -
+.type text xartle     ? _F|defined(U|xartle)
+.type bool xbreskrit  ? _F|defined(U|xbreskrit)
+.type text xengkapazz ? _F|defined(U|xengkapazz)
+.type P8   xabtlg     ? _F|defined(U|xabtlg)
+.type bool xbengkapaz ? _F|defined(U|xbengkapaz)
+.type R9.2 xabw       ? _F|defined(U|xabw)
+.type integer  xdiff      ? _F|defined(U|xdiff)
+..
+.copy U|xbengkapaz = G|FALSE
+.formula U|xengkapazz   = ""
+..
+.. FV
+.load 4 purchasing 'M|vorgang^id'
+.continue                     ? _G|mehr
+.copy U|xbreskrit = G|FALSE
+.. Reservierung
+.load 6 add 4|eres
+.continue                     ? _G|mehr
+..
+.. ist die RES aufgrund ihrer zugeordneten Beschaffungen kritisch?
+.copy U|xbreskrit = _F|empty(6|krit) & 6|fbsterm > G|datum
+..
+!ZEILE: keinen Arbeitsgang ausgeben, wenn Anfahrmenge und Anzahl null sind oder Beistellteile
+.continue HZ ? (6|amge = 0 & 6|anzahl = 0) ; 6|lfbeist
+..
+.continue ELART3                          ? 6|elart = 3
+.continue HZ
+..
+!ELART3: Kapazit„t aus Reservierung
+.formula M|engkapazz = ""
+.assign U|xabtlg   = 6|mgr
+.continue ENGPASS                          ? _F|empty(U|xabtlg)
+.continue HZ
+..
+!ENGPASS
+.reserve
+.select capacity 'U|xabtlg^id'
+.continue NOKAPA   ? _G|mehr
+.continue NOKAPA   ? '6|tsterm' = ""
+.continue NOKAPA   ? 6|tterm < G|datum
+.continue NOKAPA   ? F|empty(6|breite) & F|empty(6|lge)   
+.formula G|adatum = 6|tsterm
+.formula G|edatum = 6|tterm
+.formula U|xdiff = 6|tterm - 6|tsterm
+.formula M|engkapazz = M|mbelz            ? U|xdiff >= 1461
+.continue NOKAPA                           ? U|xdiff >= 1461
+.select machloading
+.continue NOKAPA                        ? _G|mehr
+.formula U|xabw = G|mbel + (M|prozeng / 100 * G|mbel)
+.formula M|engkapazz = "icon:stop2"    ? U|xabw > G|astd
+.copy U|xbengkapaz = G|TRUE       ? _F|empty(M|engkapazz)
+..
+!NOKAPA
+.select
+..
+!HZ
+.load 6 line
+.continue HZE           ?  _G|mehr
+.continue HZE           ? U|xbengkapaz
+.continue ZEILE
+..
+!HZE
+.continue

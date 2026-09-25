@@ -1,0 +1,309 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SQANALYSIS.TAB
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  :
+..
+.. A131: Dispositionsart
+.. variantenbezogen;(86);(VariantRelated)
+.. auftragsbezogen;(65);(SalesOrderRelated)
+.. projektbezogen;(80);(ProjectRelated)
+.. erweitert bedarfsbezogen;(69);(ExtendedRequirementRelated)
+.. bedarfsbezogen;(66);(RequirementRelated)
+.. mindestbestandsbezogen;(67);(MinimumStockLevelRelated)
+.. restmengenbezogen;(82);(RemainingQuantitiesRelated)
+..  -leer-;(0);(EmptyEntry)
+..
+...Include
+.. include la/SQANALYSIS.BEHAELTER
+..
+..*****************************************************************************
+.set trans -
+.type text      xtsel     ? _F|defined(U|xtsel)
+.type ARTR51100 xmge      ? _F|defined(U|xmge)
+.type ARTR51100 xkmge     ? _F|defined(U|xkmge)
+.type ARTR51100 xgebmge   ? _F|defined(U|xgebmge)
+.type ARTR51100 xmerk     ? _F|defined(U|xmerk)
+.type text      xmzsel    ? _F|defined(U|xmzsel)
+.type ID38      xplatz    ? _F|defined(U|xplatz)
+.type bool      xgleich   ? _F|defined(U|xgleich)
+.type text      xsel      ? _F|defined(U|xsel)
+..
+.continue BSTART  ? M|behaelter
+.copy U|xgleich = G|FALSE
+.continue BSTART  ? _M|ueberd
+..
+!UEBERDECKUNG: Artikel mit einer öberdeckung in der dynamischen Warteschlange
+.. mit bearbtyp = D 11 und vorgang = Teil Identnr und Prio = 4 enthalten sind.
+..
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";bearbtyp==D 11"
+.formula U|xtsel = U|xtsel + ";typ==0;menge<>0"
+.formula U|xtsel = U|xtsel + ";prio=4"
+.formula U|xtsel = U|xtsel + ";vorgang^dnr=2"
+.formula U|xtsel = U|xtsel + ";vorgang^such="
+.formula U|xtsel = U|xtsel + ";vorgang=" + M|artikel^id   ? _F|empty(M|artikel)
+.formula U|xtsel = U|xtsel + ";bezobj="+ M|lgruppe^id 
+.formula U|xtsel = U|xtsel + ";@ordnung=bearbtyp,prio"
+.formula U|xtsel = U|xtsel + ";@gruppe=2"
+.load 2 group "64:2" 'U|xtsel'
+.continue END     ? _G|mehr
+.continue LMELEM
+..
+!UE2BERD
+.load 2 continue
+.continue END     ? _G|mehr
+.continue LMELEM
+..
+!LMELEM: Lagergruppenelemente fÅr die gefundenen öberdeckungen
+.formula U|xmge = 0
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";artikel="+'2|vorgang^id'
+.formula U|xtsel = U|xtsel + ";lgruppe<>`"
+.formula U|xtsel = U|xtsel + ";lgruppe="+'M|lgruppe^id' ? _F|empty(M|lgruppe)
+.formula U|xtsel = U|xtsel + ";lgruppe="+'2|bezobj^id'  ?  F|empty(M|lgruppe)
+.formula U|xtsel = U|xtsel + ";dlemge="
+.formula U|xtsel = U|xtsel + ";projekt="+'M|projekt^id' ? _F|empty(M|projekt)
+.formula U|xtsel = U|xtsel + ";verw=="+'M|verw'         ? _F|empty(M|verw)
+.formula U|xtsel = U|xtsel + ";projekt<>`"              ?  M|projektbez
+.formula U|xtsel = U|xtsel + ";verw<>`"                 ?  M|verwendbez
+.formula U|xtsel = U|xtsel + ";@ablageart=(Active)"
+.load 0 group "40:6" 'U|xtsel'
+.continue NEXT
+..
+!LMLOOP
+.load 0 squantity 
+..
+!NEXT
+.continue UE2BERD  ? _G|mehr
+.continue LMLOOP     ? _G|mehr
+..nur Lagergruppenelemente mit ausgefÅllter Verwendung oder Projekt
+.continue LMLOOP     ?  F|empty(0|projekt) & F|empty(0|verw)
+.continue LMLOOP     ?  F|empty(0|projekt) & M|projektbez
+.continue LMLOOP     ?  F|empty(0|verw) & M|verwendbez
+.continue LMLOOP     ?  0|dlemge < 0
+.formula U|xkmge = '0|dlemge'
+.formula U|xgebmge = '0|dlemge'
+..
+!MZUORD: öber Dispo-MZ prÅfen, wieviele Teile reserviert sind
+.formula U|xmge = 0
+.formula U|xgebmge = 0
+.formula U|xmzsel = "$,,"
+.formula U|xmzsel = U|xmzsel + ";aktiv=TRUE"
+.formula U|xmzsel = U|xmzsel + ";lgruppe="+'0|lgruppe^id'
+.formula U|xmzsel = U|xmzsel + ";artikel="+'0|artikel^id'
+.formula U|xmzsel = U|xmzsel + ";bs=" + '0|id'
+.formula U|xmzsel = U|xmzsel + ";zuomge="
+.formula U|xmzsel = U|xmzsel + ";einplan=TRUE"
+.formula U|xmzsel = U|xmzsel + ";projekt="+'M|projekt^id' ? _F|empty(M|projekt)
+.formula U|xmzsel = U|xmzsel + ";verw=="+'M|verw'         ? _F|empty(M|verw)
+.formula U|xmzsel = U|xmzsel + ";@gruppe=0;@ablageart=(Both)"
+.load 3 mallocation 'U|xmzsel'
+.continue LINEWRT           ? _G|mehr & (_F|empty(0|projekt) ; _F|empty(0|verw))
+.continue LMLOOP       ? _G|mehr
+.continue ZUOMGE
+..
+!MZLOOP
+.load 3 mallocation
+.formula U|xgebmge = U|xkmge - U|xmge ? _G|mehr
+.continue LINEWRT                         ? _G|mehr & U|xgebmge  > 0
+.continue LMLOOP                     ? _G|mehr & U|xgebmge <= 0 
+..
+!ZUOMGE
+.formula U|xmge = U|xmge + 3|zuomge
+.continue MZLOOP
+.. 
+!BSTART: keine öberdeckung, Selektion nach Platzmengen (BehÑlter) oder Platzmengenelementen (keine BehÑlter)
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";artikel=" + 'M|artikel^id'   ? _F|empty(M|artikel)
+.formula U|xtsel = U|xtsel + ";platz=" + 'M|lplatz^id'      ? _F|empty(M|lplatz)
+.formula U|xtsel = U|xtsel + ";lgruppe=" + 'M|lgruppe^id'   ? _F|empty(M|lgruppe)
+.formula U|xtsel = U|xtsel + ";verw==" + 'M|verw'         ? _F|empty(M|verw)   & _M|behaelter
+.formula U|xtsel = U|xtsel + ";projekt=" + 'M|projekt^id' ? _F|empty(M|projekt) & _M|behaelter
+.formula U|xtsel = U|xtsel + ";charge=" + 'M|charge^id'   ? _F|empty(M|charge)  & _M|behaelter             
+.formula U|xtsel = U|xtsel + ";projekt<>`"                ? M|projektbez       & _M|behaelter
+.formula U|xtsel = U|xtsel + ";verw<>`"                   ? M|verwendbez       & _M|behaelter              
+.formula U|xtsel = U|xtsel + ";@ablageart=(Active)"
+.formula U|xtsel = U|xtsel + ";@ordnung=platz,artikel"               ? _F|empty(M|lplatz)
+.formula U|xtsel = U|xtsel + ";@ordnung=artikel,lgruppe,platz" ? _F|empty(M|artikel) ; _F|empty(M|lgruppe)
+.load 0 group "40:3" 'U|xtsel'    ? M|behaelter
+.load 0 group "40:4" 'U|xtsel'    ? _M|behaelter
+..
+!LINLOOP
+.continue UE2BERD ? _G|mehr & M|ueberd
+.continue END     ? _G|mehr
+.continue BEHVIEW ? M|behaelter 
+.continue NXTLINE ? G|mehr & _M|ueberd  & 0|gebmge=0
+..
+!LINEWRT: Zeile in die Tabelle des Infosystems schreiben 
+.make screen line +O  
+.copy M|schreibschutz = G|FALSE
+.protection hinweis 'M|aktzeile'
+.assign M|tartikel = 0|artikel^id
+.assign M|tlgruppe = 0|lgruppe
+..
+.continue OHNEBEH ? M|ueberd ; _M|behaelter
+!BEHVIEW
+.reserve
+.input "la/SQANALYSIS.BEHAELTER" 
+.select
+.continue NXTLINE   
+..
+!OHNEBEH
+.assign M|dispoa = 0|artikel^dispoa
+.copy M|internlgruppe = G|FALSE
+.copy M|internlgruppe = G|TRUE  ? 0|lgruppe^id = F|sysinfo(10)^intlgruppe^id
+.assign M|tlplatz = 0|platz^id  ? _M|ueberd
+.assign M|tlplatz = U|xplatz    ?  M|ueberd 
+.formula M|gebmge = U|xgebmge   ?  M|ueberd
+.formula M|gebmge = 0|gebmge    ?  M|ueberd & U|xgebmge = 0
+.formula M|gebmge = 0|gebmge    ? _M|ueberd
+.formula M|taufzu = M|attention ? M|gebmge < 0
+.protection -line 'M|aktzeile'  ? M|taufzu = M|attention
+.protection tmark 'M|aktzeile'  ? M|taufzu = M|attention
+.protection -exception -protected buinfosys 'M|aktzeile' ? M|taufzu = M|attention
+.protection -exception -protected buaktion 'M|aktzeile'  ? M|taufzu = M|attention
+.formula M|tverw = 0|verw
+.continue WEITER ? M|internlgruppe
+.. externe Lagergruppeneigenschaften prÅfen
+.formula U|xsel ="$,,art=" + M|tartikel^id + ";lgruppe=" + M|tlgruppe^id +  ";@gruppe=3;@ablageart=(Active)"
+.load 6 modificationlock nowait warehousedata 'U|xsel'
+.continue WEITER ? _G|mehr
+.assign M|dispoa = 6|dispoa
+.. Feld schÅtzen, wenn Dispoart= leer,r,m ober b 
+.protection tverwzu 'M|aktzeile' ? (F|equals(6|dispoa, "(EmptyEntry)") ; F|equals(6|dispoa, "(RemainingQuantitiesRelated)") ; F|equals(6|dispoa, "(MinimumStockLevelRelated)") ; F|equals(6|dispoa, "(RequirementRelated)"))
+..
+!WEITER
+.assign M|tprojekt = 0|projekt
+.copy M|tle = 0|gebeinh
+.formula M|tmge = M|gebmge
+.formula M|tfaktor = 0|gebf
+.assign M|tcharge = 0|charge^id  ? _M|ueberd
+.assign M|tfertig = 0|lffert
+.formula M|taufzu = M|attention ? F|equals(0|artikel^bsart, "(Subcontracting)") & F|empty(M|tfertig)
+.formula M|taufzu = M|attention ? F|equals(0|artikel^earta, "(None)") & F|equals(0|artikel^dispoa, "(EmptyEntry)") & F|empty(M|tfertig)
+.protection -line 'M|aktzeile'  ? M|taufzu = M|attention
+.protection tmark 'M|aktzeile'  ? M|taufzu = M|attention
+.protection -exception -protected buinfosys 'M|aktzeile' ? M|taufzu = M|attention
+.protection -exception -protected buaktion 'M|aktzeile'  ? M|taufzu = M|attention
+.assign M|tlplatzzu = M|tlplatz^id
+.formula M|tfaktorzu = 0|gebf
+.assign M|tchargezu = M|tcharge^id
+.copy M|tlezu = 0|gebeinh
+.formula M|tverwzu = 0|verw         ? M|projektbez
+.formula M|tprojektzu = 0|projekt   ? M|verwendbez
+.protection tverwzu 'M|aktzeile'    ? M|projektbez
+.protection tprojektzu 'M|aktzeile' ? M|verwendbez
+.. Feld schÅtzen, wenn Dispoart= leer,r,m ober b
+.protection tverwzu 'M|aktzeile'    ? M|internlgruppe & (F|equals(0|artikel^dispoa, "(EmptyEntry)") ; F|equals(0|artikel^dispoa, "(RemainingQuantitiesRelated)") ; F|equals(0|artikel^dispoa, "(MinimumStockLevelRelated)") ; F|equals(0|artikel^dispoa, "(RequirementRelated)"))
+.protection tprojektzu 'M|aktzeile' ? M|internlgruppe & (F|equals(0|artikel^dispoa, "(EmptyEntry)") ; F|equals(0|artikel^dispoa, "(RemainingQuantitiesRelated)") ; F|equals(0|artikel^dispoa, "(MinimumStockLevelRelated)"))
+.assign M|tfertigzu = 0|lffert
+.continue NXTLINE   ? _M|ueberd
+..
+.. Bei einer öberdeckungszeile: Anreichern der Informationen fÅr diese Zeile
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";artikel=" + 'M|tartikel^id'
+.formula U|xtsel = U|xtsel + ";platz="
+.formula U|xtsel = U|xtsel + ";lgruppe=" + 'M|tlgruppe^id'
+.formula U|xtsel = U|xtsel + ";verw==" + 'M|tverw'          ? _F|empty(M|tverw)
+.formula U|xtsel = U|xtsel + ";verw=`"                      ?  F|empty(M|tverw)
+.formula U|xtsel = U|xtsel + ";projekt=" + 'M|tprojekt^id'  ? _F|empty(M|tprojekt)
+.formula U|xtsel = U|xtsel + ";projekt=`"                   ?  F|empty(M|tprojekt)
+.formula U|xtsel = U|xtsel + ";charge=" + 'M|tcharge^id'    ? _F|empty(M|tcharge)
+.formula U|xtsel = U|xtsel + ";charge="                     ?  F|empty(M|tcharge)
+.formula U|xtsel = U|xtsel + ";gebf="
+.formula U|xtsel = U|xtsel + ";gebeinh="
+.formula U|xtsel = U|xtsel + ";gebmge="
+.formula U|xtsel = U|xtsel + ";@ablageart=(Active)"
+.formula U|xtsel = U|xtsel + ";@ordnung=artikel,lgruppe,platz" 
+.. Platzmengenelemente
+.load 4 group "40:4" 'U|xtsel' 
+.continue PROTECTION ? _G|mehr
+..                   
+.assign M|tlplatz = 4|platz
+.assign M|tlplatzzu = 4|platz
+.assign M|tlgruppe = 4|lgruppe
+..
+.formula M|tcharge = 4|charge
+.formula M|tfaktor = 4|gebf   ? U|xgebmge = 0
+.formula M|tfaktorzu = 4|gebf ? U|xgebmge = 0
+.assign M|tchargezu = M|tcharge^id
+.formula M|tle = 4|gebeinh    ? U|xgebmge = 0
+.formula M|tlezu = 4|gebeinh  ? U|xgebmge = 0
+.formula U|xmerk = M|gebmge
+.formula M|gebmge = U|xmerk ? M|tbaumaufzu = "+"
+.formula M|gebmge = 4|gebmge ? U|xgebmge = 0 & M|gebmge < 4|gebmge
+.formula M|tmge = M|gebmge 
+.formula M|taufzu = M|attention ? M|tle <> 4|gebeinh & U|xgebmge <> 0
+.protection -line 'M|aktzeile'  ? M|tle <> 4|gebeinh & U|xgebmge <> 0
+.protection -exception -protected buinfosys 'M|aktzeile' ? M|tle <> 4|gebeinh & U|xgebmge <> 0
+.protection -exception -protected buaktion  'M|aktzeile' ? M|tle <> 4|gebeinh & U|xgebmge <> 0
+.formula M|taufzu = M|attention ? M|gebmge < 0
+.protection -line 'M|aktzeile'  ? M|taufzu = M|attention
+.protection tmark 'M|aktzeile'  ? M|taufzu = M|attention
+.protection -exception -protected buinfosys 'M|aktzeile' ? M|taufzu = M|attention
+.protection -exception -protected buaktion 'M|aktzeile'  ? M|taufzu = M|attention
+..
+.continue LOAD4 ? _M|behaelter
+.continue LOAD4 ? _F|empty(M|tbaumstat)
+.type text  xselect ? _F|defined(U|xselect)
+.formula U|xselect = "$,,artikel="+M|tartikel^id+";@gruppe=2"
+.load 5 container 'U|xselect'
+.continue LOAD4 ? _G|mehr
+.protection tmark 'M|aktzeile'
+.formula M|taufzu = M|attention
+.load 5
+..
+!LOAD4
+.load 4 squantity
+.continue LMLOOP          ? _G|mehr & _U|xgleich
+.continue PROTECTION      ? _G|mehr &  U|xgleich
+..
+!L4OAD
+.continue LOAD4 ? _G|mehr
+.copy U|xgleich = G|TRUE  ?  4|platz^id = M|tlplatz^id & 4|charge^id = M|tcharge^id
+.copy U|xgleich = G|FALSE ?  4|platz^id <> M|tlplatz^id  ; 4|charge^id <> M|tcharge^id
+.continue LOAD4           ?  U|xgleich & _M|tartikel^gebvhe & _M|tartikel^gebvpe & _M|tartikel^gebehe & _M|tartikel^gebepe & _M|tartikel^gebge & _M|tartikel^gebve 
+.continue PROTECTION      ? _U|xgleich
+.copy M|schreibschutz = G|TRUE
+.formula M|taufzu = M|attention
+.protection -line 'M|aktzeile'
+.protection tmark 'M|aktzeile'
+.protection -exception -protected buinfosys 'M|aktzeile' 
+.protection -exception -protected buaktion 'M|aktzeile' 
+.continue LOAD4
+..
+!PROTECTION: Mehrere Treffer wenn G|mehr. Dann Zeile schreibschÅtzen
+.continue LMLOOP ? U|xgleich
+.protection tmark 'M|aktzeile'
+.copy M|schreibschutz = G|TRUE
+.assign M|tbaumstat = "+"
+.formula M|tlplatz = ""
+.formula M|tlplatzzu = ""
+.formula M|tfaktor = ""
+.formula M|tfaktorzu = ""
+.assign M|tchargezu = ""
+.formula M|gebmge = M|tmge
+.formula M|tmge = ""
+.formula M|tcharge = ""
+.protection tmge 'M|aktzeile'
+.protection tprojektzu 'M|aktzeile'
+.protection tlezu 'M|aktzeile'
+.protection tfaktorzu 'M|aktzeile'
+.protection tchargezu 'M|aktzeile'
+.protection tverwzu 'M|aktzeile'
+.continue LMLOOP 
+..
+!NXTLINE
+.load 0 squantity
+.continue LINLOOP
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR1
+.error Keine BehÑlterdaten vorhanden.
+.end 1

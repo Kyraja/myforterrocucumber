@@ -1,0 +1,156 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : APLAN.CHART.FOP
+.. Autor          : foe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Darstellung der Absatzzahlen als Diagramm
+.. Functionality  :
+.. Includes       :
+..
+..  include la/ZEITTEXT
+..
+..*****************************************************************************
+.set trans -
+.. Absatzzahlen als Diagramm
+..
+..*****************************************************************************
+... nur in GUI mîglich
+.end 0 ? _G|grafik
+..
+............................................
+.type GJ    xgj
+.type text  xttitel xtxmark xtvarname
+.type text  xtraster xtdattyp
+.type text  xtztext
+.type GD    xdvondat
+.type GD    xdbisdat
+.type integer   xinr
+.type integer   xifarbe
+.type text  xttfarbe xtfarbe1 xtfarbe2 xtfarbe3 xtfarbe4
+.type text  xtfarbe5 xtfarbe6 xtfarbe7 xtfarbe8 xtfarbe9
+.type text  xtfarbe10 xtfarbe11 xtfarbe12
+.type real  xrw xrw0
+.type bool  xbkum
+.type A227  xatyp
+...
+.input "ARB"
+...
+!START
+.. Zeitbereich prÅfen
+.error Zeitbereich leer ? M|anfdat > M|enddat
+.continue ENDE             ? M|anfdat > M|enddat
+..
+.. Farben festlegen
+.input "is/ABASFARBEN.DEF"
+.. Rot "255 0 0"
+.formula U|xtfarbe1 = U|xabasmidred
+.. Gelb "255 255 0" /"250 250 0"
+.formula U|xtfarbe2 = U|xabasyellow
+.. GrÅn "0 255 0" / "0 255 100"
+.formula U|xtfarbe3 = U|xabasmidgreen
+.. Blau "0 0 255" / "0 50 250"
+.formula U|xtfarbe4 = U|xabasblue
+.. Schwarz "0 0 0"
+.formula U|xtfarbe5 = U|xabasblack
+.. Dunkelorange "255 140 0"
+.formula U|xtfarbe6 = U|xabasdarkorange
+.. DunkelgrÅn "0 100 0"
+.formula U|xtfarbe7 = U|xabasgreen
+.. Dunkelrot "139 0 0"
+.formula U|xtfarbe8 = U|xabasred
+.. Hellblau "191 239 255"
+.formula U|xtfarbe9 = U|xabaslightblue
+.. Gold "255 215 0"
+.formula U|xtfarbe10 = U|xabasgold
+.. Pink "255 181 197"
+.formula U|xtfarbe11 = U|xabaspink
+.. Grau "190 190 190"
+.formula U|xtfarbe12 = U|xabasgrey
+..
+.. Diagramm-Parameter Åbernehmen
+.. Werte kumulieren ? M|chkum
+.copy U|xbkum = G|FALSE
+..
+... Variablenname setzen
+.formula U|xtvarname = "M|mge"  ?  G|evtvar = "chmge"
+.formula U|xtvarname = "M|wert" ?  G|evtvar = "chwert"
+... Text zum Typ der Daten
+.set trans +
+.formula U|xtdattyp = "Mengen"  ?  G|evtvar = "chmge"
+.formula U|xtdattyp = "Werte"   ?  G|evtvar = "chwert"
+.set trans -
+..
+!DATEN: Diagramm initalisieren
+.chart -INIT
+.. Diagrammtyp setzen
+.chart -PARAM -CHARTTYPE LINES ? U|xbkum
+.chart -PARAM -CHARTTYPE BAR   ? _U|xbkum
+.chart -PARAM -3D NO           ? _U|xbkum
+..
+!TITEL: Titel zusammensetzen
+.copy U|xatyp = M|typ
+.formula U|xttitel = 'U|xatyp'
+.set trans +
+.formula U|xttitel = U|xttitel + " " + 'M|abschn' ? M|abschn > 0
+.formula U|xttitel = U|xttitel + " " + "archiviert" ? M|archiv
+.formula U|xttitel = U|xttitel + " (" + 'U|xtdattyp' + ") fÅr " + 'M|eplan^name'
+.formula U|xttitel = U|xttitel + " " + "kumuliert" ? U|xbkum
+.formula U|xttitel = U|xttitel + " - " + "Stand" + " " + 'G|datum'
+.set trans -
+.chart -PARAM -TITLECHART 'U|xttitel'
+.chart -PARAM -TITLEX "ZeitrÑume"
+.chart -PARAM -DECIMALSY 0
+.chart -PARAM -TITLEY 'U|xtdattyp'
+..
+... ZÑhler initialisieren
+.formula U|xinr = 0
+..
+!MARKN: Beschriftung X-Achse: Bez. der Zeitabschnitte
+.select screen line
+.continue LINE ? _G|mehr
+..
+.formula U|xdvondat = M|vondat
+.formula U|xdbisdat = M|bisdat
+.formula U|xtraster = 'M|raster^zraster^raster'
+.input "la/ZEITTEXT"
+.formula U|xtxmark = U|xtztext
+.chart -PARAM -MARKERX 'U|xtxmark'
+.continue MARKN ? M|aktzeile < M|tzeilen
+..
+!LINE: Diagramm Farbe setzen
+.formula U|xinr  = U|xinr + 1
+.continue NRFARBE? U|xinr > 12
+.. Vordefinierte Farben
+.formula U|xttfarbe = 'U|xtfarbe.U|xinr'
+.chart -STARTVALUES 'U|xttitel' -RGBCOLOR 'U|xttfarbe' -LINEWIDTH 2
+.continue WERTE
+..
+!NRFARBE: Weiter Farben ab 10 verwenden
+.formula U|xifarbe  = U|xinr - 3
+.chart -STARTVALUES 'U|xttitel' -COLOR 'U|xifarbe' -LINEWIDTH 2
+..
+!WERTE
+.select screen header
+.formula U|xrw0  = 0.00
+..
+!ADD: Werte berechnen, gegebenenfalls kumulieren
+.select screen line
+.. 'M|aktzeile' 'M|tzeilen'
+.continue NLINE ? _G|mehr
+..
+.formula U|xrw  = F|eval(U|xtvarname)
+.formula U|xrw  = U|xrw0 + U|xrw ? U|xbkum
+.formula U|xrw0 = U|xrw
+... Diagramm-Werte setzen
+.chart -VALUE 'U|xrw'
+.continue ADD
+..
+!NLINE: NÑchster Typ
+..
+!CHART: Diagramm aufrufen
+.chart -SHOW chart 0
+.continue ENDE
+..
+!ENDE
+.end 0

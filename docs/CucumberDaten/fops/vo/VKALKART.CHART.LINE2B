@@ -1,0 +1,119 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..
+..  FOP-Name       : VKALKART.CHART.LINE2B
+..  Datum          : 28.10.2008
+..  Version        : 2008
+..  Autor          : cl
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..
+..  Funktion       : zeigt Gemeinkosten in einem Linien-Diagramm an
+..
+..  Includes       :
+..*****************************************************************************
+.set trans -
+... nur in GUI m”glich
+.end 0 ? _G|grafik & _F|isFlagSet(82)
+..
+.. Declarations
+.type text xtcolor       ? _F|defined(U|xtcolor)
+.type text xtitel        ? _F|defined(U|xtitel)
+.type text xtitely       ? _F|defined(U|xtitely)
+.type text xttip         ? _F|defined(U|xttip)
+.type text xcostmat      ? _F|defined(U|xcostmat)
+.type text xextserv      ? _F|defined(U|xextserv)
+.type text xprodcostfix  ? _F|defined(U|xprodcostfix)
+.type text xprodcostvar  ? _F|defined(U|xprodcostvar)
+.type text xcostmanufact ? _F|defined(U|xcostmanufact)
+.type R7.4 xmax          ? _F|defined(U|xmax)
+.type R7.4 xvergl        ? _F|defined(U|xvergl)
+.type integer  xstepx        ? _F|defined(U|xstepx)
+..
+.formula U|xmax     = 10
+..
+.set trans +
+.formula U|xtitel        = F|formatstr("Gemeinkosten des Artikels {1}", M|kart^namebspr)
+.formula U|xtitely       = F|formatstr("Kosten der Vorkalkulation in {1}", G|inland)
+.formula U|xttip         = "Kalkulation am {1};{2}: {3}"
+.formula U|xcostmat      = "Materialkosten"
+.formula U|xextserv      = "Fremdleistung"
+.formula U|xprodcostfix  = "Fertigungskosten fix"
+.formula U|xprodcostvar  = "Fertigungskosten variabel"
+.formula U|xcostmanufact = "Herstellungskosten"
+.set trans -
+..
+!CHART: Initialize chart
+.chart -INIT
+.chart -PARAM -CHARTTYPE LINES
+.chart -PARAM -TITLECHART 'U|xtitel'
+.chart -PARAM -RGBBACKCOLOR 253 253 253
+.chart -PARAM -TITLEX "Zeile"
+.chart -PARAM -TITLEY 'U|xtitely'
+..
+!MATERIALKOSTEN
+.formula U|xtcolor  = "111  80 200"
+.chart -STARTVALUES 'U|xcostmat' -ID 'U|xcostmat' -RGBCOLOR 'U|xtcolor' -POINTMARKER MARBLE
+..
+!ZEILE1: Materialkosten
+.select screen line
+.continue FREMDKOSTEN ? _G|mehr
+.chart -PARAM -MARKERX 'M|aktzeile'
+.chart -VALUE 'M|tmatgk' -TIP 'F|formatstr(U|xttip, M|tstand, U|xcostmat, M|tmatgk)'
+.continue ZEILE1
+..
+!FREMDKOSTEN
+.formula U|xtcolor = "  0 127 255"
+.chart -STARTVALUES 'U|xextserv' -ID 'U|xextserv' -RGBCOLOR 'U|xtcolor' -POINTMARKER MARBLE
+..
+!ZEILE2: Fremdleistung
+.select screen line
+.continue FIXFERTKOST ? _G|mehr
+.chart -PARAM -MARKERX 'M|aktzeile'
+.chart -VALUE 'M|tfremdgk' -TIP 'F|formatstr(U|xttip, M|tstand, U|xextserv, M|tfremdgk)'
+.continue ZEILE2
+..
+!FIXFERTKOST
+.formula U|xtcolor = "  0  10 100"
+.chart -STARTVALUES 'U|xprodcostfix' -ID 'U|xprodcostfix' -RGBCOLOR 'U|xtcolor' -POINTMARKER MARBLE
+..
+!ZEILE3: Fertigungskosten fix
+.select screen line
+.continue FERTKOSTVAR ? _G|mehr
+.chart -PARAM -MARKERX 'M|aktzeile'
+.chart -VALUE 'M|tfixfgk' -TIP 'F|formatstr(U|xttip, M|tstand, U|xprodcostfix, M|tfixfgk)'
+.continue ZEILE3
+..
+!FERTKOSTVAR
+.formula U|xtcolor = "  0   0 192"
+.chart -STARTVALUES 'U|xprodcostvar' -ID 'U|xprodcostvar' -RGBCOLOR 'U|xtcolor' -POINTMARKER MARBLE
+..
+!ZEILE4:
+.select screen line
+.continue HERSTELL ? _G|mehr
+.chart -PARAM -MARKERX 'M|aktzeile'
+.chart -VALUE 'M|tvarfgk' -TIP 'F|formatstr(U|xttip, M|tstand, U|xprodcostvar, M|tvarfgk)'
+.continue ZEILE4
+..
+!HERSTELL
+.formula U|xtcolor = " 10 100 123"
+.chart -STARTVALUES 'U|xcostmanufact' -ID 'U|xcostmanufact' -RGBCOLOR 'U|xtcolor' -POINTMARKER MARBLE
+..
+!ZEILE5: Herstellungskosten
+.select screen line
+.continue ENDE ? _G|mehr
+.chart -PARAM -MARKERX 'M|aktzeile'
+.chart -VALUE 'M|thgk' -TIP 'F|formatstr(U|xttip, M|tstand, U|xcostmanufact, M|thgk)'
+..
+.formula U|xvergl = M|thgk
+.formula U|xmax   = M|thgk ? U|xmax < U|xvergl
+.continue ZEILE5
+..
+!ENDE
+.formula U|xstepx = 5  ? M|tzeilen > 50
+.formula U|xstepx = 10 ? M|tzeilen > 100
+.chart -PARAM -MINMAXY 0 'U|xmax'
+.chart -PARAM -STEPX 'U|xstepx'
+.chart -PARAM -DECIMALSY 4
+.chart -SHOW chart 0
+.continue

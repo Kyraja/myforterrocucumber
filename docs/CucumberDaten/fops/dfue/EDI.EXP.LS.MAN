@@ -1,0 +1,830 @@
+..!interpreter english
+..@@BEGINHEAD
+..========================================================================
+..==
+..==  Name              : EDI.EXP.LS.MAN
+..==
+..==  Pfad              : dfue
+..==
+..==  Projekt           : dfue
+..==
+..==  Version           : 2005
+..==
+..==  Funktion          : manuelles senden eines SPED
+..==
+..==  Erstellungsdatum  : 18.08.2006
+..==
+..==  Autor             : Ozan Kesim
+..==
+..==  Verantwortlich    : mh
+..==
+..==
+..==
+..==  Menuepunkte       :
+..==
+..==  Maskenprioritaet
+..==  bei EFOP          :
+..==
+..==  Besonderheiten    :
+..==
+..==
+..==
+..==
+..==
+..==  Aenderungshistorie: 6.1.2000 <ma>
+..==                      - satz 500 korrigiert
+..#KOR#EDI-MODUL#DATUM#éNDERUNGS-INDEX#MitarbeiterkÅrzel#
+..#KOR#LS#14.08.2006#29#ok# (u.a. setz trans + / -)
+..#KOR#LS#18.08.2006#30#ok# Komplett umgebaut
+..==
+..========================================================================
+..@@ENDHEAD
+..
+.input ARB
+..
+.. variable definitions
+..@@BEGINVARDEFS
+..====================================================
+.set trans -
+.type text  xftn1 xspedliste
+.type bool  xbfehler
+.type text  xAblStelle
+.type text  xArtAendKonstr
+.type text  xArtAendKonstrA
+.type text  xAusfSchl
+.type text  xArtBez
+.type text  xArtChargenr
+.type text  xArtEinh
+.type text  xArtNr
+.type real  xArtPackMge
+.type BT35  xArtSachnrKu
+.type text  xAnzPackst
+.type bool  xbedl
+.type bool  xbfirstartikel
+.type bool  xbNextLS
+.type bool  xbNextZeile
+.type bool  xbpackvorhanden
+.type bool  xbsperre
+.type text  xcom
+.type integer   xDFUEproto
+.type text  xdPARAM
+.type text  xdEDI
+.type text  xdFEDI
+.type text  xEDInr
+.type text  xEDLLiefNr
+.type text  xEDLWarEmpf
+.type text  xEintrDat
+.type text  xEintrZeit
+.type text  xFrachtFuehr
+.type text  xFrankSchl
+.type integer   xgewbrutto
+.type integer   xgewnetto
+.type integer   xmge
+.type text  xHandPr
+.type text  xIDrahmen
+.type integer   xii
+.type text  xKuLiNr
+.type text  xKuNr
+.type text  xKuNrDeb
+.type text  xKuNrGLN
+.type text  xLadeMeter
+.type text  xLagHaltSchl
+.type text  xLagOrt
+.type text  xLastPackmitken
+.type integer   xLfdNr
+.type text  xLiefKenn
+.type text  xLiWerk
+.type text  xLkwArtSchl
+.type real  xlmge
+.type text  xLsDatum
+.type real  xLSGewBrut
+.type real  xLSGewNet
+.type text  xLSnr
+.type bool  xmehr
+.type text  xPackAbm
+.type text  xPackNrbis
+.type text  xPackNrvon
+.type text  xPackSachnrKu
+.type text  xPackSachnrLi
+.type integer   xPlausiArt
+.type integer   xzaehler
+.type text  xlsliste
+.type text  xpnum
+.type integer   xpos
+..... procedure stack pointer .....
+.type integer   xprocsp
+.type text  xpuffer
+.type text  xrahmen
+..
+.type text  xSPED1nr
+..
+.type text  xSPEDnr ? _defined(xSPEDnr)
+.type bool  xbinfo  ? _defined(xbinfo)
+..
+.type text  xsuch
+.type text  xsys
+.type text  xTransnr
+.type text  xTranspMitSchl
+.type text  xTransPPnr
+.type BT99  xtxt1
+.type text  xtxt2 xtxt3 xtxt4 xtxt5 xtxt6 xtxt7
+.type text  xtxt8 xtxt9 xtxt10 xtxt11 xtxt12 xtxt13
+.type text  xtxt14 xtxt15 xtxt16 xtxt17 xtxt18 xtxt19
+.type text  xtxt20 xtxt21 xtxt22 xtxt23 xtxt24 xtxt25
+.type text  xuebdat
+.type text  xuebzeit
+.type text  xULiefNr
+.type text  xUrland
+.type text  xUrlandschl
+.type text  xVerbStelle
+.type text  xVersandArt
+.type text  xVerwSchl
+.type text  xvorgang
+.type text  xVorgSchl
+.type text  xvortxt
+.type text  xWerk
+.type text  xZeichKu
+..
+..
+.. Verweis auf Speditionsauftrag
+.type P55   xvSPED     ? _F|defined(U|xvSPED)
+..
+.type text  xtselLS    ? _F|defined(U|xtselLS)
+..====================================================
+..@@ENDVARDEFS
+..
+.formula xbfehler = false
+.. initialize procedure stack pointer
+.formula xprocsp = 0
+.. alle variablen mÅssen definiert sein, sonst bricht das programm ab
+.set demand -
+..
+.. ----------------------------------------
+.continue EPROCDEF
+.. procedure definitions
+..
+!PROC001: ----- FEHLER -----
+.select -
+.formula xbfehler = true
+..
+.box Fehler in Vorgang ? _xbinfo
+'xvortxt'
+'xtxt1'
+'xtxt2'
+..
+.continue ENDE
+..
+.continue 'xprocst.xprocsp'
+..
+..
+!PROC002: ----- WRITE_EDI_SET -----
+.select from 'xdEDI' xtxt1^
+..
+..
+!LOOP001: ==============================
+.continue ELOP001 ? _(mehr)
+.make line
+..
+.formula xii = 1
+..
+..
+!LOOP002: ==============================
+.continue ELOP002 ? _(xii <= 25)
+.formula h|text.xii = xtxt1 << "#"
+.formula xtxt1      = xtxt1 >> "#"
+..
+..
+.continue EL001 ? _(xii=25)
+.. IF001
+.formula xzaehler = xzaehler + 1
+.formula h|text.xii = xzaehler
+..
+!EL001
+.. FI001
+..
+.formula xii = xii + 1
+..
+.continue LOOP002
+!ELOP002: ==============================
+..
+.select from 'xdEDI' xtxt1^
+..
+.continue LOOP001
+!ELOP001: ==============================
+..
+.continue 'xprocst.xprocsp'
+..
+!EPROCDEF: ----- end procedure definitions -----
+.. ----------------------------------------
+..
+..die parameterdatei
+.formula xdPARAM = "dfue/DFUE.EXP.INI"
+.input 'xdPARAM'
+..
+.output terminal
+.input BILD.F
+..
+..
+.continue EL002 ? _(+xSPEDnr=0)
+.. IF002
+.set trans +
+Manuelles Senden eines Speditionsauftrages     'datum ' 'zeit '
+==============================================================
+
+.read "Welcher Speditionsauftrag (SEL mit RETURN)" xSPEDnr
+.formula xvortxt = "Speditionsauftrag"
+.formula xvortxt = "Speditionsauftrag " + xSPEDnr
+.set trans -
+..
+!EL002
+.. FI002
+..
+.. hole SPED
+..
+.continue EL003 ? _(+xSPEDnr > 0)
+.. IF003
+.select transportcompany 'xSPEDnr'
+..
+.continue FI003
+!EL003
+.select transportcompany "%,,num55=;kunde=;uebdat=;spediteur="
+..
+!FI003
+..
+..
+.continue EL004 ? _(_(mehr))
+.. IF004
+.. Fehler
+.set trans +
+.formula xtxt1 = "Konnte Speditionsauftrag " + xSPEDnr + " nicht finden!"
+.set trans -
+.formula xtxt2 = ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+..
+!EL004
+.. FI004
+..
+.. Sicherstellen, dass xSPEDnr die Nummer des Speditionsauftrags enthaelt
+.. Hintergrund: Aus dem Kommandomenue kann die Lieferschein-DFUE mit der ^id
+..              des Speditionsauftrags gestartet werden
+.. !Achtung:    "+" fuer Wiederholungssendung abgelegter Speditionsauftraege
+..              nicht verlieren!
+.formula U|xSPEDnr = H|nummer
+.formula U|xSPEDnr = "+" + H|nummer ? H|ablagef
+..
+.. die Fehlerdatei, fÅr die evtl. Fehlermeldungen
+.formula xdFEDI = "rmtmp/X.SP" + xSPEDnr + "." + pid + ".ERR"
+.formula T|xdFEDI = F|regreplaceall(T|xdFEDI, "\+", "")
+..
+.output new 'xdFEDI'
+.input DATEI.F
+..
+.. die tmp. datei, die spÑter der EDI-datensatz wird
+.formula xdEDI  = "rmtmp/X.SP" + xSPEDnr + "." + pid + ".TMP"
+.formula T|xdEDI = F|regreplaceall(T|xdEDI, "\+", "")
+..
+.output new 'xdEDI'
+.input DATEI.F
+..
+.. die tmp. datei, die fÅr SpeditionsauftrÑge verwendet wird
+.formula xspedliste  = "X.SPLIST." + pid + ".TMP"
+.output new 'xspedliste'
+.input DATEI.F
+..
+..
+.continue EL005 ? _(+xSPEDnr > 0)
+.. IF005
+.formula xSPEDnr = h|num         ?  xSPEDnr << 1 <> "+"
+.formula xSPEDnr = "+" + 'h|num' ?  xSPEDnr << 1 = "+"
+..
+.select transportcompany 'xSPEDnr'
+..
+.continue FI005
+!EL005
+..
+!LOOP003: ==============================
+.continue ELOP003 ? _(mehr)
+'h|id'
+..
+.select transportcompany
+..
+.continue LOOP003
+!ELOP003: ==============================
+..
+.output new WERF.WEG
+..
+!HOLSPED
+.select from 'xspedliste' x1
+..
+..
+.continue EL006 ? _((mehr) & (x1 <> ""))
+.. IF006
+.formula xSPEDnr = x1
+.formula xsys  = "tail -n +2 " + xspedliste + " > WERF.TMP"
+.system 'xsys'
+.formula xsys  = "mv WERF.TMP " + xspedliste
+.system 'xsys'
+..
+.select transportcompany 'xSPEDnr'
+..
+.continue FI006
+!EL006
+.continue INEDI
+..
+!FI006
+..
+!FI005
+..
+..
+.continue EL007 ? _(mehr)
+.. IF007
+.formula xWEmpfNr = h|kunde^nummer
+.formula xKuNr    = h|kunde^nummer
+..
+!EL007
+.. FI007
+..
+.select transportcompany lock 'xSPEDnr'
+..
+..
+.continue EL008 ? _(_(mehr))
+.. IF008
+.. Fehler
+.set trans +
+.formula xtxt1 = "Konnte Speditionsauftrag " + xSPEDnr + " nicht finden!"
+.formula xtxt2 = ""
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+..
+.continue FI008
+!EL008
+.. Ist schon gesendet?
+..
+.continue EL009 ? _(h|dfuesenden)
+.. IF009
+.continue FI009
+!EL009
+.set trans +
+.formula xtxt1 = "Der Speditionsauftrag ist bereits gesendet!"
+.formula xtxt2 = ""
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+..
+!FI009
+..
+..
+.continue EL010 ? _(h|druck)
+.. IF010
+.set trans +
+.formula xtxt1 = "Zuerst mÅssen die Speditionspapiere gedruckt werden!"
+.formula xtxt2 = ""
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC001
+!RET004
+.formula xprocsp = xprocsp - 1
+..
+!EL010
+.. FI010
+..
+!FI008
+..
+.. ab hier wird exclusiv gearbeitet
+.formula xcom = "SPED2EDI:" + xSPEDnr
+.occupy 'xcom'
+..
+.. DFUE-Protokoll aus Kunde^edinfo
+.. ----------------------------------------
+.add h|kunde
+..
+.continue EL011 ? _(mehr)
+.. IF011
+.. ----------------------------------------
+.reserve
+..
+.continue EL012 ? _(gruppe=2)
+.. IF012
+.formula xWerk      = d|werk
+.formula xAblStelle = d|ablstelle
+.formula xKuNrDeb   = d|firma^nummer
+.formula xKuNrGLN   = d|gln
+..
+!EL012
+.. FI012
+..
+.. erst mal kein protokoll
+.formula xDFUEproto = -1
+.formula xvorgang = "VKLS"
+.input 'xdGetProtokoll'
+..
+.select
+.. ----------------------------------------
+..
+..
+.continue EL013 ? _(xDFUEproto < 0)
+.. IF013
+..
+.. kein Åbertragungsprotokoll
+..
+.continue EL014 ? _(xbedl)
+.. IF014
+.set trans +
+.formula xtxt1 = "Kann öbertragungsprotokoll von Kunde " + h|edl
+.formula xtxt2 = "nicht ermitteln!"
+.set trans -
+..
+.continue FI014
+!EL014
+.set trans +
+.formula xtxt1 = "Kann öbertragungsprotokoll von Kunde " + h|kunde
+.formula xtxt2 = "nicht ermitteln!"
+.set trans -
+..
+!FI014
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC001
+!RET005
+.formula xprocsp = xprocsp - 1
+..
+..
+!EL013
+.. FI013
+..
+.continue FI011
+!EL011
+..
+.. kein kunde
+..
+.continue EL015 ? _(xbedl)
+.. IF015
+.set trans +
+.formula xtxt1 = "Kann Kunden " + 'h|edl' + " nicht lesen!"
+.set trans -
+.formula xtxt2 = ""
+..
+.continue FI015
+!EL015
+.set trans +
+.formula xtxt1 = "Kann Kunden " + 'h|kunde' + " nicht lesen!"
+.set trans -
+.formula xtxt2 = ""
+..
+!FI015
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC001
+!RET006
+.formula xprocsp = xprocsp - 1
+..
+..
+!FI011
+..
+.add
+.. ----------------------------------------
+..
+..
+.continue EL016 ? _(+h|edl > 0)
+.. IF016
+.. eine EDL-abwicklung
+.formula xbedl = true
+..
+.continue FI016
+!EL016
+.. keine EDL-abwicklung
+.formula xbedl = false
+..
+!FI016
+..
+..
+.continue EL017 ? _(F|empty(U|xextedi) & _F|empty(U|xintedi))
+.. IF017
+.. Individulles Export-FOP
+.select -
+.formula xanzls = 0
+..
+..
+.continue EL018 ? _((xDFUEproto = 3) & (xdEDI = ""))
+.. IF018
+.. DESADV-Datei
+.. die tmp. datei, die fÅr DESADV-Datei verwendet wird
+.formula xdEDI = "X.DESADV." + pid + ".TMP"
+..
+.continue FI018
+!EL018
+..
+.continue EL019 ? _(xdEDI = "")
+.. IF019
+.. AVIEXP-Datei
+.. die tmp. datei, die fÅr AVIEXP-Datei verwendet wird
+.formula xdEDI = "X.AVIEXP." + pid + ".TMP"
+..
+!EL019
+.. FI019
+..
+!FI018
+..
+.. Lieferscheinliste
+.. die tmp. datei, die fÅr Lieferscheinliste verwendet wird
+.formula xlsliste  = "X.LSLISTE." + pid + ".TMP"
+.output new 'xlsliste'
+.input DATEI.F
+..
+.. hole Åber SEL alle LS zu einem SPED benutzt wird der StandardschlÅssel
+.formula U|xcom = "$,,;@gruppe=1;typ=(4);@ablage=(3);@zeilen=(0);sped=" + xSPEDnr
+.select sales 'xcom'
+..
+..
+!LOOP004: ==============================
+.continue ELOP004 ? _(mehr)
+.. ----------------------------------------
+.output addedto 'xlsliste'
+'num'
+..
+.output
+.. ----------------------------------------
+..
+.select sales
+..
+.continue LOOP004
+!ELOP004: ==============================
+..
+.output addedto 'xdEDI'
+.output
+.formula xzaehler = 0
+.select from 'xlsliste' xy1
+..
+..
+!LOOP005: ==============================
+.continue ELOP005 ? _(mehr)
+.formula xtvorgang = xy1
+..
+.. die Variable xintedi wird im Unterprogramm DFUE.GET.PROTOK gefÅllt
+.input 'U|xintedi'
+.formula xanzls = 1
+..
+.select from 'xlsliste' xy1
+..
+.continue LOOP005
+!ELOP005: ==============================
+..
+.formula xanzls = 2
+.input 'xintedi'
+..
+.continue HOLSPED
+..
+.continue FI017
+!EL017
+.. Infosystem EDILS
+.. release h buffer
+.select -
+..
+.formula xkom = "edpinfosys.sh -c EKS -P -n EDILS " + " -s vkspednr=" + 'xSPEDnr'
+.formula xkom = xkom + ",kompact=0"  ?  xDFUEproto=1
+.formula xkom = xkom + ",datei=" + xdEDI + ",bstart"
+.formula xkom = xkom + " -O DOKU >> EDIEXPLSMAN.out 2>> EDIEXPLSMAN.err"
+.system 'xkom' password background
+..
+..
+.continue EL020 ? _(mehr)
+.. IF020
+.continue FI020
+!EL020
+.. Fehler: Keine Inhousedatei erstellt
+.set trans +
+.formula xtxt1 = "Konnte keine Inhousedatei vorbereiten!"
+.formula xtxt2 = "PROGRAMMABBRUCH   PID: " + pid + ",Fehlermeldungen in EDIEXPLSMAN.out und EDIEXPLSMAN.err"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC001
+!RET007
+.formula xprocsp = xprocsp - 1
+..
+!FI020
+..
+.formula xsys = "test -s " + xdFEDI
+.system 'xsys' background
+..
+..
+.continue EL021 ? _(mehr)
+.. IF021
+.. Fehler: Fehlende obligatorische Daten
+.set trans +
+.formula xtxt1 = "Es fehlen obligatorischen Daten nach VDA 4913!"
+.formula xtxt2 = "Siehe Fehlerprotokoll: " + xdFEDI
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC001
+!RET008
+.formula xprocsp = xprocsp - 1
+..
+!EL021
+.. FI021
+..
+!FI017
+..
+!INEDI
+.. und ab in die EDI-DB damit
+.output
+..
+.. erst mal den kopf des EDI-datensatzes anlegen
+..
+.. =====   CASE001   =====
+.continue BRK001 ? _(xDFUEproto = 1)
+.formula xsuch = "VKSPVA"
+..
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(xDFUEproto = 2)
+.formula xsuch = "VKAVIEXP"
+..
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(xDFUEproto = 3)
+.formula xsuch = "VKDESADV"
+..
+.continue ESAC001
+!BRK003
+!ESAC001: =====   ENDCASE   =====
+..
+..
+.continue EL022 ? _((xDFUEproto = 1) ; (xDFUEproto = 2) ; (xDFUEproto = 3))
+.. IF022
+.make edifact
+.formula such = xsuch
+.. Nachricht Kennung 2108 = Lieferschein
+.formula h|edinachr = "2108"
+..
+.. interne bezeichnung
+.set trans +
+.formula h|name = "ausgehender Speditionsauftrag "
+.set trans -
+.formula h|name = h|name + " " + xSPEDnr
+..
+.. status: erstmal undefiniert
+.formula h|status = 99
+..
+.. eks-vorgangsnr, wenn nur ein vorgang
+.formula h|ideksvor = xSPEDnr
+..
+.. fehlercode: erstmal undefiniert
+.formula h|fcode = 99
+..
+.. import/export-flag setzen
+.formula h|imex = "EX"
+..
+.. vorgangsart -> SPED
+.formula h|vorart = spko
+..
+.. idnr fÅr Kunde (Besteller) bei Lieferant
+.formula h|idkundeab = xKuNr
+..
+.. idnr fÅr Debitor bei Lieferant
+.formula h|idkunderab = xKuNrDeb
+..
+.. GLN des Debitor
+.formula h|glkundesab = xKuNrGLN
+..
+.. idnr fÅr Kunde (WarenempfÑnger) bei Lieferant
+.formula h|idkundesab = xWEmpfNr
+..
+.. idnr fÅr lieferant bei kunde
+.formula h|idabkunde = xKuLiNr
+..
+.. eks-idnr des rahmen
+.formula h|ideksrah = xIDrahmen
+..
+.. verwendungsschlÅssel
+..fo h|verwschl = xVerwSchl
+..
+.. werk / abladestelle
+.formula h|werk = xWerk
+.formula h|ablstelle = xAblStelle
+..
+!EL022
+.. FI022
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC002
+!RET009
+.formula xprocsp = xprocsp - 1
+..
+.. alles roger
+.select lock header
+.. status: vorgang in edi-datenbank eingetragen
+.formula h|status = 2
+.. alles ohne fehler
+.formula h|fcode = 0
+.rewrite
+..
+.formula xEDInr = h|num
+.select -
+..
+.. Meldung fÅr Anwender
+..
+.continue EL023 ? _(xbRMeldAn)
+.. IF023
+..
+.continue EL024 ? _(_(xbfehler))
+.. IF024
+.set trans +
+.output terminal
+Der Speditionsauftrag 'xSPEDnr' ist erfolgreich in die EDI-Datenbank Åbernommen!
+Bitte, warten!!!
+.set trans -
+..
+.continue FI024
+!EL024
+.. FEHLER
+.set trans +
+.output terminal
+Fehler im Speditionsauftrag 'xSPEDnr', bitte siehe die Post bzw. das Fehlerprotokoll!
+Bitte, warten!!!
+.set trans -
+..
+!FI024
+..
+!EL023
+.. FI023
+..
+.. Speditionsauftrag und Lieferscheine auf Senden = false setzen
+.. Speditionsauftrag ist erledigt und muss auf "nicht senden" gesetzt werden.
+.. Alle Lieferscheine mit dem selben Speditionsauftrag werden auch auf
+.. dfuesenden=false gesetzt.
+..
+.. Bei Markieren von dfuesenden=false im Speditionsauftrag in der GUI werden
+.. die Lieferscheine mit Hilfe des EFOPs FOP.37.ME auf false gesetzt.
+..
+.. mh, 30.04.2009: dfuesenden=false fÅr LS jetzt auch in EDI.EXP.LS.MAN
+..
+..
+.select transportcompany lock 'xSPEDnr'
+..
+..
+.continue EL025 ? _(mehr)
+.. IF025
+.. Verweis Speditionsauftrag
+.formula U|xvSPED = H|id
+..
+.. Speditionsauftrag auf "nicht senden" setzen
+.formula H|dfuesenden = false
+.formula H|ediid = U|xEDInr
+.rewrite
+.select -
+..
+.. Alle Lieferscheine zum Speditionsauftrag auch auf "nicht senden" setzen
+.formula U|xtselLS = "$,,;@gruppe=1;typ=(4);@ablage=(3);@zeilen=(0);sped=" + U|xvSPED^id
+..
+.select lock sales 'xtselLS'
+.continue ESENDF   ? _G|mehr
+!NSENDF
+.formula H|dfuesenden = false
+.formula H|ident = U|xEDInr
+.rewrite
+.select lock sales
+.continue NSENDF   ?  G|mehr
+!ESENDF
+.select -
+..
+!EL025
+.. FI025
+..
+!ENDE
+..
+.. die tmp. datei lîschen
+.formula xsys = "rm -f " + xdEDI + " " + xlsliste
+.system 'xsys' background
+..

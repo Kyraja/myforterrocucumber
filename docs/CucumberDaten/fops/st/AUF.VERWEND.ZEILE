@@ -1,0 +1,52 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : AUF.VERWEND.ZEILE
+.. Author         : ds
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe amk
+.. Functionality  : Opens node.
+.. Program flow   : Subroutine
+..*****************************************************************************
+.set trans -
+.type bool xbvorgaenger ? _F|defined(xbvorgaenger)
+..
+.. zu BUILD springt man beim Ermitteln des ersten Vorkommens in der FL und beim Nachfolger
+.. bei BAUGRP sind schon die direkten Vorkommen in der Tabelle und es werden darÅberliegende
+.. Baugruppen gesucht
+.continue BUILD ? F|empty(M|aktzeile)
+.continue BUILD ? U|xbvorgaenger
+.continue BAUGRP
+!BAUGRP
+.formula M|stufe = M|tbaumstufe
+.copy M|kvater = M|telem
+.copy M|kvaterlgruppe = M|tlgruppe
+.copy M|kvaterbasis  = M|telem^basisartikel
+..
+!BUILD: Build query
+.copy M|stdvers = G|false
+.copy M|stdvers = G|true ? _F|empty(M|kvater^basisartikel) & M|kvater^stdvers
+.assign M|kvater = U|xvvorgaenger   ? U|xbvorgaenger = G|TRUE
+.formula M|select = "$,,"
+.. kelem ist gefÅllt, kelem ist keine Standard-Version
+.formula M|select = M|select + "elem=" + 'M|kvater^id'               ? _M|stdvers & _F|empty(M|kvater)
+.. kelem ist leer und NUR der Basisartikel ist gefÅllt   
+.formula M|select = M|select + ";tbasisartikel=" + 'M|kvaterbasis^id' ? _M|stdvers & _F|empty(M|kbasisartikel)   
+.. kelem ist gefÅllt UND kelem ist eine Standard-Version                     
+.formula M|select = M|select + ";tbasisartikel=" + 'M|kvaterbasis^id' ? M|stdvers
+.formula M|select = M|select + ";kompeig=`"                 ? _M|mitkoppel
+..
+.continue WHGROUP ? _M|knurfliststd
+.formula M|select = M|select + ";flistestd=" + 'M|knurfliststd'
+..
+!WHGROUP: Add warehouse group
+.continue OPTIONS ? F|empty(M|kvaterlgruppe)
+.formula M|select = M|select + ";lgruppe=" + M|kvaterlgruppe
+..
+!OPTIONS: Add sort key
+.formula M|select = M|select + ";@gruppe=1;@ablageart=(Active);@zeilen=" + 'G|TRUE'
+..
+.. Query
+.input "is/SELECT.ROWBYROW"
+..*****************************************************************************
+!END
+.continue

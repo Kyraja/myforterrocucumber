@@ -1,0 +1,94 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PRINTQUEUE.TAB
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Erzeugt eine Zeile in der Tabelle der Druckschlange im EK/VK.
+.. Ablauf         : Tabellen-EFOP
+..
+.. Functionality  : Creates a table row in the printer queue from purchase or sales.
+.. Program flow   : Table efop
+..*****************************************************************************
+.set trans -
+.type text      xselect        ? _F|defined(U|xselect)
+..
+.input "ev/PRINTKOPF"
+.. Filter through in-house contact
+.continue ROW ? F|empty(M|inhouse)
+.continue FILSALE ? M|sales
+..
+.. Filter purchasing
+.continue END ? M|inhouse^id <> H|kl^betreuer^id & M|inhouse^id <> H|resteller^betreuer^id
+.continue ROW
+..
+!FILSALE: filter sales
+.continue END ? M|inhouse^id <> H|kl^betreuer^id & M|inhouse^id <> H|reempf^betreuer^id & M|inhouse^id <> H|warenempf^betreuer^id
+..
+!ROW: create a row in table
+.make screen line +O
+.assign M|tfiled = H|ablagef
+.assign M|printable = H|druck
+.assign M|transaction = H|id
+.formula M|subject = H|betreff
+.copy M|tdocdate = H|vom
+.copy M|tbookdate = H|budat
+.copy M|treview = H|tterm
+.formula M|toperator = H|zeich
+.assign M|partner = H|kl
+.formula M|fax1 = H|kl^fax
+.formula M|email1 = H|kl^email
+.copy M|lockeddocument = H|vsperre
+..
+.file -screen -tempname M|emailftext
+.output new 'M|emailftext'
+.input "DATEI.F"
+.input -text 'H|emailftext'
+.output new werf.weg
+..
+.continue SALES ? M|sales
+.assign M|billto = H|resteller
+.copy M|fax2 = H|resteller^fax
+.copy M|email2 = H|resteller^email
+.continue END
+!SALES
+.assign M|billto = H|reempf
+.copy M|fax2 = H|reempf^fax
+.copy M|email2 = H|reempf^email
+.assign M|sendto = H|warenempf
+.copy M|fax3 = H|warenempf^fax
+.copy M|email3 = H|warenempf^email
+.copy M|erechmail = H|erechmail
+.assign M|terechok = (_H|uebertr & H|erechok & H|druck & H|ktyp = G|reko)
+.copy M|sendemail = H|drbelegart^dmsemail ? _F|empty(H|drbelegart)
+..
+.continue NOZUGFERD ? H|ktyp <> G|reko
+.copy M|txml = G|FALSE
+.copy M|tpdfxml = G|FALSE
+.continue NOZUGFERD ? _F|sysinfo(18)^zugferd
+.formula U|xselect = F|formatstr("$,,klnum={1};edinachraz=(ZUGFeRDInvoice);erlaubt=1;@zeilen=ja;@gruppe=4", M|billto^id)
+.load 6 customer 'U|xselect'
+.continue NOZUGFERD ? _G|mehr
+.load 6 line '6|selzeile'
+.continue NOZUGFERD ? _G|mehr
+.assign M|abmodell = 6|ieabmodell^id ? G|mehr
+.copy M|txml = G|TRUE ? 6|ieabmodell^request = "xrechnung-cii"
+.copy M|tpdfxml = G|TRUE ? 6|ieabmodell^request = "en16931" ; 6|ieabmodell^request = "extended"
+..
+!NOZUGFERD
+.formula M|temailbetreff = 'H|vorganga(L=H|spr)' +" " +'H|nummer'
+.formula M|tnameanhang = 'H|vorganga(L=H|spr)' +"_" +'H|nummer'
+.formula M|tanhang1 = "xrechnung" +"_" +'H|nummer' ? M|txml
+.continue END     ? _M|bxml & _M|bpdfxml
+.continue END     ? M|bxml & M|bpdfxml & (M|txml ; M|tpdfxml)
+.continue END     ? M|bxml & M|txml
+.continue END     ? M|bpdfxml & M|tpdfxml
+..
+!DELETE
+.make screen line -O
+.continue END
+..
+..*****************************************************************************
+!END
+.input "ev/PRINTZEILE"
+.continue

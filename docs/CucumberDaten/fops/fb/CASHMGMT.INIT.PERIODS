@@ -1,0 +1,86 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : CASHMGMT.INIT.PERIODS
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Initialisierung der Perioden
+.. Functionality  :
+..*****************************************************************************
+..
+.set trans -
+..
+.type integer xi                 ? _F|defined(U|xi)
+.type integer xj                 ? _F|defined(U|xj)
+.type integer xk                 ? _F|defined(U|xk)
+.type integer ximaxperiod        ? _F|defined(U|ximaxperiod)
+.type AS225 xiperiodtype     ? _F|defined(U|xiperiodtype)
+.type P125:3 xpperiodpattern ? _F|defined(U|xpperiodpattern)
+.type integer xitufactor         ? _F|defined(U|xitufactor)
+..
+.copy U|xiperiodtype = U|xpperiodpattern^zeiteinheit ? _F|empty(U|xpperiodpattern)
+.formula   U|xiperiodtype =  "(Week)" ? F|empty(U|xiperiodtype)
+.formula   U|ximaxperiod  = 13 ? U|ximaxperiod < 1
+.formula   U|xitufactor   = F|condexpr(F|empty(U|xpperiodpattern), 1, U|xpperiodpattern^zefaktor)
+..
+.make planningtimeperiod group4
+.copy H|kzyklus  = U|xpperiodpattern
+.continue COMPUTE ? _F|empty(H|kzyklus)
+.copy H|zeiteinheit = U|xiperiodtype
+.formula   H|zefaktor    = U|xitufactor
+.formula   H|zefaktor    = 1 ? H|zefaktor < 1
+.copy H|wochemo  = G|TRUE ? F|equals(H|zeiteinheit, "(Week)")
+.copy H|monattag = 1      ? F|equals(H|zeiteinheit, "(Month)")
+.copy H|jahrtim1 = 1      ? F|equals(H|zeiteinheit, "(Year)")
+.copy H|zqmonat  = 1      ? F|equals(H|zeiteinheit, "(Quarter)")
+.copy H|zqmonattag = 1    ? F|equals(H|zeiteinheit, "(Quarter)")
+.continue COMPUTE
+..
+..*****************************************************************************
+!COMPUTE
+..*****************************************************************************
+.. set to first day of month resp. monday (first day of week)
+.formula   H|anfdat  = 'U|xdstartdate:8' << 6 + "01" ? U|xiperiodtype = "(Month)"
+.formula   H|anfdat  = 'U|xdstartdate:8' << 4 + "01" ? U|xiperiodtype = "(Year)"
+.formula   H|anfdat  = 'U|xdstartdate:8' << 4 + "01" ? U|xiperiodtype = "(Quarter)"
+.formula   H|anfdat  = U|xdstartdate - U|xdstartdate//7 + 1 ? U|xiperiodtype = "(Week)"
+.formula   H|anfdat  = U|xdstartdate ? U|xiperiodtype = "(Day)"
+.formula   H|anzzp   = U|ximaxperiod + 5
+.formula   H|bzrbest = ""
+..
+.formula U|xi = 0
+.formula U|xj = 0
+.formula U|xk = 0
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+.formula U|xi = U|xi + 1
+.formula U|xk = U|xi - U|xj
+.continue ELOOP ? U|xk > U|ximaxperiod
+.continue ELOOP ? U|xi > H|ozeilen
+.select line 'U|xi'
+.formula U|xj = U|xj + 1 ? H|bisdat < U|xdstartdate
+.continue LOOP  ? H|bisdat < U|xdstartdate
+.type GD xpstart.U|xk ? _F|defined(U|xpstart.U|xk)
+.type GD xpend.U|xk   ? _F|defined(U|xpend.U|xk)
+.copy U|xpstart.U|xk = F|condexpr(H|datum > U|xdstartdate, H|datum, U|xdstartdate)
+.copy U|xpend.U|xk   = H|bisdat
+.continue LOOP ? U|xk < U|ximaxperiod
+.. determine end of configured periods
+.load 8 add F|SYSINFO(12)^id
+.continue ELOOP ? _G|mehr
+.load 8 line '8|ozeilen'
+.formula U|xpend.U|xk = 8|gjend ? 8|gjend > U|xpstart.U|xk
+.continue ELOOP
+..
+..*****************************************************************************
+!ELOOP
+..*****************************************************************************
+.select
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue
+

@@ -1,0 +1,234 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : AUSZUG.EV
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : Allgemeines Event-FOP des Infosystems fb/AUSZUG
+..  Functionality  : Common event FOP of the Infosystem fb/AUSZUG
+..
+.. include fb/AUSZUG.SELECT
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.continue BELEG  ? (G|evtartengl ="BUTTON_AFTER") & (G|evtvar ="bbeleg")
+.make screen line --
+.formula M|anfsaldo  = 0.00
+.formula M|endsaldo  = 0.00
+.formula M|anfsaldo2 = 0.00
+.formula M|endsaldo2 = 0.00
+.formula M|sumsoll   = 0.00
+.formula M|sumhaben  = 0.00
+.formula M|sumsoll2  = 0.00
+.formula M|sumhaben2 = 0.00
+.formula M|differenz = 0.00
+.formula M|differenz2= 0.00
+.formula M|vkzssum   = 0.00
+.formula M|vkzhsum   = 0.00
+.formula M|vkzssum2  = 0.00
+.formula M|vkzhsum2  = 0.00
+..
+.type integer xi ? _F|defined(U|xi)
+.formula U|xi = 1
+..*****************************************************************************
+!INITOHLC
+..*****************************************************************************
+.formula M|open.U|xi  = 0.00
+.formula M|high.U|xi  = 0.00
+.formula M|low.U|xi   = 0.00
+.formula M|close.U|xi = 0.00
+.formula U|xi = U|xi + 1
+.continue INITOHLC ? U|xi <= 15
+..
+.continue START  ? G|evtartengl = "BUTTON_BEFORE" &  G|evtvar = "bstart"
+.continue ACCSET ? G|evtartengl = "FIELD_EXIT"   &  G|evtvar = "konto"
+.continue PERIOD ? G|evtvar = "amonat"
+.continue PERIOD ? G|evtvar = "emonat"
+.continue PERIOD ? G|evtvar = "ajahr"
+.continue PERIOD ? G|evtvar = "ejahr"
+.continue PERIOD ? G|evtvar = "gjahr"
+.continue ENTOUT ? G|evtartengl = "FIELD_EXIT"   & (G|evtvar = "buverd" ; G|evtvar = "bukeine")
+.continue BUART  ? (G|evtartengl ="FIELD_EXIT")   & (G|evtvar ="buart" ; G|evtvar = "buartalle")
+.continue END
+..
+..*****************************************************************************
+!BUART: statistical and financial entries selected ?
+..*****************************************************************************
+..
+.. M|buartn == 70 -> financial
+.. M|buartn == 83 -> statistical
+.. M|buartalle == true -> all
+..
+.protection        buart    ?  M|buartalle
+.protection -reset buart    ? _M|buartalle
+..
+.continue END
+..
+..*****************************************************************************
+!ENTOUT: Output of entries ?
+..*****************************************************************************
+.formula M|bukeine = _M|buverd ? G|evtvar = "buverd"
+.continue END ? G|evtvar = "buverd"
+..
+.formula M|buverd = _M|bukeine ? G|evtvar = "bukeine"
+.continue END ? G|evtvar = "bukeine"
+..
+.continue END
+..
+..*****************************************************************************
+!PERIOD: Start, end month or financial year set
+..*****************************************************************************
+.formula M|ajahr = M|gjahr ? G|evtvar = "gjahr"
+.formula M|ejahr = M|gjahr ? G|evtvar = "gjahr"
+.type text xxtemon xxtsmon xxtsyear xxteyear xxtfromd xxttod
+.formula U|xxtsmon = "amonat"
+.formula U|xxtemon = "emonat"
+.formula U|xxtsyear= "ajahr"
+.formula U|xxteyear= "ejahr"
+.formula U|xxtfromd= "adatum"
+.formula U|xxttod  = "edatum"
+.input "fb/IS.SETPERIOD"
+.make screen line --
+.continue END
+..
+..*****************************************************************************
+!ACCSET: Set account values
+..*****************************************************************************
+.protection        ktokvertaufl        ? _F|empty(M|konto) ; M|konto^dnr<>5 ; M|konto^gruppe<>1
+.protection -reset ktokvertaufl        ? _F|empty(M|konto) & M|konto^dnr=5 & M|konto^gruppe=1
+.formula M|ktokvertaufl = G|FALSE   ? _F|empty(M|konto) ; M|konto^dnr<>5 ; M|konto^gruppe<>1
+.formula M|bukeine = M|konto^ohnebu
+.formula M|verd  = G|false
+.formula M|waehr2= ""
+.continue END ? F|empty(M|konto)
+..
+.select add M|konto
+.formula   M|verd   = _H|bu    ? F|defined(H|bu)
+.copy M|waehr2 =  H|w2ist ? F|defined(H|w2ist)
+.select
+.continue END
+..
+..*****************************************************************************
+!START: Start Infosystem execution level 1
+..*****************************************************************************
+.continue ERR01 ? F|empty(M|konto)
+..
+.set setofbooks 'M|bukreis^bknr'
+..
+.type VP6 xaccount
+.type GJ xsyear xeyear
+.type integer xsmonth xemonth
+..
+.copy U|xsyear   = M|ajahr
+.copy U|xeyear   = M|ejahr
+.copy U|xsmonth  = M|amonat
+.copy U|xemonth  = M|emonat
+.copy U|xaccount = M|konto
+..
+.set currency 'M|waehr'
+.set outcurr 'M|waehr'
+..
+.input "fb/ACCOUNT.FIGURES"
+.formula M|anfsaldo = U|xobalance
+.formula M|endsaldo = U|xcbalance
+.formula M|vkzssum  = U|xdebit
+.formula M|vkzhsum  = U|xcredit
+.continue S2 ? F|empty(M|waehr2)
+..
+.set currency 'M|waehr2'
+.set outcurr 'M|waehr2'
+..
+.input "fb/ACCOUNT.FIGURES"
+.formula M|anfsaldo2 = U|xobalance
+.formula M|endsaldo2 = U|xcbalance
+.formula M|vkzssum2  = U|xdebit
+.formula M|vkzhsum2  = U|xcredit
+.continue S2
+..
+!S2
+.. flag if we process accounts or cost center/objects
+.type bool xbcost
+.type bool xbconsol
+.type bool xbbackward
+..
+.formula U|xbcost = (M|konto^dnr = 5 & M|konto^gruppe <> 1)
+.formula U|xbbackward = 'M|richtung(L="0")' = "(1)"
+..
+.. Consolidating account selected?
+.select add M|konto
+.formula U|xbconsol = F|condexpr(F|defined(H|bu), _H|bu, G|FALSE)
+.continue CONSOL ? U|xbconsol
+..
+.type DVM2 xtabfop
+.formula U|xtabfop = M|tab
+.continue BKOPF
+..
+!CONSOL
+.type DVM2 xtoutfile
+.type text xtblah
+.type P131:0.1 xpbuzeile
+..
+.file -tempname U|xtoutfile
+.input "DATEI.F"
+.output new 'U|xtoutfile'
+..
+.input "java:de.abas.jfop.is.IterateConsolidatedAccounts" bufname=H callback=fb/AUSZUG.SELECT 'F|formatstr("account={1}", M|konto^id)'
+.output terminal
+.continue BKOPF ? _U|xbconsol
+.system 'F|expr("sort -k2,2n  -k3,3n  -k4,4n  -k5,5n  -t# -o " + F|tostring(U|xtoutfile) + " " +  F|tostring(U|xtoutfile))' background ? _U|xbbackward
+.system 'F|expr("sort -k2,2nr -k3,3nr -k4,4nr -k5,5nr -t# -o " + F|tostring(U|xtoutfile) + " " +  F|tostring(U|xtoutfile))' background ?  U|xbbackward
+.continue BKOPF
+..
+!BKOPF
+.input 'M|bkopf'
+.continue TAB2 ? U|xbconsol
+.continue TAB1
+..
+!TAB1
+.input "fb/AUSZUG.SELECT"
+.continue BFUSS
+..
+!TAB2
+.set reference +
+.select from 'U|xtoutfile' U|xpbuzeile # U|xtblah^
+.set reference -
+.continue TAB2E ? _G|mehr
+.select add U|xpbuzeile
+.input 'M|tab'
+.continue TAB2
+..
+!TAB2E
+.set reference -
+.continue BFUSS
+..
+!BFUSS
+.input 'M|bfuss'
+.continue END
+..
+..*****************************************************************************
+!BELEG: Show voucher
+..*****************************************************************************
+.continue NOEKVK ? F|empty(M|tbuchung^ursacheref)
+.command -parallel 'M|tbuchung^ursacheref^id' ? + 'M|tbuchung^ursacheref' <> 0
+.continue END
+..
+..*****************************************************************************
+!NOEKVK: No voucher (invoice) available
+..*****************************************************************************
+.box(0,0) Beachte!
+ Es existiert kein Beleg fÅr diese Buchungsursache 
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue
+..
+..
+..*****************************************************************************
+!ERR01
+..*****************************************************************************
+.error Kein Konto bzw. Kst/Ktr angegeben.
+.end 1

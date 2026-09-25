@@ -1,0 +1,130 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           :     PAYMENT.INCOMING.SEPA  
+.. Date           :     17/11/2014
+.. Version        :     1.0
+.. Author         :     rasc
+.. Copyright      :     
+.. Functionality  :     Incoming payment weekly
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xtcmd      ? _F|defined(U|xtcmd)
+.type text U|xtedp      ? _F|defined(U|xtedp)
+.type text U|xtout      ? _F|defined(U|xtout)
+.type text U|xterr      ? _F|defined(U|xterr)
+.type text U|xtref      ? _F|defined(U|xtref)
+.type integer U|ximod   ? _F|defined(U|ximod)
+.type integer U|xilop   ? _F|defined(U|xilop)
+.type GD2  U|xdate      ? _F|defined(U|xdate)
+..
+.formula U|xdate        = 'M|qflagdate:8'           ?  F|defined(M|qflagdate)
+.formula U|xdate        = 'G|datum:8'               ? _F|defined(M|qflagdate)
+....formula U|xdate        = "16.01.14"
+..
+.file -TEMPNAME U|xtedp
+.file -TEMPNAME U|xtout
+.file -TEMPNAME U|xterr
+..
+.output NEW 'U|xtedp'
+.input DATEI.F
+#!database=101
+#!group=1
+#!action=NEW
+#!report=REF
+#!EDP_LANG='P|spr'
+.input "owinstall/HEAD.EDP"
+zaterm;gkonto;kozabetrplus;opladen;
+'U|xdate:8';14610;'G|true';;
+.output
+.formula U|xtcmd        = "edpimport.sh -p abas123 -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.continue ERROR         ? F|filesize(U|xterr) > 0
+.select from
+!SELFROM
+.select from 'U|xtout' U|xtref^
+.continue END           ? F|empty(U|xtref) ; 'U|xtref'="(0,0,0)"
+..
+!PAY
+.output NEW 'U|xtout'
+.output NEW 'U|xterr'
+.output NEW 'U|xtedp'
+.input DATEI.F
+#!EDP_LANG=D
+#!database=4:3
+#!action=PAYMENT
+#!menuchoice=(DebitOutstandingItems)
+#!firsttabfld=tabnr
+#!dontchange=-
+.input "owinstall/HEAD.EDP"
+id;gkonto;beleg;beldat;budat;bezahlt;tabnr;tophist;
+..
+.formula U|xilop        = 0
+.load 0 nolock object 'U|xtref'
+.continue ERRZV         ? _G|mehr
+.continue DELETE        ? 0|tzeilen = 0
+!LOOP
+.load 0 nolock line
+.continue EDP           ? _G|mehr
+..
+..jede 3. Zeile ausschlieáen, damit Zahlungsverzge entstehen
+.formula U|ximod        = 0|aktzeile // 3
+.continue LOOP          ? U|ximod = 0
+..
+.formula U|xilop        = U|xilop + 1
+;18100;'0|nummer';.;.;'G|true';+'U|xilop';'0|ophist^id';
+.continue LOOP
+..
+!EDP
+.output
+.....edi 'U|xtedp'
+.formula U|xtcmd        = "edpimport.sh -p abas123 -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.continue ERROR         ? F|filesize(U|xterr) > 0
+..
+!DELETE: jetzt noch den ZV l”schen
+.output NEW 'U|xtout'
+.output NEW 'U|xterr'
+.output NEW 'U|xtedp'
+.input DATEI.F
+#!database=101
+#!group=1
+#!action=DELETE
+.input "owinstall/HEAD.EDP"
+id
+'U|xtref'
+.output
+.formula U|xtcmd        = "edpimport.sh -p abas123 -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.continue ERROR         ? F|filesize(U|xterr) > 0
+..
+.continue END
+..
+!ERROR
+.continue END           ? G|edp
+....edi -READONLY 'U|xterr'
+.continue END
+..
+!ERRZV
+.continue END           ? G|edp
+....error "Zahlungsvorschlag 'U|xtref' konnte nicht geladen werden!"
+.continue END
+..
+!END
+.continue

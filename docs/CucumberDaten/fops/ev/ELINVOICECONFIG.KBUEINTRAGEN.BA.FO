@@ -1,0 +1,219 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICECONFIG.KBUEINTRAGEN.BA.FO
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Functionality  : Erstellt ein EDP-Skript, das die EDI Einstellungen von ZUGFeRD schreibt
+..*****************************************************************************
+.set trans -
+..
+..<META M|='ev/ELINVOICECONFIG'>
+.. Je nach Art das Feld unterscheiden
+.continue VEN01 ? P|maskkontextfop = "Einkauf"
+.continue CUS01 ? P|maskkontextfop = "Verkauf"
+..
+!VEN01
+..<META 9|='P1:4'>
+.continue CVEND01
+!CUS01
+..<META 9|='P0:4'>
+.continue CVEND01
+!CVEND01
+..
+.type text edpfile
+.file -tempname U|edpfile
+.type text edperror
+.file -tempname U|edperror
+.type text edpnotice
+.file -tempname U|edpnotice
+..
+.type text xabm 
+.type text xabmverarb
+.type text xobjsuche
+..
+.select screen head
+..
+.output new 'U|edpfile'
+.input "DATEI.F"
+..
+!NXTEDP
+.select screen line
+.continue ENDEPD ? _G|mehr
+.continue NXTEDP ? _M|tmark
+.formula U|xabm = ""
+.formula U|xabm = M|kabm^id ? _F|empty(M|kabm)
+.formula U|xabmverarb = ""
+.formula U|xabmverarb = M|kabmverarb^id ? _F|empty(M|kabmverarb)
+.formula U|xobjsuche = ""
+.formula U|xobjsuche = M|kobjsuche^id ? _F|empty(M|kobjsuche)
+..
+.. Editing shell table 1:4 with EDP has to consider three states
+.. > there is no object at all -> create all with STROE
+.. > there is a shell, but no row for ZUGFERD -> UPDATE table, and add new row with +
+.. > there is a shell as well as a row for ZUGFERD -> UPDATE table, select row, and UPDATE this row
+..
+.. Je nach Art das Feld unterscheiden
+.continue VEN02 ? P|maskkontextfop = "Einkauf"
+.continue CUS02 ? P|maskkontextfop = "Verkauf"
+..
+!VEN02
+.continue STOREVE  ? F|empty(M|tlief^edinfosnr)
+.continue UPDATVE ? F|empty(M|tediinfolief)
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#
+# Update existing row for 'M|kedinachrzugferdaz' in existing config object for supplier 'M|tliefsuch'
+#
+#!action=UPDATE
+#!database=1:4
+#!dontchange=~
+#!flddelimiter=#
+
+..Wenn das Abbildungmodell, das zugeordnet werden soll, leer ist, die EDI Zeile loeschen
+.continue ROWDELV ? (M|kabm = "") & (M|kabmverarb = "") & (M|kobjsuche = "") & (M|kaktiv = false)
+
+klnum\
+   zn#edinachraz#ieabmodell#abmodell#suchkonfig#erlaubt
+
+$,,klnum='M|tlief^id'\
+  $,,edinachraz='M|kedinachrzugferdaz'#'M|kedinachrzugferdaz'#'U|xabm'#'U|xabmverarb'#'M|kobjsuche^id'#'M|kaktiv'
+    
+.continue NXTEDP
+!ROWDELV
+.. Das Abbildungmodell der EDI Zeile auf leer setzen, sorgt fuer das Loeschen der Zeile. Muss als letztes auf leer gesetzt werden
+klnum\
+   zn#erlaubt#suchkonfig#edinachraz
+
+$,,klnum='M|tlief^id'\
+  $,,edinachraz='M|kedinachrzugferdaz'#'M|kaktiv'##
+
+.continue NXTEDP
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+!UPDATVE
+.continue NXTEDP ? (M|kabm = "") & (M|kabmverarb = "") & (M|kobjsuche = "") & (M|kaktiv = false)
+#
+# Update existing config object for supplier 'M|tliefsuch' with new 'M|kedinachrzugferdaz' row
+#
+#!action=UPDATE
+#!database=1:4
+#!dontchange=~
+#!flddelimiter=#
+
+klnum\
+   zn#edinachraz#ieabmodell#abmodell#suchkonfig#erlaubt
+
+$,,klnum='M|tlief^id'\
+   + #'M|kedinachrzugferdaz'#'U|xabm'#'U|xabmverarb'#'M|kobjsuche^id'#'M|kaktiv'
+
+.continue NXTEDP
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+!STOREVE
+..Neue ZUGFeRD Zeile bei leeren EDI Einstellungen
+.continue NXTEDP ? (M|kabm = "") & (M|kabmverarb = "") & (M|kobjsuche = "") & (M|kaktiv = false)
+# 
+# Create new config object for supplier 'M|tliefsuch' with new 'M|kedinachrzugferdaz' row
+#
+#!action=STORE
+#!database=1:4
+#!dontchange=~
+#!flddelimiter=#
+
+klnum#klnum\
+   zn#edinachraz#ieabmodell#abmodell#suchkonfig#erlaubt
+
+$,,klnum='M|tlief^id'#'M|tlief^id'\
+  $,,edinachraz='M|kedinachrzugferdaz'#'M|kedinachrzugferdaz'#'U|xabm'#'U|xabmverarb'#'M|kobjsuche^id'#'M|kaktiv'
+
+.continue NXTEDP
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+..
+!CUS02
+.continue STORECU  ? F|empty(M|tkunde^edinfosnr)
+.continue UPDATCU ? F|empty(M|tediinfokunde)
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+#
+# Update existing row for 'M|kedinachrzugferdaz' in existing config object for supplier 'M|tliefsuch'
+#
+#!action=UPDATE
+#!database=0:4
+#!dontchange=~
+#!flddelimiter=#
+
+..Wenn das Abbildungmodell, das zugeordnet werden soll, leer ist, die EDI Zeile loeschen
+.continue ROWDELC ? (M|kabm = "") & (M|kaktiv = false)
+klnum\
+   zn#edinachraz#ieabmodell#abmodell#suchkonfig#erlaubt
+   
+$,,klnum='M|tkunde^id'\
+  $,,edinachraz='M|kedinachrzugferdaz'#'M|kedinachrzugferdaz'#'U|xabm'#'U|xabmverarb'#'M|kobjsuche^id'#'M|kaktiv'
+
+.continue NXTEDP
+!ROWDELC
+.. Das Abbildungmodell der EDI Zeile auf leer setzen, sorgt fuer das Loeschen der Zeile. Muss als letztes auf leer gesetzt werden
+klnum\
+   zn#erlaubt#edinachraz
+
+$,,klnum='M|tkunde^id'\
+  $,,edinachraz='M|kedinachrzugferdaz'#'M|kaktiv'#
+
+.continue NXTEDP
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+!UPDATCU
+.continue NXTEDP ? (M|kabm = "") & (M|kaktiv = false)
+#
+# Update existing config object for supplier 'M|tliefsuch' with new 'M|kedinachrzugferdaz' row
+#
+#!action=UPDATE
+#!database=0:4
+#!dontchange=~
+#!flddelimiter=#
+
+klnum\
+   zn#edinachraz#ieabmodell#abmodell#suchkonfig#erlaubt
+
+$,,klnum='M|tkunde^id'\
+   + #'M|kedinachrzugferdaz'#'U|xabm'#'U|xabmverarb'#'M|kobjsuche^id'#'M|kaktiv'
+
+.continue NXTEDP
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+!STORECU
+.continue NXTEDP ? (M|kabm = "") & (M|kaktiv = false)
+# 
+# Create new config object for supplier 'M|tliefsuch' with new 'M|kedinachrzugferdaz' row
+#
+#!action=STORE
+#!database=0:4
+#!dontchange=~
+#!flddelimiter=#
+
+klnum#klnum\
+   zn#edinachraz#ieabmodell#abmodell#suchkonfig#erlaubt
+
+$,,klnum='M|tkunde^id'#'M|tkunde^id'\
+  $,,edinachraz='M|kedinachrzugferdaz'#'M|kedinachrzugferdaz'#'U|xabm'#'U|xabmverarb'#'M|kobjsuche^id'#'M|kaktiv'
+
+.continue NXTEDP
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+!ENDEPD
+.output terminal
+..
+.. .editing -readonly 'U|edpfile'
+..
+.system 'F|formatstr("edpimport.sh -P -I {1} -H {2} 2> {3}", U|edpfile, U|edpnotice, U|edperror)' password background
+.continue ERREDP ? _G|mehr
+..
+..Tabelle neu laden
+.input "ev/ELINVOICECONFIG.BSTART.BB.FO"
+.input "is/HOL.LISTE"
+..*****************************************************************************
+!END
+.continue
+..
+.set trans + 
+..
+!ERREDP
+.error Fehler beim Speichern der Konfiguration.
+.. .editing -readonly 'U|edperror'
+.. .editing -readonly 'U|edpnotice'
+.. .editing -readonly 'U|edpfile'
+.end 1

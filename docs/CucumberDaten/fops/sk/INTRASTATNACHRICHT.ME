@@ -1,0 +1,73 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : INTRASTATNACHRICHT.ME
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      :
+.. Funktion       :
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+..
+.type text xtkey    ? _F|defined(U|xtkey)
+.type text xtselect ? _F|defined(U|xtselect)
+..
+.. diese folgenden 2 Zeilen bitte nicht ver„ndern, da sonst nicht korrekt gemeldet wird.
+.. Wenn einmal Eingang und Versendung getrennt abgewickelt werden kann, dann
+.. muss man im IS die zwei Bools sichtbar machen zur Selektion.
+.copy M|bvre = G|TRUE
+.copy M|bere = G|TRUE
+..
+.. Default-Eintstellung fr die Anzeige der JEDI-Meldung fr das Erstellen von
+.. EDI-Nachrichten. Wird das Infosystem ber das Infosystem INTRASTATZENTRALE
+.. aufgerufen, so wird diese Einstellung in dem Aufrufpartameter 52591 bergeben
+..
+.copy M|bshowerror = G|TRUE ? F|empty(M|kvorgang)
+..
+.formula M|waehrkenn = 2
+..
+..  Parameter aus EDI-Parameter laden
+..  ---------------------------------
+..  Abbildungsmodell EDI-Nachricht fr Verkaufsrechnungen
+..
+.formula U|xtkey = "IntrastatNachricht"
+.formula U|xtselect = "$,,key=" + 'U|xtkey' + ";variable=ediabmvk;@gruppe=9"
+.select ediconfiguration 'U|xtselect'
+.assign M|ediabmvk = H|data ?  G|mehr
+..
+..  Abbildungsmodell EDI-Nachricht fr Einkaufsrechnungen
+..
+.formula U|xtselect = "$,,key=" + 'U|xtkey' + ";variable=ediabmek;@gruppe=9"
+.select ediconfiguration 'U|xtselect'
+.assign M|ediabmek = H|data ?  G|mehr
+..
+.continue END ? M|bfarben
+..
+.input "is/ABASFARBEN.DEF"
+.formula M|farbe = U|xabasyellow
+.formula M|fehlfarbe = U|xabasred
+.colour -background 'M|farbe' waehrkenn
+..
+.. Steuernummer von m”glichen Leerzeichen oder brigen nicht-Zahlen bereinigen
+.formula M|steunr   = F|regreplaceall(F|sysinfo(10)^steunr, "[^0-9]", "")
+.formula M|ustzus   = ("000" + F|sysinfo(10)^ustzus) >> 3
+.formula M|ischl    = F|sysinfo(10)^finlakenn^ischl
+.continue FEHLER      ? F|empty(M|ischl)
+..
+.formula M|monat = ('G|datum:8' >> -2) >> 2  ? F|empty(M|datumbis)
+.formula M|jahr  = ('G|datum:8' >> -4) >> 2  ? F|empty(M|datumbis)
+.colour -background 'M|farbe' monat
+.colour -background 'M|farbe' jahr
+.colour -background 'M|farbe' steunr
+.colour -background 'M|farbe' ustzus
+.colour -background 'M|farbe' ischl
+..
+.formula M|intra = 0
+.formula M|edinachricht = ""
+..*****************************************************************************
+!END
+.continue
+..
+!FEHLER
+.error Bitte Intrastat-Schlssel fr meldendes Bundesland eintragen!
+.end 1

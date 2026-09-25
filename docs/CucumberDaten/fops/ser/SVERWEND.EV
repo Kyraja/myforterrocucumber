@@ -1,0 +1,137 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SVERWEND.EV
+.. Datum          : 22.05.2007
+.. Version        : 2007r3n00
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Eventhandling fr Kopffelder, Unterdrcken von Zeilenoperationen
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+.. Ablauf         : Zentrales Eventhandling
+..
+.. Functionality  : eventhandling for header fields, suppress row operations
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+.. Program flow   : central event handling
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.type text xtsel
+..
+.. event evaluation
+.. ----------- ----- Kopfteil Button -------------------------------------------
+.continue KOMP    ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kkomp"
+.continue ARTIKEL ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kartikel"
+.continue SERPROD ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kserprod"
+.continue KUNDE   ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kkunde"
+.continue AUKUNDE ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kaukunde"
+.continue MIXKUN  ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kbmixkunde"
+.continue CHARGE  ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kcharge"
+.continue EXNUM   ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kexnum"
+.continue STLBOOL ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kbarchiv"
+.continue STLBOOL ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kbdienstl"
+.continue DIENSTL ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kdienstl"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue TABINIT ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kvom"
+.continue TABINIT ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kbis"
+.. ----------- ----- Tabellenteil ----------------------------------------------
+.continue FORBID  ? T|evtartengl = "ROW_MOVE_BEFORE"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+!EXNUM: find internal lot id with external lot number / serial number
+.formula M|kcharge   = ""                    ?  F|empty(M|kexnum)
+.continue CHARGE                              ?  F|empty(M|kexnum)
+.formula T|xtsel = "$,,;exnum==" + 'M|kexnum'
+.select lots 'T|xtsel'
+.continue NOLOT   ? _T|mehr
+.assign M|kcharge = H|id
+.select lots
+.continue CHARGE  ? _T|mehr
+.assign M|kcharge = "%,,;exnum==" + 'M|kexnum' + ";nummer=;such=;name=;artikel=;lief=;mge=;@autostart=(1)"
+.continue CHARGE
+!NOLOT
+.assign M|kcharge = "%,,;exnum="  + 'M|kexnum' + ";nummer=;such=;name=;artikel=;lief=;mge=;@autostart=(1)"
+!CHARGE
+.formula M|kexnum    = M|kcharge^exnum
+.formula M|kkomp     = M|kcharge^artikel^id
+.continue TABINIT
+..
+!KOMP: component
+.continue TABINIT     ?  M|kcharge^artikel^id = M|kkomp^id
+.formula M|kcharge   = ""
+.formula M|kexnum    = ""
+.continue TABINIT
+..
+!SERPROD: service product
+.formula M|kartikel  = M|kserprod^artikel
+.formula M|kkunde    = M|kserprod^kunde^id
+.continue TABINIT
+..
+!ARTIKEL: master item for service product
+.continue TABINIT     ?  M|kserprod^artikel^id = M|kartikel^id
+.formula M|kserprod  = ""
+.continue TABINIT
+..
+!KUNDE: customer / location for service product
+.continue TABINIT     ?  M|kserprod^kunde^id = M|kkunde^id
+.formula M|kserprod  = ""
+.continue TABINIT
+..
+!AUKUNDE: customer who bought the service product
+.continue TABINIT
+..
+!MIXKUN
+.protection  kaukunde 0             ?  M|kbmixkunde
+.formula M|kaukunde = ""         ?  M|kbmixkunde
+.protection -reset kaukunde 0       ? _M|kbmixkunde
+.continue TABINIT
+..
+!STLBOOL: the two bool fields toggle each other
+.formula M|kbdienstl = _M|kbarchiv       ?  T|evtvar = "kbarchiv"
+.formula M|kbarchiv  = _M|kbdienstl      ?  T|evtvar = "kbdienstl"
+.continue STLARCH ?  M|kbarchiv
+.continue STLDIEN ?  M|kbdienstl
+!STLARCH
+.protection kdienstl 0
+.formula M|kdienstl = ""
+.protection -reset kcharge 0
+.protection -reset kexnum 0
+.protection -reset kvom 0
+.protection -reset kbis 0
+.continue TABINIT
+!STLDIEN
+.protection -reset kdienstl 0
+.protection kcharge 0
+.protection kexnum 0
+.protection kvom 0
+.protection kbis 0
+.formula M|kcharge = ""
+.formula M|kexnum = ""
+.formula M|kvom = ""
+.formula M|kbis = ""
+.continue TABINIT
+..
+!DIENSTL
+.continue TABINIT
+..
+..
+!TABINIT: a key field was changed, remove old rows
+.make screen line -- ? M|tzeilen > 0
+.continue END
+..
+!FORBID: an event was triggered, which is not allowed
+.error
+.end 1
+..*****************************************************************************
+!END
+.continue

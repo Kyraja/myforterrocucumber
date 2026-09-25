@@ -1,0 +1,141 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : OPENDOWNPAYMENTS.BFUSS
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text     xverdkunde    ? _F|defined(U|xverdkunde)
+.type text     xverdlief     ? _F|defined(U|xverdlief)
+.type text     xfile         ? _F|defined(U|xfile)
+.type I5       xzeile        ? _F|defined(U|xzeile)
+.type text     xsys          ? _F|defined(U|xsys)
+.type P3       x1            ? _F|defined(U|x1)
+.type P4       x8            ? _F|defined(U|x8)
+.type P0       x2            ? _F|defined(U|x2)
+.type P1       x9            ? _F|defined(U|x9)
+.type ARTR52000 x3           ? _F|defined(U|x3)
+.type P5       x4            ? _F|defined(U|x4)
+.type ARTR52000 x5           ? _F|defined(U|x5)
+.type PS100:21 x6            ? _F|defined(U|x6)
+.type PS86:1   x7            ? _F|defined(U|x7)
+.type integer  xtzeile       ? _F|defined(U|xtzeile)
+.type text     xtsel         ? _F|defined(U|xtsel)
+..
+.continue ERROR1     ?  M|tzeilen = 0
+..
+!HEADER: Zeilen ohne Zahlbetrag loeschen
+.select screen header
+.formula U|xtzeile = M|tzeilen
+..
+!SELLINE
+.select screen line 'U|xtzeile'
+.continue WEITER ? _G|mehr
+.make screen line -O ? F|empty(M|zahlbetr) & M|anzerenr^kotyp <> 5 & M|beinkauf
+.make screen line -O ? F|empty(M|zahlbetr) & M|anzrenr^kotyp <> 5 & M|bverkauf
+.formula U|xtzeile = U|xtzeile - 1 
+.continue WEITER ? U|xtzeile = 0
+.continue SELLINE
+..
+!WEITER: Storno-Zeilen loeschen, wenn _M|storno
+.continue ERROR1     ?  M|tzeilen = 0
+.continue NEXT       ? M|storno
+.select screen header
+.formula U|xtzeile = M|tzeilen
+..
+!STORNO
+.select screen line 'U|xtzeile'
+.continue NEXT ? _G|mehr
+.. stornierte Anzahlung / Storno-Anzahlung / stornierte Rechnung / Storno-Rechnung 
+.make screen line -O ? F|equals(M|vorganga, "(InvoiceCanceled)") ; F|equals(M|vorganga, "(InvoiceReversal)") ; F|equals(M|vorganga, "(CancelationDownpayment)") ; F|equals(M|vorganga, "(CanceledDownpayment)")
+.formula U|xtzeile = U|xtzeile - 1
+.continue NEXT ? U|xtzeile = 0
+.continue STORNO
+..
+!NEXT
+.continue SUMME      ? _F|empty(M|anzkonto) ; _F|empty(M|kunde) ; _F|empty(M|lief) ; _F|empty(M|projekt)
+.continue VERDICHTEN ?  M|bprolief ; M|bprokunde
+.continue END
+..
+!SUMME
+.formula M|summe = 0
+.select screen header
+..
+!LINE
+.select screen line
+.continue ENDSUM ? _G|mehr
+.formula M|summe = M|summe + M|inlzahlbetr
+.continue LINE
+..
+!ENDSUM
+.continue END    ? _M|bmonatsende
+.continue END    ?  F|empty(M|anzkonto)
+.formula M|diff = M|summe - M|endsaldo
+.continue END
+..
+!VERDICHTEN
+.formula U|xfile      = "rmtmp/OPENDOWNPAYMENTS." + G|pid + "." + G|sekundenz
+.formula U|xverdkunde = "rmtmp/OPENDOWNPAYMENTS.KUNDE." + G|pid + "." + G|sekundenz
+.formula U|xverdlief = "rmtmp/OPENDOWNPAYMENTS.LIEF." + G|pid + "." + G|sekundenz
+..
+.output new 'U|xfile'
+.input "DATEI.F"
+.output
+..
+.formula U|xzeile = 1
+..
+!OUTPUT
+.select screen line 'U|xzeile'
+.output addedto 'U|xfile'
+.. x1(x8)         # x2(x9)          # x3                        # x4    # x5         # x6 # x7      #
+.. Vorgangsnummer # Kunde/Lieferant # Anzahlungsrechnungsbetrag # Konto # Zahlbetrag # OP # Projekt #
+?'M|aunummer^id'#'M|tkunde^id'#'M|anzrebetr'#'M|tanzkonto^id'#'M|inlzahlbetr'#'M|ophist^id'#'M|tprojekt^id'# ? M|bprokunde
+?'M|benummer^id'#'M|tlief^id'#'M|anzrebetr'#'M|tanzkonto^id'#'M|inlzahlbetr'#'M|ophist^id'#'M|tprojekt^id'# ? M|bprolief
+..
+.formula U|xzeile = U|xzeile + 1
+.continue GROUP  ? U|xzeile > M|tzeilen
+.continue OUTPUT
+..
+!GROUP
+.formula U|xsys = "group_by.sh -n8 -k2 -s5 " + U|xfile + " >> " + U|xverdkunde  ? M|bprokunde
+.formula U|xsys = "group_by.sh -n8 -k2 -s5 " + U|xfile + " >> " + U|xverdlief   ? M|bprolief
+.system 'U|xsys' background
+.continue ERROR ? _G|mehr
+..
+.input "is/TABLEEREN"
+.continue PROKUNDE ? M|bprokunde
+.continue PROLIEF  ? M|bprolief
+..
+!PROKUNDE
+.select from 'U|xverdkunde' U|x1 # U|x2 # U|x3 # U|x4 # U|x5 # U|x6 # U|x7 #
+.continue END ? _G|mehr
+.make screen line +O
+.assign M|tkunde = 'U|x2'
+.formula M|inlzahlbetr = 'U|x5'
+.copy M|buwaehr = G|inland
+.continue PROKUNDE
+..
+!PROLIEF
+.select from 'U|xverdlief' U|x8 # U|x9 # U|x3 # U|x4 # U|x5 # U|x6 # U|x7 #
+.continue END ? _G|mehr
+.make screen line +O
+.assign M|tlief = 'U|x9'
+.formula M|inlzahlbetr = 'U|x5'
+.copy M|buwaehr = G|inland
+.continue PROLIEF
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR: Consolidation failed!
+.error Verdichten gescheitert!
+.end 1
+..
+!ERROR1
+.note Kein(e) Treffer vorhanden!
+.assign M|treffer = G|false
+.continue
+

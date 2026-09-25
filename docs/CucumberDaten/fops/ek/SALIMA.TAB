@@ -1,0 +1,86 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SALIMA.TAB
+.. Datum/Date     : 09.01.06
+.. Version        : 2006
+.. Autor/Author   : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       :
+.. Ablauf         : Lieferantenmahnungen fÅr alle Lieferanten
+..                  + Erinnerung
+..*****************************************************************************
+.set trans -
+..
+.type P1:1.2  xlief    ? _F|defined(U|xlief)
+.type text xvergl      ? _F|defined(U|xvergl)
+.type bool xmahnsperre ? _F|defined(U|xmahnsperre)
+.type text xtsel       ? _F|defined(U|xtsel)
+..
+.formula U|xvergl = ""
+.formula U|xtsel  = "$,,typ=(3)"
+.formula U|xtsel  = U|xtsel + ";lief=" + 'H|id'
+.formula U|xtsel  = U|xtsel + ";@gruppe=1;@ablageart=(Active)"
+..
+.load 1 purchasing 'U|xtsel'
+.continue WEITER
+..
+!LIEF
+.load 1 purchasing
+..
+!WEITER
+.continue              ? _G|mehr
+.continue              ?  1|lief^id = U|xvergl
+.. Mahnsperre im Vorgang prÅfen
+.. Diese Bestellung kînnte Mahnsperre haben, aber weitere Bestellungen dieses
+.. Lieferanten eventuell nicht
+.continue LIEF         ?  1|limahnsperre & M|mahnung
+.continue LIEF         ?  1|limahnsperre & M|erinnern & M|ermahnsperr
+..
+.copy U|xlief = 1|lief
+.. Mahnsperre im Lieferant
+.copy U|xmahnsperre = G|FALSE
+.copy U|xmahnsperre = 1|lief^limahnsperre
+..
+!ZEILE
+.load 1 line
+.continue LIEF          ? _G|mehr
+.continue ABMAHN        ? M|abmahn
+.continue ERINNERN      ? M|erinnern
+.continue ZEILE         ? ('1|tterm:8' < 'M|madatum:8') & _F|empty(M|madatum)
+.continue ZEILE         ? '1|tterm:8' > 'M|medatum:8'  
+.continue ZEILE         ? (1|limge-1|lifrg):3<=0.0
+.continue MACHEZEILE
+..
+!ABMAHN
+.continue ZEILE         ? _F|empty(1|abnrpo)
+.continue MACHEZEILE    ? F|empty(M|liefadatum) & F|empty(M|liefedatum)
+.continue ZEILE         ? F|empty(1|tterm) & M|btterm
+.continue ZEILE         ? F|empty(1|vom) & M|bvom
+.continue ZEILE         ? ('1|tterm:8' < 'M|liefadatum:8') & _F|empty(M|liefadatum) & M|btterm
+.continue ZEILE         ? ('1|tterm:8' > 'M|liefedatum:8') & _F|empty(M|liefedatum) & M|btterm
+.continue ZEILE         ? ('1|vom:8' < 'M|liefadatum:8') & _F|empty(M|liefadatum) & M|bvom
+.continue ZEILE         ? ('1|vom:8' > 'M|liefedatum:8') & _F|empty(M|liefedatum) & M|bvom
+.continue ZEILE         ? (1|limge-1|lifrg):3<=0.0
+.continue MACHEZEILE
+..
+!ERINNERN
+.continue ZEILE         ? '1|tterm:8' < 'M|eadatum:8'
+.continue ZEILE         ? ('1|tterm:8' > 'M|eedatum:8') & _F|empty(M|eedatum)
+.continue ZEILE         ? (1|limge-1|lifrg):3<=0.0
+.continue MACHEZEILE
+..
+!MACHEZEILE
+.make screen line +O
+.formula M|tlief          = U|xlief
+.copy M|limahnsperre      = U|xmahnsperre
+.formula U|xvergl         = 1|kopf^lief^id
+.assign M|spra            = U|xlief^spr
+.input "ek/LIMA.TEXTE"
+.copy M|temail            = U|xlief^email
+.copy M|tperemail         = G|true  ? _F|empty(M|temail)
+.assign M|temailbetreff   = U|xtext3
+.formula M|temailbodytext = "<P>" +  'U|xtext1' + "</P><P>" + 'U|xtext2' + "</P>"
+.formula M|temailanhang    = F|formatstr("{1}_{2}{3}{4}.pdf", 'U|xtext3', F|year(G|datum), F|month(G|datum), F|day(G|datum))
+.copy U|xbzeile           = G|TRUE
+.continue LIEF

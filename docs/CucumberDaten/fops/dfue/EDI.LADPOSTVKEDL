@@ -1,0 +1,343 @@
+..!interpreter english
+..@@BEGINHEAD
+..========================================================================
+..==
+..==  Name              : EDI.LADPOSTVKEDL
+..==
+..==  Pfad              : dfue
+..==
+..==  Funktion          : Postprocessing VKEDL zum Åberwachten Lader-BATCH-LG
+..==
+..==  Erstellungsdatum  : 13.06.2003
+..==
+..==  Autor             : Ozan Kesim
+..==  Verantwortlicher  : mh
+..==  notwendige Pfade  : dfue, dfue1, dfue2, tmp
+..==
+..==  Menuepunkte       :
+..==
+..==  Maskenprioritaet
+..==  bei EFOP          :
+..==
+..==  Besonderheiten    : Parameter aus DFUE.LADADMIN
+..==                      (DFUE.<MMVVL> -> DFUE.LADMAIN -> Batch-LG
+..==                      mit ".lesen"-Parametern):
+..==                      - Timeout fÅr Test Proze·aktivitÑt (xtimtestladerakt)
+..==                      - Identnummer des EDI-Datensatzes (xedinumactinnachr1)
+..==                      - Beschreibungen des Fehlercodes 1 (xedireffcod1)
+..==                      - Proze·-ID des Lader-Batch-LG (xplader)
+..==
+..==                      - RÅckgabewert des Shell-Scripts zur öberwachung
+..==                        des Lader-Batch-LG (xlbatchlgreturn)
+..==                      - Name des DFUE-Unterprogramms (xdfueuprog)
+..==                      - Name der Erweiterung der Ergebnisprotokoll-Datei
+..==                        (xneprotokollerw)
+..==                      - Name der Erweiterung der Fehlerprotokoll-Datei
+..==                        (xnfprotokollerw)
+..==
+..==  Aenderungshistorie:
+..#KOR#EDI-MODUL#DATUM#éNDERUNGS-INDEX#MitarbeiterkÅrzel#
+..#KOR#EDL#13.06.2003#0#ok#
+..#KOR#EDL#16.09.2003#1#ok#
+..#KOR#EDL#17.11.2003#2#ok#
+..==
+..========================================================================
+..@@ENDHEAD
+..
+.input ARB
+..
+.. variable definitions
+..@@BEGINVARDEFS
+..====================================================
+.set trans -
+..... procedure stack pointer .....
+..art int   xprocsp
+..>> Identnummer ABAS-Lieferschein fÅr EDL-Meldung
+.type text       xideksvor
+..>> öbertragungsnummer
+.type text       xuebnr
+..>> öbertragungsnummer alt
+.type text       xuebnra
+..====================================================
+..@@ENDVARDEFS
+..
+.. initialize procedure stack pointer
+..fo xprocsp = 0
+.. alle variablen mÅssen definiert sein, sonst bricht das programm ab
+.set demand -
+..
+.. ----------------------------------------
+.continue EPROCDEF
+.. procedure definitions
+.. Prozedur: EDISchreibeLadAdminProtokoll
+..
+!PROC001: ----- EDISchreibeLadAdminProtokoll -----
+..>> AnhÑngen von Informationen an Protokoll des öberwachungs-Batch-LG
+..>>
+..>> Parameter:
+..>>
+..>> Ein: - Name der Ergebnisprotokoll-Datei (xneprotokollerw)
+..>>      - Name der Fehlerprotokoll-Datei (xnfprotokollerw)
+..>>      - EKS-EDI-Identnummer des EKS-EDI-Datensatzes (xedinumactinnachr1)
+..>>      - Beschreibungen der Fehlercodes 1 (xedireffcod1 !!!)
+..>>
+..>> Aus: - Erfolg Operation (xprocreturn)
+..>>      - globaler Schalter, ob Protokoll erweitert (xistfproterw)
+..>>
+..>> Interne Variablen: - xfobefehl
+..>>
+..
+..>> Erfolg der Operation
+.formula xprocreturn = true
+..
+.. >> Erweitern Protokoll-Datei
+.select edifact 'xedinumactinnachr1'
+..
+....      Datum_Zeit     EDI-Nr    Vorgang  Vo Kunde    Fehl       Bemerkung
+....    # 29.04.98_21:29 15        400005   3           52 ausgehende VK-RE 400005
+....      29.04.98_21:29 16        400006   3  70001       ausgehende VK-RE 400006
+.set separator=^
+.formula xfobefehl = (('datum' + "_" + 'zeit' + "              ") << 14) + " "
+.formula xfobefehl = xfobefehl + ((num + "         ") << 9) + " "
+.formula xfobefehl = xfobefehl + ((ideksvor + "        ") << 8) + " "
+.formula xfobefehl = xfobefehl + (('vorart' + "  ") << 2) + " "
+.formula xfobefehl = xfobefehl + ((idkundeab + "        ") << 8) + " "
+..
+..
+.continue EL001 ? _(fcode = 0)
+.. IF001
+..
+.continue EL002 ? _((status = 5) ; (status = 6))
+.. IF002
+....                                 gespoolt      (e -> eingegegangen)
+....                                 |             (v -> verarbeitet)
+....                                 |
+.formula xfobefehl = "  " + xfobefehl + " s " + (name << ";") + ((name >> ";") >> "")
+..
+.continue FI002
+!EL002
+..
+.continue EL003 ? _(status = 10)
+.. IF003
+....                                 verarbeitet   (e -> eingegegangen)
+....                                 |             (s -> gespoolt)
+....                                 |
+.formula xfobefehl = "  " + xfobefehl + " v " + (name << ";") + ((name >> ";") >> "")
+..
+.continue FI003
+!EL003
+....                                 eingegegangen (s -> gespoolt)
+....                                 |             (v -> verarbeitet)
+....                                 |
+.formula xfobefehl = "  " + xfobefehl + " e " + (name << ";") + ((name >> ";") >> "")
+..
+!FI003
+..
+!FI002
+..
+.. >> Ausgabe an Ergebnisprotokoll-Datei
+.output addedto 'xneprotokollerw'
+.length 1
+.right 80
+.tablerecord
+..
+.continue FI001
+!EL001
+.formula xfobefehl = "# " + xfobefehl + (('fcode' + "  ") << 2) + " " + xedireffcod1
+..
+.formula xistfproterw = true
+..
+.. >> Ausgabe an Fehlerprotokoll-Datei
+.output addedto 'xnfprotokollerw'
+.length 1
+.right 80
+.tablerecord
+..
+!FI001
+..
+'xfobefehl'
+.set
+..
+.output new WERF.WEG
+.output addedto 'xnfprotokollerw'
+.output new WERF.WEG
+..
+.continue 'xprocst.xprocsp'
+..
+!EPROCDEF: ----- end procedure definitions -----
+.. ----------------------------------------
+..
+.. >> Postprocessing nach Ende des durch DFUE.LADADMIN Åberwachten Laders
+..>> - Zustand des Åber EKS-EDI-Datensatz spezifizierten neuen EKS-Liefer-
+..>>   Abrufs ermitteln und bei:
+..>>   - Lader-Batch-LG fehlerfrei beendet, Eintrag in:
+..>>
+..>>     - EDI-Datensatz: - Identnummer ABAS-Lieferschein
+..>>                      - Status EDL-Meldung   (fertig)
+..>>                      - Fehlercode           (kein Fehler)
+..>>
+..>>   - Lader-Batch-LG fehlerhaft beendet:
+..>>     - EDI-Datensatz: - Status EDL-Meldung   (Fehler Lader)
+..>>                      - Fehlercode           (...)
+..>> - Protokollzeile
+..
+..>> Holen EKS-EDI-Datensatz
+.select edifact 'xedinumactinnachr1'
+..
+..
+.continue EL004 ? _(mehr)
+.. IF004
+..>> Test, ob Lader-Batch-LG fehlerfrei beendet
+..
+..
+.continue EL005 ? _((status = 10) & (fcode = 0))
+.. IF005
+..>> Merken öbertragungsnummer der EDL-Meldung
+.formula xuebnr = uebnr
+..
+.. Ermitteln der letzten Uebertragungsnummer EDL EDI-Info zu Kunde/nKontakt
+..
+.continue EL006 ? _(F|empty(idkundeab))
+.. IF006
+.continue FI006
+!EL006
+.. ----------------------------------------
+.reserve
+.select customer 'idkundeab'
+..
+..
+.continue EL007 ? _(mehr)
+.. IF007
+.type text xvorgang ? _F|defined(U|xvorgang)
+.type P109:2 xedinachr ? _F|defined(U|xedinachr)
+.formula U|xvorgang = "VKEDL"
+.formula U|xedinachr = "2110"
+.input "DFUE.GET.PROTOK"
+..
+.. xediuebnr will be zero if no EDI-Info entry exists
+.formula U|xuebnra = U|xediuebnr
+..
+!EL007
+.. FI007
+..
+.select
+.. ----------------------------------------
+..
+!FI006
+..
+.. >> Merken den ABAS-Lieferschein des Kunden aus EDL-Meldung
+.reserve
+..
+.formula xvksuchschluessel1 = "$,,;@gruppe=1;@ablage=(1);@zeilen=(0);ktyp=4;@ordnung=nummer.(1);kunde=" + idkundesab + ";ident=" + xedinumactinnachr1
+.select sales 'xvksuchschluessel1'
+..
+..
+.continue EL008 ? _(mehr)
+.. IF008
+.formula xideksvor = num
+..
+!EL008
+.. FI008
+..
+.select
+..
+.. >> Eintragen den ABAS-Lieferschein des Kunden aus EDL-Meldung in EDI-Datensatz
+.reserve
+..
+.select lock edifact 'xedinumactinnachr1'
+..
+.formula ideksvor = xideksvor
+.formula uebnra = xuebnra
+..
+.rewrite
+..
+.select
+..
+.reserve
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+..
+.select
+..
+.. Eintragen Uebertragungsnummer in EDL EDI-Info zu Kunde/nKontakt
+..
+.continue EL009 ? _(F|empty(idkundeab))
+.. IF009
+.continue FI009
+!EL009
+.. ----------------------------------------
+.reserve
+.select customer 'idkundeab'
+..
+..
+.continue EL010 ? _(mehr)
+.. IF010
+.type text xvorgang ? _F|defined(U|xvorgang)
+.type P109:2 xedinachr ? _F|defined(U|xedinachr)
+.type text  xediuebnr ? _F|defined(U|xediuebnr)
+.formula U|xvorgang = "VKEDL"
+.formula U|xedinachr = "2110"
+.formula U|xediuebnr = U|xuebnr
+.input "DFUE.PUT.PROTOK.UEBNR"
+..
+!EL010
+.. FI010
+..
+.select
+.. ----------------------------------------
+..
+!FI009
+..
+..**ok,16.09.2003 (erst nach LS-Eintrag wird der EDI-Datensatzstatus auf 0 gestellt)
+..
+..
+.continue EL011 ? _(xideksvor<>"")
+.. IF011
+.. >> Eintragen Status 0, Fehlercode 0 in EDI-Datensatz
+.reserve
+..
+.select lock edifact 'xedinumactinnachr1'
+..
+.formula status = 0
+.formula fcode = 0
+..
+.rewrite
+..
+.select
+..
+!EL011
+.. FI011
+..
+.continue FI005
+!EL005
+.. Testergebnis negativ: Setzen Status 1 und Fehlercode 1
+.reserve
+..
+.select lock edifact 'xedinumactinnachr1'
+..
+.formula status = 1
+.formula fcode = 1
+..
+.rewrite
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+..
+.select
+..
+!FI005
+..
+!EL004
+.. FI004
+..
+.continue
+..

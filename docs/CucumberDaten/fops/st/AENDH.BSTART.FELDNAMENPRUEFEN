@@ -1,0 +1,85 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : AENDH.BSTART.FELDNAMENPRUEFEN
+.. Autor          : erwo
+.. Verantwortlich : cl
+.. Kontrolle      : lei
+.. Funktion       :
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+..
+.type GL    stringlistekopf      ? _F|defined(U|stringlistekopf)
+.type GL    stringlistetrenner   ? _F|defined(U|stringlistetrenner)
+.type GL    stringlisterest      ? _F|defined(U|stringlisterest)
+.type GL    stringlistefop       ? _F|defined(U|stringlistefop)
+.type GL    feldlistezeile       ? _F|defined(U|feldlistezeile)
+.type bool  traversierungabbruch ? _F|defined(U|traversierungabbruch)
+.type text  xv                   ? _F|defined(U|xv)
+.type integer xsummekopf         ? _F|defined(U|xsummekopf)
+.type integer xsummetabelle      ? _F|defined(U|xsummetabelle)
+..
+.copy U|traversierungabbruch = G|FALSE
+.assign U|stringlistetrenner = ","
+..
+.. entf„llt bei Freitext
+.continue END ? (M|allekopf & M|alletabelle) ; (M|allekopf & F|empty(M|ausloesertabelle)) ; (M|alletabelle & F|empty(M|ausloeserkopf))
+.. Do we have a @noswd query?
+.assign M|select = "!"
+.copy M|numsuch = _F|regmatch(M|select, "^[%$].*")
+.continue GROUP   ? _M|numsuch
+.assign M|select = F|formatstr("$,,@numsuch={1}", M|select)
+..
+!GROUP
+.load 8 object 'M|kid^id'              ? _F|empty(M|kid)
+.load 8 group 'M|grliste' 'M|select'   ?  F|empty(M|kid)
+.continue END ? _G|mehr
+..
+.. hier lade ich die gew„hlte Vartab in den 9-Puffer
+.load 9 metadata "8|"
+.continue END ? _G|mehr
+..
+.protection -reset vartabgruppe
+.assign M|vartabgruppe = 9|id
+.protection  vartabgruppe
+.assign U|feldlistezeile = M|ausloesertabelle + U|stringlistetrenner + M|feldertabelle ? _F|regmatch(M|ausloesertabelle, ".*,")
+.. zweites wenn M|ausloesertabelle mit "," endet
+.assign U|feldlistezeile = M|ausloesertabelle + M|feldertabelle  ? F|regmatch(M|ausloesertabelle, ".*,")
+.assign U|feldlistezeile = M|feldertabelle ? F|empty(M|ausloesertabelle)
+.copy U|notableindngrerr = G|FALSE ? F|length(U|feldlistezeile) = 1 & _9|vvtab
+.copy U|notableindngrerr = G|FALSE ? 9|vvtab
+.continue END ? U|notableindngrerr
+..
+!KOPF: Kopffelder pruefen: Ausl”serfelder und weitere Felder
+.copy U|stringlistefop = "st/AENDH.BSTART.KOPFFELDNAMENPRUEFUNG"
+.continue ERROR1 ? F|length(M|felderkopf) > 2990
+.formula U|xsummekopf = F|length(M|felderkopf) + F|length(M|ausloeserkopf)
+.continue ERROR1 ? U|xsummekopf > 2990
+.assign U|stringlisterest = M|ausloeserkopf + U|stringlistetrenner + M|felderkopf ? _F|regmatch(M|ausloeserkopf, ".*,") & _F|empty(M|ausloeserkopf)
+.. zweites wenn M|ausloeserkopf mit "," endet
+.assign U|stringlisterest = M|ausloeserkopf + M|felderkopf ? _F|empty(M|ausloeserkopf) & F|regmatch(M|ausloeserkopf, ".*,")
+.assign U|stringlisterest = M|felderkopf ? F|empty(M|ausloeserkopf)
+.. wenn M|allekopf und/oder M|alletabelle, dann muss der Freitext fr Kopf und/oder Tabelle ausgelesen werden
+.input "st/FELDTRAVERSIERUNG"
+.continue END ? _F|empty(U|unknownheaderfields)
+..
+!TABELLE: Tabellenfelder pruefen: Ausl”serfelder und weitere Felder
+.copy U|stringlistefop = "st/AENDH.BSTART.TABFELDNAMENPRUEFUNG"
+.continue ERROR1 ?  F|length(M|feldertabelle) > 2990
+.formula U|xsummetabelle = F|length(M|feldertabelle) + F|length(M|ausloesertabelle)
+.continue ERROR1 ? U|xsummetabelle > 2990
+.assign U|stringlisterest = M|ausloesertabelle + U|stringlistetrenner + M|feldertabelle ? _F|regmatch(M|ausloesertabelle, ".*,") & _F|empty(M|ausloesertabelle)
+.. zweites wenn M|ausloesertabelle mit "," endet
+.assign U|stringlisterest = M|ausloesertabelle + M|feldertabelle ? _F|empty(M|ausloesertabelle) & F|regmatch(M|ausloesertabelle, ".*,")
+.assign U|stringlisterest = M|feldertabelle ? F|empty(M|ausloesertabelle)
+.input "st/FELDTRAVERSIERUNG"
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR1
+.error Felderliste fr Auswertung zu lang!
+.formula M|feldertabelle = "" ? F|length(M|feldertabelle) > 2990 ; U|xsummetabelle > 2990
+.formula M|felderkopf = ""    ? F|length(M|felderkopf) > 2990 ; U|xsummekopf > 2990
+.end 1

@@ -1,0 +1,112 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : KBFORMBILGUV.TAB
+..  Datum          : 05.01.2010
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : Tabellen-FOP der Infosysteme
+..                   fb/KBFORM, fb/BILANZ, fb/GUV, fb/GUVNACH, fb/BILANZNACH etc.
+..*****************************************************************************
+..
+.set trans -
+..
+.. set initial value
+.copy U|xereregeln = M|reregeln
+..
+.formula   U|xizstufe   = 1|stufe + 1
+.. current account range
+.type ID68 xpaccrange.xizstufe ? _F|defined(U|xpaccrange.xizstufe)
+.copy U|xpaccrange.xizstufe = 1|id ? 1|dnr = 68
+..
+.select add 1|id
+.continue INSERTROW
+..
+..*****************************************************************************
+!LOOPAR: Loop over account range rows
+..*****************************************************************************
+.load 1 line
+.continue END ? _G|mehr
+..
+.continue C1     ? _F|defined(1|koobj)
+.continue LOOPAR ? _F|empty(1|koobj) & _M|mitkoobjber
+..
+!C1
+.continue COOAR  ? 1|dnr = 68 & 1|gruppe = 10
+..
+.select add F|condexpr(F|empty(1|kbereich), 1|konto, 1|kbereich)
+..
+.formula   U|xizstufe   = 1|stufe + 1
+.. current account range
+.type ID68 xpaccrange.xizstufe ? _F|defined(U|xpaccrange.xizstufe)
+.copy U|xpaccrange.xizstufe = H|id ? H|dnr = 68
+..
+.continue INSERTROW
+..
+..*****************************************************************************
+!COOAR: Cost object range row
+..*****************************************************************************
+.select add 1|koobj
+..
+..*****************************************************************************
+!INSERTROW: Insert new row
+..*****************************************************************************
+.continue END    ? 1|dnr <> 68 & M|noaccounts & H|dnr <> 68
+.continue LOOPAR ? 1|dnr  = 68 & M|noaccounts & H|dnr <> 68
+..
+.copy U|xbhasvalues  = G|false
+.copy U|xbhasvaluesp = G|false
+..
+.continue PEREND ? M|novkz
+..
+.continue C3 ? 'M|reregeln(L="0")' = "(9)"
+.copy U|xereregeln = F|condexpr(F|defined(H|reregeln) & H|dnr=68, H|reregeln, F|eval("U|xpaccrange" + F|tostring(F|expr(U|xizstufe-1)) + "^reregeln"))
+.formula   U|xrzanteil  = F|condexpr(F|defined(1|zanteil), 1|zanteil, 1)
+..
+!C3
+.input "fb/KBFORMBILGUV.VALUES.LOOP"
+..
+..*****************************************************************************
+!PEREND
+..*****************************************************************************
+.make screen line +O
+.formula M|tnull       = _U|xbhasvalues & _U|xbhasvaluesp & _M|novkz
+.formula M|kber = H|id ? H|dnr  = 68
+.formula M|knum = H|id ? H|dnr <> 68 & 1|gruppe <> 10
+.assign M|knum      = 2|id ? 1|dnr = 68 & 1|gruppe = 10
+.assign M|tkoobjber = F|condexpr(F|defined(1|koobjber), 1|koobjber, "")
+.assign M|tkoobj    = F|condexpr(F|defined(1|koobj), 1|koobj, "")
+.assign M|tkoobjber = 1|id ? 1|dnr = 68 & 1|gruppe = 10
+.input "fb/KBFORMBILGUV.GRPS"
+..
+.formula M|tanteil   = F|condexpr(F|empty(M|kber), 1, M|kber^anteil)
+.formula M|tzanteil  = U|xrzanteil
+.formula M|tganteil  = M|tanteil * M|tzanteil
+..
+.formula M|tdavon    = (M|tzanteil = 0.00)
+..
+.copy M|tclosed   = G|false
+.copy M|tclosed   = 1|closed ? F|defined(1|closed) & M|cclosed
+.formula   M|tclosed   = (M|tclosed ; U|xbclosed) & M|cclosed ? H|dnr = 68
+.copy M|tclosed   = G|true   ? _F|empty(M|tkoobj)
+.copy M|tclosed   = G|true   ? _F|empty(M|knum) & F|empty(M|tkoobjber)
+..
+.continue C2 ? M|novkz
+..
+.input "fb/KBFORMBILGUV.SET.VALUES"
+..
+!C2
+.formula U|xrowlevel = U|xizstufe
+.input "fb/KBFORMBILGUV.WRITE.LINE"
+.make screen line -O
+..
+..*****************************************************************************
+!CONT
+..*****************************************************************************
+.continue END    ? 1|dnr <> 68
+.continue LOOPAR ? 1|dnr  = 68 & _(U|xbclosed & M|cclosed)
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

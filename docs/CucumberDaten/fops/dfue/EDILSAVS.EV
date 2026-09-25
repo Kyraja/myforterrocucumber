@@ -1,0 +1,145 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDILSAVS.EV
+.. Autor          : tg
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Allgemeine Ereignisse Infosystem EDILSAVS
+.. Functionality  : Common Events Infosystem EDILSAVS
+..*****************************************************************************
+.set trans -
+..
+.type text xtsel      ? _defined(xtsel)
+.type text xtprot     ? _defined(xtprot)
+.type text xtmedi     ? _defined(xtmedi)
+.type text xtdat      ? _defined(xtdat)
+.type text xtdat2     ? _defined(xtdat2)
+.type text xtsys      ? _defined(xtsys)
+.type bool xbmehr     ? _defined(xbmehr)
+.type text xtnum      ? _defined(xtnum)
+.type real xlimge     ? _defined(xlimge)
+.type real xlimge     ? _defined(xlimge)
+.type P4:23 tlenummer ? _defined(tlenummer)
+..
+..  Event evaluation
+.. ----------- ----- Header -------- ------------------------------------------
+.continue INIT   ? evtartengl="FIELD_EXIT"      & evtvar="edinr"
+.continue INIT   ? evtartengl="FIELD_EXIT"      & evtvar="kwerk"
+.continue INIT   ? evtartengl="FIELD_EXIT"      & evtvar="kablade"
+.continue INIT   ? evtartengl="FIELD_EXIT"      & evtvar="kliefnr"
+.continue INIT   ? evtartengl="FIELD_EXIT"      & evtvar="lwerk "
+.continue INIT   ? evtartengl="FIELD_EXIT"      & evtvar="lablstelle"
+.continue INIT   ? evtartengl="FIELD_EXIT"      & evtvar="dvon"
+.continue INIT   ? evtartengl="FIELD_EXIT"      & evtvar="dbis"
+.continue INIT   ? evtartengl="FIELD_EXIT"      & evtvar="abschlnr"
+.continue INIT   ? evtartengl="FIELD_EXIT"      & evtvar="edinrbis"
+.continue INIT   ? evtartengl="FIELD_EXIT"      & evtvar="inkllsre"
+.continue INIT   ? evtartengl="FIELD_EXIT"      & evtvar="mitpack"
+.continue INIT   ? evtartengl="FIELD_EXIT"      & evtvar="buebl"
+.continue LS     ? evtartengl="BUTTON_BEFORE"    & evtvar="buls"
+.continue PROT   ? evtartengl="BUTTON_AFTER"   & evtvar="bstart"
+.. ----------- ----- Table ----------------------------------------------------
+.continue BESUCH ? evtartengl="BUTTON_BEFORE"    & evtvar="tbusuchbe"
+.. ----------- ---------- ---------- ------------------------------------------
+.continue END
+..
+!INIT
+.input "is/TABLEEREN"
+.formula M|lwerk       = ""
+.formula M|lablstelle  = ""
+.formula M|abrufnr     = ""
+.formula M|abschlnr    = ""
+.continue END
+..
+..
+!MELD
+.box Meldung
+Bei der EDI-Id handelt es sich um kein Lieferavis !
+.formula M|edinr = ""
+.cursor edinr
+..
+!LS
+.select screen line
+!INSERT.LOOP
+.continue             ? _mehr
+.continue LS          ? _M|tzu ; 'M|tart' = ""
+.formula T|xtdat  = "rmtmp/" + "X." + "LSAVS."     + T|sekundenz + "." + pid + 'M|aktzeile' + ".TMP"
+.formula T|xtdat2 = "rmtmp/" + "X." + "LSAVS.OUT." + T|sekundenz + "." + pid + 'M|aktzeile' + ".TMP"
+..
+.output new 'xtdat'
+.input "DATEI.F"
+nummer;vom;num;zeile;mge
+'tkbenum';.;'M|tlsnummer';1;'M|tmge'
+..
+!EDP.START
+.output new WERF.WEG
+.formula T|xtsys="edpimport.sh -a delivery -b 4 -P -Z nummer:zeile" + " -c EKS " + " -I " + 'xtdat' + " -r NUM 1>" + 'xtdat2'
+.system 'xtsys' password background
+..
+.set trans +
+.formula   M|thinweis  = M|thinweis + ";Lieferschein konnte nicht angelegt werden" ? _mehr
+.set trans -
+.continue                                                                           ? _mehr
+.formula   M|zicon     = "icon:attention"                                     ? _mehr
+.continue   INSERT.LOOP                                                             ? _mehr
+..
+.select from 'xtdat2' T|xtnum
+.assign T|tlenummer = T|xtnum
+.formula M|tls         = T|xtnum                                                   ?  mehr
+.set trans +
+.formula M|thinweis    = M|thinweis + ";Lieferschein konnte nicht angelegt werden" ? _mehr
+.set trans -
+.formula M|tzu         = false
+.load 1 purchasing 'M|posid'
+.formula T|xlimge      =  M|posid^limge                 ? _M|inkllsre
+.formula T|xlimge      =  M|posid^limge - M|posid^lifrg ?  M|inkllsre
+.formula M|tofmge      =  T|xlimge
+.set trans +
+.formula   M|thinweis  = M|thinweis + ";Lieferschein mit der Nummer " + 'M|tls' + " wurde angelegt"
+.set trans -
+.continue INSERT.LOOP
+.continue
+..
+!PROT
+.select screen header
+.select screen line
+..
+!PROT.LOOP
+.continue ? _mehr
+.formula T|xtmedi = M|edident
+.formula T|xtprot = "rmtmp/ZAVS." + pid + ".ZAVS"
+.output addedto 'xtprot'
+.input "DATEI.F"
+'M|thinweis'
+.select screen line
+.formula T|xbmehr = mehr
+.continue UPROT ? _mehr
+.continue UPROT ? M|edident <> T|xtmedi & 'T|xtmedi' <> ""
+.continue PROT.LOOP
+..
+!UPROT
+.output new WERF.WEG
+.select lock edifact 'xtmedi'
+.formula H|ftext = 'xtprot'
+.rewrite
+.select -
+.output new 'xtprot'
+.continue ? _xbmehr
+.continue PROT.LOOP
+..
+..
+!BESUCH
+.continue ? 'M|tbesuchstrg' = ""
+.select purchasing 'M|tbesuchstrg'
+.continue ? _mehr
+.formula M|tkbenum = H|kopf
+.formula M|posid   = H|id
+.formula T|xlimge  = H|limge           ? _M|inkllsre
+.formula T|xlimge  = H|limge - H|lifrg ?  M|inkllsre
+.formula M|tofmge  = T|xlimge
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+

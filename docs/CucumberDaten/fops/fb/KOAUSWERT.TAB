@@ -1,0 +1,123 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KOAUSWERT.TAB
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Tabellen-FOP des Infosystems fb/KOAUSWERT
+..*****************************************************************************
+..
+.set trans -
+..
+.continue DEFINED ? F|defined(U|xtret)
+..
+.type text xtret
+.type text xtsel   ? _F|defined(U|xtsel)
+.type bool xbbuch
+.. variables for interface to fb/ACCOUNT.FIGURES
+.type VP6  xaccount
+.type GJ   xsyear xeyear
+.type integer  xsmonth xemonth
+..
+.copy U|xsyear = M|ajahr
+.copy U|xeyear = M|ejahr
+.formula U|xsmonth = M|amonat
+.formula U|xemonth = M|emonat
+..
+..*****************************************************************************
+!DEFINED
+..*****************************************************************************
+.formula U|xtret = ""
+..
+.load 7 object '9|id' ? M|vdn = 68 & (M|vgr = 1 ; M|vgr = 3)
+..
+.continue ADDAR  ? M|vdn = 68 & M|vgr = 1
+.continue ADDPAR ? M|vdn = 68 & M|vgr = 3
+.. else
+.continue ADDARF ? M|vdn = 68
+..
+.load 0 object '9|id'
+..
+.continue ADDROW
+..
+..*****************************************************************************
+!ADDAR: Add accounts of an account range
+..*****************************************************************************
+.formula U|xtsel = "$,nummer=" + '7|nummer' + ";@gruppe=17"
+.load 1 accrange 'U|xtsel'
+..
+..*****************************************************************************
+!LPAR: Loop over account range's accounts
+..*****************************************************************************
+.load 1 line
+.continue END    ? _G|mehr &  9|gruppe = 1
+.continue ADDARF ? _G|mehr & (9|gruppe = 2 ; 9|gruppe = 4 ; 9|gruppe = 5)
+.continue LPAR   ? +'1|konto' = 0
+.load 0 add 1|konto
+.formula U|xtret = "LPAR"
+.continue ADDROW
+..
+..*****************************************************************************
+!ADDPAR: Add accounts of a personal account range
+..*****************************************************************************
+.formula U|xtsel = "$,nummer=" + '7|nummer' + ";@gruppe=19"
+.load 1 accrange 'U|xtsel'
+..
+..*****************************************************************************
+!LPPAR: Loop over accounts of a personal account range
+..*****************************************************************************
+.load 1 line
+.continue END    ? _G|mehr &  9|gruppe = 3
+.continue ADDARF ? _G|mehr & (9|gruppe = 2 ; 9|gruppe = 4 ; 9|gruppe = 5)
+.continue LPPAR  ? +'1|konto' = 0
+.load 0 add 1|konto
+.formula U|xtret = "LPPAR"
+.continue ADDROW
+..
+..*****************************************************************************
+!ADDARF: Add accounts of an account range form
+..*****************************************************************************
+.load 9 line
+.continue END     ? _G|mehr
+.continue ADDARF  ? +'9|kbereich' = 0
+.load 7 object '9|kbereich^id'
+.continue ADDPAR  ? 7|gruppe = 3
+.continue ADDAR   ? 7|gruppe = 1
+..
+..*****************************************************************************
+!ADDROW: Add a mask row
+..*****************************************************************************
+.. any posting values available?
+.select entryjournal 'F|formatstr("$,bukreis={1};iwbu={2};konto={3};kstelle={4};koart={5};sortgjgm={6}!{7};budat={8}!{9};kvnextrakt=1;@zeilen=(1)", M|bukreis^id, M|waehr^id, F|condexpr((0|dnr=5&0|gruppe=1);0|dnr=0;0|dnr=1;0|dnr=11,0|id, ""), F|condexpr(0|dnr=5&(0|gruppe=2;0|gruppe=4), 0|id, ""), F|condexpr(0|dnr=60, 0|id, ""), F|fysortdat(M|ajahr, M|amonat), F|fysortdat(M|ejahr, M|emonat), M|adatum, M|edatum)'
+.continue ENDADDROW ? _G|mehr & M|buch
+.copy U|xbbuch = G|mehr
+.assign U|xaccount = 0|id
+.input "fb/ACCOUNT.FIGURES"
+.. do only add a row if the event is a header event
+.make screen line +O  ? G|evtzeile = 0
+.assign M|tid     = 0|id
+.assign M|tkonto  = 0|id     ? G|evtvar <> "tkonto"
+.formula       M|tverd   = _0|bu      ? F|defined(0|bu)
+.copy M|tgjahr  = M|gjahr
+.copy M|tejahr  = M|ajahr
+.copy M|tejahr  = M|ejahr
+.copy M|tamonat = M|amonat
+.copy M|temonat = M|emonat
+.copy M|tadatum = M|adatum
+.copy M|tedatum = M|edatum
+.copy M|tbuch   = U|xbbuch
+.copy M|tasaldo = U|xobalance
+.copy M|tesaldo = U|xcbalance
+.copy M|twaehr  = M|waehr
+.copy M|tbukreis= M|bukreis
+..
+..*****************************************************************************
+!ENDADDROW:
+..*****************************************************************************
+.select
+.continue 'U|xtret' ? +'U|xtret' > 0
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

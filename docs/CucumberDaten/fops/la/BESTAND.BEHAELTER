@@ -1,0 +1,97 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : BESTAND.BEHAELTER
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  : Maske Beh„lterlagermengen durchlaufen und darstellen
+..                  Hat 2 Funktionen:
+..                    - Darstellung von Best„nden in Beh„ltern
+..                    - Verdichtung von Best„nden
+.. Puffers        : 1| -> Lagermenge
+..                  H| -> Beh„lterlagermengen
+..*****************************************************************************
+..
+.set trans -
+.type bool       xdispo     ? _F|defined(U|xdispo)
+.type text       xtsel      ? _F|defined(U|xtsel)
+..
+.continue VERDICH ? M|verdichten
+.continue BEHAEL  ? M|behaelter
+!BEHAEL
+.continue ERROR1 ? F|empty(M|artikel)  & F|empty(M|klplatz) & F|empty(M|basisartikel)
+.formula P|maskkontextfop = "BESTAND"
+.formula U|xtsel = "$,,;@ablageart=(Active)" 
+.formula U|xtsel =  U|xtsel + ";artikel=" + M|artikel^id  ? _F|empty(M|artikel)
+.formula U|xtsel =  U|xtsel + ";artikel^basisartikel=" + M|basisartikel^id  ? _F|empty(M|basisartikel) 
+.formula U|xtsel =  U|xtsel + ";platz=" + M|klplatz^id    ? _F|empty(M|klplatz)
+.continue SELECT
+!VERDICH
+.continue ERROR3 ? M|verdichten & F|empty(M|tartikel) & F|empty(M|lplatz)
+.formula P|maskkontextfop = "BESTAND"
+.formula U|xtsel = "$,,;@ablageart=(Active)"
+.formula U|xtsel =  U|xtsel + ";artikel=" + M|tartikel^id  ? _F|empty(M|tartikel) 
+.formula U|xtsel =  U|xtsel + ";platz=" + M|lplatz^id    ? _F|empty(M|lplatz)
+.continue SELECT   
+!SELECT: Platzmengen lesen
+.formula U|xtsel =  U|xtsel + ";lager=" + M|klager^id     ? _F|empty(M|klager)
+.formula U|xtsel =  U|xtsel + ";lgruppe<>`"               ?  F|empty(M|klgruppe)
+.formula U|xtsel =  U|xtsel + ";lgruppe=" + M|klgruppe^id ? _F|empty(M|klgruppe)
+.formula U|xtsel =  U|xtsel + ";artikel^packmit=TRUE"     ?  M|packm
+.load 1 group "40:3" 'U|xtsel'
+.continue ERROR2 ? _G|mehr
+!LMLOOP
+.. Behaelterlagermengen
+.make container group12
+.assign H|charge    = M|kcharge      ? _F|empty(M|kcharge)
+.assign H|behaelter = M|selbehaelter  ? _F|empty(M|selbehaelter)
+.assign H|kverw     = M|kverw        ? _F|empty(M|kverw)
+.assign H|platz   = 1|platz^id 
+.assign H|artikel = 1|artikel^id 
+..
+.select header
+..
+!LINLOOP
+.select line 
+.continue ENDLINE     ? _G|mehr
+.. nur negative Mengen fr mit Behaelterinfo anzeigen
+.continue LINLOOP ? M|nurnegativ & M|behaelter & (H|mge >= 0)
+.make screen line +O 
+.assign M|tartikel     = H|tartikel
+.assign M|tartikeltyp  = M|tartikel^elementicon
+.assign M|tbasisartikel = M|tartikel^basisartikel
+.copy M|lplatz       =  H|tplatz^id
+.copy M|dispo        = M|lplatz^dispo
+.assign M|tbehaelter = H|tbehaelter^id ? _F|empty(tbehaelter)  
+.assign M|geinheit   = H|gebeinh
+.formula M|gebf      = H|gebf
+.copy M|charge       = H|ztcharge
+.formula M|exnum     = H|ztexnum 
+.formula M|gebmge    = H|mge
+.formula M|verw      = H|verw
+.assign M|projekt    = H|tprojekt
+.copy M|lffert       = H|lffert
+.copy M|platzmengeelem = G|true
+.continue NOBEH ? _M|behaelter
+.copy M|lager    = M|lplatz^lager                  
+.copy M|lgruppe  = M|lplatz^lgruppe 
+.formula M|tlginfo = M|iconinternlg ? M|lgruppe^intlager 
+.formula M|tlginfo = M|iconexternlg ? _M|lgruppe^intlager
+!NOBEH
+.continue LINLOOP
+..
+!ENDLINE
+.load 1 squantity
+.continue LMLOOP ? G|mehr
+.continue END
+!ERROR1
+.error -message Artikel oder Lagerplatz eingeben, wenn Beh„lterinformationen angezeigt werden sollen.
+.end 1
+!ERROR2
+.error -message Es gibt keine Lagerbest„nde.
+.end 1
+!ERROR3
+.error -message Verdichten nicht m”glich.
+!END
+.continue
+

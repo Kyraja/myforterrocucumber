@@ -1,0 +1,198 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : S0179.YTBURECH.AZ
+.. Date           : 02/11/2015
+.. Version        : 1.0
+.. Author         : RASC
+.. Copyright      :
+.. Functionality  : Sub-FOP of S0179.YTBURECH.BA
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xttext     ? _F|defined(U|xttext)
+.type text U|xtcmd      ? _F|defined(U|xtcmd)
+.type text U|xtedp      ? _F|defined(U|xtedp)
+.type text U|xtout      ? _F|defined(U|xtout)
+.type text U|xterr      ? _F|defined(U|xterr)
+.type text U|xtref      ? _F|defined(U|xtref)
+.type integer U|xiz     ? _F|defined(U|xiz)
+..
+.formula U|xiz          = 0
+.load 0 nolock object 'M|yvorgang^id'
+!VORGZ
+.load 0 nolock line
+.continue START         ? _G|mehr
+.formula U|xiz          = U|xiz + 1
+.continue VORGZ
+..
+!START
+.formula U|xiz          = U|xiz + 1
+..
+.file -TEMPNAME U|xtedp
+.file -TEMPNAME U|xtout
+.file -TEMPNAME U|xterr
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Anzahlungsposition zu Fakturaplan
+#!database='M|yvorgang^dnr'
+#!group=22
+#!action=update
+#!recordidfld=nummer
+#!firsttabfld=zn
+nummer;zn;artex;ptext;
+'M|yvorgang^nummer';+'U|xiz';'M|ytanzpos^id';'M|ytereignis';
+.output
+.formula U|xtcmd        = "edpimport.sh -P -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' PASSWORD background
+..
+.continue ERRANZ        ? F|filesize(U|xterr) > 0
+.formula U|xtref        = ""
+..
+.load 0 nolock object 'M|yvorgang^id'
+.continue ERRANZ        ? _G|mehr
+!ANZID
+.load 0 nolock line
+.continue RECHN         ? _G|mehr
+..
+.continue ANZID         ? 0|aktzeile <> U|xiz
+.formula U|xtref        = 0|id
+.load 0
+..
+!RECHN
+.continue ERRANZ        ? F|empty(U|xtref)
+..
+.output NEW 'U|xtout'
+.output NEW 'U|xterr'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Anzahlungsrechnung zu Fakturaplan
+#!database='M|yvorgang^dnr'
+#!group=24
+#!action=new
+#!report=REF
+?beleg;vorganga;zbed;1:pwert;                                           ? M|yvorgang^dnr = 3
+?'U|xtref';(65);'M|ytzbed^id';'M|ytwert';                               ? M|yvorgang^dnr = 3
+.formula U|xttext = 'M|yvorgang^nummer' + "." + 'M|aktzeile'
+?beleg;nummer;ebeleg;vorganga;vom;zbed;1:pwert;                         ? M|yvorgang^dnr = 4
+?'U|xtref';'U|xttext';'U|xttext';(65);.;'M|ytzbed^id';'M|ytwert';       ? M|yvorgang^dnr = 4
+.output
+.formula U|xtcmd        = "edpimport.sh -P -o SHOWNOTES=0 -o SHOWTEXT=0 -o FOPMODE=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' PASSWORD background
+..
+..edi 'U|xtedp'
+..edi 'U|xterr'
+...input
+.continue ERROR         ? F|filesize(U|xterr) > 0
+.formula U|xtref        = ""
+.select from
+.select from 'U|xtout' U|xtref^
+.continue ERROR         ? F|empty(U|xtref) ; 'U|xtref' = "(0,0,0)"
+..
+.select lock object 'M|id'
+.continue ERROR         ? _G|mehr
+.select lock line 'M|aktzeile'
+.formula H|ytrepid      = 'U|xtref'
+.assign H|ytkonto       = M|ytanzpos^vkonto^id
+.rewrite
+.select-
+..
+.assign M|ytrechn       = U|xtref
+.formula M|ytopbetr     = M|ytwert
+..
+..jetzt noch die Planzahlung lîschen
+.formula U|xtref        = M|ytplzid
+.formula U|xtref        = M|ytplanz^id  ? F|empty(M|ytplzid)
+.output NEW 'U|xtout'
+.output NEW 'U|xterr'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Planzahlung zu Fakturaplan lîschen
+#!database=141
+#!group=1
+#!action=delete
+id
+'U|xtref'
+.output
+.formula U|xtcmd        = "edpimport.sh -P -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' PASSWORD background
+..
+.continue ERRPLZ        ? F|filesize(U|xterr) > 0
+..
+.select lock object 'M|id'
+.continue ERROR         ? _G|mehr
+.select lock line 'M|aktzeile'
+.formula H|ytplzid      = ""
+.rewrite
+.select-
+..
+.formula M|ytplanz      = ""
+.formula M|ytplbetr     = 0
+..
+..jetzt noch die Aufgabe als erledigt kennzeichnen
+.continue END           ? F|empty(M|ytaufgabe)
+.output NEW 'U|xtout'
+.output NEW 'U|xterr'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Aufgabe zu Fakturaplan erledigen
+#!database=86
+#!group=6
+#!action=update
+id;status;
+'M|ytaufgabe^id';(70);
+.output
+.formula U|xtcmd        = "edpimport.sh -P -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' PASSWORD background
+..
+.assign M|ytaufgabe    = M|ytaufgabe
+.continue END           ? F|filesize(U|xterr) = 0
+.set trans +
+.text U|xttext 'G|bspri' "Die Aufgabe konnte nicht erledigt werden, soll sie geîffent werden?"
+.set trans -
+.box -button no:yes
+'U|xttext'
+.continue END           ? G|box = G|boxno
+.formula U|xtcmd        = "<(Transaction)>" + 'M|ytaufgabe^id' + "<(View)>,(Task)"
+.command -PARALLEL 'U|xtcmd'
+.continue END
+..
+!ERRPLZ
+.set trans +
+.text U|xttext 'G|bspri' "Das Lîschen der Planzahlung zu dieser Zeile ist fehlgeschlagen - Fehlermeldung wird im Anschluss ausgegeben!"
+.set trans -
+.error 'U|xttext'
+.edi -READONLY 'U|xterr'
+.continue END
+..
+!ERROR
+.set trans +
+.text U|xttext 'G|bspri' "Die Neuanlage der Anzahlungsrechnung ist fehlgeschlagen - Fehlermeldung wird im Anschluss ausgegeben!"
+.set trans -
+.error 'U|xttext'
+.edi -READONLY 'U|xterr'
+.continue END
+..
+!ERRANZ
+.set trans +
+.text U|xttext 'G|bspri' "Die Anzahlungsposition konnte nicht im Auftrag hinzugefÅgt werden!"
+.set trans -
+.error 'U|xttext'
+.edi -READONLY 'U|xterr'
+.continue END
+..
+!END
+.continue

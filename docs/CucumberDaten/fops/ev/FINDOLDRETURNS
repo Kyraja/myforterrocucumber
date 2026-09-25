@@ -1,0 +1,121 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : FINDOLDRETURNS
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. FunKtion       : Sucht alte RÅcklieferungen, die vor dem Upgrade entstanden sind
+..*****************************************************************************
+.set trans -
+.type text   xtdat         ? _F|defined(U|xtdat)
+.type ID4    xektreffer    ? _F|defined(U|xektreffer)
+.type ID3    xvktreffer    ? _F|defined(U|xvktreffer)
+.type text   xselect       ? _F|defined(U|xselect)
+.type text   xtekdat       ? _F|defined(U|xtekdat)
+.type text   xtvkdat       ? _F|defined(U|xtvkdat)
+.type text   xtsys         ? _F|defined(U|xtsys)
+..
+.formula U|xtdat = "rmtmp/TREFFER."+'G|versionneu'+".TMP"
+.formula U|xtekdat = "rmtmp/LSEKTREFFER."+'G|versionneu'+".TMP"
+.formula U|xtvkdat = "rmtmp/LSVKTREFFER."+'G|versionneu'+".TMP"
+..
+.set trans +
+.output new 'U|xtdat'
+.input "DATEI.F"
+Listen von Lieferscheinen mit negativen Mengen (alte RÅcklieferscheine):
+
+Einkauf: Bestellnummer  # Suchwort           # Positions-ID # Artikelnummer      # Artikelsuchwort        # Belegdatum     # Rechnungsmenge # Lieferschein    #  Menge    
+___________________________________________________________________________________________________________________________________________________________________________________________
+.set trans -
+.output
+.output new 'U|xtekdat'
+.input "DATEI.F"
+.output
+.output new 'U|xtvkdat'
+.input "DATEI.F"
+..
+!PURCHASING: Einkauf
+.formula U|xselect = "$,,"
+.formula U|xselect = U|xselect + ";kotyp=(PackingSlip)"
+...formula U|xselect = U|xselect + ";kopf^lsart=(PackingSlip)"
+.formula U|xselect = U|xselect + ";kopf^uebertr=FALSE"
+.formula U|xselect = U|xselect + ";artikel^gruppe=1"
+.formula U|xselect = U|xselect + ";mge<0"
+.formula U|xselect = U|xselect + ";orig^remge<>0"
+.formula U|xselect = U|xselect + ";@gruppe=2"
+.formula U|xselect = U|xselect + ";@ablageart=(Both)"
+..
+.load 4 purchasing 'U|xselect'
+.continue SALES ? _G|mehr
+.continue OUT4
+..
+!LOAD4
+.load 4 purchasing
+.continue SORT4 ? _G|mehr
+.continue OUT4
+..
+!OUT4
+!A4DDEDTO
+.output addedto 'U|xtekdat'
+'4|okopf^nummer        '# '4|okopf^such     '# '4|orig^id  '# '4|artikel^nummer '# '4|artikel^such       '# '4|orig^kovom '# '4|orig^remge '# '4|kopf^nummer '# '4|mge'
+.output
+.continue LOAD4
+..
+!SORT4: Sortieren von U|xtekdat und an xtdat hÑngen
+.continue SALES ? F|empty(U|xtekdat)
+.formula xtsys="sort -t# +0n " + U|xtekdat + " >>" + U|xtdat
+.system 'xtsys' background
+.continue ERROR1 ? _G|mehr
+.continue SALES
+..
+!SALES: Verkauf
+.output addedto 'U|xtdat'
+.set trans +
+
+
+Verkauf: Auftragsnummer # Suchwort           # Positions-ID # Artikelnummer      # Artikelsuchwort        # Belegdatum     # Rechnungsmenge # Lieferschein    #  Menge
+__________________________________________________________________________________________________________________________________________________________________________________________
+.set trans -
+.output
+..
+.formula U|xselect = "$,,"
+.formula U|xselect = U|xselect + ";kotyp=(PackingSlip)"
+...formula U|xselect = U|xselect + ";kopf^lsart=(PackingSlip)"
+.formula U|xselect = U|xselect + ";kopf^uebertr=FALSE"
+.formula U|xselect = U|xselect + ";artikel^gruppe=1"
+.formula U|xselect = U|xselect + ";mge<0"
+.formula U|xselect = U|xselect + ";orig^remge<>0"
+.formula U|xselect = U|xselect + ";@gruppe=2"
+.formula U|xselect = U|xselect + ";@ablageart=(Both)"
+..
+.load 5 sales 'U|xselect'
+.continue END ? _G|mehr
+.continue OUT5
+..
+!LOAD5
+.load 5 sales
+.continue SORT5  ? _G|mehr
+.continue OUT5
+..
+!OUT5
+!A5DDEDTO
+.output addedto 'U|xtvkdat'
+'5|okopf^nummer        '# '5|okopf^such     '# '5|orig^id  '# '5|artikel^nummer '# '5|artikel^such       '# '5|orig^kovom '# '5|orig^remge '# '5|kopf^nummer '# '5|mge'
+.output
+.continue LOAD5
+!SORT5: U|xtvkdat sortieren und an U|xtdat hÑngen
+.continue END ? F|empty(U|xtvkdat)
+.formula xtsys="sort -t# +0n +5n " + U|xtvkdat + " >>" + U|xtdat
+.system 'xtsys' background
+.continue ERROR1 ? _G|mehr
+.continue END
+..
+..*****************************************************************************
+!END
+.input 'U|xtdat'
+.continue
+..
+!ERROR1
+.error Das Sortieren der VorgÑnge ist gescheitert!
+.end 1
+

@@ -1,0 +1,174 @@
+..!interpreter english translate noabbrev
+..***************************************************************************
+..
+..  FOP-name       : FOPKOPF
+..  Datum          :
+..  Version        : 2005
+..  Autor          : cl
+..  Verantwortlich : cl
+..  Kontrolle      : lei
+..
+..  Funktion       : setzt die individuellen Anfangs- und Schlusstexte
+..
+..  Pufferbelegung : H| --> Einkauf/Verkauf
+..                   0| --> Kunde aus Verkauf (ev/ADRESSE3)
+..                   1| --> Artikel
+..                   2| --> Werkstoff
+..                   3| --> Betreuer          (ev/DRUCK.BN)
+..                   4| --> Betriebsdatensatz (st/BKOPF.ME)
+..
+..  Functionality  :
+..
+..  Buffer         : H| --> Purchasing/Sales
+..                   0| --> Customer Sales    (ev/ADRESSE3)
+..                   1| --> Product
+..                   2| --> Material
+..                   3| --> In-house contact  (ev/DRUCK.BN)
+..                   4| --> Company data      (st/BKOPF.ME)
+..
+..  Ablauf         :
+..  Program flow   :
+..
+..  Bemerkung      : Das FOP ist ein I-File.
+..                   Dieses FOP wird fÅr Ein- und VerkaufsvorgÑnge verwendet.
+..                   Bitte achten Sie darauf, dass Felder, welche nur in
+..                   Ein- oder Verkaufsbelegen verwendet werden nur bedingt in
+..                   AbhÑngigkeit des Belegtyps "Einkauf" oder "Verkauf"
+..                   gefÅllt werden dÅrfen.
+..                   Im Infosystem EVVORGANG wird M|ekvk gefÅllt und verwendet.
+..                   M|ekvk = 3 entspricht dem Verkauf
+..                   M|ekvk = 4 entspricht dem Einkauf
+..
+..  includes       :
+..
+..***************************************************************************
+.type text xsys      ? _F|defined(U|xsys)
+.type text xetemp    ? _F|defined(U|xetemp)
+..
+.. angepasstes Drucken: Gruppenwechselzeilen sind eigene Tabellenzeilen
+.copy U|xgrwzeile = G|TRUE
+...copy U|xgrwzeile = G|FALSE
+..
+.. Beistellungen drucken ja/nein -> default ist ja / Print provided Materials
+.. fÅr Bestellungen
+...formel T|xbbeist = T|FALSE
+.copy U|xbbeist = G|TRUE
+..
+.set trans -
+!BAFTEXT: Anfangstext
+.continue BSFTEXT ? F|empty(M|baftextbenart)
+.assign U|origftext = "M|baftextbenart"
+.assign U|copyftext = "M|kbatext"
+.input "is/COPY.FREETEXT"
+.file -screen -tempname M|batext
+.output new 'M|batext'
+.input DATEI.F
+.input -text 'M|kbatext'
+..
+!BSFTEXT: Schlusstext
+.continue BATEXT  ? F|empty(M|bsftextbenart)
+.assign U|origftext = "M|bsftextbenart"
+.assign U|copyftext = "M|kbstext"
+.input "is/COPY.FREETEXT"
+.file -screen -tempname M|bstext
+.output new 'M|bstext'
+.input DATEI.F
+.input -text 'M|kbstext'
+.continue START
+.set trans +
+..
+!BATEXT
+.continue BSTEXT      ? _F|empty(M|kbatext)
+.continue BSTEXT      ?  F|empty(H|batext)
+.copy M|kbatext = F|foppath(H|batext)
+.file -screen -tempname M|batext
+.output new 'M|batext'
+.input DATEI.F
+.input -text 'M|kbatext'
+..
+!BSTEXT
+.continue START       ? _F|empty(M|kbstext)
+.continue START       ?  F|empty(H|bstext)
+.copy M|kbstext = F|foppath(H|bstext)
+.file -screen -tempname M|bstext
+.output new 'M|bstext'
+.input DATEI.F
+.input -text 'M|kbstext'
+..
+!START
+.continue EINKAUF  ? M|ekvk = 4
+..
+!VERKAUF: Anfangs- bzw. Endtexte / Sales: Opening or Closing text
+.text U|xt1 'P|spr' Wir liefern auf Ihre Rechnung und Gefahr:          ? H|typ = G|liko
+.text U|xt1 'P|spr' Wir lieferten auf Ihre Rechnung und Gefahr:        ? H|typ = G|reko
+.text U|xt1 'P|spr' Wir danken fÅr Ihren Auftrag, den wir wie folgt bestÑtigen:        ? H|typ = G|abko
+.text U|xt1 'P|spr' Wir bedanken uns fÅr Ihre Anfrage und unterbreiten Ihnen folgendes Angebot: ? H|typ = G|anko
+.text U|xt1 'P|spr' Wir danken fÅr Ihren Web-Auftrag. Ihre Daten wurden ins System Åbertragen   ? H|typ = G|wako
+..
+.text U|xt2 'P|spr' Es gelten ausschlie·lich unsere allgemeinen Verkaufs- und Lieferbedingungen.
+.formula U|xt2 = ""                                                                            ? H|typ = G|anko
+..
+.formula M|sepatext = ""
+.text M|sepatext 'P|spr' Es handelt sich hier um ein SEPA-Lastschriftverfahren. Das zugehîrige Mandat liegt bei. ? _F|empty(H|sepamand) & _H|sepamand^sepamverw & H|sepamand^sepamaktiv
+.text M|sepatext 'P|spr' Der Rechnungsbetrag wird automatisch von Ihrem Bankkonto abgebucht. ? _F|empty(H|sepamand) & H|sepamand^sepamverw & H|sepamand^sepamaktiv
+.continue TEXT
+..
+!EINKAUF: Anfangs- bzw. Endtexte / Purchasing: Opening or Closing text
+.text U|xt1 'P|spr' Wir bestellen zu unseren GeschÑftsbedingungen:     ? H|typ = G|abko
+.text U|xt1 'P|spr' RÅcklieferung auf Ihre Rechnung und Gefahr:        ? H|typ = G|liko
+.text U|xt1 'P|spr' Hiermit stellen wir Ihnen bei:                      ? H|typ = G|liko & F|equals(H|bsart, "(Relocation)")
+.formula U|xt1 = ""                                                     ? H|typ = G|anko ; H|typ = G|reko
+..
+.text U|xt2 'P|spr' Bitte machen Sie uns ein Angebot fÅr die aufgelisteten Artikel und nennen Sie uns Ihre Lieferbedingungen. ? H|typ = G|anko
+.formula U|xt2 = "" ? _H|typ = G|anko
+..
+!TEXT
+.formula M|atext = U|xt1
+.formula M|etext = U|xt2
+.text U|xt6 'P|spr' Das Leistungsdatum entspricht dem Rechnungsdatum.  ? H|fakt &  H|typ = G|reko
+.formula M|ltext = ""
+.formula M|ltext = U|xt6                                                ? H|fakt &  H|typ = G|reko
+..
+.text U|xtextkl 'P|spr' Kunde       ? M|ekvk = 3
+.text U|xtextkl 'P|spr' Lieferant   ? M|ekvk = 4
+..
+.formula M|textkl   = U|xtextkl
+.formula M|textvorg = "Nr." + " "+'M|vorgang^nummerb'
+.formula M|kuli     = 'M|kunde^nummer'
+..
+.continue VGRE ? H|typ = G|reko
+.continue VGAN ? H|typ = G|anko
+.continue VGAU ? H|typ = G|abko
+.continue VGLS ? H|typ = G|liko
+.continue VGAU ? H|typ = G|wako
+..
+!VGLS: Lieferschein Verkauf / Delivery note: Sale
+.continue EVGLS ? M|ekvk = 4
+.continue ENDE
+..
+!EVGLS: Lieferschein Einkauf / Delivery note: Purchasing
+.continue ENDE
+..
+!VGRE: Rechnung Verkauf / Invoice: Sale
+.continue EVGRE      ? M|ekvk = 4
+.continue ENDE
+..
+!EVGRE: Rechnung Einkauf / Invoice: Purchasing
+.continue ENDE
+..
+!VGAN: Angebot / Quotation
+.continue EVGAN   ? M|ekvk = 4
+.continue ENDE
+..
+!EVGAN: Anfrage / Request
+.continue ENDE
+..
+!VGAU: Auftrag / Sales-order  -  Webauftrag / Web Order
+.continue EVGAU     ? M|ekvk = 4
+.continue ENDE
+..
+!EVGAU: Bestellung / Purchase-order
+.continue ENDE
+..
+!ENDE
+.continue

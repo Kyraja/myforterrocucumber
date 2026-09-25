@@ -1,0 +1,145 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : BUJ.TAB
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : Tabellenzeig-FOP des Infosystems "Buchungsjournal"
+..*****************************************************************************
+..
+.set trans -
+..
+.. ignore downpayments
+.continue ? F|empty(0|nummer)
+..
+.copy U|xbrpr = G|false
+..
+..*****************************************************************************
+!SETCOL: set row color
+..*****************************************************************************
+.formula U|ximod  = U|ximod + 1
+..
+..*****************************************************************************
+!CHECKROW: Check amount criteria for entry row
+..*****************************************************************************
+.continue CHKSTAT ?  0|gruppe <> 0
+.continue END     ? _F|empty(M|ustva) & 0|ustva^id <> M|ustva^id
+..
+..*****************************************************************************
+!CHKSTAT
+..*****************************************************************************
+.continue CHKROW2 ? F|empty(M|betrrel)
+..
+.. check restrictions not already in selection
+.formula U|xrbetr = 0|betrag * M|kurs
+..
+.continue CHKROW2 ?  M|betrrel = ">=" & (U|xrbetr >=  M|betrsuch)
+.continue CHKROW2 ?  M|betrrel = "<=" & (U|xrbetr <=  M|betrsuch)
+.continue CHKROW2 ?  M|betrrel = "="  & (U|xrbetr = M|betrsuch)
+.continue CHKROW2 ?  M|betrrel = ">"  & (U|xrbetr > M|betrsuch)
+.continue CHKROW2 ?  M|betrrel = "<"  & (U|xrbetr < M|betrsuch)
+.continue END     ?  M|istyp = 0
+..
+.formula U|xrbetr  = 0|pfixbetr  * M|kurs
+.formula U|xrbetr2 = 0|ppropbetr * M|kurs
+.continue CHKROW2 ?  M|betrrel = ">=" & ((U|xrbetr >= M|betrsuch) ; (U|xrbetr2 >= M|betrsuch))
+.continue CHKROW2 ?  M|betrrel = "<=" & ((U|xrbetr <= M|betrsuch) ; (U|xrbetr2 <= M|betrsuch))
+.continue CHKROW2 ?  M|betrrel = "="  & ((U|xrbetr =  M|betrsuch) ; (U|xrbetr2 =  M|betrsuch))
+.continue CHKROW2 ?  M|betrrel = ">"  & ((U|xrbetr >  M|betrsuch) ; (U|xrbetr2 >  M|betrsuch))
+.continue CHKROW2 ?  M|betrrel = "<"  & ((U|xrbetr <  M|betrsuch) ; (U|xrbetr2 <  M|betrsuch))
+.continue END     
+..
+..*****************************************************************************
+!CHKROW2: Check journal code
+..*****************************************************************************
+.continue CHKOK   ? F|empty(M|jkenn)
+.formula U|xtajkenn =  M|jkenn
+..
+..*****************************************************************************
+!JC: Loop over journal codes
+..*****************************************************************************
+.formula U|xtjkenn     = U|xtajkenn << ","
+.formula U|xtajkenn    = U|xtajkenn >> ","
+.formula U|xtjkenn     = U|xtjkenn  << " "
+.continue END     ? F|empty(U|xtjkenn)
+.continue JC      ? (U|xtjkenn <> 0|kenn)
+..
+..*****************************************************************************
+!CHKOK: Check OK -> print row
+..*****************************************************************************
+.copy U|xbrpr    = G|true
+..
+.make screen line +O
+.copy M|tkonto   = 0|konto
+.copy M|tkstelle = 0|kstelle
+.copy M|tanlage  = 0|anlage
+.copy M|tbudat   = 0|budat
+.formula   M|tbumon   = 0|monat
+.copy M|tbujahr  = 0|gjahr
+.formula   M|tjkenn   = 0|kenn
+.formula   M|tbeleg   = 0|beleg
+.copy M|tbeldat  = 0|beldat
+.assign M|tsteuer  = 0|steuer ? 0|gruppe=0
+.copy M|tstrgl = 0|strgl ? 0|gruppe = 0
+.assign M|tbunum   = 0|buchung
+.copy M|tbuwaeh  = 0|iwbu
+.formula   M|tewbetr  = 0|ewbetr ? 0|gruppe=0
+.copy M|tewbu    = 0|ewbu ? 0|gruppe=0
+.assign M|terfdat  = 0|erfass
+.assign M|taenddat = 0|stand
+.copy M|tbearb   = 0|erfasserzeichen
+.copy M|tursache = 0|ursache
+.formula   M|tsoll    = 0|betrag * M|kurs ?  0|soll
+.formula   M|thaben   = 0|betrag * M|kurs ? _0|soll
+.formula   M|ttext    = 0|text
+.formula   M|tptext   = 0|ptext
+.copy M|tustva   = 0|ustva ? 0|gruppe = 0
+.copy M|tkonsol  = 0|konsol ? 0|gruppe = 0
+.copy M|tbuart   = 0|buart
+.continue STAT   ? 0|gruppe = 1
+..
+..*****************************************************************************
+!FIBU2: Financial accounting entry
+..*****************************************************************************
+.assign M|tvkekre = 0|ursacheref
+.assign M|tebeleg = 0|ebeleg
+.copy M|tzaart  = 0|zaart
+.copy M|tvaldat = 0|vdat
+.copy M|tzaterm = 0|term
+.assign M|tzbed = 0|zbed
+.continue COL
+..
+..*****************************************************************************
+!STAT: Statistical entries
+..*****************************************************************************
+.continue COL    ? M|istyp = 0
+..
+.formula M|tspfix   = 0|pfixbetr  * M|kurs  ?  0|soll
+.formula M|tspprop  = 0|ppropbetr * M|kurs  ?  0|soll
+.formula M|thpfix   = 0|pfixbetr  * M|kurs  ? _0|soll
+.formula M|thpprop  = 0|ppropbetr * M|kurs  ? _0|soll
+.formula M|tkoart   = 0|koart
+.formula M|tvkzart  = 0|vkzart
+..
+..*****************************************************************************
+!COL: set color
+..*****************************************************************************
+.colour -background 'F|condexpr(F|expr(U|ximod//2)=0, U|xabasgroupdark, U|xabasgrouplight)' 'M|aktzeile'
+..
+.. sum up
+.formula U|xrssum     = U|xrssum + M|tsoll
+.formula U|xrhsum     = U|xrhsum + M|thaben
+..
+.continue END     ? M|istyp = 0
+..
+.formula U|xrssumpfix  = U|xrssumpfix  + M|tspfix
+.formula U|xrhsumpfix  = U|xrhsumpfix  + M|thpfix
+.formula U|xrssumpprop = U|xrssumpprop + M|tspprop
+.formula U|xrhsumpprop = U|xrhsumpprop + M|thpprop
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.formula U|ximod  = U|ximod - 1 ? _U|xbrpr
+.continue
+

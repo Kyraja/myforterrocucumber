@@ -1,0 +1,376 @@
+..!interpreter english declaration noabbrev
+.. at 2017-03-15, 11:43
+.set TRANS -
+..========================================================================
+..==  Name              : FOP.PRJM.NACHTRANFRAGE.EV
+..==  Pfad              : allppro
+..==  Funktion          : EFOP an Nachtragsanfrage
+..==  Erstellungsdatum  : 27.02.2012
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allppro/LV.KONFIG.INI"
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF"
+..====================================================
+.type text    xtsys xtsel xtcmd xtid xysel
+.type text    xtedpdat xtedpout xtedperr xtedpmsg
+.type integer xprocsp      ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Neuberechnung_Anfragewerte -----
+.formula M|yanfeigwert = M|yanfeigstd * M|yanfvkstdsatz                 ? M|yanfeigstd <> 0 & M|yanfvkstdsatz <>0
+.formula M|yanfgeswert = M|yanfeigwert + M|yanffremdwert + M|yanfsonstwert + M|yanffertwert
+.formula M|yanferwwert = M|yanfgeswert * M|yerfwahrsch / 100
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Neuberechnung_akzeptierte_Werte -----
+.formula M|yakzeigwert = M|yakzeigstd * M|yakzvkstdsatz                 ? M|yakzeigstd <> 0 & M|yakzvkstdsatz <>0
+.formula M|yakzgeswert = M|yakzeigwert + M|yakzfremdwert + M|yakzsonstwert + M|yakzfertwert
+.continue 'xprocst.xprocsp'
+!PROC003: ----- AU-Pos_pruefen -----
+.continue EL001 ? _(_(F|empty(M|ysauposeigen)))
+.continue EL002 ? _(M|ysauposeigen^alternativpos)
+.set trans +
+.box Fehler
+Alternativpositionen sind nicht erlaubt.
+.set trans -
+.error (0)
+.assign M|ysauposeigen = ""     ? _G|evtart = "maskpruef"
+.end 1                          ?  G|evtart = "maskpruef"
+.continue FI002
+!EL002
+.select group 'U|xydbgrnachtranfrage' 'F|expr("$,,yauposeigenid==" + M|ysauposeigen^id + ";id<>" + M|id)'
+.continue EL003 ? _(G|mehr)
+.set TRANS +
+.box Fehler
+Die Auftragsposition gehîrt bereits zu einer Nachtragsanfrage.
+.set TRANS -
+.assign M|ysauposeigen = ""     ? _G|evtart = "maskpruef"
+.error
+.end 1                          ?  G|evtart = "maskpruef"
+!EL003
+!FI002
+!EL001
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskein")
+.continue EL004 ? _(G|evtkommd = G|kaktname10)
+.select group 'U|xydbgrnachtranford' 'F|expr("$,,ytnachtranfrid==" + M|id + ";@ablageart=(1);@zeilen=(1)")'
+.continue EL005 ? _(G|mehr)
+.set TRANS +
+.box Fehler
+Die Nachtragsanfrage ist noch in der Nachtragsforderung 'H|nummer' eingetragen.
+Die Nachtragsanfrage darf nicht gelîscht werden.
+.set TRANS -
+.error
+.end 1
+!EL005
+.continue FI004
+!EL004
+.continue EL006 ? _(G|evtkommd = G|kaktname13)
+.continue EL007 ? _(_(F|empty(M|ynachtrfordid)))
+.set TRANS +
+.box Fehler
+Diese Nachtragsanfrage gehîrt zu einer Nachtragsforderung.
+Nachtragszeilen dÅrfen nicht bearbeitet werden.
+.set TRANS -
+.error
+.end 1
+!EL007
+.continue EL008 ? _(_(F|empty(M|yleilistid)))
+.select lock nowait group 'U|xydbgrleistliste' 'M|yleilistid'
+.continue EL009 ? _(G|mehr)
+.continue EL010 ? _(_(G|gesperrt))
+.set TRANS +
+.box Fehler
+Die zur Nachtragsanfrage gehîrende Leistungsliste konnte nicht geîffnet werden.
+
+Die Nachtragsanfrage darf nicht bearbeitet werden.
+
+'G|sperrtext                                            '
+.set TRANS -
+.error
+.end 1
+!EL010
+.continue FI009
+!EL009
+.set TRANS +
+.box Fehler
+Die zur Nachtragsanfrage gehîrende Leistungsliste konnte nicht geîffnet werden.
+
+Die Nachtragsanfrage darf nicht bearbeitet werden.
+.set TRANS -
+.error
+.end 1
+!FI009
+!EL008
+!EL006
+.continue EL011 ? _(G|evtkommd = G|kaktname14)
+.formula M|yleilistid        = ""
+.formula M|ynachtrfordid     = ""
+.copy    M|ybnachtrfordzeile = G|false
+.copy    M|ykontaktintern    = G|passw^passmitarb   ? F|empty(M|ykontaktintern)
+.formula M|yfortschrgrad     = 100
+!EL011
+.assign  M|ysauftrageigen = M|yauftrageigenid
+.assign  M|ysauposeigen   = M|yauposeigenid
+.assign  M|yskalkpos      = M|ykalkposid
+.assign  M|ysleistlist    = M|yleilistid
+.assign  M|ysnachtrford   = M|ynachtrfordid
+!FI004
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "maskpruef")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC003
+!RET001
+.formula xprocsp = xprocsp - 1
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtart = "maskaus")
+.continue EL012 ? _(G|evtkommd = G|kaktname10)
+.continue EL013 ? _(_(F|empty(M|yleilistid)))
+.load 9 group 'U|xydbgrleistliste' 'M|yleilistid'
+.continue EL014 ? _(G|mehr)
+.select group 'U|xydbgrnachtranfrage' 'F|expr("($,,yleilistid==" + 9|id)'
+.continue EL015 ? _(_(G|mehr))
+.select lock add 9|id
+.delete         ?  G|mehr
+!EL015
+!EL014
+!EL013
+!EL012
+.continue ESAC001
+!BRK003
+.continue BRK004 ? _(G|evtart = "buttonnach")
+.continue BRK005 ? _(G|evtvar = "ybuanfwertueb")
+.continue EL016 ? _(G|evtkommd = G|kaktname12)
+.note -IMMEDIATELY Eintrag ist schreibgeschtzt
+.continue FI016
+!EL016
+.formula M|yakzeigstd    = M|yanfeigstd
+.formula M|yakzvkstdsatz = M|yanfvkstdsatz
+.formula M|yakzeigwert   = M|yanfeigwert
+.formula M|yakzfremdwert = M|yanffremdwert
+.formula M|yakzsonstwert = M|yanfsonstwert
+.formula M|yakzfertwert  = M|yanffertwert
+.formula M|yakzgeswert   = M|yanfgeswert
+!FI016
+.continue ESAC002
+!BRK005
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK004
+.continue BRK006 ? _(G|evtart = "feldfuell")
+.continue BRK007 ? _(G|evtvar = "ypvurspr")
+.formula U|xysel = ";.yistblatt==1"
+.input "allpstart/FOP.PRJM.UP.SELCHECK.FF"
+.continue ESAC003
+!BRK007
+.continue BRK008 ? _(G|evtvar = "ypvnachtr")
+.formula U|xysel = ";.yistblatt==1"
+.input "allpstart/FOP.PRJM.UP.SELCHECK.FF"
+.continue ESAC003
+!BRK008
+.continue BRK009 ? _(G|evtvar = "yskalkpos")
+.continue ESAC003
+!BRK009
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC001
+!BRK006
+.continue BRK010 ? _(G|evtart = "feldaus")
+.continue BRK011 ? _(G|evtvar = "yprojekt")
+.input "allpstart/CHECK.PROJECT"
+.continue ESAC004
+!BRK011
+.continue BRK012 ? _(G|evtvar = "ysauftrageigen")
+.formula M|yauftrageigenid = ""                 ?  F|empty(M|ysauftrageigen)
+.formula M|yauftrageigenid = M|ysauposeigen^id  ? _F|empty(M|ysauftrageigen)
+.continue ESAC004
+!BRK012
+.continue BRK013 ? _(G|evtvar = "ysauposeigen")
+.continue EL017 ? _(M|ysauposeigen^kotyp = G|ABKO)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC003
+!RET002
+.formula xprocsp = xprocsp - 1
+.continue FI017
+!EL017
+.continue EL018 ? _(_(F|empty(M|ysauposeigen)))
+.set TRANS +
+.box Fehler
+Es sind nur Auftragspositionen erlaubt.
+.set TRANS -
+.assign M|ysauposeigen = ""
+!EL018
+!FI017
+.formula M|yauposeigenid   = ""                         ?  F|empty(M|ysauposeigen)
+.formula M|yposnumeig      = ""                         ?  F|empty(M|ysauposeigen)
+.formula M|yauftrageigenid = ""                         ?  F|empty(M|ysauposeigen)
+.formula M|yauposeigenid   = M|ysauposeigen^id          ? _F|empty(M|ysauposeigen)
+.formula M|yposnumeig      = M|ysauposeigen^pnum        ? _F|empty(M|ysauposeigen)
+.formula M|yauftrageigenid = M|ysauposeigen^kopf^id     ? _F|empty(M|ysauposeigen)
+.assign  M|ysauftrageigen  = M|yauftrageigenid
+.continue ESAC004
+!BRK013
+.continue BRK014 ? _(G|evtvar = "ypvurspr")
+.continue EL019 ? _((_(F|empty(M|ypvurspr))) & (_(M|ypvurspr^yistblatt)))
+.set TRANS +
+.box Hinweis
+Es sind nur bebuchbare ProjektvorgÑnge erlaubt.
+.set TRANS -
+.formula M|ytpvurspr = ""
+!EL019
+.assign  M|yprojekt    = M|ypvurspr^yprojekt^id         ? _F|empty(M|ypvurspr)
+.assign  M|yabrechtypk = M|yprojekt^yabrechtypk
+.formula M|ykalkposid  = M|ypvurspr^ykalkposid
+.assign  M|yskalkpos   = M|ykalkposid
+.protection -RESET yprojekt    0        ?  F|empty(M|ypvurspr)
+.protection -RESET yabrechtypk 0        ?  F|empty(M|ypvurspr)
+.protection        yprojekt    0        ? _F|empty(M|ypvurspr)
+.protection        yabrechtypk 0        ? _F|empty(M|ypvurspr)
+.continue ESAC004
+!BRK014
+.continue BRK015 ? _(G|evtvar = "ypvnachtr")
+.continue EL020 ? _((_(F|empty(M|ypvnachtr))) & (_(M|ypvnachtr^yistblatt)))
+.set TRANS +
+.box Hinweis
+Es sind nur bebuchbare ProjektvorgÑnge erlaubt.
+.set TRANS -
+.formula M|ypvnachtr = ""
+!EL020
+.continue ESAC004
+!BRK015
+.continue BRK016 ? _(G|evtvar = "yskalkpos")
+.formula M|ykalkposid = ""              ?  F|empty(M|yskalkpos)
+.formula M|ykalkposid = M|yskalkpos^id  ? _F|empty(M|yskalkpos)
+.continue ESAC004
+!BRK016
+.continue BRK017 ? _(G|evtvar = "yanfeigstd")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK017
+.continue BRK018 ? _(G|evtvar = "yanfvkstdsatz")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC001
+!RET004
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK018
+.continue BRK019 ? _(G|evtvar = "yanfeigwert")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC001
+!RET005
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK019
+.continue BRK020 ? _(G|evtvar = "yanffremdwert")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC001
+!RET006
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK020
+.continue BRK021 ? _(G|evtvar = "yanfsonstwert")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC001
+!RET007
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK021
+.continue BRK022 ? _(G|evtvar = "yanffertwert")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC001
+!RET008
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK022
+.continue BRK023 ? _(G|evtvar = "yakzeigstd")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC002
+!RET009
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK023
+.continue BRK024 ? _(G|evtvar = "yakzvkstdsatz")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC002
+!RET010
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK024
+.continue BRK025 ? _(G|evtvar = "yakzeigwert")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC002
+!RET011
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK025
+.continue BRK026 ? _(G|evtvar = "yakzfremdwert")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC002
+!RET012
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK026
+.continue BRK027 ? _(G|evtvar = "yakzsonstwert")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET013" 
+.continue PROC002
+!RET013
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK027
+.continue BRK028 ? _(G|evtvar = "yakzfertwert")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET014" 
+.continue PROC002
+!RET014
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK028
+.continue BRK029 ? _(G|evtvar = "yerfwahrsch")
+.formula M|yanferwwert = M|yanfgeswert * M|yerfwahrsch / 100
+.continue ESAC004
+!BRK029
+!ESAC004: =====   ENDCASE   =====
+.continue ESAC001
+!BRK010
+!ESAC001: =====   ENDCASE   =====
+.continue

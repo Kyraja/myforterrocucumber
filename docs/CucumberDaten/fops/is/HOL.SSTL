@@ -1,0 +1,92 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name              : HOL.SSTL
+.. Autor             : bs
+.. Verantwortlich    : cl
+.. Kontrolle         : tiwe
+.. Funktion          : Fuehrt die Datenbankanfrage fuer Strukturstuecklisten
+.. aus und startet im Ergebnisfall das Tabellen-EFOP.
+.. Ablauf            : HOL-FOP fuer Strukturstuecklisten
+..
+.. Functionality     : Executes the database queries for production lists. If
+.. any hits were found, this program starts running the table EFOP.
+.. Program flow      : Data collection EFOP for production lists
+..*****************************************************************************
+.set trans -
+.type bool      xbweiter
+.type PS39:2    xintlg xlaggr
+.type ARTR51001 xgesmge
+.type GD2       xkonddat
+..
+.copy U|xbweiter = G|FALSE
+.copy U|xintlg   = F|sysinfo(10)^intlgruppe
+.continue LINE ? _M|bstartbut
+..
+.. read first level of the parts list
+.select screen header
+.formula M|stufe = 0
+.continue END ? F|empty(M|select) ; F|empty(M|lgruppe)
+.select parts 'M|select'
+.continue END ? _G|mehr
+..
+.. get factor for the total quantity
+.formula   U|xgesmge  = M|menge
+.copy U|xkonddat = M|konddat
+.. get warehouse group
+.copy U|xlaggr = M|lgruppe
+.continue HEAD
+..
+!STUFEN: put up, check and show next level
+.copy U|xbweiter = G|FALSE
+.select screen header
+.formula M|stufe = M|stufe + 1
+.continue END ? (M|stufe >= M|anzstufen)
+..
+!NEXT: get and check next mask row
+.select screen line
+.continue STUFEN ? _G|mehr & U|xbweiter
+.continue END ? _G|mehr
+.continue NEXT ? (M|tbaumstufe <> M|stufe)
+.continue NEXT ? (M|elart <> 1 & M|elart <> 4)
+..
+!LINE: get parts list of actual mask row
+.continue NEXTST ? M|combiprod
+.continue NEXTST ? M|bstartbut & (M|mge = 0.0 & M|amge = 0.0)
+..
+.. get part by its warehouse group
+.select parts add M|elem
+.continue NEXTST ? _G|mehr
+.formula U|xgesmge = M|gesamt
+.copy U|xkonddat= M|konddat
+.copy U|xlaggr  = M|laggr
+..
+!HEAD:
+.copy H|lgruppean = U|xlaggr ? U|xlaggr^id <> U|xintlg^id ; F|equals(H|bsart, "(Relocation)")
+.continue WGROUP                   ? H|bsart<>"Umlagern" ; H|tzeilen<>1
+.select line 1
+.continue WGROUP                   ? H|elem^id <> H|id
+.. skip destination warehouse group, continue with source warehouse group
+.copy H|lgruppean = H|umllg
+!WGROUP:
+.select header
+.copy H|flistean  = M|fertliste ? _F|empty(M|fertliste) & M|stufe = 0 & _F|equals(H|bsart, "(Relocation)")
+.. get new factor for the total quantity while new level starts here
+.formula H|gesmge = U|xgesmge
+.formula H|konddat= U|xkonddat
+.copy H|mitaufl   = M|mitaufl
+.continue NEXTST ? H|tzeilen = 0
+..
+!ZEILE: base element has table. Transfer it into the main buffer
+.select line
+.continue NEXTST ? _G|mehr
+..
+.. call table EFOP for each parts list row
+.input 'M|tab'
+.copy U|xbweiter = G|TRUE
+.continue ZEILE
+..
+!NEXTST: if the start button was pushed, this will get next element
+.continue NEXT ? M|bstartbut
+..*****************************************************************************
+!END
+.continue

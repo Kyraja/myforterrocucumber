@@ -1,0 +1,130 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDI.DO.OSEARCH.LAKO.PRODUCTS
+.. Author         : dsch
+.. Verantwortlich : dsch
+.. Kontrolle      : mh
+.. Functionality  : Finds customers and products for edi messages in abas
+..                  Updates edi message with product id and unit.
+..
+..*****************************************************************************
+.set trans -
+..
+.. Error message
+.type text xdatfehler  ? _F|defined(U|xdatfehler)
+.type text xtcustnr    ? _F|defined(U|xtcustnr)
+.type text xtcustgln   ? _F|defined(U|xtcustgln)
+..
+.type integer xapfcode ? _F|defined(U|xapfcode)
+..
+.type P0 xapkunde      ? _F|defined(U|xapkunde)
+.formula U|xapkunde = ""
+..
+.. Required: edi message in H buffer
+.continue NOEDI  ? _F|defined(H|edinachr)
+.continue NOTYPE ?  F|empty(H|edinachr)
+..
+.. Lock Edi message!
+.select lock edifact 'H|id'
+.continue NOLOCK ? _G|mehr ; _G|gesperrt
+..
+.formula U|xdatfehler = "rmtmp/X.ERR." + G|pid + ".TMP"
+..
+.input "DATEI.F"
+.output addedto 'U|xdatfehler'
+..
+.type text xapnummer  ? _F|defined(xapnummer)
+.type BT128 xapkuartnr ? _F|defined(xapkuartnr)
+.type text xapgtin    ? _F|defined(xapgtin)
+..
+!ROWS
+.select line
+.continue RETURN   ? _G|mehr
+.continue CUSTOMER ?  H|text1 = "BUY1"
+.continue PRODUCT  ?  H|text1 = "PAC1"
+.continue ROWS
+..
+!CUSTOMER
+.formula T|xtcustgln = H|text3
+.formula T|xtcustnr  = H|text4
+..
+.continue CUSTGLN ? F|empty(U|xtcustnr)
+.load 1 customer 'F|formatstr("$,,;@gruppe=1.2;nummer=={1}", U|xtcustnr)'
+.continue ECUSTNR ? _G|mehr
+.formula U|xapkunde = 1|id
+.continue ROWS
+..
+!CUSTGLN
+.load 1 customer 'F|formatstr("$,,;@gruppe=1.2;gln=={1}", U|xtcustgln)'
+.continue ERRGLN ? _G|mehr
+.formula U|xapkunde = 1|id
+.continue ROWS
+..
+!PRODUCT
+.formula T|xapnummer  = H|text4
+.formula T|xapkuartnr = H|text5
+..
+.. die Variable U|xapkunde enthaelt den Kunden
+.input "ARTIKELPRUEFUNG"
+..
+.. Artikel nicht gefunden => Fehler ausgegeben
+.continue EPRODUCT ? _F|defined(5|id)
+..
+.formula H|tartikel  = 5|id
+.load 5
+.rewrite
+..
+.. Kunde muss neu gesucht werden
+.formula U|xapkunde = ""
+.continue ROWS
+..
+!RETURN
+.formula H|status = 4 ? _F|empty(H|fcode)
+.rewrite
+..
+.. release buffers
+.load 1 ? F|defined(1|id)
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ECUSTNR
+.set trans +
+Der Kunde mit der Kundennummer 'U|xtcustnr' aus dem EDI-Datensatz 'H|nummer', Zeile 'H|zn', wurde nicht gefunden.
+.set trans -
+.formula U|xapfcode = 60
+.continue ERRCODE
+..
+!ECUSTGLN
+.set trans +
+Der Kunde mit der GLN 'U|xtcustgln' aus dem EDI-Datensatz 'H|nummer', Zeile 'H|zn', wurde nicht gefunden.
+.set trans -
+..
+!EPRODUCT
+..
+.. No Success!
+'U|xaptext1'
+'U|xaptext2'
+..
+!ERRCODE
+.formula H|fcode  = U|xapfcode
+.formula H|status = 4
+.formula H|ftext  = U|xdatfehler
+..
+.rewrite
+.continue ROWS
+..
+!NOLOCK
+.error Das Sperren des EDI-Datensatzes 'H|nummer' ist gescheitert.
+.end 1
+..
+!NOEDI
+.error Fehler bei Start der Objektsuche: Kein EDI-Datensatz angegeben.
+.end 1
+..
+!NOTYPE
+.error Fehler bei Start der Objektsuche: EDI-Datensatz 'H|nummer' hat keinen Nachrichten-Eintrag.
+.end 1
+..

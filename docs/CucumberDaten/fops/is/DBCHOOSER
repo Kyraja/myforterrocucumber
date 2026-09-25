@@ -1,0 +1,155 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : DBCHOOSER
+..  Datum          : 27.06.2005
+..  Version        : 1
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : fwester
+..  Funktion       : Datenbankauswahl in Infosystemen
+..
+..
+..  Schnittstelle (Parameter und ihre Bedeutung)
+..    verwendet Arrayparameter (arg.i)          : nein
+..    verwendet Namensparameter (xpname=wert)   : nein
+..
+..    Parameter    Bedeutung
+..    ---------------------------------------------------------
+..    xxvdn.i      Dateinummer (fuer Auswahlmen)
+..    xxdvg.i      Gruppe      (fuer Auswahlmen)
+..
+..
+..  Ablauf         : Das FOP funktioniert nur als EFOP in Infosystemen, welche
+..                   mindestens die folgenden Felder enthalten:
+..                   1. vdn    (IP3)    -> Dateinummer (vartab^vdn)
+..                   2. vgr    (IP3)    -> Gruppe      (vartab^vgr)
+..                   3. datei  (GL40)   -> Dateiname in Bediensprachen (vartab^vgrtxtbspr)
+..                   4. bdatei (BU)     -> Button fr Auswahl (vartab^vgrtxtbspr)
+..
+..
+..  Functionality  :
+..
+..  Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    ---------------------------------------------------------
+..    xxvdn.i      Database number       (for menu choice)
+..    xxdvg.i      Database group number (for menu choice)
+..
+..  Program flow  : The FOP only works as an EFOP in Infosystems which at least contain
+..                  the following fields:
+..                   1. vdn    (IP3)    -> Database number (vartab^vdn)
+..                   2. vgr    (IP3)    -> Database group  (vartab^vgr)
+..                   3. vtab   (P12:26) -> Database group reference (vartab)
+..                   4. datei  (GL40)   -> Database name in operating language (vartab^vgrtxtbspr)
+..                   5. bdatei (BU3)    -> Button to choose the database (vartab^vgrtxtbspr)
+..
+... Includes      :
+..*****************************************************************************
+.type integer    xxi    ? _F|defined(U|xxi)
+.type IP9    xxgrp  ? _F|defined(U|xxgrp)
+.type text   xtmenu ? _F|defined(U|xtmenu)
+.type P12:26 xpvtab ? _F|defined(U|xpvtab)
+..
+..*****************************************************************************
+.set trans -
+.continue END ? (G|evtartengl = "NO_EVENT")
+.continue END ? _F|defined(M|vdn)
+.continue END ? _F|defined(M|vgr)
+.continue END ? _F|defined(M|datei)
+.continue END ? _F|defined(M|datnr)
+..
+.continue LOADVTAB ? G|evtvar  = "vtab"
+.continue GETVTAB  ? G|evtvar <> "bdatei"
+..
+.continue END ? _F|defined(U|xxvdn1)
+.continue END ? _F|defined(U|xxvgr1)
+..
+..*****************************************************************************
+!MENU: Generate the menue entries
+..*****************************************************************************
+.formula U|xxi    = 0
+.formula U|xtmenu = ""
+..
+..*****************************************************************************
+!LOOP: Loop over xxvdn.xxi until none defined (starting at index 1)
+..*****************************************************************************
+.formula U|xxi = U|xxi + 1
+.continue SHOW ? _F|defined(U|xxvdn.U|xxi)
+.continue SHOW ? _F|defined(U|xxvgr.U|xxi)
+..
+.type P12:26 xpvtab.xxi ? _F|defined(U|xpvtab.U|xxi)
+..
+.load 9 company 'F|expr("$,@gruppe=26;gruppe=26;@ablageart=(Active);typ=(1);vdn=" + F|tostring(U|xxvdn.U|xxi) + ";vgr=" + F|tostring(U|xxvgr.U|xxi))'
+.continue LOOP ? _G|mehr
+.assign U|xpvtab.U|xxi = 9|id
+..
+.formula U|xtmenu = U|xtmenu + '9|vgrtxtbspr' + " ;"
+..
+.continue LOOP
+..
+..*****************************************************************************
+!SHOW: Show menue
+..*****************************************************************************
+.set trans +
+.separator ;
+.menu Ausw„hlen
+'xtmenu                           '
+..
+.set trans -
+.continue END ? G|menue = 0
+..
+.type text   xxtmp   ? _F|defined(U|xxtmp)
+.formula U|xxtmp   = "xpvtab" + 'G|menue' + "^id"
+.formula U|xxtmp   = 'U|.U|xxtmp'
+.load 9 company 'U|xxtmp'
+.continue SETVTAB
+..
+..*****************************************************************************
+!GETVTAB: Select database table definition
+..*****************************************************************************
+.load 9 company 'F|expr("$,@gruppe=26;gruppe=26;@ablageart=(Active);typ=(1);vdn=" + F|tostring(M|vdn) + ";vgr=" + F|tostring(M|vgr))'
+.continue CLEAR   ? _G|mehr
+.continue SETVTAB
+..
+..*****************************************************************************
+!LOADVTAB: Variable M|vtab has caused the event -> load to buffer 9
+..*****************************************************************************
+.load 9 add M|vtab ? _F|empty(M|vtab)
+.continue SETVTAB ? G|mehr
+.continue CLEAR
+..
+..*****************************************************************************
+!CLEAR: Clear the table name
+..*****************************************************************************
+.formula M|datei  = ""
+.load 9
+.continue END
+..
+..*****************************************************************************
+!SETVTAB: Set mask values with database table values
+..*****************************************************************************
+.continue NOVTAB ? _F|defined(M|vtab)
+.. valid value ?
+.continue END ? _F|isvalue(F|tostring(9|id), F|typeof(M|vtab))
+.assign M|vtab = 9|id
+.continue END ? _G|mehr
+..
+..*****************************************************************************
+!NOVTAB
+..*****************************************************************************
+.formula M|datei  = 9|vgrtxtbspr
+.formula M|vdn    = 9|vdn
+.formula M|datnr  = 9|vdn
+.formula M|vgr    = 9|vgr
+.load 9
+..
+.formula M|grliste = F|formatstr("{1}:{2}", M|datnr, M|vgr)
+.continue END
+..
+..*****************************************************************************
+!END: End
+..*****************************************************************************
+.continue

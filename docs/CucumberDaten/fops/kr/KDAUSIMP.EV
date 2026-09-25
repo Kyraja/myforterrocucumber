@@ -1,0 +1,126 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..
+..  FOP-Name       : kr/KDAUSIMP.EV
+..  Datum          : 22.09.2003
+..  Version        :
+..  Autor          : tf
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..
+..*****************************************************************************
+
+..  Schnittstelle (Parameter und ihre Bedeutung)
+..    verwendet Arrayparameter (arg.i)          : nein
+..    verwendet Namensparameter (xpname=wert)   : nein
+..
+..  Ablauf         : Eventbehandlung fÅr den Import von Konzeraustausch
+..                   --------------------------------------------------
+..
+..                   Im Infosystem ist eine Importdatei anzugeben, die im
+..                   freigegebenen Windows-Tempdir liegt (win/tmp/). Diese
+..                   Dateien haben gewîhnlich den Namen "KONZEXP<ZEICHENKETTE>.IMP".
+..                   Die ausgewÑhlte Datei wird in das tmp-Verzeichnis des
+..                   Mandanten kopiert. Anschlie·end findet der Import Åber
+..                   die EDP-Schnittstelle statt. Wird ein Konzerndatenaustauschobjekt
+..                   erzeugt, so wird dessen Referenz im Infosystem angezeigt.
+..
+..*****************************************************************************
+..
+..  functionality  : Event handling of group accounting import
+..                   -----------------------------------------
+..
+..                   You have to select an import data file, which is located in
+..                   the client wintmp directory (win/tmp/). Their common name
+..                   is like "KONZEXP<STRING>.IMP". The selected file will be
+..                   copied into the tmp directory of the client. After this,
+..                   the datefile will be imported by the EDP-Interface.
+..
+..  interface (argument with meaning)
+..    used array argument (arg.i)           : no
+..    used name arguement  (xpname=value)   : no
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.. import file
+.type text ximpfile xwinfile
+..
+.. filename of redirected output stream
+.type text xoutdat
+..
+.. filename of redirected error stream
+.type text xerrdat
+..
+.. text variable of system call
+.type text xsys
+..
+.. reference of imported object
+.type text ximpref
+.formula ximpref=""
+..
+.. return value of import statement
+.type bool xsuccess
+..
+.. switch of head buttons
+.continue START   ? (evtartengl ="BUTTON_BEFORE") & (evtvar ="bstart")
+..
+.continue
+..####################################### S T A R T ###########################
+!START: start button pressed
+.. name of import file not empty
+.continue NAMEEMPTY ? 'M|impdatei' = ""
+..
+.. cut the filename
+.formula ximpfile='M|impdatei'>>"\"
+.formula ximpfile='M|impdatei'>>"/" ? F|empty(U|ximpfile)
+.formula xwinfile= "win/tmp/" + 'ximpfile'
+..
+.. attaches the local temp dir
+.formula ximpfile= "rmtmp/" + 'ximpfile'
+..
+.. copy import file from win tempdir to client tempdir
+.formula xsys = " cp " + 'xwinfile' + " " + 'ximpfile'
+.system 'xsys' background
+.continue COPYERROR ? _mehr
+..
+.. does import file exists
+.formula xsys = "test -s " + 'ximpfile'
+.system 'xsys' background
+.continue FILENOEXISTS ? _mehr
+..
+.formula xoutdat = 'ximpfile' + ".OUT"
+.formula xerrdat = 'ximpfile' + ".ERR"
+..
+.formula xsys = "edpimport.sh -P -c EKS -I " + 'ximpfile' + " -o updatemode=strict >"+'xoutdat' + " 2>" + 'xerrdat'
+.system 'xsys' password background
+.formula xsuccess = mehr
+.continue IMPORTERROR ? _xsuccess
+..
+.select from 'xoutdat' ximpref
+.formula M|impobj=ximpref
+.formula xsys = "rm -f " + 'xoutdat' + " " + 'xerrdat'
+.system 'xsys' background
+.note Importobjekt aus Datei 'ximpfile' erzeugt!
+.end
+..
+..################# E R R O R S ###########################
+!NAMEEMPTY
+.error Importdatei fehlt!
+.end 1
+..
+!FILENOEXISTS
+.error Dateiname falsch!
+.end 1
+..
+!COPYERROR
+.error Importdatei konnte nicht auf Server kopiert werden.  Quelle: 'M|impdatei' --> Ziel: 'ximpfile'
+.end 1
+..
+!IMPORTERROR
+.. delete temporary files
+.error Datei nicht korrekt importiert!
+.editing -readonly 'xerrdat'
+..
+.end 1

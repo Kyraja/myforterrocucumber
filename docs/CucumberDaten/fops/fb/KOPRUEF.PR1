@@ -1,0 +1,134 @@
+..!interpreter english translate
+..*************************************************************
+..
+..  Verantwortlich : hc
+..  Kontrolle      : 
+..
+..               UNTERPROGRAMM VOM KOPRUEF
+.end .  ?  txname / "*KOPRUEF.PR1"
+..*************************************************************
+..
+.output terminal
+Bitte warten
+..
+.output new 'a'
+
+        ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ b     Bilanzkonto fehlt in KOTAB
+        ³                   g     GuV-Konto fehlt in KOTAB
+        ³
+        ³       ÚÄÄÄÄÄÄÄÄÄÄ b     Konto steht in zwei Rubriken der Bilanz
+        ³       ³                    oder Konto nicht vorhanden
+        ³       ³           g     Konto steht in zwei Rubriken der GuV
+        ³       ³                    oder Konto nicht vorhanden
+        v       v           g b   GuV-Konto steht in Bilanz
+                            b g   Bilanzkonto steht in GUV
+
+
+.set trans -
+.length 1
+..
+.select company "$,gruppe=7;@gruppe=7"
+.formula xko1  =  verb
+.formula xko2  =  ford
+.formula xsko1 =  sverb
+.formula xsko2 =  sford
+.select
+..
+.output new 'a1'
+!A
+.select account
+.continue AE   ? _mehr
+.continue A    ? _bu  &  xko1 <> num  &  xko2 <> num  &  xsko1 <> num  &  xsko2 <> num
+.formula xn = num
+?'    xn' b  ? _gv
+?'    xn' g  ?  gv
+.continue A
+..
+!AE
+.output new 'a2'
+.output new 'a3'
+.formula xai="a"
+!B
+.select from 'kotab' xkenn # xart # xber # xinf # xrest ^
+.continue BE ? _mehr
+.continue B ? _xinf/"(01234)" ; xber="" ; xber="-b !"
+.formula xk1=xkenn<<1
+.formula xk2=xkenn<<2
+.formula xks=xk2>>1
+.formula xa=""
+.formula xa= xart  ? xk1="b" & ( xart="so" ; xart="ha" )
+.formula xks="" ? xa=""
+.output addedto 'a2' ? xa="" & xai<>""
+.output addedto 'a3' ? xa<>""
+.formula xai=xa
+.....
+!U1
+.formula xtber=xber<<","
+.continue B ? xtber=""
+.formula xber=xber>>","
+.select account 'xtber'
+.continue U1  ? _mehr
+.continue G2  ? _bu  &  xko1 <> num  &  xko2 <> num  &  xsko1 <> num  &  xsko2 <> num
+..
+!G
+.formula xn=num
+?'    xn' b? _gv & xinf="0"
+?'    xn' g? gv & xinf="0"
+.continue G2 ? xinf="0"
+?'    xn' 'xk1' 'xks' 'xa'  ? gv & xk1="g" ; _gv & xk1="b"
+?'    xn' b 'xk1' 'xks' 'xa'? _gv & xk1="g"
+?'    xn' b                 ? _gv & xk1="g"
+?'    xn' g 'xk1' 'xks' 'xa'? gv & xk1="b"
+?'    xn' g                 ? gv & xk1="b"
+!G2
+.select account
+.continue U1  ? _mehr
+.continue G2  ? _bu  &  xko1 <> num  &  xko2 <> num  &  xsko1 <> num  &  xsko2 <> num
+.continue G
+..
+!BE
+.occupy WERF.WEG
+.output new WERF.WEG
+.formula sy="sort -o "+a3+" "+a3
+.system 'sy' background
+.occupy
+..
+.output addedto 'a2'
+..
+!SP
+.select from 'a3' xko xbg xap xsh^
+.continue SE ? _mehr
+..
+!S
+.formula xko2=xko
+.formula xbg2=xbg
+.formula xap2=xap
+.formula xsh2=xsh
+.select from 'a3' xko xbg xap xsh^
+.continue SA ? _mehr ; xbg2<>"b" ; xko2<>xko ; xap2=xap ; xsh2=xsh
+'   xko' 'xbg'
+.continue SP
+..
+!SA
+'  xko2' 'xbg' 'xap' 'xsh'
+.continue S ? mehr
+..
+!SE
+.occupy WERF.WEG
+.output new WERF.WEG
+.set background +
+.formula sy="sort -o "+a1+" "+a1
+.system 'sy'
+.formula sy="sort -o "+a2+" "+a2
+.system 'sy'
+.formula sy="comm -3 "+a1+" "+a2+">>"+a
+.system 'sy'
+.formula sy="tabsweg "+a
+.system 'sy'
+.set background -
+.occupy
+..
+.formula sy="rm "+a1+" "+a2+" "+a3
+.system 'sy'
+..
+.continue

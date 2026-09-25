@@ -1,0 +1,384 @@
+..!interpreter english declaration noabbrev englvar
+
+..============================================================================
+..  Author             : fbracke
+..  Date of Creation   : 30.01.2016
+..  Name               : IS.XAUFZAEHLUNG.FO
+..  Path/Pfad          : owis
+..  Language/Sprache   : ENGLISH
+..  Possible Languages : GERMAN | ENGLISH
+..  Interpreteroptionen: NOABBREV DECLARATION
+..  Possible Options   : [DECLARATION] [ENGLVAR] [TRANSLATE] 
+..  Function           : Displays enumerations selected by database:group
+..                       or all defined.
+..  include-easy  spx/ow
+..  required Paths    : 
+..  Menu Items        : 
+..  Mask Priority
+..  for EFOP           : 
+..  Starting Ticket    : 
+..                     History of Changes
+..                     ==================
+.. Ticket of Change    : 
+..
+..============================================================================
+..
+..<VAR folded>
+..    Kenner, 2. Zugriff beim Aufklappen der Aufzaehlung
+.type bool U|xbsecond                                       ?  _(F|defined(U|xbsecond))
+..    Kenner, ob die Aufzaehlung in der Datenbank vorkommt
+.type integer U|xbtreffer                                   ?  _(F|defined(U|xbtreffer))
+..  File-Handler
+.type integer U|xidatei                                     ?  _F|defined(U|xidatei)
+.type integer U|xidatei2                                    ?  _(F|defined(U|xidatei2))
+..  temporaerer Dateiname
+.type text U|xttmpfile                                      ?  _(F|defined(U|xttmpfile))
+.type text U|xttmpfile2                                     ?  _(F|defined(U|xttmpfile2))
+..  Systemkommandos
+.type text U|xtsystem                                       ?  _(F|defined(U|xtsystem))
+..    Menue-Auswahl
+.type text U|xtwahl                                         ?  _(F|defined(U|xtwahl))
+..  Spalten der Datendateien
+.type text U|xt1                                            ?  _(F|defined(U|xt1))
+.type text U|xt2                                            ?  _(F|defined(U|xt2))
+.type text U|xt3                                            ?  _(F|defined(U|xt3))
+.type text U|xt4                                            ?  _(F|defined(U|xt4))
+.type text U|xt5                                            ?  _(F|defined(U|xt5))
+.type text U|xt6                                            ?  _(F|defined(U|xt6))
+.type text U|xt7                                            ?  _(F|defined(U|xt7))
+.type text U|xt8                                            ?  _(F|defined(U|xt8))
+.type text U|xt9                                            ?  _(F|defined(U|xt9))
+.type text U|xt10                                           ?  _(F|defined(U|xt10))
+.type text U|xt11                                           ?  _(F|defined(U|xt11))
+.type text U|xt12                                           ?  _(F|defined(U|xt12))
+.type text U|xt13                                           ?  _(F|defined(U|xt13))
+..    Zwischenspeichern der aktuellen Aufzaehlung (beim Aufklappen)
+.type text U|xtaufz                                         ?  _(F|defined(U|xtaufz))
+..</VAR>
+..
+def main() {
+    ..<META M|= 'owis/AUFZAEHLUNGEN20'>
+    switch(G|evtType) {
+        case("maskein") {
+            .. Maskeneintritt
+            .call screenEntry()
+        }
+        case("buttonnach") {
+            switch(G|evtVar) {
+                case("bstart") {
+                    ..    Startbutton
+                    ..    Tabelle leeren
+                    .call clearTable()
+                    .call fillTable()
+                }
+                case("yaufzu") {
+                    ..    Auf- Zuklappen
+                    .call OpenCloseFolder()
+                }
+                default {
+                }
+            }
+        }
+        
+        case ("feldaus") {
+            switch(G|evtVar) {
+                case("ydbnr") {
+                    ..    Datenbankgruppe auswaehlen
+                    .call selectDatabaseGroupname()
+                }
+                case("ynurindvar") {
+                    ..    Schalter "Nur individuelle Variablen"
+                    .call onlyCustomFields()
+                }
+                case("yalle") {
+                    ..    Schalter "Alle Aufzaehlungen anzeigen"
+                    .call allEnumarations()
+                }
+                default {
+                }
+            }
+        }
+        default {
+        }
+    }
+}
+
+def allEnumarations( ) {
+    ..    Wenn "alle Aufzaehlungen anzeigen" angehakt wurde, dann darf "Nur individuelle Variablen" nicht angehakt sein.
+    .formula M|ynurindvar = G|false 
+} 
+
+def onlyCustomFields( ) {
+    ..    Wenn "Nur individuelle Variablen" angehakt wurde, dann darf "Alle Aufzaehlungen anzeigen" nicht gesetzt sein.
+    .formula M|yalle = G|false  
+} 
+
+def fillTable() {
+    ..    Dateinamen definieren
+    .file -fop -tempname U|xttmpfile
+    .file -fop -tempname U|xttmpfile2
+    .note -immediately Read Enumerations ...
+    ..    Alle Aufzaehlungen exportieren
+    .formula U|xtsystem = "edpexport.sh -p "+ G|oneTimePwd +" -c EKS -a AK > "+ U|xttmpfile
+    .system 'U|xtsystem' background
+    ..<BLOCK folded> Aufbau der erzeugten Datendatei
+    .. name;desc;emptyisvalid;maxposlen;classname;maxbdesclen;id;acttype;isbriefdesc;ismenu;
+    .. A1;Bewertung;1;36;Valuation;1;1;A1;0;0;
+    .. A2;ja/nein;0;4;YesNo;1;2;A2;0;0;
+    .. A3;Selektionsrohling;1;44;SelectionTemplate;1;3;A3;0;0;
+    .. A4;Einkaufsvorgang;1;28;PurchasingProcess;1;4;A4;0;0;
+    .. A5;Verkaufsvorgang;1;28;SalesProcess;1;5;A5;0;0;
+    .. A6;Ein-/Verkaufsposition;1;28;PurchasingSalesItem;1;6;A6;0;0;
+    .. A7;Ein-/Verkauf;1;7;PurchasingSales;1;7;A7;0;0;
+    .. A8;Land-Art;1;8;CountryType;1;8;A8;0;0;
+    .. A9;S/H;0;5;DebitCredit;1;9;A9;0;0;
+    ..</BLOCK>
+    ..
+    ..<BLOCK folded> Alle Aufzaehlungselemente in die Maske schreiben
+    .file -open U|xidatei 'U|xttmpfile'
+    .file -read U|xidatei U|xt1 ; U|xt2 ; U|xt3 ; U|xt4 ; U|xt5 ; U|xt6 ; U|xt7 ; U|xt8 ; U|xt9 ; U|xt10 ; U|xt11 ;
+    while(G|success) {
+        ..    Ist der Schalter "nur individuelle Aufzaehlungen" gesetzt ?
+        if(M|ynurindaufz) {
+            ..    Dann muss in der 11. Spalte der Datendatei (iscustom) eine "1" stehen       
+            if(U|xt11 = "1") {
+                .call ZeileSchreiben()
+            }
+        }else {
+            .call ZeileSchreiben()
+        }
+        
+        .file -read U|xidatei U|xt1 ; U|xt2 ; U|xt3 ; U|xt4 ; U|xt5 ; U|xt6 ; U|xt7 ; U|xt8 ; U|xt9 ; U|xt10 ; U|xt11 ;
+    }
+    ..</BLOCK>
+    if(_(M|yalle)) {
+        ..<BLOCK folded> Nur Aufzaehlungen der gewaehlten Variablentabelle anzeigen
+        .note -immediately Export vaules for database 'M|ydbnr':'M|ygrnr' ...
+        ..    Variablentabelle der gewaehlten Datenbank:Gruppe exportieren
+        .copy U|xtsystem = "edpexport.sh -p "+ G|oneTimePwd +" -c EKS -a FE -l "+ 'M|ydbnr' +":"+ 'M|ygrnr' +" > "+ U|xttmpfile
+        .system 'U|xtsystem' background
+        ..
+        ..<BLOCK folded> Dateiaufbau der exportierten Variablentabelle
+        ..name;edptype;length;desc;type;tableflag;isskip;englname;scrprot;priodisp;prioedit;iscustom;isalias;origname;meaning;meaningdic;meaningmsgnr;prompt;promptdic;promptmsgnr;headtext;headtextdic;headtextmsgnr;actprompt;actpromptdic;actpromp
+        ..grust;N;9;Gruppe;I9;0;0;;1;A;A;0;0;grust;Gruppe;vt;1;;;0;;;0;Gruppe;vt;1;Gruppe;vt;1;I9;grust;1;
+        ..gruppe;A;2;Gruppennummer;GRN0;0;0;grpNo;1;A;A;0;1;gruppe;Gruppennummer;vt;2;;;0;;;0;Gruppennummer;vt;2;Gruppennummer;vt;2;GRN0;grust;1;
+        ..grbez;A;80;Gruppenbezeichnung;GRB0;0;0;grpDescr;1;A;A;0;1;grbez;Gruppenbezeichnung;vt;3;;;0;;;0;Gruppenbezeichnung;vt;3;Gruppenbezeichnung;vt;3;GRB0;grust;1;
+        ..sn;A;8;Satznummer;P0;0;0;recordNo;1;A;A;0;0;sn;Satznummer;vt;4;;;0;;;0;Satznummer;vt;4;Satznummer;vt;4;P0;sn;1;
+        ..id;A;30;Datensatz-ID;ID0;0;0;id;1;A;A;0;1;id;Datensatz-ID;vt;5;;;0;;;0;Datensatz-ID;vt;5;Datensatz-ID;vt;5;ID0;sn;1;
+        .. </BLOCK>
+        .. 
+        ..<BLOCK folded> Maskenzeilen mit der erzeugten Datendatei abgleichen
+        .note -immediately Purge between database 'M|ydbnr':'M|ygrnr' and emumerations ...
+        .select screen header
+        .select screen line
+        while(G|success) {
+            if (_(F|empty(M|yaufz))) {
+                .. In Datendatei nach der Aufzaehlung suchen
+                if (M|yindaufz) {
+                    ..    Individuelle Aufzaehlung -> ueber Identnummer suchen
+                    .copy    U|xtsystem = "grep '"+ M|yverweis^idno +";' "+ U|xttmpfile +" > "+ U|xttmpfile2
+                    .system 'U|xtsystem' background
+                }else {
+                    ..    Standard-Aufzaehlungselement vorhanden -> Aufzaehlung in Variablenliste suchen
+                    .copy    U|xtsystem = "grep ';"+ M|yaufz +";' "+ U|xttmpfile +" > "+ U|xttmpfile2
+                    .system 'U|xtsystem' background
+                }
+                if (G|success) {
+                    .file -open U|xidatei2 'U|xttmpfile2'
+                    .file -read U|xidatei2 U|xt1 ; U|xt2  ; U|xt3 ; U|xt4 ; U|xt5 ; U|xt6 ; U|xt7 ; U|xt8 ; U|xt9 ; U|xt10 ; U|xt11 ; U|xt12 ; U|xt13^
+                    while (G|success) {
+                        .. Feldliste fuellen
+                        .formula M|yfeldliste = M|yfeldliste +" "+ U|xt1
+                        .. das Kennzeichen iscustom - individuelle Variable - steht in Spalte 12
+                        if(U|xt12 = "1") {
+                            .formula M|yindvar = G|true   ? U|xt12 = "1"
+                        }
+                        .file -read U|xidatei2 U|xt1 ; U|xt2  ; U|xt3 ; U|xt4 ; U|xt5 ; U|xt6 ; U|xt7 ; U|xt8 ; U|xt9 ; U|xt10 ; U|xt11 ; U|xt12 ; U|xt13^
+                    }
+                    .file -close U|xidatei2 
+                }
+                ..
+            }
+            .select screen line
+        }
+        ..</BLOCK>
+        ..
+        ..<BLOCK folded> Alle nicht in der Variablenliste verwendeten Aufzaehlungen aus Maske entfernen
+        .note -immediately Remove in database 'M|ydbnr':'M|ygrnr' unused emumerations ...
+        .select screen header
+        .copy U|xtsystem = "$,,"
+        .copy U|xtsystem = U|xtsystem +";@ordnung=zn.rueckwaerts"
+        .select screen line 'U|xtsystem'
+        while(G|success) {
+            if(F|empty(M|yfeldliste)) {
+                ..    Feldliste ist leer  
+                .make screen line -o
+            }else {
+                if(_(M|yindaufz) & M|ynurindaufz) {
+                    ..    Nur individuelle Aufzaehlungen anzeigen
+                    .make screen line -o
+                }else {
+                    if(M|yohnea177 & M|yaufz = "A177") {
+                        ..    A177 ausblenden
+                        .make screen line -o
+                    }else {
+                        if (_(M|yindvar) & M|ynurindvar) {
+                            ..    Nur individuelle Variablen anzeigen
+                            .make screen line -o
+                        }
+                    }
+                }
+            }
+            .select screen line
+        }
+        ..</BLOCK>
+        ..</BLOCK>
+    }
+    ..<BLOCK folded> Aufzaehlungen sollen sofort aufgeklappt werden
+    if(M|yaufklappen) {
+        .copy    U|xtsystem = "$,,"
+        .copy    U|xtsystem = U|xtsystem +";@ordnung=zn.rueckwaerts"
+        .select screen line 'U|xtsystem'
+        while(G|success) {
+            if(M|yaufzu = "icon:folder_closed") {
+                .call Aufklappen()
+            }
+            .select screen line 'U|xtsystem'
+        }
+    }
+    ..</BLOCK>
+    .note -immediately
+}
+
+def clearTable() {
+    .make screen line --
+}
+
+def screenEntry() {
+    ..  Datenbank = Kunde
+    .formula M|ydbnr = 0
+    .formula M|ydbbez = "Kunde"
+    ..  Gruppe = Kunde
+    .formula M|ygrnr = 1
+    .formula M|ygrbez = "Kunde"
+    ..  ohne Aufzaehlung A177
+    .formula M|yohnea177 = G|true
+    ..  alle Datenbanken auswählen
+    .formula M|yalle = G|false
+    ..  Keine weiter Option mehr
+}
+
+def selectDatabaseGroupname() {
+    ..  Temporaerer Dateiname bilden
+    .file -fop -tempname U|xttmpfile
+    ..  Kopfzeile des Menues erstellen
+    .copy U|xtsystem = "echo "+ G|marksQuot +"..!interpreter english"+ G|marksQuot +" > "+ U|xttmpfile
+    .copy U|xtsystem = U|xtsystem +"; echo "+ G|marksQuot +".menu Gruppenauswahl"+ G|marksQuot +" >> "+ U|xttmpfile
+    .system 'U|xtsystem' background
+    .. Gruppenliste exportieren und als Menue aufbereiten
+    .copy U|xtsystem = "edpexport.sh -p "+ G|oneTimePwd +" -c EKS -a GA -l "+ 'M|ydbnr' +" | awk 'BEGIN{FS="+ G|marksQuot +";"+ G|marksQuot
+    .copy U|xtsystem = U|xtsystem +"}{print $3"+ G|marksQuot
+    .copy U|xtsystem = U|xtsystem +" >> .formula U|xtwahl = \"+ G|marksQuot + G|marksQuot +"$3"+ G|marksQuot
+    .copy U|xtsystem = U|xtsystem + "#"+ G|marksQuot +"$4"+ G|marksQuot +"\"+ G|marksQuot + G|marksQuot +"}'"
+    .copy U|xtsystem = U|xtsystem +" >> "+ U|xttmpfile
+    .system 'U|xtsystem' background
+    .. Menue-Datei einziehen
+    .input 'U|xttmpfile'
+    if (G|noSelectedMenuOption <> 0) {
+        .. Auswahl aufbereiten - Beispielinhalt von U|xtwahl = "Position#2"
+        .formula M|ygrnr = F|tovalue(U|xtwahl >> "#", "IP9")
+        .formula M|ygrbez = F|substr(U|xtwahl, 1, F|strindex(U|xtwahl,"#") -1)
+    }else {
+        .formula M|ygrnr = 0
+        .formula M|ygrbez = ""
+    }
+}
+
+def ZeileSchreiben() { 
+    .. Zeile schreiben
+    .make screen line +o
+    ..    Ordnersymbol
+    .formula M|yaufzu = "icon:folder_closed"
+    ..    Aufzaehlungselement
+    .formula M|yaufz = U|xt1
+    ..    Bezeichnung
+    .formula M|yname = U|xt2
+    ..    Klassenname
+    .formula M|yclassname = U|xt5+".java"
+    ..    Verweis auf die Aufzaehlung (wenn es eine benannte Aufzaehlung ist)
+    .assign  M|yverweis = U|xt7
+    ..    Ist es eine individuelle Aufzaehlung
+    .formula M|yindaufz = U|xt11 = "1"
+}
+
+def OpenCloseFolder( ) {
+    if(M|yaufzu = "icon:folder_closed") {
+        ..    Aufklappen
+        .call Aufklappen()
+    }else {
+        ..    Zuklappen
+        .call Zuklappen()
+    }
+} 
+
+def Zuklappen( ) {
+    ..    Symbol wechseln
+    .formula M|yaufzu = "icon:folder_closed"
+    ..    Positionstext leeren
+    .formula M|ypostext = ""
+    ..    Kurzdarstellung leeren
+    .formula M|ykurzbez = ""
+    ..    Universelle Darstellung
+    .formula M|yuniversell = ""
+    ..    Bezeichner
+    .formula M|ybezeichner = ""
+    ..    Sprachunabhaengig
+    .formula M|ysprachunab = ""
+    ..    Zeilenselektion aufbauen
+    .copy    U|xtsystem = "$,,"
+    .copy    U|xtsystem = U|xtsystem +";ygrepfeld=="+ M|yaufz
+    .copy    U|xtsystem = U|xtsystem +";zn>"+ 'M|rowNo'
+    .copy    U|xtsystem = U|xtsystem +";@ordnung=zn.rueckwaerts"
+    .select screen line 'U|xtsystem'
+    while(G|success) {
+        .make screen line -o
+        .select screen line
+    }
+} 
+
+def Aufklappen( ) { 
+    .note -immediately Loading valueset for enumeration 'M|yaufz' ...
+    .. Dateiname bilden
+    .file -fop -tempname U|xttmpfile2 ? F|empty(U|xttmpfile2)
+    .. aktuelle Aufzaehlung merken
+    .formula U|xtaufz = M|yaufz
+    .formula U|xtsystem = "edpexport.sh -p "+ G|oneTimePwd +" -c EKS -a AP -l "+ M|yaufz +" > "+ U|xttmpfile2
+    ..<BLOCK folded> Aufbau der Datendatei 
+    .. poscode;postext;briefdesc;universal;identifier;langindep;
+    .. 82;Rechnungspreis;R;(82);InvoicePrice;(InvoicePrice);
+    .. 69;Einkaufspreis;E;(69);PurchasePrice;(PurchasePrice);
+    .. 87;Werkstoffpreis;W;(87);PriceOfMaterials;(PriceOfMaterials);
+    .. 109;Mischpreis;m;(109);MixedPrice;(MixedPrice);
+    ..</BLOCK>
+    .system 'U|xtsystem' background
+    .. 
+    .file -open U|xidatei2 'U|xttmpfile2'
+    .formula U|xbsecond = G|false
+    ..<BLOCK folded> Zweite Datei verarbeiten
+    .file -read U|xidatei2 U|xt1 ; U|xt2 ; U|xt3 ; U|xt4 ; U|xt5 ; U|xt6 ;
+    while(G|success) {
+        .make screen line +o  ? U|xbsecond
+        .formula M|yaufzu = "icon:folder_opened"  ? _(U|xbsecond)
+        .formula U|xbsecond = G|true
+        .formula M|ypostext = U|xt2
+        .formula M|ykurzbez = U|xt3
+        .formula M|yuniversell = U|xt4
+        .formula M|ybezeichner = U|xt5
+        .formula M|ysprachunab = u|xt6
+        .formula M|ygrepfeld = U|xtaufz
+        .file -read U|xidatei2 U|xt1 ; U|xt2 ; U|xt3 ; U|xt4 ; U|xt5 ; U|xt6 ;
+    }
+    ..</BLOCK>
+    .file -close U|xidatei2
+    .note -immediately
+} 

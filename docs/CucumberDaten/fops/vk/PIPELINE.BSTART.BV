@@ -1,0 +1,190 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : PIPELINE.BSTART.BV
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Einstellungen pruefen und DB-Anfrage formulieren.
+.. Functionality  : Check input parameters and build database query.
+..*****************************************************************************
+.set trans -
+..
+.. Validate and initialize input and control parameters
+.continue ERROR00 ? _(M|chance ; M|angebot)
+..
+.copy M|anzstufen = 0
+.formula M|anzstufen = M|anzstufen + 1 ? M|chance
+.formula M|anzstufen = M|anzstufen + 1 ? M|angebot
+.continue FATAL   ? M|anzstufen < 0 ; M|anzstufen > 2
+.continue FILED   ? F|value(M|ablageart, "AS193") <> "(Active)"
+.continue INIT
+..
+!FILED: Special validations while filing
+.continue ERROR05 ?  F|empty(M|partner) & F|empty(M|betreuer)
+.continue INIT    ? _F|empty(M|vonbelegdat)      & _F|empty(M|bisbelegdat)
+.continue INIT    ? _F|empty(M|vonwiedervorlage) & _F|empty(M|biswiedervorlage)
+.continue INIT    ? _F|empty(M|vonaudatum)       & _F|empty(M|bisaudatum)
+.continue INIT    ? _F|empty(M|gltvon)           & _F|empty(M|gltbis)
+.continue ERROR06
+..
+!INIT
+.formula M|preselect = "{1},,;@ablageart={2};@gruppe=1"
+..
+.continue REVIEW  ? _M|belegdat
+.continue DATEDOC ? F|empty(M|vonbelegdat) ; F|empty(M|bisbelegdat)
+.continue ERROR07 ? M|vonbelegdat > M|bisbelegdat
+!DATEDOC
+.formula M|preselect = M|preselect + ";vom=" + M|vonbelegdat:8
+.formula M|preselect = M|preselect + "!" + M|bisbelegdat:8
+..
+!REVIEW: Review date
+.continue ORDDAT ? _M|wvorlage
+.continue TERM   ? F|empty(M|vonwiedervorlage) ; F|empty(biswiedervorlage)
+.continue ERROR01 ? M|vonwiedervorlage > M|biswiedervorlage
+!TERM
+.formula M|preselect = M|preselect + ";wvorlage=" + 'G|TRUE'
+.formula M|preselect = M|preselect + ";tterm=" + M|vonwiedervorlage:8
+.formula M|preselect = M|preselect + "!" + M|biswiedervorlage:8
+..
+!ORDDAT: Planned sales order date
+.continue VALID   ? _M|audatum
+.continue DATEORD ? F|empty(M|vonaudatum) ; F|empty(bisaudatum)
+.continue ERROR03 ? M|vonaudatum > M|bisaudatum
+!DATEORD
+.formula M|preselect = M|preselect + ";audatum=" + M|vonaudatum:8
+.formula M|preselect = M|preselect + "!" + M|bisaudatum:8
+..
+!VALID: Validity date
+.continue TYPE ? _M|glt
+.continue DATEVAL ? F|empty(M|gltvon) ; F|empty(gltbis)
+.continue ERROR04 ? M|gltvon > M|gltbis
+!DATEVAL
+.formula M|preselect = M|preselect + ";gltvon=!" + M|gltbis:8
+.formula M|preselect = M|preselect + ";gltbis=" + M|gltvon:8 + "!"
+..
+!TYPE: Add type of document
+.continue PARTNER ? F|empty(M|kotyp)
+.formula M|preselect = M|preselect + ";typa=={3}"
+..
+!PARTNER: Add partner
+.continue REPRSNT ? F|empty(M|partner)
+.formula M|preselect = M|preselect + ";kunde=" + M|partner^id
+..
+!REPRSNT: Add representative
+.continue PROPLTY ? F|empty(M|vertret)
+.formula M|preselect = M|preselect + ";vertret=" + M|vertret^id
+..
+!PROPLTY: Add propability
+.continue STAFFER ? F|empty(M|wahrsch)
+.formula M|preselect = M|preselect + ";wahrsch=" + 'M|wahrsch' + "!"
+..
+!STAFFER: Add staff personel
+.continue REFUSAL ? F|empty(M|betreuer)
+.formula M|preselect = M|preselect + ";betreuer=" + M|betreuer^id
+..
+!REFUSAL: Add reason for refusal
+.continue STATE ? F|empty(M|ablehngrund)
+.formula M|preselect = M|preselect + ";ablehngrund=" + M|ablehngrund^id
+..
+!STATE: Add state
+.continue REGION ? F|empty(M|staat)
+.formula M|preselect = M|preselect + ";staat=" + M|staat^id
+..
+!REGION: Add region
+.continue SYMBOL ? F|empty(M|region)
+.formula M|preselect = M|preselect + ";region=" + M|region^id
+..
+!SYMBOL: Add symbol
+.continue POSTAL ? F|empty(M|zeich)
+.formula M|preselect = M|preselect + ";zeich==" + M|zeich
+..
+!POSTAL: Add postal code
+.continue CITY ? F|empty(M|vonplz) & F|empty(M|bisplz)
+.type P3:1 xcheck
+.assign U|xcheck = "$,,;@gruppe=1;plz=" + M|vonplz + "!" + M|bisplz + ";@lesen=" + 'G|FALSE'
+.continue ERROR02 ? _G|mehr
+.formula M|preselect = M|preselect + ";plz=" + M|vonplz + "!" + M|bisplz
+..
+!CITY: Add city
+.continue ATTRES ? F|empty(M|nort)
+.formula M|preselect = M|preselect + ";nort=" + M|nort
+..
+!ATTRES: Attributes
+.. Setting attributes
+.type integer xi ? _F|defined(U|xi)
+.assign U|xi = 1
+..
+!FOR
+.continue ORDER ? U|xi > 6
+.formula M|preselect = M|preselect + ";kl^merkmal" + 'U|xi' + "=" + M|merkmal.U|xi^id ? _F|empty(M|merkmal.U|xi)
+.formula U|xi = U|xi + 1
+.continue FOR
+..
+!ORDER: Add order
+.formula M|preselect = M|preselect + ";@ordnung=tterm"
+..
+.. Clear table
+.input "is/TABLEEREN"
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+!FATAL: Fatal error
+.error -number 1111
+.continue BREAK
+..
+!ERROR00: Opportunities AND offers do not match together!
+.error -line 0 -field M|chance -message Bitte mindestens eine Belegart ausw„hlen!
+.continue BREAK
+..
+!ERROR01: Period is illegal
+.error -line 0 -field M|vonwiedervorlage -message Zeitraum ist falsch, bitte korrigieren
+.continue BREAK
+..
+!ERROR02: Wrong area!
+.. Standardmeldung aufheben.
+.error
+.cursor vonplz 0
+.continue BREAK
+..
+!ERROR03: Start date greater then end date!
+.error -line 0 -field M|vonaudatum -message Zeitraum ist falsch, bitte korrigieren
+.continue BREAK
+..
+!ERROR04: Start date greater then end date!
+.error -line 0 -field M|gltvon -message Zeitraum ist falsch, bitte korrigieren
+.continue BREAK
+..
+!ERROR05: Partner or inhouse contact is missing!
+.error -line 0 -field M|partner -message Es fehlt die Angabe eines Gesch„ftspartners oder Betreuers!
+.continue BREAK
+..
+!ERROR06: Period is missing!
+.continue CSRDOC  ? _F|empty(M|vonbelegdat) ; _F|empty(M|bisbelegdat)
+.continue CSRREVW ? _F|empty(M|vonwiedervorlage) ; _F|empty(M|biswiedervorlage)
+.continue CSRORDR ? _F|empty(M|vonaudatum)       ; _F|empty(M|bisaudatum)
+.continue CSRVLDT ? _F|empty(M|gltvon)           ; _F|empty(M|gltbis)
+..
+!CSRDOC
+.cursor vonbelegdat 0
+.error -line 0 -field M|vonbelegdat -message Zeitraum ist nicht vollst„ndig
+.continue BREAK
+..
+!CSRREVW
+.error -line 0 -field M|vonwiedervorlage -message Zeitraum ist nicht vollst„ndig
+.continue BREAK
+..
+!CSRORDR
+.error -line 0 -field M|vonaudatum -message Zeitraum ist nicht vollst„ndig
+.continue BREAK
+..
+!CSRVLDT
+.error -line 0 -field M|gltvon -message Zeitraum ist nicht vollst„ndig
+.continue BREAK
+..
+!ERROR07: Start date greater then end date!
+.cursor vonbelegdat 0
+.error -line 0 -field M|vonbelegdat -message Zeitraum ist falsch, bitte korrigieren
+..
+!BREAK
+.end 1

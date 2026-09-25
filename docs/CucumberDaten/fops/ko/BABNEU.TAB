@@ -1,0 +1,276 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..
+..  FOP-Name       : BABNEU.TAB
+..  Datum          : 10.09.2001
+..  Version        : 2 (30.08.2006)
+..  Autor          : male
+..  Verantwortlich : tiwe
+..  Kontrolle      : mh
+..
+..  Funktion       : Infosystem, Betriebsabrechnungsbogen neu
+..                   Tabellezeigfop
+..
+..  Ablauf         : Lesen der BAB-Zeilen
+..
+.. include ko/BABNEU.SETCOO
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.continue EXCEL ? 'M|atyp(L=":")' = "(Excel)"
+..
+.continue END   ? H|tzeilen = 0
+..
+.copy M|next = G|false
+.formula U|xikoart = 0
+..
+.input "ko/BABNEU.SETCOO" ? G|evtzeile = 0
+..
+.formula U|xtd1 = "rmtmp/" + M|such65 + ".D" + G|aufrufernr
+..
+.output new 'U|xtd1'
+.input "DATEI.F"
+..
+.continue BABZ        ? G|evtzeile = 0
+..
+.. Tabellenereignis
+.continue END ?  F|empty(M|koart)
+.continue END ?  M|koart^gruppe <> 2
+.continue END ? 'M|koart^optyp(L=":")' = "(BlankLine)"
+..
+.copy U|xbclosed    = G|false
+.formula   U|xibaumstufe = M|tbaumstufe + 1
+..
+.formula U|xiksti = 0
+.load 2 add M|koart
+.copy 2|anjahr  = M|anfj
+.copy 2|endjahr = M|endj
+.formula   2|anmon   = M|anfm
+.formula   2|endmon  = M|endm
+.copy 2|waehr      = M|buwaehr
+.copy 2|selbukreis = M|bukreis
+.continue NKOART
+..
+..*****************************************************************************
+!BABZ: Zeilen des BAB-Formulars lesen
+..*****************************************************************************
+.formula U|xibaumstufe = 1
+.load 2
+.select line
+..
+.continue HZE   ? _G|mehr
+.continue BABZ  ? F|empty(H|koart)
+.continue NRERE ?  H|koart^gruppe <> 2
+.continue BABZ  ? 'H|koart^optyp(L=":")' = "(BlankLine)"
+..
+..*****************************************************************************
+!NRERE: Sprungmarke falls H|koart keine Rechenregel ist
+..*****************************************************************************
+.formula   U|xikoart  = U|xikoart + 1
+.copy U|xbclosed = H|closed
+..
+.continue BABZ2 ? U|xbclosed ; _M|strukturauf ; (M|strukturauf & H|koart^gruppe <> 2)
+..
+.formula U|xiksti = 0
+.load 2 cotype 'F|expr("$,@gruppe=7;id=" + H|koart^id)'
+.formula   2|anjahr     = M|anfj
+.formula   2|endjahr    = M|endj
+.formula   2|anmon      = M|anfm
+.formula   2|endmon     = M|endm
+.copy 2|waehr      = M|buwaehr
+.copy 2|selbukreis = M|bukreis
+.copy U|xpkoart    = H|koart
+.continue HOLK1
+..
+..*****************************************************************************
+!BABZ2
+..*****************************************************************************
+.formula U|xiksti = 0
+.load 5 add H|koart
+.copy U|xpkoart = H|koart
+..
+.formula   5|anjahr     = M|anfj
+.formula   5|endjahr    = M|endj
+.formula   5|anmon      = M|anfm
+.formula   5|endmon     = M|endm
+.copy 5|waehr      = M|buwaehr
+.copy 5|selbukreis = M|bukreis
+..
+.type integer xikst    ? _F|defined(U|xikst)
+.formula U|xikst   = 1
+..
+.continue HOLK1
+..
+..*****************************************************************************
+!NKOART: Naechste Kostenart aus Zeile lesen (bei Tabellenevent oder Struktur)
+..*****************************************************************************
+.load 2 line
+.. naechste Zeile, falls durch Startbutton ausgeloest
+.continue BABZ   ? _G|mehr & G|evtzeile = 0
+.. Ende falls durch Tabellenbutton ausgeloest
+.continue HZE    ? _G|mehr
+.continue NKOART ?  F|empty(2|koart)
+.continue NRERE2 ?  2|koart^gruppe <> 2
+.continue NKOART ? '2|koart^optyp(L=":")' = "(BlankLine)"
+..
+..*****************************************************************************
+!NRERE2: Sprungmarke falls 2|koart keine Rechenregel ist
+..*****************************************************************************
+.formula   U|xikoart = U|xikoart + 1
+.formula   U|xiksti  = 0
+.copy U|xpkoart = 2|koart
+..
+.continue HOLK1
+..
+..*****************************************************************************
+!HOLK1: Datei mit KSt lesen und Werte schreiben (alle)
+..*****************************************************************************
+.formula U|xiksti = U|xiksti + 1
+.continue BABZ     ? U|xiksti > 20      &  2|pugruppe <> 7 & G|evtzeile = 0
+.continue NKOART   ? U|xiksti > 20      & (2|pugruppe  = 7 ; G|evtzeile > 0)
+.continue BABZ     ? F|empty(M|kst.U|xiksti) &  2|pugruppe <> 7 & G|evtzeile = 0
+.continue NKOART   ? F|empty(M|kst.U|xiksti) & (2|pugruppe  = 7 ; G|evtzeile > 0)
+.formula U|xtkst  = 'F|eval("M|kst.xiksti^id")'
+..
+.continue HOLK2 ? 2|pugruppe = 7 ; G|evtzeile > 0
+..
+.assign 5|koobj = 'U|xtkst'
+..
+.formula U|xibaumstufe = 1
+.formula U|xrwert      = 0
+..
+.formula U|xrwert = 5|kikum * U|xxvnkurs     ? M|ist
+?'U|xikoart'#'5|id'#'U|xtkst'#'U|xiksti'#'U|xrwert'#(ActCos)#'U|xibaumstufe'#'U|xbclosed'# ? M|ist    & (U|xrwert <> 0 ; _M|nonull)
+..
+.formula U|xrwert = 5|kpfixkum * U|xxvnkurs  ? M|pfix
+?'U|xikoart'#'5|id'#'U|xtkst'#'U|xiksti'#'U|xrwert'#(Plfix)#'U|xibaumstufe'#'U|xbclosed'# ? M|pfix   & (U|xrwert <> 0 ; _M|nonull)
+..
+.formula U|xrwert = 5|kppropkum * U|xxvnkurs ? M|pprop
+?'U|xikoart'#'5|id'#'U|xtkst'#'U|xiksti'#'U|xrwert'#(Plprop)#'U|xibaumstufe'#'U|xbclosed'# ? M|pprop  & (U|xrwert <> 0 ; _M|nonull)
+..
+.formula U|xrwert = 5|kskum * U|xxvnkurs     ? M|soll
+?'U|xikoart'#'5|id'#'U|xtkst'#'U|xiksti'#'U|xrwert'#(Debit)#'U|xibaumstufe'#'U|xbclosed'# ? M|soll   & (U|xrwert <> 0 ; _M|nonull)
+..
+.formula U|xrwert = 5|ksiakum * U|xxvnkurs   ? M|absabw
+?'U|xikoart'#'5|id'#'U|xtkst'#'U|xiksti'#'U|xrwert'#(TarActabs)#'U|xibaumstufe'#'U|xbclosed'# ? M|absabw & (U|xrwert <> 0 ; _M|nonull)
+..
+.formula U|xrwert = 5|ksirkum * U|xxvnkurs   ? M|relabw
+?'U|xikoart'#'5|id'#'U|xtkst'#'U|xiksti'#'U|xrwert'#(TarActvar)#'U|xibaumstufe'#'U|xbclosed'# ? M|relabw & (U|xrwert <> 0 ; _M|nonull)
+..
+.. n„chstes Kostenobjekt verarbeiten
+.continue HOLK1
+..
+..*****************************************************************************
+!HOLK2: Tabellen-Event (nur eine VKZ-Art und eine KOArt)
+..*****************************************************************************
+.continue HOLK3 ? 2|pugruppe = 7
+.assign 2|koobj = 'U|xtkst'
+.formula U|xtzart = 'M|art(L=":")'
+.formula U|xrwert = 0.00
+.formula U|xibaumstufe = M|tbaumstufe + 1
+.formula U|xrwert = 2|ikum     * U|xxvnkurs ? U|xtzart = "(ActCos)"
+.formula U|xrwert = 2|pfixkum  * U|xxvnkurs ? U|xtzart = "(Plfix)"
+.formula U|xrwert = 2|ppropkum * U|xxvnkurs ? U|xtzart = "(Plprop)"
+.formula U|xrwert = 2|skum     * U|xxvnkurs ? U|xtzart = "(Debit)"
+.formula U|xrwert = 2|siakum   * U|xxvnkurs ? U|xtzart = "(TarActabs)"
+.formula U|xrwert = 2|sirkum   * U|xxvnkurs ? U|xtzart = "(TarActvar)"
+.continue HOLK1 ? (U|xrwert = 0.00 & M|nonull)
+'U|xikoart'#'2|koart^id'#'U|xtkst'#'U|xiksti'#'U|xrwert'#'U|xtzart'#'U|xibaumstufe'#'U|xbclosed'#
+.continue HOLK1
+..
+..*****************************************************************************
+!HOLK3
+..*****************************************************************************
+.assign 2|koobj = 'U|xtkst'
+..
+.formula U|xrwert = 0
+..
+.formula U|xtkoartid   = F|condexpr(2|aktzeile > 0, 2|koart^id, 2|id)
+.formula U|xibaumstufe = F|condexpr(2|aktzeile > 0, 1 + 2|tbaumstufe, 1)
+..
+.formula U|xrwert = F|condexpr(2|aktzeile > 0, 2|ikum  * U|xxvnkurs, 2|kikum * U|xxvnkurs)     ? M|ist
+?'U|xikoart'#'U|xtkoartid'#'U|xtkst'#'U|xiksti'#'U|xrwert'#(ActCos)#'U|xibaumstufe'#'U|xbclosed'# ? M|ist    & (U|xrwert <> 0 ; _M|nonull)
+..
+.formula U|xrwert = F|condexpr(2|aktzeile > 0, 2|pfixkum  * U|xxvnkurs, 2|kpfixkum * U|xxvnkurs) ? M|pfix
+?'U|xikoart'#'U|xtkoartid'#'U|xtkst'#'U|xiksti'#'U|xrwert'#(Plfix)#'U|xibaumstufe'#'U|xbclosed'#   ? M|pfix   & (U|xrwert <> 0 ; _M|nonull)
+..
+.formula U|xrwert = F|condexpr(2|aktzeile > 0, 2|ppropkum  * U|xxvnkurs, 2|kppropkum * U|xxvnkurs) ? M|pprop
+?'U|xikoart'#'U|xtkoartid'#'U|xtkst'#'U|xiksti'#'U|xrwert'#(Plprop)#'U|xibaumstufe'#'U|xbclosed'#     ? M|pprop  & (U|xrwert <> 0 ; _M|nonull)
+..
+.formula U|xrwert = F|condexpr(2|aktzeile > 0, 2|skum  * U|xxvnkurs, 2|kskum * U|xxvnkurs)     ? M|soll
+?'U|xikoart'#'U|xtkoartid'#'U|xtkst'#'U|xiksti'#'U|xrwert'#(Debit)#'U|xibaumstufe'#'U|xbclosed'# ? M|soll   & (U|xrwert <> 0 ; _M|nonull)
+..
+.formula U|xrwert = F|condexpr(2|aktzeile > 0, 2|siakum  * U|xxvnkurs, 2|ksiakum * U|xxvnkurs) ? M|absabw
+?'U|xikoart'#'U|xtkoartid'#'U|xtkst'#'U|xiksti'#'U|xrwert'#(TarActabs)#'U|xibaumstufe'#'U|xbclosed'# ? M|absabw & (U|xrwert <> 0 ; _M|nonull)
+..
+.formula U|xrwert = F|condexpr(2|aktzeile > 0, 2|sirkum  * U|xxvnkurs, 2|ksirkum * U|xxvnkurs) ? M|relabw
+?'U|xikoart'#'U|xtkoartid'#'U|xtkst'#'U|xiksti'#'U|xrwert'#(TarActvar)#'U|xibaumstufe'#'U|xbclosed'# ? M|relabw & (U|xrwert <> 0 ; _M|nonull)
+..
+.. n„chstes Kostenobjekt verarbeiten
+.continue HOLK1
+..
+..*****************************************************************************
+!HZE:
+..*****************************************************************************
+.output new WERF.WEG
+.output terminal
+.system 'F|expr("sort -t# -k 1,1n -k 6,6  " + U|xtd1 + " -o " + U|xtd1)' background ? _M|strukturauf
+.system 'F|expr("sort -t# -k 6,6  -k 1,1n " + U|xtd1 + " -o " + U|xtd1)' background ?  M|strukturauf
+..
+.continue END     ? 'M|atyp(L=":")' <> "(Terminal)"
+..
+..*****************************************************************************
+!HKSTE:
+..*****************************************************************************
+.formula U|xtlkoartid = ""
+.formula U|xtzart     = ""
+..
+..*****************************************************************************
+!HDAT:
+..*****************************************************************************
+.select from 'U|xtd1' U|xikoart # U|xtkoartid # U|xtkst # U|xiksti # U|xrwert # U|xtartint # U|xibaumstufe # U|xbclosed #
+.continue END         ? _G|mehr
+.continue HDAT        ? U|xrwert = 0 & M|nonull
+.type bool xbchanged ? _F|defined(U|xbchanged)
+.formula U|xbchanged = G|false
+.formula U|xbchanged = (U|xtlkoartid <> U|xtkoartid ; U|xtzart <> U|xtartint)
+..
+.continue HDAT2       ? _U|xbchanged
+..
+.make screen line +O
+.assign M|koart    = 'U|xtkoartid'
+.formula M|tbaumstufe = U|xibaumstufe
+.assign M|tbaumstat = "(Minus)" ? M|koart^gruppe  = 2 &  G|evtzeile = 0 &  M|strukturauf & _U|xbclosed
+.assign M|tbaumstat = "(Plus)"  ? M|koart^gruppe  = 2 & (G|evtzeile > 0 ; _M|strukturauf ; U|xbclosed)
+.assign M|tbaumstat = ""        ? M|koart^gruppe <> 2
+..
+.assign M|art = U|xtartint
+..
+..*****************************************************************************
+!HDAT2
+..*****************************************************************************
+.formula U|xtlkoartid  = U|xtkoartid
+.formula U|xtzart      = U|xtartint
+..
+..*****************************************************************************
+!HDAT1:
+..*****************************************************************************
+.formula M|wert.U|xiksti = U|xrwert
+.formula M|zsum        = M|zsum + U|xrwert
+.continue HDAT
+..
+..*****************************************************************************
+!EXCEL:
+..*****************************************************************************
+.select screen line
+.continue END  ?_(G|mehr)
+.tablerecord line
+'M|koart';'M|koartbez';'M|art';'M|wert1';'M|wert2';'M|wert3';'M|wert4';'M|wert5';'M|wert6';'M|wert7';'M|wert8';'M|wert9';'M|wert10';'M|wert11';'M|wert12';'M|wert13';'M|wert14';'M|wert15';'M|wert16';'M|wert17';'M|wert18';'M|wert19';'M|wert20';'M|zsum'
+.continue EXCEL
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

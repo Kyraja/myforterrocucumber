@@ -1,0 +1,374 @@
+..!interpreter english translate
+..*****************************************************************************
+..
+..  Name      : STATISTIK
+..  Datum     : 07.12.98
+..  Vers.     : 9.1
+..  Autor     : Margit Dîhler
+..
+..  Verantwortlich : cl
+..
+..  Funktion  : Statistiken Verkauf
+..
+..  Ablauf    : Mit EXCEL Ausgabe
+..              panummer - eindeutige Nummer des Bearbeiters
+..              Namen der Tempfiles werden um panummer ergÑnzt, um Druckwieder-
+..              holung laufen kînnen
+..
+..
+..*****************************************************************************
+.set trans +
+..                           SUBROUTINE
+..                           ----------
+.. verwendete Texte:    sk/ABLAGE  (Aufbauen von ABL.DAT)
+..                      sk/AUMS    (Druck Umsatzstatistik Kunden/Artikel)
+..                      sk/BSTA    (Druck Bestseller Artikel)
+..                      sk/BSTK    (Druck Bestseller Kunden)
+!G1
+.input DRUCKER1
+..
+.type text xxwaehr:10
+..
+..*****************************************************************************
+!START
+.type BT30  xtvon xtbis xtnknr
+.type date xdre   frueh   xdvon xdbis xdvvon xdvbis xdpst
+.type text  xdate8 xdate81 xyw x98 q xtdre xtdvon xtdbis xtdvvon xtdvbis
+.type text  xtabla:14 xtaums:14 xtbstk:14 xtusim:14 xtbsta:14 xtstat:8
+.type text  xtbudg:14 xt1art:10 xtbupl:14 xt2art:10 xytlgp:9 xtger:15
+.type text  xtdf:14 xtds:18 xtdb:14 xtda:14 xtsys:80 xtmag:6 xtag:3
+.type text  xtwahl:2 xtsys:80 xtdo:10 xtzw:10 xtlsa:10 xtasa:10
+.type text  xtknr:8  xtksu:8 xtren:8 xtanr:15 xtasu:23 xtle:6
+.type text  xt1tmp:8 xt2tmp:8 xtvku:8 xtbku:8 xtms:2 xtvms:2 xtbms:2 xxq:40
+.type text  xyxsu z xyynr xtmo xyknr xxyb
+.type real  xrmge xrtmp
+.type real  xrm1 xrm2 xrm3 xrm4 xrm5 xrm6 xrm7 xrm8 xrm9 xrm10 xrm11 xrm12
+.type real  xrb1 xrb2 xrb3 xrb4 xrb5 xrb6 xrb7 xrb8 xrb9 xrb10 xrb11 xrb12
+.type real  xrs1 xrs2 xrs3 xrs4 xrs5 xrs6 xrs7 xrs8 xrs9 xrs10 xrs11 xrs12
+.type real2 xri4 xrj4 xri5 xrj5 xri6 xrj6
+.type realx xrpw
+.type realx xrkurs
+.type integer   xiaud xiukd xiumd xiuad xibpd xivm xibm
+.type bool  xbn xbbudg xybmit xbdw xbnn
+.type text  xtvsu xtbsu xtvku xtbku xtknr
+..
+..............Dateinamen festlegen.....................................
+.input "ARB"
+.formula xtabla=xarb+"ABLAGE"
+.formula xtaums=xarb+"AUMS"
+.formula xtbstk=xarb+"BSTK"
+.formula xtbsta=xarb+"BSTA"
+..
+.formula xtdf=panummer
+.formula xtds=panummer
+.formula xtda=panummer
+.formula xtdf=xarb + "STAT." + xtdf
+.formula xtds=xarb + "STAT.SRT" + xtds
+.formula xtda=xarb + "ST.AUSW." + xtda
+.formula xtdo=xarb + "ABL.DAT"
+.formula xtzw=xarb + "ABL.TMP"
+..
+!MENUE0: Hauptmenue
+.reserve -
+.select -
+.output terminal
+.input BILD.F
+.up
+.down
+.occupy
+.formula xtger = geraet
+.formula xtger = "Bildschirm"  ?  geraet = ""
+..
+!MENUE1
+.output terminal
+.set thoussep
+.set decpoint
+                                  Statistiken
+
+        Verarbeitung von mehreren MenÅpunkten mîglich, schon ausgewÑhlt:
+
+?                        Umsatzstatistik Kunden/Artikel  ?  xtstat / "*1*"
+?                                                        ?  xtstat / "*1*"
+?                         Kunden, nach Umsatz sortiert   ?  xtstat / "*2*"
+?                                                        ?  xtstat / "*2*"
+?                        Artikel, nach Umsatz sortiert   ?  xtstat / "*3*"
+?                                                        ?  xtstat / "*3*"
+.menu AuswÑhlen
+Umsatzstatistik Kunden/Artikel                    >>  .formula xtstat = xtstat + "1"
+Kunden, nach Umsatz sortiert                      >>  .formula xtstat = xtstat + "2"
+Artikel, nach Umsatz sortiert                     >>  .formula xtstat = xtstat + "3"
+Verarbeitung starten                              >>  .continue VA0
+Wechsel des Ausgabemediums: 'xtger             '  >>  .continue G1
+?AusgabewÑhrung,  z.Zt. 'auswaehr '                >> .continue AWAEHR  ?  eurokurs > 0.0
+Beenden                                           >>  .continue BEENDEN
+..
+.continue BEENDEN  ?  F|empty(G|menue)
+.continue MENUE1
+..
+!VA0: wenn Keine Auswahl getroffen, wird das HauptmenÅ angezeigt
+.continue MENUE1   ?  _xtstat / "*(123)*"
+.formula xtsys = "touch " + xtda
+.system 'xtsys' background
+.select from 'xtda' xt1tmp
+.formula xbdw = mehr
+..
+.. Wenn die xtda-Datei nicht vorhanden ist, kann der Letztedruck nicht
+.. wiederholt werden
+..
+.continue VA1  ?  _xbdw
+.menu Letzten Druck wiederholen
+              Nein             >>  .formula xbdw = false
+              Ja               >>  .formula xbdw = true
+..
+.continue BEENDEN  ?  F|empty(G|menue)
+..
+!VA1
+.select from
+..
+..  Letzten Druck wiederholen -> die Var. xbdw = true
+..  Gelesen wird der 1. Satz der ST.AUSW.panummer Datei
+.select from 'xtda' xtwahl # xtvku # xtbku # xtvms # xtbms # xdate8 # xdate81 # xyw
+.formula xdvon=xdate8
+.formula xdbis=xdate81
+.output terminal
+                                   Statistiken
+
+?                        Umsatzstatistik Kunden/Artikel  ?  xtstat / "*1*"
+?                                                        ?  xtstat / "*1*"
+?                         Kunden, nach Umsatz sortiert   ?  xtstat / "*2*"
+?                                                        ?  xtstat / "*2*"
+?                        Artikel, nach Umsatz sortiert   ?  xtstat / "*3*"
+?                                                        ?  xtstat / "*3*"
+?                     Der letzte Druck wird in der Einheit    ?   xbdw  &  eurokurs > 0
+?                      des letzten Laufes wiederholt ('xyw')  ?   xbdw  &  eurokurs > 0
+..
+!FRAGE1:
+.continue FRAGE2 ? _xtstat/"*/1/*"
+.continue FRAGE2 ? xbdw
+.menu
+Monatlich          >>  .formula xtwahl = "M"
+Kumuliert          >>  .formula xtwahl = "K"
+Vorheriges MenÅ    >>  .continue MENUE0
+..
+?                                   monatlich  ?  xtwahl = "M"
+?                                   kumuliert  ?  xtwahl = "K"
+
+..
+!FRAGE2:
+.continue FRAGE3 ? _xtstat/"*/1/*"
+..
+!AKUNDE
+.read "von Kunde " xtvku ? _xbdw
+.continue AKUNDE ? XTVKU / "\?"
+.formula xtvku="A" ? xtvku=""
+.formula xtvsu="A" ? xtvku="A"
+  von Kunde: 'xtvku'
+.formula xbn  xtvku/"(09)*" ; (xtvku/"(09)*" & xtvku/"*(AZ)*")
+.continue EKUNDE  ? xtvku="A"
+.select customer 'xtvku'
+?Kunde 'xtvku' nicht vorhanden ? _mehr
+.continue AKUNDE   ? _mehr
+.formula T|xtvsu = H|such
+.formula T|xtvku = H|such ? _xbn
+..
+!EKUNDE
+.read "bis Kunde " xtbku ? _xbdw
+.formula xbnn  xtbku/"(09)*" ; (xtbku/"(09)*" & xtbku/"*(AZ)*")
+.continue EKUNDE ? XTBKU / "\?"
+.formula xtbku="ZZZZZZZZ" ? xtbku = "" & _xbn
+.formula xtbku="99999999" ? xtbku = "" & xbn
+.formula xtbsu="ZZZZZZZZ" ? xtbku="ZZZZZZZZ"
+  bis Kunde: 'xtbku'
+?Bitte Identnummer eingeben       ? xbn & _xbnn & xtbku <> "99999999"
+?Bitte Suchwort eingeben          ? _xbn & xbnn & xtbku <> "ZZZZZZZZ"
+.continue EKUNDE ? (xbn & _xbnn & xtbku <> "99999999") ; (_xbn & xbnn & xtbku <> "ZZZZZZZZ")
+.continue SKUNDE ? xtbku="99999999" ; xtbku="ZZZZZZZZ"
+.select customer 'xtbku'
+?Kunde 'xtbku' nicht vorhanden ? _mehr
+.continue EKUNDE   ? _mehr
+.formula T|xtbsu = H|such
+.formula T|xtbku = H|such ? _xbn
+.formula T|xtbku = H|num  ? xbn
+..
+!SKUNDE
+?Obergrenze kleiner als Untergrenze, bitte neu wÑhlen! ? xtbku < xtvku & _xbn
+.continue FRAGE2 ? xtbku < xtvku & _xbn
+.continue FRAGE3  ? _xbn
+..
+.select customer "!" ? xtvku="A" ; xtbku = "99999999" ; xtbku="ZZZZZZZZ"
+.formula xtvon = "----------------------" + xtvku
+.formula xtvon = xtvon>> +H|nummerb
+.formula xtbis = "----------------------" + xtbku
+.formula xtbis = xtbis>> +H|nummerb
+?Obergrenze kleiner als Untergrenze, bitte neu wÑhlen! ? xtbis < xtvon
+.continue FRAGE2 ? xtbis < xtvon
+..
+!FRAGE3:
+..  eventuell weitere Auswahlkriterien
+..  normalleweise wird "xanf" und "xend" in ZEITRAUM belegt,
+..  bei Druckwiederholung allerdings steht der Zeitraum in "xdvon" und "xdbis"
+..
+.formula xanf = xdvon  ?  xbdw
+.formula xend = xdbis  ?  xbdw
+.continue FRAGE5    ?  xbdw
+..
+!FRAGE4: Zeitraum abfragen
+.input ZEITRAUM
+.formula xdvon = xanf
+.formula xdbis = xend
+..
+!FRAGE5: wenn letzten Druck wiederholen (xbdw = true) wird, wird es FRAGE4
+....      Åbersprungen. Nachfolgende Bildschirmausgabe nur bei Druckwiederholung
+?Zeitraum 'xdvon' bis 'xdbis'  ?  xbdw
+?                              ?  xbdw
+.type date xyindate xyoutdate
+.formula xyindate = xanf
+.input DATUM.JAHR
+.formula xdvvon   = xyoutdate
+..
+.formula xyindate = xend
+.input DATUM.JAHR
+.formula xdvbis   = xyoutdate
+..
+Vorjahr  'xdvvon' bis 'xdvbis'
+
+..
+..  Mit EXCEL Ausgabe nur wenn DB_Var dde = true
+.formula xybmit = false
+.formula xytlgp = "STATISTIK"
+.input DDE.MENUE  ?  dde  &  (xtstat / "*2*"  ;  xtstat / "*3*")
+..
+.read "Umsatzstatistik Kunden/Artikel: Anzahl Drucke " xiaud ? xtstat/"*1*"
+.read "Kunden, nach Umsatz sortiert: Anzahl Drucke "   xiukd ? xtstat/"*2*"
+.read "Artikel, nach Umsatz sortiert: Anzahl Drucke "  xiuad ? xtstat/"*3*"
+'txname': Selektieren der Daten lÑuft...
+
+.formula xiaud=1 ? xiaud=0
+.formula xiukd=1 ? xiukd=0
+.formula xiuad=1 ? xiuad=0
+.formula xiumd=1 ? xiumd=0
+.formula xibpd=1 ? xibpd=0
+..
+..  Satz in ST.AUSW.panummer speichern. Datei bei "Druck wiederholen" verwenden
+..  xtwahl - monatlich(M) / kumuliert(K), default ist monatlich
+..  xtvku - von Kunde, xtbku - bis Kunde
+..  xtvms - Textvar. leer, xtbms- Textvar. leer, Datum von bis: xdvon xdbis
+..
+.formula xtwahl = "M"  ?  xtwahl = ""
+.output new 'xtda'
+.input "DATEI.F"
+..
+..  brauche nicht zu schreiben, wenn Druckwiederholung
+?'xtwahl' # 'xtvku' # 'xtbku' # 'xtvms' # 'xtbms' # 'xdvon:8' # 'xdbis:8' # 'auswaehr'  ? _xbdw
+..
+..  UPRO: ABLAGE starten -> es wird die Datei ABL.DAT (xtdo) erzeugt/ergÑnzt
+.input 'xtabla'
+..
+........von/bis Monat, Artikelgruppe ermitteln
+.formula xdate8 = xdvon:8
+.formula xdate8 = (xdate8 << 6) >> 2
+.formula xivm   = xdate8
+.formula xdate8 = xdbis:8
+.formula xdate8 = (xdate8 << 6) >> 2
+.formula xibm   = xdate8
+..
+........letzten Druck wiederholen? -> xbdw = true
+.continue DRUCK  ?  xbdw
+..
+..  Daten aus ABL.DAT verarbeiten
+..  xtdf -> STAT.panummer, alle Treffer speichern
+..  xtdo -> ABL.DAT
+.select from
+.occupy 'xtdo'
+.output new 'xtdf'
+..
+!HA: von sk/ABL.DAT holen
+.select from 'xtdo' xtasa # xtren # xtknr # xtksu # xdate8 # xrpw # xtanr # xtasu # xrmge # xtle # xyw
+.continue DRUCK  ? _mehr
+.formula xtdre=xdate8
+.formula xtdbis = 'xdbis:8'
+.formula xtdvvon = 'xdvvon:8'
+.formula xtdvbis = 'xdvbis:8'
+.formula xtdvon = 'xdvon:8'
+.formula xtms="00"
+..
+..  Datum PrÅfen
+.continue HA  ?  xtdre < xtdvvon ; xtdre > xtdbis
+.continue HA  ?  xtdre > xtdvbis & xtdre < xtdvon
+..
+..  Springen  wenn nicht Pkt 1 im HauptmenÅ gewÑhlt wurde
+.continue HA1 ? _xtstat/"*/1/*"
+..
+..  xbn = true -> Numerneingabe bei Kunde, Kundenbereich wird getestet
+.continue HA  ? _xbn & (xtksu < xtvku ; xtksu > xtbku)
+.continue HA  ? _mehr & (xtksu < xtvsu ;  xtksu > xtbsu)
+..
+.formula xtnknr= "----------------------" + xtknr  ? xbn
+.formula xtnknr= xtnknr>> +H|nummerb               ? xbn
+..
+.continue HA  ? mehr  & xbn  & (xtvon > xtnknr ; xtbis < xtnknr)
+..
+!HA1
+..  noch kein Euro bekannt, InlandswÑhrung eindeutig
+.continue BOSTON  ?  eurokurs = 0.0
+..
+..  AusgabewÑhrung und VorgangswÑhrung identisch
+.continue BOSTON  ?  xyw = auswaehr
+..
+..  Umrechnen in gewÑhlte WÑhrung
+.formula xrpw = xrpw / eurokurs  ?  xyw = ainland
+.formula xrpw = xrpw * eurokurs  ?  xyw = ninland
+..
+!BOSTON: AUSGABE auf STAT.panummer (geholt von sk/ABL.DAT)
+?'xtknr'#'xtksu'#'xtdre'#'xtanr'#'xtasu'#'xrmge'#'xrpw'#0.00#0.00#0.00#0.00#'xtms'#'xtle'# ? xtdre >= xtdvon
+?'xtknr'#'xtksu'#'xtdre'#'xtanr'#'xtasu'#0.00#0.00#'xrmge'#'xrpw'#0.00#0.00#'xtms'#'xtle'# ? xtdre <= xtdvbis
+.continue HA
+..
+!DRUCK:
+.occupy
+..  in die Var. q wird die WÑhrung aus dem Firmenstamm - Konfig. geladen
+..  Diese Var. wird in Kopf Åberschriften verwendet
+.formula q = xyw       ?  xbdw
+.formula q = inland    ? _xbdw & eurokurs = 0.0
+.formula q = auswaehr  ? _xbdw & eurokurs > 0.0
+..
+.continue DRUCK2 ? _xtstat/"*1*"
+.up
+.down
+.output 'geraet'
+.print 'xiaud'
+.input BLANKOB.F
+.input 'xtaums'
+.output terminal ...  ?   geraet  = ""
+..
+!DRUCK2: Kunden (mit EXCEL)
+.continue DRUCK3 ? _xtstat/"*2*"
+.up
+.down
+.output 'geraet'
+.print 'xiukd'
+.input BLANKOB.F
+.input 'xtbstk'
+..
+!DRUCK3: Artikel (mit EXCEL)
+.continue DRUCK4 ? _xtstat/"*3*"
+.up
+.down
+.output 'geraet'
+.print 'xiuad'
+.input BLANKOB.F
+.input 'xtbsta'
+..
+!DRUCK4:
+.continue START
+..
+!BEENDEN
+.end .
+..
+..  *** WAEHRUNG ***
+!AWAEHR: AusgabewÑhrung bestimmen
+..
+.input IWAEHRWAHL
+.set outcurr 'xxwaehr'
+.continue MENUE1
+..  *** WAEHRUNG - Ende ***

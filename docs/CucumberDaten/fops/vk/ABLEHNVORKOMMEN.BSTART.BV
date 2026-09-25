@@ -1,0 +1,87 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ABLEHNVORKOMMEN.BSTART.BV
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Validiert Eingaben, formuliert DB-Anfrage und setzt Stufen.
+.. Functionality  : Validates inputs, creates query and sets levels.
+..*****************************************************************************
+.set trans -
+..
+.. Validate input fields
+.continue ERROR00 ? _M|chko & _M|vkanko
+.continue ERROR01 ?  M|chko &  M|vkanko
+.continue ERROR02 ? _F|equals(M|ablageart, "(Active)") & F|empty(M|vkpartner) & F|empty(M|betreuer)
+.continue ACTIVE  ? F|empty(M|vomvom) ; F|empty(M|vombis)
+.continue ERROR04 ? M|vomvom > M|vombis
+.continue START
+..
+!ACTIVE: bl needs no period if filing mode is active
+.continue CHDATE ? F|equals(M|ablageart, "(Active)")
+.continue ERROR03
+..
+!CHDATE: Checkdate
+.continue ERROR04 ? _(F|empty(M|vomvom) ; F|empty(M|vombis)) & M|vomvom > M|vombis
+..
+!START: Which start or end level?
+.assign M|aktvktyp = ""
+..
+.. Reset query
+.formula M|preselect = "$,,"
+..
+.. Which partner?
+.continue PERIOD ? F|empty(M|vkpartner)
+.formula M|preselect = F|formatstr("{1};kl={2}", M|preselect, M|vkpartner^id)
+..
+!PERIOD: Which period?
+.continue STAFFER ? F|empty(M|vomvom) & F|empty(M|vombis)
+.formula M|preselect = F|formatstr("{1};vom={2}!{3}", M|preselect, M|vomvom:8, M|vombis:8)
+..
+!STAFFER: Which staff personnel?
+.continue FILING ? F|empty(M|betreuer)
+.formula M|preselect = F|formatstr("{1};betreuer={2}", M|preselect, M|betreuer^id)
+..
+!FILING: Which filing mode?
+.formula M|preselect = F|formatstr("{1};@ablageart={2}", M|preselect, F|value(M|ablageart, "AS193"))
+..
+.. Which document type?
+.continue OPPORTY ? M|chko
+.continue OFFER   ? M|vkanko
+.continue ERROR00
+..
+!OPPORTY: Complete query for opportunities
+.assign M|aktvktyp = M|chkotxt
+.continue TYPE
+..
+!OFFER: Complete query for offers
+.assign M|aktvktyp = M|vkankotxt
+..
+!TYPE
+.formula M|preselect = M|preselect + F|formatstr(";typ=={1}", M|aktvktyp)
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR00: Type of document is missing
+.error -line 0 -field M|chko -message Es fehlt die Angabe mindestens einer Belegart!
+.continue BREAK
+..
+!ERROR01: Only one type of document is neccessary
+.error -line 0 -field M|chko -message Es ist nur eine Belegart zul„ssig!
+.continue BREAK
+..
+!ERROR02: Partner is missing
+.error -line 0 -field M|vkpartner -message Es fehlt die Angabe des Gesch„ftspartners oder Betreuers!
+.continue BREAK
+..
+!ERROR03: Period is incomplete
+.error -line 0 -field M|vomvom -message Zeitraum ist nicht vollst„ndig
+.continue BREAK
+..
+!ERROR04: Period is illegal
+.error -line 0 -field M|vomvom -message Zeitraum ist falsch, bitte korrigieren
+..
+!BREAK
+.end 1

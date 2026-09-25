@@ -1,0 +1,125 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : MONBER.TAB
+.. Autor/Author   : dr/cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Monatsbericht nach L„ndern bzw. Inland/Ausland getrennt
+..                  um eine direkte šbernahme der Umsatzwerte in das Formular
+..                  "Monatsbericht fr Betriebe" zu erm”glichen, wird
+..                  der Umsatz nun in drei Rubriken berechnet:
+..                  1.: Inlandsumsatz (Umsatz im gesamten Bundesgebiet)
+..                  2.: Auslandsumsatz ingesamt
+..                  3.: Aus 2.: Ums„tze mit dem NICHT zur Eurozone geh”renden
+..                      Ausland
+..*****************************************************************************
+.set trans -
+.type integer xizeile      ? _F|defined(U|xizeile)
+.type integer xikz         ? _F|defined(U|xikz)
+.type bool    xbeuro       ? _F|defined(U|xbeuro)
+.type bool    xbverkauf    ? _F|defined(U|xbverkauf)
+.type text    xlaart1      ? _F|defined(U|xlaart1)
+.type text    xlaart2      ? _F|defined(U|xlaart2)
+.type text    xlaart3      ? _F|defined(U|xlaart3)
+.type text    xtland       ? _F|defined(U|xtland)
+.type text    xtzwi        ? _F|defined(U|xtzwi)
+.type text    xtsys        ? _F|defined(U|xtsys)
+.type text    xtlname      ? _F|defined(U|xtlname)
+.type text    x1           ? _F|defined(U|x1)
+.type realx   xrkurs       ? _F|defined(U|xrkurs)
+.type real    xrwert       ? _F|defined(U|xrwert)
+.type real    xrsum        ? _F|defined(U|xrsum)
+..
+.continue SORT    ? U|xbverkauf
+..
+!BEURO: Alle L„nder, die keine EUR-W„hrung in der L„ndertabelle ('laniw'
+..      oder 'laiw') haben, z„hlen zu Punkt 3
+..
+.copy U|xbeuro  = G|FALSE
+.copy U|xbeuro  = G|TRUE   ? H|vstaat^laniw = "EUR"
+.continue KURS ? U|xbeuro
+.copy U|xbeuro  = G|TRUE   ? H|vstaat^laniw = "" & H|vstaat^laiw = "EUR"
+..
+!KURS
+.formula U|xrkurs = H|kurs
+.formula U|xtland = H|vstaat^kenn
+..
+!HZ
+.select line
+.continue         ? _G|mehr
+.continue HZ      ? H|typ = G|zspos ; H|typ = G|stpos ; H|typ = G|supos ; H|typ = G|espos
+.continue HZ      ? H|mge = 0.0 & H|pwert = 0.0
+.. USt/VSt-Position (inklusive) = 51 = sipos
+.formula U|xrwert = (H|pwert / U|xrkurs) * -1 ? H|typ = G|sipos
+.continue SIPO                                ? H|typ = G|sipos
+.formula U|xrwert = H|pwert / U|xrkurs
+..
+!SIPO
+.formula U|xtzwi = "*," + U|xtland + ",*"
+.output addedto 'U|xtd1'
+.input "DATEI.F"
+?1#'U|xtland'#'U|xrwert'#  ? U|xtland = U|xtin
+?2#'U|xtland'#'U|xrwert'#  ? U|xteg / U|xtzwi
+?3#'U|xtland'#'U|xrwert'#  ? U|xteg / U|xtzwi & _U|xbeuro & M|biea
+.continue HZ
+..
+!SORT
+.output new "WERF.WEG"
+.formula U|xtsys = "sort -t# +0 -1 -o " + U|xtd1 + " " + U|xtd1    ? M|biea
+.formula U|xtsys = "sort -t# +1 -2 -o " + U|xtd1 + " " + U|xtd1    ? M|bland
+.system 'U|xtsys' background
+..
+.formula U|xtsys = "verdmonber1.sh " + U|xtd1 + " > " + U|xtd2     ? M|biea
+.formula U|xtsys = "verdmonber2.sh " + U|xtd1 + " > " + U|xtd2     ? M|bland
+.system 'U|xtsys' background
+..
+.formula U|xrsum   = 0
+.formula U|xizeile = 1
+..
+!HOL
+.select from 'U|xtd2' U|xikz # U|xtland # U|xrwert #
+.continue SUM           ? _G|mehr
+.continue IEA           ? M|biea
+.formula U|xtlname = ""
+.formula U|xtkey   = "$,,kenn==" + 'U|xtland' + ";@ablageart=(Active);@gruppe=1"
+.select regions 'U|xtkey'
+.formula U|xtlname = H|rnamebspr   ? G|mehr
+.formula U|x1      = U|xtland
+..
+.make screen line +O
+.formula M|kenn   = U|x1
+.formula M|rname  = U|xtlname
+.formula M|umsatz = 'U|0xrwert'
+.formula U|xrsum  = U|xrsum + U|xrwert
+.continue HOL
+..
+!IEA
+.set trans +
+.formula U|xlaart1 = "Inland"
+.formula U|xlaart2 = "Ausland"
+.formula U|xlaart3 = "Ausland ohne Euro"
+.set trans -
+.make screen line +O                     ? U|xizeile = 1
+.formula M|laart  = U|xlaart1            ? U|xizeile = 1
+.formula M|umsatz = 'U|0xrwert'          ? U|xizeile = 1
+..
+.make screen line +O                     ? U|xizeile = 1
+.select screen line 2                    ? U|xizeile = 2
+.formula M|laart  = U|xlaart2            ? U|xizeile = 1
+.formula M|umsatz = 'U|0xrwert'          ? U|xizeile = 2
+..
+.make screen line +O                     ? U|xizeile = 1
+.select screen line 3                    ? U|xizeile = 3
+.formula M|laart  = U|xlaart3            ? U|xizeile = 1
+.formula M|umsatz = 'U|0xrwert'            ? U|xizeile = 3
+.formula U|xizeile  = U|xizeile  + 1
+.formula U|xrsum    = U|xrsum + U|xrwert
+.continue HOL
+..
+!SUM
+.continue END ? M|biea
+.select screen header
+.formula M|gesumsatz = 'U|0xrsum'
+..
+!END
+.continue

@@ -1,0 +1,119 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name        : TRANS.EV
+..  Autor           : fwester
+..  Verantwortlich  : fwester
+..  Kontrolle       : cl
+..  Funktion        : Steuert die Funktionalitaet des Infosystems TRANS auf Grund
+..  von Ereignissen, die an Maskenelementen auftreten.
+..  Ablauf          : Ereignis-EFOP folgender Maskenvariablen:
+..      --> Button-nach-Ereignis auf Taste "butransall"
+..          Uebersetzt einfach alles.
+..      --> Button-nach-Ereignis auf Taste "bufolangen"
+..          Wechselt die FO-Sprache von Deutsch zu Englisch.
+..      --> Feldaustrittsereignis auf Schalter "toolmode"
+..          Schalter zur ein-/ausschalten des Werkzeugmodus.
+..      --> Feldaustrittsereignis auf Zeichensatz-Schaltern
+..          Verhindert falsche Einstellungen bei der Zeichensatzwahl.
+..      --> Feldaustrittsereignis auf Textfeld "filename"
+..          Prueft, ob Verzeichnis oder Datei vorhanden sind.
+..
+..  Functionality   : Controls the functionality of the infosystem TRANS while
+..  events are occuring at mask parameters.
+..  Program flow    : Event efop of the following mask parameters:
+..      --> Button after event at button "butransall"
+..          Will translate all.
+..      --> Button after event at button "bufolangen"
+..          Will change the language of FO from German to English.
+..      --> Field exit event at "toolmode"
+..          Will turn on/off the tool mode.
+..      --> Field exit event for charset selection
+..          Will avoid false configuration of the charset selection.
+..      --> Field exit event at "filename"
+..          Will check if the mentioned file or directory exists.
+...Includes                     :
+.. include sy/TRANS.SET.PROTECT
+..*****************************************************************************
+.set trans -
+..--------------------------------- Header:  ----------------------------------
+.continue TRANSALL ? G|evtartengl = "BUTTON_AFTER"     &  G|evtvar = "butransall"
+.continue FOCMMND  ? G|evtartengl = "BUTTON_AFTER"     &  G|evtvar = "bufolangen"
+.continue TOOL     ? G|evtartengl = "FIELD_EXIT"       &  G|evtvar = "toolmode"
+.continue CHARUTF  ? G|evtartengl = "FIELD_EXIT"       &  G|evtvar = "charsetutf16"
+.continue CSVFORM  ? G|evtartengl = "FIELD_EXIT"       &  G|evtvar = "csvformat"
+.continue FILE     ? G|evtartengl = "FIELD_VALIDATION" &  G|evtvar = "filename"
+.. --------------------------------- Table: -----------------------------------
+.continue END
+..
+!TRANSALL: Short cut for translation of all elements
+.formula M|cmd = "trans.sh -A " + M|log
+.continue EXEC
+..
+!FOCMMND: Short cut for translation of FO commands
+.formula M|cmd = "trans.sh -F ALL " + M|log
+.continue EXEC
+..
+!TOOL: Set or reset protection while tool mode was clicked
+.formula M|category = "DICTION"
+.input "sy/TRANS.SET.PROTECT"
+.continue END
+..
+!CHARUTF: Handle charset UTF
+.copy M|csvformat = G|FALSE
+.continue END
+..
+!CSVFORM: Handle csv format
+.copy M|charsetutf16 = G|FALSE
+.continue END
+..
+!FILE: Check name of file
+.continue END ? F|empty(M|filename)
+.continue FOPONE ? M|fopone
+.continue FOPARB ? M|foparb
+.continue FATAL
+..
+!FOPONE
+.continue ERROR1 ? _F|fileexists(F|expr(M|clientdir + "/" + M|filename))
+.continue ERROR1 ?  F|isdir(F|expr(M|clientdir + "/" + M|filename))
+.continue END
+!FOPARB
+.continue ERROR4 ? _F|isdir(F|expr(M|clientdir + "/" + M|filename))
+.continue END
+..
+!EXEC
+.set cancel -
+.system 'M|cmd'
+.continue ERROR2 ? _G|mehr
+.set cancel +
+..****************************************************************************
+!END
+.continue
+..****************************************************************************
+..
+!ERROR1
+.error -line 0 -field M|filename -message Der angegebene Dateiname 'M|filename' wurde nicht gefunden!
+.end 1
+..
+!ERROR2
+.type text xerror
+.set trans +
+.formula U|xerror = "Fehler beim öbersetzen. Protokoll beachten!" ? G|evtvar = "butransall"
+.formula U|xerror = "Fehler beim Kommandos Åbersetzen. Protokoll beachten!" ? G|evtvar = "bufolangen"
+.set trans -
+.continue NOFATAL
+..
+!ERROR3
+.error -message 'U|xfop' ist gesperrt! Aktion jetzt nicht mîglich!
+.end 1
+..
+!ERROR4
+.error -line 0 -field M|filename -message Der angegebene Verzeichnisname 'M|filename' wurde nicht gefunden!
+.end 1
+..
+!NOFATAL
+.error -message 'U|xerror'
+.end 1
+..
+!FATAL
+.error -number 1111
+.end 1

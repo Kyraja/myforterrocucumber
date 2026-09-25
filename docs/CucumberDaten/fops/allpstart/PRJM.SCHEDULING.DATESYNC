@@ -1,0 +1,186 @@
+..!interpreter english declaration noabbrev
+.. at 2017-05-02, 13:56
+.set trans -
+..========================================================================
+..==  Name              : PRJM.SCHEDULING.DATESYNC
+..==  Pfad              : allpstart
+..==  Funktion          : Start der Disposition und
+..==                      Abgleich der Termine Fertigungsvorschlag <> Projektvorgang und Bestellvorschlag/Bestellung <> Projektvorgang
+..==                      wird U|xtprojekt Åbergeben werden nur die VorgÑnge des Projektes aktualisiert
+..==
+..==  Erstellungsdatum  : 14.10.2013
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2015 alltrotec GmbH
+..==  Besonderheiten    :
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF"
+..====================================================
+.type text    xtsel     ? _F|defined(U|xtsel)
+.type text    xtsys     ? _F|defined(U|xtsys)
+.type text    xtprojekt ? _F|defined(U|xtprojekt)
+.type text    xtedpdat  ? _F|defined(U|xtedpdat)
+.type text    xtedpout  ? _F|defined(U|xtedpout)
+.type text    xtedpmsg  ? _F|defined(U|xtedpmsg)
+.type text    xtedperr  ? _F|defined(U|xtedperr)
+.type GD      xdstart   ? _F|defined(U|xdstart)
+.type GD      xdende    ? _F|defined(U|xdende)
+.type bool    xbmehr    ? _F|defined(U|xbmehr)
+.type bool    xberror   ? _F|defined(U|xberror)
+.type integer xprocsp   ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- ProjektvorgangAktualisieren -----
+.continue EL001 ? _((_(0|yiststart = U|xdstart)) ; (_(0|yistend   = U|xdende)))
+.select lock nowait add 0|id
+.continue EL002 ? _(G|mehr)
+.continue EL003 ? _(G|gesperrt)
+.copy H|yiststart = U|xdstart
+.copy H|yistend   = U|xdende
+.rewrite
+.select -
+.continue FI003
+!EL003
+.set TRANS +
+.box Fehler
+Der Projektvorgang konnte nicht geîffnet werden.
+Aktualisierung der Termine ist fehlgeschlagen.
+
+Bitte prÅfen Sie den Projektvorgang '0|nummer'/'0|such'.
+.set TRANS -
+.copy U|xberror = G|TRUE
+!FI003
+.continue FI002
+!EL002
+.set TRANS +
+.box Fehler
+Der Projektvorgang konnte nicht geîffnet werden.
+Aktualisierung der Termine ist fehlgeschlagen.
+
+Bitte prÅfen Sie den Projektvorgang '0|nummer'/'0|such'.
+.set TRANS -
+.copy U|xberror = G|TRUE
+!FI002
+!EL001
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.copy U|xberror = G|FALSE
+.continue EL004 ? _(_(G|evtart = "maskende"))
+.file -TEMPNAME U|xtedpdat
+.file -TEMPNAME U|xtedpout
+.file -TEMPNAME U|xtedpmsg
+.file -TEMPNAME U|xtedperr
+.output NEW 'U|xtedpdat'
+.input DATEI.F
+#!EDP_LANGCODE='G|bsprache'
+param
+;
+.output NEW WERF.WEG
+.formula U|xtsys = "edpimport.sh -a DO -b " + G|apostroph + "(Scheduling)" + G|apostroph
+.formula U|xtsys = U|xtsys + " -p " + G|einmalpw
+.formula U|xtsys = U|xtsys + " -H " + U|xtedpmsg
+.formula U|xtsys = U|xtsys + " -I " + U|xtedpdat
+.formula U|xtsys = U|xtsys + " > "  + U|xtedpout
+.formula U|xtsys = U|xtsys + " 2> " + U|xtedperr
+.input "allpstart/FOP.ALL.EDP.CHECK"
+.copy U|xberror = U|xbfehler
+!EL004
+.formula U|xtsel = "$,,
+.formula U|xtsel = U|xtsel + ";yprojekt==" + U|xtprojekt                ? _F|empty(U|xtprojekt)
+.formula U|xtsel = U|xtsel + ";yistblatt==1;yreftypk<>`;yablage==0;@filingmode=(Active)"
+.load 0 group 'U|xydbgrpvorgang' 'U|xtsel'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL005 ? _((0|yreftypk = "02") & (F|regmatch(0|yrefid, ".*,4,.*")))
+.load 9 group "4:5" '0|yrefid'
+.continue EL006 ? _(G|mehr)
+.formula U|xdstart = 9|tsterm
+.formula U|xdende  = 9|fterm
+.formula U|xdende  = 9|tterm   ? 'U|xdende' = ""
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.continue FI006
+!EL006
+.select lock nowait add 0|id
+.continue EL007 ? _(G|mehr)
+.continue EL008 ? _(G|gesperrt)
+.formula H|yrefid = ""
+.rewrite
+.select -
+.continue FI008
+!EL008
+.set TRANS +
+.box Fehler
+Der Projektvorgang konnte nicht geîffnet werden.
+Aktualisierung der Termine ist fehlgeschlagen.
+
+Bitte prÅfen Sie den Projektvorgang '0|nummer'/'0|such'.
+.set TRANS -
+.copy U|xberror = G|TRUE
+!FI008
+.continue FI007
+!EL007
+.set TRANS +
+.box Fehler
+Der Projektvorgang konnte nicht geîffnet werden.
+Aktualisierung der Termine ist fehlgeschlagen.
+
+Bitte prÅfen Sie den Projektvorgang '0|nummer'/'0|such'.
+.set TRANS -
+.copy U|xberror = G|TRUE
+!FI007
+!FI006
+.continue FI005
+!EL005
+.continue EL009 ? _(0|yreftypk = "04")
+.copy U|xbmehr = G|FALSE
+.formula U|xtsel = "$,,yprjmppvorgang==" + 0|id
+.formula U|xtsel = U|xtsel + ";kotyp<>(Request);kotyp<>(PackingSlip);kotyp<>(Invoice)"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 9 group "4:2" 'U|xtsel'
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.continue EL010 ? _(F|empty(9|kotyp))
+.formula U|xdstart = 9|tsterm   ? (9|tsterm < U|xdstart ; F|empty(U|xdstart)) & _'9|tsterm' = ""
+.formula U|xdende  = 9|tterm    ? (9|tterm  > U|xdende  ; F|empty(U|xdende))  & _'9|tterm'  = ""
+!EL010
+.continue EL011 ? _('9|kotyp(L=":")' = "(PurchaseOrder)")
+.formula U|xdstart = 9|kovom    ? (9|kovom  < U|xdstart ; F|empty(U|xdstart)) & _'9|kovom' = ""
+.formula U|xdende  = 9|tterm    ? (9|tterm  > U|xdende  ; F|empty(U|xdende))  & _'9|tterm' = ""
+!EL011
+.load 9 continue
+.continue LOOP002
+!ELOP002: ==============================
+.continue EL012 ? _(U|xbmehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+!EL012
+!EL009
+!FI005
+.load 0 continue
+.continue LOOP001
+!ELOP001: ==============================
+.continue EL013 ? _(_(G|evtart = "maskende"))
+.continue EL014 ? _(U|xberror)
+.set trans +
+.box Fehler
+Beim Abgleich der Termine sind Fehler aufgetreten.
+.set trans -
+.continue FI014
+!EL014
+.set trans +
+.box Hinweis
+Der Abgleich der Termine ist erfolgt.
+.set trans -
+!FI014
+!EL013
+.continue

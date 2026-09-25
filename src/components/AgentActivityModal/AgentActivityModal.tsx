@@ -9,9 +9,11 @@
  *
  * @exports AgentActivityModal (default)
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AgentRun } from '../../types/fop';
+import { useTranslation } from '../../i18n';
 import styles from './AgentActivityModal.module.css';
+import { WorkflowTimeline } from '../WorkflowTimeline/WorkflowTimeline';
 
 import type { SavedConversation } from '../../hooks/useAgentActivity';
 
@@ -37,28 +39,17 @@ function ElapsedTimer({ startedAt }: { startedAt: number }) {
   return <span>{m > 0 ? `${m}m ${s % 60}s` : `${s}s`}</span>;
 }
 
-function statusLabel(status: AgentRun['status'], lang: 'de' | 'en'): string {
-  const map: Record<AgentRun['status'], [string, string]> = {
-    running: ['Läuft', 'Running'],
-    done:    ['Abgeschlossen', 'Done'],
-    error:   ['Fehler', 'Error'],
-    idle:    ['Inaktiv', 'Idle'],
-    paused:  ['Pausiert', 'Paused'],
-  };
-  return map[status][lang === 'de' ? 0 : 1];
-}
-
 export default function AgentActivityModal({ run, agentLabel, description, savedConversations, onDeleteSaved, onClose, onStop, lang }: AgentActivityModalProps) {
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const [showRawInput, setShowRawInput] = useState(false);
+  const { t } = useTranslation();
+  const statusLabelMap: Record<AgentRun['status'], string> = {
+    running: t('agentActivity.status.running'),
+    done: t('agentActivity.status.done'),
+    error: t('agentActivity.status.error'),
+    idle: t('agentActivity.status.idle'),
+    paused: t('agentActivity.status.paused'),
+  };
   const [activeTab, setActiveTab] = useState<'activity' | 'history' | 'description'>('activity');
   const [selectedSaved, setSelectedSaved] = useState<SavedConversation | null>(null);
-  const [showSavedInput, setShowSavedInput] = useState(false);
-
-  // Auto-scroll chat to bottom on new output
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [run?.outputSoFar, run?.history.length]);
 
   const handleOverlay = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) onClose();
@@ -83,7 +74,7 @@ export default function AgentActivityModal({ run, agentLabel, description, saved
               {isRunning && <span className={styles.spinner} />}
               {status === 'done' && '✓ '}
               {status === 'error' && '✗ '}
-              {statusLabel(status, lang)}
+              {statusLabelMap[status]}
             </span>
           </div>
           <div className={styles.headerRight}>
@@ -103,7 +94,7 @@ export default function AgentActivityModal({ run, agentLabel, description, saved
             className={`${styles.tab} ${activeTab === 'activity' ? styles.tabActive : ''}`}
             onClick={() => setActiveTab('activity')}
           >
-            {lang === 'de' ? 'Aktivität' : 'Activity'}
+            {t('agentActivity.activity')}
           </button>
           {savedConversations && savedConversations.length > 0 && (
             <button
@@ -111,7 +102,7 @@ export default function AgentActivityModal({ run, agentLabel, description, saved
               className={`${styles.tab} ${activeTab === 'history' ? styles.tabActive : ''}`}
               onClick={() => { setActiveTab('history'); setSelectedSaved(null); }}
             >
-              {lang === 'de' ? `Verlauf (${savedConversations.length})` : `History (${savedConversations.length})`}
+              {t('agentActivity.historyCount', { count: savedConversations.length })}
             </button>
           )}
           {description && (
@@ -120,7 +111,7 @@ export default function AgentActivityModal({ run, agentLabel, description, saved
               className={`${styles.tab} ${activeTab === 'description' ? styles.tabActive : ''}`}
               onClick={() => setActiveTab('description')}
             >
-              {lang === 'de' ? 'System-Prompt' : 'System Prompt'}
+              {t('agentActivity.systemPrompt')}
             </button>
           )}
         </div>
@@ -149,11 +140,11 @@ export default function AgentActivityModal({ run, agentLabel, description, saved
         {activeTab === 'history' && (
           <div className={styles.historyTab}>
             {selectedSaved ? (
-              // Detail view of a saved conversation
+              // Detail view of a saved conversation — uses Timeline
               <div className={styles.savedDetail}>
                 <div className={styles.savedDetailHeader}>
                   <button type="button" className={styles.backBtn} onClick={() => setSelectedSaved(null)}>
-                    ← {lang === 'de' ? 'Zurück' : 'Back'}
+                    ← {t('agentActivity.back')}
                   </button>
                   <span className={styles.savedDetailTitle}>{selectedSaved.title}</span>
                   <span className={styles.savedDetailMeta}>
@@ -161,30 +152,7 @@ export default function AgentActivityModal({ run, agentLabel, description, saved
                     {selectedSaved.durationMs && ` · ${(selectedSaved.durationMs / 1000).toFixed(1)}s`}
                   </span>
                 </div>
-                <div className={styles.chatBody}>
-                  {selectedSaved.inputSnapshot && (
-                    <div className={styles.msgSent}>
-                      <div className={styles.msgBubbleSent}>
-                        <div className={styles.msgMeta}>
-                          {lang === 'de' ? 'Gesendet' : 'Sent'} · <button type="button" className={styles.toggleRaw} onClick={() => setShowSavedInput(v => !v)}>
-                            {showSavedInput ? (lang === 'de' ? 'Einklappen' : 'Collapse') : (lang === 'de' ? 'Anzeigen' : 'Show')}
-                          </button>
-                        </div>
-                        {showSavedInput && <pre className={styles.msgPre}>{selectedSaved.inputSnapshot}</pre>}
-                        {!showSavedInput && <p className={styles.msgSummary}>{selectedSaved.title}</p>}
-                      </div>
-                    </div>
-                  )}
-                  {selectedSaved.outputSoFar && (
-                    <div className={styles.msgReceived}>
-                      <div className={styles.msgAvatar}>🤖</div>
-                      <div className={styles.msgBubbleReceived}>
-                        <div className={styles.msgMeta}>{lang === 'de' ? 'Antwort' : 'Response'}</div>
-                        <pre className={styles.msgPre}>{selectedSaved.outputSoFar}</pre>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                <WorkflowTimeline steps={selectedSaved.steps ?? []} lang={lang} autoScroll={false} />
               </div>
             ) : (
               // List of saved conversations (newest first)
@@ -194,7 +162,7 @@ export default function AgentActivityModal({ run, agentLabel, description, saved
                     <button
                       type="button"
                       className={styles.savedItemMain}
-                      onClick={() => { setSelectedSaved(conv); setShowSavedInput(false); }}
+                      onClick={() => { setSelectedSaved(conv); }}
                     >
                       <span className={styles.savedItemTitle}>{conv.title}</span>
                       <span className={styles.savedItemMeta}>
@@ -207,7 +175,7 @@ export default function AgentActivityModal({ run, agentLabel, description, saved
                         type="button"
                         className={styles.savedItemDelete}
                         onClick={() => onDeleteSaved(conv.id)}
-                        title={lang === 'de' ? 'Löschen' : 'Delete'}
+                        title={t('agentActivity.delete')}
                       >×</button>
                     )}
                   </div>
@@ -221,155 +189,32 @@ export default function AgentActivityModal({ run, agentLabel, description, saved
         {activeTab === 'description' && description && (
           <div className={styles.descriptionBody}>
             <p className={styles.descriptionHint}>
-              {lang === 'de'
-                ? 'Aktuell aktiver System-Prompt dieses Agents. Änderbar in den Einstellungen.'
-                : 'Currently active system prompt of this agent. Editable in settings.'}
+              {t('agentActivity.promptHint')}
             </p>
             <pre className={styles.descriptionPre}>{description}</pre>
           </div>
         )}
 
-        {/* ── Chat body ── */}
-        {activeTab === 'activity' && <div className={styles.chatBody}>
-
-          {/* No activity yet */}
-          {!run && (
-            <div className={styles.emptyChat}>
-              <span className={styles.emptyChatIcon}>🤖</span>
-              <p>{lang === 'de'
-                ? 'Noch keine Aktivität. Der Agent wurde noch nicht gestartet.'
-                : 'No activity yet. The agent has not been started.'}</p>
-            </div>
-          )}
-
-          {/* Completed exchanges (table identification, etc.) */}
-          {run?.exchanges?.map((ex, idx) => (
-            <div key={idx} className={styles.exchange}>
-              <div className={styles.msgSent}>
-                <div className={styles.msgBubbleSent}>
-                  <div className={styles.msgMeta}>{ex.label}</div>
-                  <pre className={styles.msgPre}>{ex.input}</pre>
-                </div>
-              </div>
-              {ex.output && (
-                <div className={styles.msgReceived}>
-                  <div className={styles.msgAvatar}>🤖</div>
-                  <div className={styles.msgBubbleReceived}>
-                    <div className={styles.msgMeta}>{lang === 'de' ? 'Antwort' : 'Response'}</div>
-                    <pre className={styles.msgPre}>{ex.output}</pre>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {/* Current active exchange (input + streaming output) */}
-          {run && (run.inputSnapshot || run.outputSoFar) && (
-            <div className={styles.exchange}>
-              {/* Sent message — right side */}
-              {run.inputSnapshot && (
-                <div className={styles.msgSent}>
-                  <div className={styles.msgBubbleSent}>
-                    <div className={styles.msgMeta}>
-                      {lang === 'de' ? 'Gesendet' : 'Sent'}
-                      {' · '}
-                      <button
-                        type="button"
-                        className={styles.toggleRaw}
-                        onClick={() => setShowRawInput(v => !v)}
-                      >
-                        {showRawInput
-                          ? (lang === 'de' ? 'Einklappen' : 'Collapse')
-                          : (lang === 'de' ? 'Prompt anzeigen' : 'Show prompt')}
-                      </button>
-                    </div>
-                    {showRawInput && (
-                      <pre className={styles.msgPre}>{run.inputSnapshot}</pre>
-                    )}
-                    {!showRawInput && (
-                      <p className={styles.msgSummary}>
-                        {run.currentItem
-                          ? (lang === 'de' ? `Feature: ${run.currentItem}` : `Feature: ${run.currentItem}`)
-                          : (lang === 'de' ? '(Kontext eingeklappt)' : '(Context collapsed)')}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Typing indicator — shown when running but no output yet */}
-              {isRunning && !run.outputSoFar && (
-                <div className={styles.msgReceived}>
-                  <div className={styles.msgAvatar}>🤖</div>
-                  <div className={styles.msgBubbleReceived}>
-                    <div className={styles.msgMeta}>
-                      {run.currentItem
-                        ? (lang === 'de' ? `Verarbeite: ${run.currentItem}` : `Processing: ${run.currentItem}`)
-                        : (lang === 'de' ? 'KI arbeitet…' : 'AI working…')}
-                    </div>
-                    <div className={styles.typingIndicator}>
-                      <span className={styles.typingDot1} />
-                      <span className={styles.typingDot2} />
-                      <span className={styles.typingDot3} />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Received message — left side */}
-              {run.outputSoFar && (
-                <div className={styles.msgReceived}>
-                  <div className={styles.msgAvatar}>🤖</div>
-                  <div className={styles.msgBubbleReceived}>
-                    <div className={styles.msgMeta}>
-                      {lang === 'de' ? 'Antwort' : 'Response'}
-                      {isRunning && (
-                        <span className={styles.streamingIndicator}>
-                          {lang === 'de' ? ' · schreibt…' : ' · writing…'}
-                        </span>
-                      )}
-                    </div>
-                    <pre className={styles.msgPre}>{run.outputSoFar}</pre>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* History — past exchanges */}
-          {run && run.history.length > 0 && (
-            <div className={styles.historySection}>
-              <div className={styles.historySeparator}>
-                {lang === 'de' ? `${run.history.length} abgeschlossene Aufgaben` : `${run.history.length} completed tasks`}
-              </div>
-              {[...run.history].reverse().map((item, idx) => (
-                <div key={idx} className={`${styles.historyItem} ${item.status === 'error' ? styles.historyError : styles.historyDone}`}>
-                  <span className={styles.historyIcon}>{item.status === 'done' ? '✓' : '✗'}</span>
-                  <span className={styles.historyName}>{item.item}</span>
-                  <span className={styles.historyDuration}>
-                    {(item.durationMs / 1000).toFixed(1)}s
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div ref={chatEndRef} />
-        </div>}
+        {/* ── Activity body — Workflow Timeline ── */}
+        {activeTab === 'activity' && (
+          <div className={styles.chatBody}>
+            <WorkflowTimeline steps={run?.steps ?? []} lang={lang} />
+          </div>
+        )}
 
         {/* ── Footer ── */}
         <div className={styles.footer}>
           <span className={styles.readonlyNote}>
-            {lang === 'de' ? 'Nur-Lesen' : 'Read-only'}
+            {t('agentActivity.readOnly')}
           </span>
           <div className={styles.footerActions}>
             {onStop && isRunning && (
               <button className={styles.stopBtn} onClick={onStop} type="button">
-                {lang === 'de' ? '⏹ Stoppen' : '⏹ Stop'}
+                ⏹ {t('agentActivity.stop')}
               </button>
             )}
             <button className={styles.closeFooterBtn} onClick={onClose} type="button">
-              {lang === 'de' ? 'Schließen' : 'Close'}
+              {t('agentActivity.close')}
             </button>
           </div>
         </div>

@@ -1,0 +1,177 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EKLAB.ME
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Maskeneintritt - Parameter ermitteln, Startwerte setzen
+.. Functionality  : Mask entry - fetch parameters, set default/start values
+..*****************************************************************************
+..<META M|='ek/EKLAB'>
+..
+.set trans +
+.formula M|ktyprahmenpos    = "Rahmenposition"
+.formula M|ktypvorschlag    = "Bestellvorschlag"
+.formula M|ktyplieferabruf  = "Lieferabruf"
+.formula M|ktypkeinbedarf   = "Lieferabruf: Kein Bedarf"
+.formula M|ktyplieferschein = "Lieferschein"
+.formula M|ktextkeinbedarf  = "Kein Bedarf"
+.formula M|ktyplieferant    = "Lieferant"
+.set trans -
+..
+.type text xtname   ? _F|defined(U|xtname)
+.type text xtkey    ? _F|defined(U|xtkey)
+.type text xtselect ? _F|defined(U|xtselect)
+..
+.formula U|xtname = "InfosysEklab"
+.formula U|xtkey  = "eklab"
+..
+.. only show blanket orders whose supplier is activated for eklab
+.formula M|kbaktiv = true
+..
+.. update table on each row operation
+.formula M|kbzeileakt = true
+..
+.. treat all rows as marked when using operate-all buttons
+.formula M|kbmark = true
+..
+.. show all data
+.formula M|kballeszeigen  = true
+.formula M|kbrahmenzeigen = false
+.formula M|kbliefzeigen   = false
+..
+..
+..
+.. start with empty table
+.make screen line -- ? M|tzeilen > 0
+..
+..
+..  Parameter aus EDI-Parameter laden
+..  ---------------------------------
+..  Abbildungsmodell EKLAB
+.formula U|xtselect = "$,,key=" + 'U|xtkey' + ";variable=id;name=" + 'U|xtname' + ";@gruppe=9"
+.select ediconfiguration 'U|xtselect'
+.assign M|kconfigentry = H|data ?  G|mehr
+.assign M|kconfigentry = "4230"  ? _G|mehr
+..
+..  Artikel fÅr Kein-Bedarf-Meldungen lesen
+.formula U|xtselect = "$,,key=" + 'U|xtkey' + ";variable=kkbartikel;name=" + 'U|xtname' + ";@gruppe=9"
+.select ediconfiguration 'U|xtselect'
+.formula M|kkbartikel = H|data ?  G|mehr
+.formula M|kkbartikel = "TEXT" ? _G|mehr
+..
+..  Auftragsart fÅr Lieferabrufe
+.formula U|xtselect = "$,,key=" + 'U|xtkey' + ";variable=kvorart;name=" + 'U|xtname' + ";@gruppe=9"
+.select ediconfiguration 'U|xtselect'
+.formula M|kvorart = H|data      ?  G|mehr
+.assign M|kvorart = "LFABRUF" ? _G|mehr
+..
+..  Lieferabrufe gemÑss VDA (Verband der Automobilindustrie)
+.formula U|xtselect = "$,,key=" + 'U|xtkey' + ";variable=createVdaLab;name=" + 'U|xtname' + ";@gruppe=9"
+.select ediconfiguration 'U|xtselect'
+.formula M|kbkbvdalab = true   ? _G|mehr
+.continue NEXTP1                ? _G|mehr
+.formula M|kbkbvdalab = true   ?  H|data="1"
+.formula M|kbkbvdalab = false  ?  H|data="0"
+..
+..  export directory
+!NEXTP1
+.formula M|kblieflab  = true   ? _M|kbkbvdalab
+..
+.. Read export directory from edi export configuration
+.input "dfue/DFUE.EXP.INI"
+.assign M|kdstdir = T|xsendeverz
+..
+.. RÅckstÑnde verschieben
+.formula U|xtselect = "$,,key=" + 'U|xtkey' + ";variable=combineEllapsedTterms;name=" + 'U|xtname' + ";@gruppe=9"
+.select ediconfiguration 'U|xtselect'
+.formula M|kbcmbeltterm = true  ? _G|mehr
+.continue NEXTP2                 ? _G|mehr
+.formula M|kbcmbeltterm = true  ?  H|data="1"
+.formula M|kbcmbeltterm = false ?  H|data="0"
+..
+.. Stornieren der Lieferabrufe
+!NEXTP2
+.formula U|xtselect = "$,,key=" + 'U|xtkey' + ";variable=cfCancelPO;name=" + 'U|xtname' + ";@gruppe=9"
+.select ediconfiguration 'U|xtselect'
+.formula M|kbcfcancelpo = true  ? _G|mehr
+.continue NEXTP3                 ? _G|mehr
+.formula M|kbcfcancelpo = true  ?  H|data="1"
+.formula M|kbcfcancelpo = false ?  H|data="0"
+..
+.. Anlegen der Lieferabrufe
+!NEXTP3
+.formula U|xtselect = "$,,key=" + 'U|xtkey' + ";variable=cfConvertlPOP;name=" + 'U|xtname' + ";@gruppe=9"
+.select ediconfiguration 'U|xtselect'
+.formula M|kbcfconvertpop = true  ? _G|mehr
+.continue NEXTP4                   ? _G|mehr
+.formula M|kbcfconvertpop = true  ?  H|data="1"
+.formula M|kbcfconvertpop = false ?  H|data="0"
+..
+.. Anlegen der Keinbedarfsmeldungen
+!NEXTP4
+.formula U|xtselect = "$,,key=" + 'U|xtkey' + ";variable=cfNoRequirementCreate;name=" + 'U|xtname' + ";@gruppe=9"
+.select ediconfiguration 'U|xtselect'
+.formula M|kbcfnoreqcre = true  ? _G|mehr
+.continue NEXTP5                 ? _G|mehr
+.formula M|kbcfnoreqcre = true  ?  H|data="1"
+.formula M|kbcfnoreqcre = false ?  H|data="0"
+..
+.. Stornieren der Keinbedarfsmeldungen
+!NEXTP5
+.formula U|xtselect = "$,,key=" + 'U|xtkey' + ";variable=cfNoRequirementDelete;name=" + 'U|xtname' + ";@gruppe=9"
+.select ediconfiguration 'U|xtselect'
+.formula M|kbcfnoreqdel = true  ? _G|mehr
+.continue NEXTP6                 ? _G|mehr
+.formula M|kbcfnoreqdel = true  ?  H|data="1"
+.formula M|kbcfnoreqdel = false ?  H|data="0"
+..
+.. Termine zusammenfassen
+!NEXTP6
+.formula U|xtselect = "$,,key=" + 'U|xtkey' + ";variable=kbtermzusammen;name=" + 'U|xtname' + ";@gruppe=9"
+.select ediconfiguration 'U|xtselect'
+.formula M|kbtermzusammen = true  ? _G|mehr
+.continue ENDP                     ? _G|mehr
+.formula M|kbtermzusammen = true  ?  H|data="1"
+.formula M|kbtermzusammen = false ?  H|data="0"
+..
+!ENDP
+.select
+..
+..
+.. legend submask
+..
+.input "is/ABASFARBEN.DEF"
+.formula M|colvendor = U|xabasstructuretop
+.formula M|colboitem = U|xabasstructuresub
+.formula M|colposuggestion = "-1 -1 -1"
+.formula M|colforecast = "-1 -1 -1"
+.formula M|colnodemand = "-1 -1 -1"
+.formula M|coldelivery = U|xabaslightorange
+..
+.colour -foreground 'T|xabasblack' -background 'M|colvendor'          ktyplieferant
+.colour -foreground 'T|xabasblack' -background 'M|colboitem'          ktyprahmenpos
+.colour -foreground 'T|xabasblack' -background 'M|colposuggestion'    ktypvorschlag
+.colour -foreground 'T|xabasblack' -background 'M|colforecast'        ktyplieferabruf
+.colour -foreground 'T|xabasblack' -background 'M|colnodemand'        ktypkeinbedarf
+.colour -foreground 'T|xabasblack' -background 'M|coldelivery'        ktyplieferschein
+..
+.formula M|kstatusgruen = G|icook
+.formula M|kstatusrot = G|icoerror
+.formula M|kstatusblau = "icon:ball_blue"
+.formula M|kstatusstop = "icon:stop2"
+.formula M|kstatusnoglt = "icon:stop"
+.formula M|kstatusgelb = "icon:ball_yellow"
+.formula M|kstatuslosebv ="icon:attention"
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERRDMY
+.error Die Verarbeitung von Kein-Bedarf Lieferabrufen ist nicht mîglich, Dummy-Artikel fehlt!
+.end 1
+..
+!ERRVTYP
+.error Legen Sie bitten den Kurztext fÅr den Vorgangstyp Lieferabruf an!
+.end 1

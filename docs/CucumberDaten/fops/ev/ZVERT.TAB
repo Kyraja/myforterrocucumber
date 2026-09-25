@@ -1,0 +1,86 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ZVERT.TAB
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : FÅllt Tabelle des Infosystems ZVERT
+.. Ablauf         : H|-Puffer: Vorgang
+..                  1|-Puffer: Zahlungsbedingung
+..                  M|-Puffer: Maskenpuffer IS ZVERT
+..*****************************************************************************
+.set trans -
+..
+.type text      xtincl
+.type integer   xznr xi
+.type ARTR52100 xrestbetr
+..
+.input "is/TABLEEREN"
+..
+.continue ERROR1           ? F|empty(M|vorgang)
+.select object 'M|vorgang^id'
+.continue ZVERTENDE        ? _G|mehr
+.. Sollen bei negativen RechnungsbetrÑgen bzw. buart = 1 kein
+.. Zahlungsverteiler gedruckt werden, so mÅssen diese Zeilen wieder
+.. aufgenommen werden.
+.. .continue ZVERTENDE        ?  H|buart = 1
+.. .continue ZVERTENDE        ?  H|rebetr < 0
+..
+.formula U|xrestbetr = 0
+..
+.continue                  ? F|empty(H|zbedvert)
+.load 1 pmasterfiles 'H|zbedvert^id'
+.continue ENDE             ? _G|mehr
+.formula M|vertname   = 1|sucherw
+.copy 1|waehrung = H|land
+.copy M|waehrung = H|land
+.assign 1|betrag   = H|rebetr
+.assign M|betrag   = H|rebetr
+.formula U|xrestbetr  = 1|restbetr
+.formula M|restbetr   = 1|restbetr
+.copy M|skbbetr  = H|skbbetr
+.formula 1|vdat= H|vdat
+.formula U|xi = 1
+..
+.input "ev/ZVERTKOPF"
+..
+!ZEILE
+.load 1 line
+.continue ENDE                              ? _G|mehr
+..
+.make screen line +O
+.copy M|proz      = 1|proz
+.copy M|teilbetr  = 1|teilbetr
+.copy M|zbedschl  = 1|zbedschl
+.formula M|teilskbbetr = 1|proz * M|skbbetr / 100
+.assign M|zbed      = 1|zbedre
+.formula M|irate    = U|xi
+.formula U|xznr     = M|zn
+.formula M|text     = ""
+.formula M|term1    = 1|term1
+.copy M|skonto1     = 1|skonto1
+.formula U|xi = U|xi + 1
+..
+.input "ev/ZVERTZEILE"
+.continue ZEILE
+..
+!ENDE
+.continue ZVERTENDE                              ? U|xrestbetr = 0
+.load 1 line 'U|xznr'
+.formula M|teilbetr = 1|teilbetr + U|xrestbetr
+.text U|xtincl 'P|spr' inclusive Restbetrag
+.formula M|text     = U|xtincl
+..
+!ZVERTENDE
+.input "ev/ZVERTENDE"
+.continue
+..
+!ERROR1:
+.error -field M|vorgang -message Bitte Verkaufsvorgang wÑhlen
+.formula M|vertname = ""
+.formula M|vdat     = ""
+.formula M|tterm    = ""
+.formula M|vom      = ""
+.formula M|buart    = ""
+.formula M|kunde2   = ""
+.end 1

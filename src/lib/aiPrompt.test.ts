@@ -8,6 +8,9 @@ import {
   extractPromptRating,
   buildRatingMessages,
   parseRatingResponse,
+  buildKeywordExtractionMessages,
+  parseKeywordExtractionResponse,
+  buildMessages,
 } from './aiPrompt';
 import type { TableDef } from '../types/gherkin';
 
@@ -94,6 +97,18 @@ describe('buildTableIdentificationMessages', () => {
   });
 });
 
+describe('buildMessages', () => {
+  it('includes available tables without throwing', () => {
+    const messages = buildMessages('Anforderung', undefined, [
+      { name: 'Kundenstamm', tableRef: '0:1', kind: 'database' },
+      { name: 'Kundenumsatz', tableRef: '0:2', kind: 'infosystem' },
+    ]);
+
+    expect(messages[1].content).toContain('Kundenstamm');
+    expect(messages[1].content).toContain('Kundenumsatz');
+  });
+});
+
 // ── lookupRelevantTables ────────────────────────────────────────
 
 describe('lookupRelevantTables', () => {
@@ -135,6 +150,7 @@ describe('lookupRelevantTables', () => {
       { tables: ['Kundenstamm'], infosystems: ['Umsatzauswertung'] },
       tables,
     );
+
     expect(result).toHaveLength(2);
     expect(result[0].kind).toBe('database');
     expect(result[1].kind).toBe('infosystem');
@@ -420,5 +436,80 @@ describe('parseRatingResponse', () => {
   it('handles inconsistencies with content', () => {
     const r = parseRatingResponse('{"score": 40, "reason": "Probleme", "suggestions": ["Fix"], "inconsistencies": ["Feld X widerspricht Y"]}');
     expect(r!.inconsistencies).toEqual(['Feld X widerspricht Y']);
+  });
+});
+
+// ── Keyword extraction (KB) ─────────────────────────────────────
+
+describe('buildKeywordExtractionMessages', () => {
+  it('builds a system+user pair in German with known tables injected', () => {
+    const msgs = buildKeywordExtractionMessages(
+      'Artikel soll chargenpflichtig werden.',
+      ['Artikel', 'Kundenstamm'],
+      5,
+      'de',
+    );
+    expect(msgs).toHaveLength(2);
+    expect(msgs[0].role).toBe('system');
+    expect(msgs[0].content).toContain('5');
+    expect(msgs[0].content).toContain('Artikel');
+    expect(msgs[0].content).toContain('Kundenstamm');
+    expect(msgs[1].role).toBe('user');
+    expect(msgs[1].content).toContain('chargenpflichtig');
+  });
+
+  it('handles empty known-tables list', () => {
+    const msgs = buildKeywordExtractionMessages('Text', [], 3, 'de');
+    expect(msgs[0].content).toContain('(keine)');
+  });
+
+  it('English variant uses English system prompt', () => {
+    const msgs = buildKeywordExtractionMessages('Text', ['Article'], 5, 'en');
+    expect(msgs[0].content).toContain('abas ERP expert');
+    expect(msgs[1].content).toContain('Requirements text');
+  });
+});
+
+describe('parseKeywordExtractionResponse', () => {
+  it('parses plain JSON with keywords and fields', () => {
+    const out = parseKeywordExtractionResponse('{"keywords":["Chargenpflicht","Sperrkennzeichen"],"fields":["artikel","mge"]}', 5);
+    expect(out.keywords).toEqual(['Chargenpflicht', 'Sperrkennzeichen']);
+    expect(out.fieldHints).toEqual(['artikel', 'mge']);
+  });
+
+  it('strips markdown code fences', () => {
+    const out = parseKeywordExtractionResponse('```json\n{"keywords":["Disposition"]}\n```', 5);
+    expect(out.keywords).toEqual(['Disposition']);
+    expect(out.fieldHints).toEqual([]);
+  });
+
+  it('extracts JSON block surrounded by prose', () => {
+    const out = parseKeywordExtractionResponse(
+      'Hier sind die Stichpunkte:\n{"keywords":["Mehrwertsteuer","Preisfindung"]}\nDas war es.',
+      5,
+    );
+    expect(out.keywords).toEqual(['Mehrwertsteuer', 'Preisfindung']);
+  });
+
+  it('deduplicates case-insensitively', () => {
+    const out = parseKeywordExtractionResponse('{"keywords":["Charge","charge","CHARGE"]}', 5);
+    expect(out.keywords).toEqual(['Charge']);
+  });
+
+  it('caps at maxCount', () => {
+    const out = parseKeywordExtractionResponse('{"keywords":["a","b","c","d","e","f","g"]}', 3);
+    expect(out.keywords).toHaveLength(3);
+  });
+
+  it('returns empty on invalid JSON', () => {
+    const out = parseKeywordExtractionResponse('not json', 5);
+    expect(out.keywords).toEqual([]);
+    expect(out.fieldHints).toEqual([]);
+  });
+
+  it('parses fields without keywords', () => {
+    const out = parseKeywordExtractionResponse('{"keywords":[],"fields":["freig","ladetab","malle"]}', 5);
+    expect(out.keywords).toEqual([]);
+    expect(out.fieldHints).toEqual(['freig', 'ladetab', 'malle']);
   });
 });

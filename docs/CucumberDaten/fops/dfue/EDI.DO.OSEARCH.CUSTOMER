@@ -1,0 +1,65 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDI.DO.OSEARCH.CUSTOMER
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : carue
+.. Functionality  : Finds customer for edi messages in abas, updates edi message
+..                  with number of customer
+..*****************************************************************************
+.set trans -
+..
+.. Required: edi message in H buffer
+.continue NOEDI ? _F|defined(H|edinachr)
+.continue NOTYPE ? F|empty(H|edinachr)
+..
+.. Lock Edi message!
+.select lock edifact 'H|id'
+.continue NOLOCK ? _G|mehr ; _G|gesperrt
+..
+.. If GLN is given, do not look with abas idno or search word
+.continue GLN   ? _F|empty(H|glkundeab)
+..
+.. Must fix using EDISEARCH
+.continue NOCUST ? F|empty(H|idkundeab)
+.continue NOCUST ? _F|isvalue('H|idkundeab', "SW0") & _F|isvalue('H|idkundeab', "N0")
+..
+.. Verify Customer in abas
+.load 1 customer 'F|formatstr("$,,;@gruppe=1;such=={1}", H|idkundeab)' ? F|isvalue('H|idkundeab', "SW0")
+.load 1 customer 'F|formatstr("$,,;@gruppe=1;nummer=={1}", H|idkundeab)' ? F|isvalue('H|idkundeab', "N0")
+.continue NOCUST ? _G|mehr
+.formula H|idkundeab = 1|nummer
+.continue RETURN
+..
+!GLN
+.load 1 customer 'F|formatstr("$,,;@gruppe=1;gln=={1}", H|glkundeab)' 
+.continue NOCUST ? _G|mehr
+.formula H|idkundeab = 1|nummer
+.continue RETURN
+..
+!NOCUST: No Success!
+.formula H|fcode  = 60
+.formula H|status = 4
+..
+!RETURN
+.rewrite
+..
+.. release buffers
+.load 1 ? F|defined(1|id)
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!NOLOCK
+.error Das Sperren des EDI-Datensatzes 'H|nummer' ist gescheitert.
+.end 1
+..
+!NOEDI
+.error Fehler bei Start der Objektsuche: Kein EDI-Datensatz angegeben.
+.end 1
+..
+!NOTYPE
+.error Fehler bei Start der Objektsuche: EDI-Datensatz 'H|nummer' hat keinen Nachrichten-Eintrag.
+.end 1

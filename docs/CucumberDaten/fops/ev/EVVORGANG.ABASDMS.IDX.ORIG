@@ -1,0 +1,381 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EVVORGANG.ABASDMS.IDX
+.. Autor          : kop
+.. Verantwortlich : saac
+.. Kontrolle      : lei
+.. Funktion       : Erzeugt Indexdatei fÅr abas-DMS
+.. Functionality  : Creates index file for abas-DMS
+..*****************************************************************************
+.. includes ev/EVVORGANG.ABASDMS.IDX.KOPF
+.. includes ev/EVVORGANG.ABASDMS.IDX.TAB
+..*****************************************************************************
+.type text xt            ? _F|defined(U|xt)
+.type text xartprefix    ? _F|defined(U|xartprefix)
+.type text xvorgtyp      ? _F|defined(U|xvorgtyp)
+.type bool xbthis        ? _F|defined(U|xbthis)
+.type bool xbauls        ? _F|defined(U|xbauls)
+.type I1   xkopftyp      ? _F|defined(U|xkopftyp)
+.type text xkopfid       ? _F|defined(U|xkopfid)
+.type text xkopfnummer   ? _F|defined(U|xkopfnummer)
+.type P155:1 xausschr    ? _F|defined(U|xausschr)
+.type bool xpro          ? _F|defined(U|xpro)
+.type VID99 xid          ? _F|defined(U|xid)
+.type bool xhaspos       ? _F|defined(U|xhaspos)
+.type bool xwithpdetails ? _F|defined(U|xwithpdetails)
+.type VP5  xkuli         ? _F|defined(U|xkuli)
+.type VP5  xinvoicer     ? _F|defined(U|xinvoicer)
+.type VP5  xgoodsr       ? _F|defined(U|xgoodsr)
+.type P59  xcharge       ? _F|defined(U|xcharge)
+..
+.input "dms/FIND.CONTEXT"
+..
+.set trans +
+.formula U|xartprefix = "Alternative"
+.set trans -
+..
+.formula U|xbthis   = G|FALSE
+.formula U|xbauls   = G|FALSE
+.formula U|xpro     = G|FALSE
+.formula U|xvorgtyp = ""
+.formula U|xhaspos  = G|FALSE
+..
+.file -tempname U|xt
+..
+.output new 'U|xt' -encoding "UTF-8"
+.input DATEI.F
+.formula U|xkopftyp    = U|xid^ktyp
+.formula U|xkopfid     = U|xid^id
+.formula U|xkopfnummer = U|xid^nummer
+.copy    U|xausschr    = U|xid^ausschr
+..
+.continue VERKAUF ? U|xid^dnr = 3
+..
+.select purchasing 'U|xid'
+.formula U|xvorgtyp = "Einkauf"
+.continue BELENDE
+..
+!VERKAUF
+.select sales 'U|xid'
+.formula U|xvorgtyp = "Verkauf"
+..
+!BELENDE
+.input dms/STD.ABASDMS.IDX
+?BelDat='H|vom(L="0")' ? F|defined(H|vom)
+..
+.continue NOERECH            ? _F|sysinfo(18)^erech
+.continue NOERECH            ? H|dnr <> 3
+.continue NOERECH            ? _H|erechok 
+.continue NOERECH            ? _H|druck 
+.continue NOERECH            ? H|uebertr
+ReMail='H|erechmail'
+ReSpr='H|sprai'
+MailKz=0
+..
+!NOERECH
+.continue EBELEG ? H|dnr = 4 & H|ktyp = 4
+.continue EBELEG ? H|dnr = 4 & H|ktyp = 5
+!FRZEICH
+FBelNr='H|frzeich'
+.continue KULIDATA
+!EBELEG
+FBelNr='H|ebeleg'
+..
+!KULIDATA
+.. Kunden-/Lieferantendatena
+KuLiNam='H|ans'
+KuLiPLZ='H|plz'
+KuLiOrt='H|nort'
+KuLiLKZ='H|lakenn'
+Email='H|email'
+Betreuer='H|betreuer'
+..
+.formula U|xwithpdetails = G|FALSE
+.assign U|xkuli = U|xid^kl
+.input st/KULI.ABASDMS.IDX
+..
+.assign U|xinvoicer=U|xid^kl2      ? _F|defined(M|U|xid^xinvoicer)
+.assign U|xgoodsr=U|xid^warenempf  ? _F|defined(M|U|xid^warenempf)
+.input RECIPIENTS.ABASDMS.IDX
+..
+!KULIEND
+.continue NODOKARCH       ? _F|defined(M|betreff)
+.continue NODOKARCH       ? F|empty(M|betreff)
+Betreff='M|betreff'
+.continue INFO
+..
+!NODOKARCH
+Betreff='H|betreff'
+!INFO
+Info='H|atext'
+Waehrung='H|staat^waeh'
+BruBet='H|sumbrutto'
+NetBet='H|sumnetto'
+.. Ausschreibungsnummer
+.continue KOPFENDE                   ? U|xvorgtyp = "Verkauf"
+?EKAusNr='U|xausschr^nummer'         ? _F|empty(U|xausschr)
+?AbasEGID='U|xausschr^id'            ? _F|empty(U|xausschr)
+!KOPFENDE
+.input ev/EVVORGANG.ABASDMS.IDX.KOPF
+..
+.select line
+..
+!POSANF
+.continue NOPOS  ? _G|mehr & _ U|xhaspos
+.continue ENDE   ? _G|mehr
+.continue POSAUS ? _H|artex^gruppe = 4
+.continue POSAUS ? H|artex^gruppe = 4 & F|equals(H|artex^zptyp, "(SOPOItemPOS)")
+.continue POSAUS ? H|artex^gruppe = 4 & F|equals(H|artex^zptyp, "(MinimumOrderValueItem)")
+.continue POSAUS ? H|artex^gruppe = 4 & F|equals(H|artex^zptyp, "(Text)")
+.continue POSAUS ? H|artex^gruppe = 4 & F|equals(H|artex^zptyp, "(NeutralItem)")
+.continue EPOSAUS
+..
+!POSAUS
+.formula U|xhaspos = G|TRUE
+POS-ANF
+.continue ENDSPROD ? F|empty(H|serprod)
+SPrNr='H|serprod^nummer'
+SPrSuch='H|serprod^such'
+SPrBez='H|serprod^name'
+?ESerNr='H|serprod^tcharge' ? _F|empty(U|xid^serprod^tcharge)
+!ENDSPROD
+abasaid='H|artex^id'
+ArtNr='H|artex^nummer'
+ArtSuch='H|artex^such'
+?ArtBez='H|artex^name'                    ? _H|alternativpos
+?ArtBez='U|xartprefix' 'H|artex^name'     ?  H|alternativpos 
+?FArtNr='H|zkuartnr' ? H|artikel^gruppe = 1 & U|xvorgtyp = "Verkauf"
+?FArtNr='H|bstnr'    ? H|artikel^gruppe = 1 & U|xvorgtyp = "Einkauf"
+?AbasPRID='H|projekt^id'             ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+?ProjNr='H|projekt^nummer'           ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+?ProjSuch='H|projekt^such'           ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+?ProjBez='H|projekt^name'            ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+.continue ENDTECH ? _F|defined(H|techniker)
+.continue ENDTECH ? F|empty(H|techniker)
+TechNr='H|techniker^nummer'
+TechBez='H|techniker^name'
+TechId='H|techniker^id'
+!ENDTECH
+..
+.copy U|xcharge=H|charge
+.copy U|xcharge=H|serprod^charge ? F|empty(U|xcharge) & _F|empty(H|serprod^charge)
+.continue ENDLOT   ? F|empty(U|xcharge)
+CharNr='U|xcharge^nummer'
+CharID='U|xcharge^id'
+CharEx='U|xcharge^exnum'
+CharBez='U|xcharge^name'
+!ENDLOT
+..
+.continue EINKAUF ? U|xvorgtyp = "Einkauf"
+..Verkauf
+?VKChanNr='U|xkopfnummer'  ? U|xkopftyp = G|chko
+?AbasVAID='U|xkopfid'      ? U|xkopftyp = G|chko
+?VKAngNr='U|xkopfnummer'   ? U|xkopftyp = G|anko
+?AbasVAID='U|xkopfid'      ? U|xkopftyp = G|anko
+?VKRAufNr='U|xkopfnummer'  ? U|xkopftyp = G|rako
+?AbasVAID='U|xkopfid'      ? U|xkopftyp = G|rako
+?VKAufNr='U|xkopfnummer'   ? U|xkopftyp = G|abko
+?AbasVBID='U|xkopfid'      ? U|xkopftyp = G|abko
+?VKLiefNr='U|xkopfnummer'  ? U|xkopftyp = G|liko
+?AbasVLID='U|xkopfid'      ? U|xkopftyp = G|liko
+?VKRechNr='U|xkopfnummer'  ? U|xkopftyp = G|reko
+?AbasVRID='U|xkopfid'      ? U|xkopftyp = G|reko
+..Service
+?VKSANr='U|xkopfnummer'    ? U|xkopftyp = G|snko
+?AbasSNID='U|xkopfid'      ? U|xkopftyp = G|snko
+?VKSerNr='U|xkopfnummer'   ? U|xkopftyp = G|sbko
+?AbasSAId='U|xkopfid'      ? U|xkopftyp = G|sbko
+?VKRepNr='U|xkopfnummer'   ? U|xkopftyp = G|srko
+?AbasREID='U|xkopfid'      ? U|xkopftyp = G|srko
+?VKKostNr='U|xkopfnummer'  ? U|xkopftyp = G|kvko
+?AbasSKID='U|xkopfid'      ? U|xkopftyp = G|kvko
+?VKSanfNr='U|xid^seranf^nummer'? _F|empty(U|xid^seranf)
+?AbasSAId='U|xid^seranf^id'    ? _F|empty(U|xid^seranf)
+.continue POSEND ? F|empty(H|orig)
+..Chance
+?VKChanNr='H|okopf^nummer'                      ? H|okopf^ktyp = G|chko
+?AbasVCID='H|okopf^id'                          ? H|okopf^ktyp = G|chko
+?VKChanNr='H|orig^okopf^nummer'                 ? H|okopf^ktyp = G|anko & H|orig^okopf^ktyp = G|chko
+?AbasVCID='H|orig^okopf^id'                     ? H|okopf^ktyp = G|anko & H|orig^okopf^ktyp = G|chko
+?VKChanNr='H|orig^orig^okopf^nummer'            ? H|okopf^ktyp = G|abko & H|orig^orig^okopf^ktyp = G|chko
+?AbasVCID='H|orig^orig^okopf^id'                ? H|okopf^ktyp = G|abko & H|orig^orig^okopf^ktyp = G|chko
+?VKChanNr='H|orig^orig^orig^okopf^nummer'       ? H|okopf^ktyp = G|liko & H|orig^orig^orig^okopf^ktyp = G|chko
+?AbasVCID='H|orig^orig^orig^okopf^id'           ? H|okopf^ktyp = G|liko & H|orig^orig^orig^okopf^ktyp = G|chko
+?VKChanNr='H|orig^orig^orig^orig^okopf^nummer'  ? H|okopf^ktyp = G|reko & H|orig^orig^orig^orig^okopf^ktyp = G|chko
+?AbasVCID='H|orig^orig^orig^orig^okopf^id'      ? H|okopf^ktyp = G|reko & H|orig^orig^orig^orig^okopf^ktyp = G|chko
+..
+.. Angebotsnummer und Rahmenauftragsnummer
+?VKAngNr='H|okopf^nummer'                 ? H|okopf^ktyp = G|anko
+?AbasVAID='H|okopf^id'                    ? H|okopf^ktyp = G|anko
+?VKRAufNr='H|okopf^nummer'                ? H|okopf^ktyp = G|rako
+?AbasVOID='H|okopf^id'                    ? H|okopf^ktyp = G|rako
+?VKAngNr='H|orig^okopf^nummer'            ? H|okopf^ktyp = G|abko & H|orig^okopf^ktyp = G|anko
+?AbasVAID='H|orig^okopf^id'               ? H|okopf^ktyp = G|abko & H|orig^okopf^ktyp = G|anko
+?VKRAufNr='H|orig^okopf^nummer'           ? H|okopf^ktyp = G|abko & H|orig^okopf^ktyp = G|rako
+?AbasVOID='H|orig^okopf^id'               ? H|okopf^ktyp = G|abko & H|orig^okopf^ktyp = G|rako
+?VKAngNr='H|orig^orig^okopf^nummer'       ? H|okopf^ktyp = G|liko & H|orig^orig^okopf^ktyp = G|anko
+?AbasVAID='H|orig^orig^okopf^id'          ? H|okopf^ktyp = G|liko & H|orig^orig^okopf^ktyp = G|anko
+?VKRAufNr='H|orig^orig^okopf^nummer'      ? H|okopf^ktyp = G|liko & H|orig^orig^okopf^ktyp = G|rako
+?AbasVOID='H|orig^orig^okopf^id'          ? H|okopf^ktyp = G|liko & H|orig^orig^okopf^ktyp = G|rako
+?VKAngNr='H|orig^orig^orig^okopf^nummer'  ? H|okopf^ktyp = G|reko & H|orig^orig^orig^okopf^ktyp = G|anko
+?AbasVAID='H|orig^orig^orig^okopf^id'     ? H|okopf^ktyp = G|reko & H|orig^orig^orig^okopf^ktyp = G|anko
+?VKRAufNr='H|orig^orig^orig^okopf^nummer' ? H|okopf^ktyp = G|reko & H|orig^orig^orig^okopf^ktyp = G|rako
+?AbasVOID='H|orig^orig^orig^okopf^id'     ? H|okopf^ktyp = G|reko & H|orig^orig^orig^okopf^ktyp = G|rako
+..
+..Servicenanfragenumer
+?VKSanfNr='H|okopf^seranf^nummer'                ? H|okopf^ktyp = G|snko & _F|empty(H|okopf^seranf)
+?AbasSAId='H|okopf^seranf^id'                    ? H|okopf^ktyp = G|snko & _F|empty(H|okopf^seranf)
+?VKSanfNr='H|orig^okopf^seranf^nummer'           ? H|okopf^ktyp = G|sbko & _F|empty(H|orig^okopf^seranf)
+?AbasSAId='H|orig^okopf^seranf^id'               ? H|okopf^ktyp = G|sbko & _F|empty(H|orig^okopf^seranf)
+?VKSanfNr='H|orig^okopf^seranf^nummer'           ? H|okopf^ktyp = G|srko & _F|empty(H|orig^okopf^seranf)
+?AbasSAId='H|orig^okopf^seranf^id'               ? H|okopf^ktyp = G|srko & _F|empty(H|orig^okopf^seranf)
+?VKSanfNr='H|orig^okopf^seranf^nummer'           ? H|okopf^ktyp = G|kvko & _F|empty(H|orig^okopf^seranf)
+?AbasSAId='H|orig^okopf^seranf^id'               ? H|okopf^ktyp = G|kvko & _F|empty(H|orig^okopf^seranf)
+?VKSanfNr='H|orig^orig^okopf^seranf^nummer'      ? H|okopf^ktyp = G|liko & _F|empty(H|orig^orig^okopf^seranf)
+?AbasSAId='H|orig^orig^okopf^seranf^id'          ? H|okopf^ktyp = G|liko & _F|empty(H|orig^orig^okopf^seranf)
+..
+..Serviceangebotsnummer
+?VKSANr='H|okopf^nummer'                  ? H|okopf^ktyp = G|snko
+?AbasSNID='H|okopf^id'                    ? H|okopf^ktyp = G|snko
+?VKSANr='H|orig^okopf^nummer'            ? H|okopf^ktyp = G|sbko & H|orig^okopf^ktyp = G|snko
+?AbasSNID='H|orig^okopf^id'               ? H|okopf^ktyp = G|sbko & H|orig^okopf^ktyp = G|snko
+?VKSANr='H|orig^orig^okopf^nummer'        ? H|okopf^ktyp = G|liko & H|orig^orig^okopf^ktyp = G|snko
+?AbasSNID='H|orig^orig^okopf^id'          ? H|okopf^ktyp = G|liko & H|orig^orig^okopf^ktyp = G|snko
+?VKSANr='H|orig^orig^orig^okopf^nummer'   ? H|okopf^ktyp = G|reko & H|orig^orig^orig^okopf^ktyp = G|snko
+?AbasSNID='H|orig^orig^orig^okopf^id'     ? H|okopf^ktyp = G|reko & H|orig^orig^orig^okopf^ktyp = G|snko
+..
+.. Auftragsnummer
+?VKAufNr='H|okopf^nummer'            ? H|okopf^ktyp = G|abko
+?AbasVBID='H|okopf^id'               ? H|okopf^ktyp = G|abko & H|orig^okopf^ktyp = G|abko
+?VKAufNr='H|orig^okopf^nummer'       ? H|okopf^ktyp = G|liko & H|orig^okopf^ktyp = G|abko
+?AbasVBID='H|orig^okopf^id'          ? H|okopf^ktyp = G|liko & H|orig^okopf^ktyp = G|abko
+?VKAufNr='H|orig^orig^okopf^nummer'  ? H|okopf^ktyp = G|reko & H|orig^orig^okopf^ktyp = G|abko
+?AbasVBID='H|orig^orig^okopf^id'     ? H|okopf^ktyp = G|reko & H|orig^orig^okopf^ktyp = G|abko
+..
+.. Serviceauftragsnummer
+?VKSerNr='H|okopf^nummer'            ? H|okopf^ktyp = G|sbko
+?AbasSBID='H|okopf^id'               ? H|okopf^ktyp = G|sbko
+?VKSerNr='H|orig^okopf^nummer'       ? H|okopf^ktyp = G|liko & H|orig^okopf^ktyp = G|sbko
+?AbasSBID='H|orig^okopf^id'          ? H|okopf^ktyp = G|liko & H|orig^okopf^ktyp = G|sbko
+?VKSerNr='H|orig^orig^okopf^nummer'  ? H|okopf^ktyp = G|reko & H|orig^orig^okopf^ktyp = G|sbko
+?AbasSBID='H|orig^orig^okopf^id'     ? H|okopf^ktyp = G|reko & H|orig^orig^okopf^ktyp = G|sbko
+..Reparaturauftragsnummer
+?VKRepNr='H|okopf^nummer'            ? H|okopf^ktyp = G|srko
+?AbasREID='H|okopf^id'               ? H|okopf^ktyp = G|srko
+?VKRepNr='H|orig^okopf^nummer'       ? H|okopf^ktyp = G|liko & H|orig^okopf^ktyp = G|srko
+?AbasREID='H|orig^okopf^id'          ? H|okopf^ktyp = G|liko & H|orig^okopf^ktyp = G|srko
+?VKRepNr='H|orig^orig^okopf^nummer'  ? H|okopf^ktyp = G|reko & H|orig^orig^okopf^ktyp = G|srko
+?AbasREID='H|orig^orig^okopf^id'     ? H|okopf^ktyp = G|reko & H|orig^orig^okopf^ktyp = G|srko
+..Kostenvoranschlag
+?VKKostNr='H|okopf^nummer'          ? H|okopf^ktyp = G|kvko
+?AbasSKID='H|okopf^id'               ? H|okopf^ktyp = G|kvko
+?VKKostNr='H|orig^okopf^nummer'      ? H|okopf^ktyp = G|srko & H|orig^okopf^ktyp = G|kvko
+?AbasSKID='H|orig^okopf^id'          ? H|okopf^ktyp = G|srko & H|orig^okopf^ktyp = G|kvko
+.. Lieferscheinnummer
+?VKLiefNr='H|okopf^nummer'      ? H|okopf^ktyp = G|liko
+?AbasVLID='H|okopf^id'          ? H|okopf^ktyp = G|liko
+?VKLiefNr='H|orig^okopf^nummer' ? H|okopf^ktyp = G|reko
+?AbasVLID='H|orig^okopf^id'     ? H|okopf^ktyp = G|reko
+.. Rechnungsnummer
+?VKRechNr='H|okopf^nummer' ? H|okopf^ktyp = G|reko
+?AbasVRID='H|okopf^id'     ? H|okopf^ktyp = G|reko
+.continue POSEND
+..
+!EINKAUF
+..
+?EKAnfNr='U|xkopfnummer'   ? U|xkopftyp = G|anko
+?AbasEAID='U|xkopfid'      ? U|xkopftyp = G|anko
+?EKRAufNr='U|xkopfnummer'   ? U|xkopftyp = G|rako
+?AbasEAID='U|xkopfid'      ? U|xkopftyp = G|rako
+?EKBestNr='U|xkopfnummer'  ? U|xkopftyp = G|abko
+?AbasEBID='U|xkopfid'      ? U|xkopftyp = G|abko
+?EKLiefNr='U|xkopfnummer'  ? U|xkopftyp = G|liko
+?AbasELID='U|xkopfid'      ? U|xkopftyp = G|liko
+?EKRechNr='U|xkopfnummer'  ? U|xkopftyp = G|reko
+?AbasERID='U|xkopfid'      ? U|xkopftyp = G|reko
+.continue POSEND ? F|empty(H|orig)
+.. Anfragenummer und Rahmenauftragsnummer
+?EKAnfNr='H|okopf^nummer'                 ? H|okopf^ktyp = G|anko
+?AbasEAID='H|okopf^id'                    ? H|okopf^ktyp = G|anko
+?EKRAufNr='H|okopf^nummer'                 ? H|okopf^ktyp = G|rako
+?AbasEOID='H|okopf^id'                    ? H|okopf^ktyp = G|rako
+?EKAnfNr='H|orig^okopf^nummer'            ? H|okopf^ktyp = G|abko & H|orig^okopf^ktyp =G|anko
+?AbasEAID='H|orig^okopf^id'               ? H|okopf^ktyp = G|abko & H|orig^okopf^ktyp = G|anko
+?EKRAufNr='H|orig^okopf^nummer'            ? H|okopf^ktyp = G|abko & H|orig^okopf^ktyp =G|rako
+?AbasEOID='H|orig^okopf^id'               ? H|okopf^ktyp = G|abko & H|orig^okopf^ktyp = G|rako
+?EKAnfNr='H|orig^orig^okopf^nummer'       ? H|okopf^ktyp = G|liko & H|orig^orig^okopf^ktyp = G|anko
+?AbasEAID='H|orig^orig^okopf^id'          ? H|okopf^ktyp = G|liko & H|orig^orig^okopf^ktyp = G|anko
+?EKRAufNr='H|orig^orig^okopf^nummer'       ? H|okopf^ktyp = G|liko & H|orig^orig^okopf^ktyp = G|rako
+?AbasEOID='H|orig^orig^okopf^id'          ? H|okopf^ktyp = G|liko & H|orig^orig^okopf^ktyp = G|rako
+?EKAnfNr='H|orig^orig^orig^okopf^nummer'  ? H|okopf^ktyp = G|reko & H|orig^orig^orig^okopf^ktyp = G|anko
+?AbasEAID='H|orig^orig^orig^okopf^id'     ? H|okopf^ktyp = G|reko & H|orig^orig^orig^okopf^ktyp = G|anko
+?EKRAufNr='H|orig^orig^orig^okopf^nummer'  ? H|okopf^ktyp = G|reko & H|orig^orig^orig^okopf^ktyp = G|rako
+?AbasEOID='H|orig^orig^orig^okopf^id'     ? H|okopf^ktyp = G|reko & H|orig^orig^orig^okopf^ktyp = G|rako
+..
+.. Bestellungsnummer
+?EKBestNr='H|okopf^nummer'           ? H|okopf^ktyp = G|abko
+?AbasEBID='H|okopf^id'               ? H|okopf^ktyp = G|abko
+?EKBestNr='H|orig^okopf^nummer'      ? H|okopf^ktyp = G|liko
+?AbasEBID='H|orig^okopf^id'          ? H|okopf^ktyp = G|liko
+?EKBestNr='H|orig^orig^okopf^nummer' ? H|okopf^ktyp = G|reko
+?AbasEBID='H|orig^orig^okopf^id'     ? H|okopf^ktyp = G|reko
+.. Lieferscheinnummer
+?EKLiefNr='H|okopf^nummer'      ? H|okopf^ktyp = G|liko
+?AbasELID='H|okopf^id'          ? H|okopf^ktyp = G|liko
+?EKLiefNr='H|orig^okopf^nummer' ? H|okopf^ktyp = G|reko
+?AbasELID='H|orig^okopf^id'     ? H|okopf^ktyp = G|reko
+.. Rechnungsnummer
+?EKRechNr='H|okopf^nummer' ? H|okopf^ktyp = G|reko
+?AbasERID='H|okopf^id'     ? H|okopf^ktyp = G|reko
+..
+!POSEND
+.input ev/EVVORGANG.ABASDMS.IDX.TAB
+POS-END
+..
+!EPOSAUS
+.select line
+.continue POSANF
+.continue ENDE ? _ U|xhaspos
+..
+!NOPOS
+POS-ANF
+.continue NPPURCHASE                     ? U|xvorgtyp = "Einkauf"
+..
+?VKChanNr='U|xkopfnummer'                ? U|xkopftyp = G|chko
+?AbasVCID='U|xkopfid'                    ? U|xkopftyp = G|chko
+?VKAngNr='U|xkopfnummer'                 ? U|xkopftyp = G|anko
+?AbasVAID='U|xkopfid'                    ? U|xkopftyp = G|anko
+?VKRAufNr='U|xkopfnummer'                ? U|xkopftyp = G|rako
+?AbasVAID='U|xkopfid'                    ? U|xkopftyp = G|rako
+?VKSANr='U|xkopfnummer'                  ? U|xkopftyp = G|snko
+?AbasSNID='U|xkopfid'                    ? U|xkopftyp = G|snko
+?VKAufNr='U|xkopfnummer'                 ? U|xkopftyp = G|abko
+?AbasVBID='U|xkopfid'                    ? U|xkopftyp = G|abko
+?VKSerNr='U|xkopfnummer'                 ? U|xkopftyp = G|sbko
+?AbasSBID='U|xkopfid'                    ? U|xkopftyp = G|sbko
+?VKRepNr='U|xkopfnummer'                 ? U|xkopftyp = G|srko
+?AbasREID='U|xkopfid'                    ? U|xkopftyp = G|srko
+?VKLiefNr='U|xkopfnummer'                ? U|xkopftyp = G|liko
+?AbasVLID='U|xkopfid'                    ? U|xkopftyp = G|liko
+?VKRechNr='U|xkopfnummer'                ? U|xkopftyp = G|reko
+?AbasVRID='U|xkopfid'                    ? U|xkopftyp = G|reko
+.continue NPOSEND
+..
+!NPPURCHASE
+?EKAnfNr='U|xkopfnummer'                 ? U|xkopftyp = G|anko
+?AbasEAID='U|xkopfid'                    ? U|xkopftyp = G|anko
+?EKRAufNr='U|xkopfnummer'                ? U|xkopftyp = G|rako
+?AbasEOID='U|xkopfid'                    ? U|xkopftyp = G|rako
+?EKBestNr='U|xkopfnummer'                ? U|xkopftyp = G|abko
+?AbasEBID='U|xkopfid'                    ? U|xkopftyp = G|abko
+?EKLiefNr='U|xkopfnummer'                ? U|xkopftyp = G|liko
+?AbasELID='U|xkopfid'                    ? U|xkopftyp = G|liko
+?EKRechNr='U|xkopfnummer'                ? U|xkopftyp = G|reko
+?AbasERID='U|xkopfid'                    ? U|xkopftyp = G|reko
+..
+!NPOSEND
+POS-END
+.continue ENDE
+..
+!ENDE
+.system 'F|expr("crlf+ < " + U|xt + " >" + U|xxmldata)' background

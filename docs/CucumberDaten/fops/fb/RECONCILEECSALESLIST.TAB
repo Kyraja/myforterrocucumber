@@ -1,0 +1,117 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Author         : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  : Report footer of the Infosystem fb/RECONCILEECSALESLIST
+..*****************************************************************************
+..
+.set trans -
+..
+..!meta H|=P131:0
+..!meta M|=fb/RECONCILEECSALESLIST
+..
+..*****************************************************************************
+!FILTER
+..*****************************************************************************
+.continue END ?  F|empty(H|zmart) & F|empty(H|ustva) & F|empty(H|ustid) & _H|zmrel
+.formula U|xtustid = F|regreplaceall(F|toupper(H|ustid), "[^A-Z0-9]", "")
+.continue END ? _F|empty(M|selustid) & U|xtustid <> U|xtselustid
+..
+.formula U|xthinweise = ""
+..
+..*****************************************************************************
+!CHK1
+..*****************************************************************************
+.copy    U|xbchk1 = _(H|zmart <> H|ustva^zmart)
+.continue CHK2 ? U|xbchk1 
+.set trans +
+.formula U|xthinweise = F|formatstr("Die ZM-Art der Buchungszeile ({1}) passt nicht zur ZM-Art in der Position ({2}).", H|zmart, H|ustva^zmart)
+.set trans -
+.continue CHK2
+..
+..*****************************************************************************
+!CHK2
+..*****************************************************************************
+.copy    U|xbchk2 = _(H|zmrel & F|empty(U|xtustid))
+.continue CHK3 ? U|xbchk2
+.formula U|xthinweise = U|xthinweise + ";" ? _F|empty(U|xthinweise)
+.set trans +
+.formula U|xthinweise = U|xthinweise + "Die Buchung ist fÅr die ZM relevant, aber die Umsatzsteuer-Identifikationsnummer fehlt."
+.set trans -
+.continue CHK3
+..
+..*****************************************************************************
+!CHK3
+..*****************************************************************************
+.copy    U|xbchk3 = _(H|zmrel & F|empty(H|zmart) & _F|empty(H|ustva^zmart))
+.continue CHK4 ? U|xbchk3
+.formula U|xthinweise = U|xthinweise + ";" ? _F|empty(U|xthinweise)
+.set trans +
+.formula U|xthinweise = U|xthinweise + "Die Buchung ist fÅr die ZM relevant, aber die ZM-Art fehlt."
+.set trans -
+.continue CHK4
+..
+..*****************************************************************************
+!CHK4
+..*****************************************************************************
+.copy    U|xbchk4 = _(H|zmrel & F|empty(H|ustva) & ('H|zmart(L=":")'="(Goods)" ; 'H|zmart(L=":")'="(TriangularTrade)" ; 'H|zmart(L=":")'="(Service)"))
+.continue CHK5 ? U|xbchk4
+.formula U|xthinweise = U|xthinweise + ";" ? _F|empty(U|xthinweise)
+.set trans +
+.formula U|xthinweise = U|xthinweise + "Die Buchung ist fÅr die ZM relevant, aber die UStVA-Position fehlt."
+.set trans -
+.continue CHK5
+..
+..*****************************************************************************
+!CHK5
+..*****************************************************************************
+.copy    U|xbchk5 = _(_H|zmrel & _F|empty(H|zmart) & _F|empty(U|xtustid)) 
+.continue CHK6 ? U|xbchk5
+.formula U|xthinweise = U|xthinweise + ";" ? _F|empty(U|xthinweise)
+.set trans +
+.formula U|xthinweise = U|xthinweise + "Die ZM-Art und die Umsatzsteuer-Identifikationsnummer sind nicht leer, aber die Buchung ist nicht als fÅr die ZM relevant markiert."
+.set trans -
+.continue CHK6
+..
+..*****************************************************************************
+!CHK6
+..*****************************************************************************
+.copy    U|xbchk6 = _(_H|zmrel & _F|empty(H|ustva^zmart)) 
+.continue LINE ? U|xbchk6
+.formula U|xthinweise = U|xthinweise + ";" ? _F|empty(U|xthinweise)
+.set trans +
+.formula U|xthinweise = U|xthinweise + "Die ZM-Art der UStVA-Position ist nicht leer, aber die Buchung ist nicht als fÅr die ZM relevant markiert."
+.set trans -
+.continue LINE
+..
+..*****************************************************************************
+!LINE
+..*****************************************************************************
+.copy    U|xramount = F|fxamount(M|auswaehr, H|betrag, G|datum, H|iwbu)
+.copy    U|xramount = U|xramount *  -1 ? H|soll
+.formula M|sumwaren1 = M|sumwaren1 + U|xramount ? 'H|zmart(L=":")'="(Goods)"
+.formula M|sumdienstleist1 = M|sumdienstleist1 + U|xramount ? 'H|zmart(L=":")'="(Service)"
+.formula M|sumdreieck1 = M|sumdreieck1 + U|xramount ? 'H|zmart(L=":")'="(TriangularTrade)"
+.formula M|sumwaren2 = M|sumwaren2 + U|xramount ? 'H|ustva^zmart(L=":")'="(Goods)"
+.formula M|sumdienstleist2 = M|sumdienstleist2 + U|xramount ? 'H|ustva^zmart(L=":")'="(Service)"
+.formula M|sumdreieck2 = M|sumdreieck2 + U|xramount ? 'H|ustva^zmart(L=":")'="(TriangularTrade)"
+.continue END ? U|xbchk1 & U|xbchk2 & U|xbchk3 & U|xbchk4 & U|xbchk5 & U|xbchk6
+..
+.make screen line +O
+.assign  M|tbuchung  = H|id
+.copy    M|tkonto    = H|konto
+.copy    M|tklm      = H|klm
+.formula M|tustid    = U|xtustid
+.copy    M|tustva    = H|ustva
+.formula M|tbetrag   = U|xramount
+.copy    M|tlaart    = H|laart
+.copy    M|tbudat    = H|budat
+.copy    M|tzmart    = H|zmart
+.formula M|thinweise = U|xthinweise
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

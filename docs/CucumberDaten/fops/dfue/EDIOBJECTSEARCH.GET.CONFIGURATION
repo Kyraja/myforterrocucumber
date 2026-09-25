@@ -1,0 +1,65 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDIOBJECTSEARCH.GET.CONFIGURATION
+.. Author         : carue
+.. Verantwortlich : carue
+.. Kontrolle      : dsch
+.. Functionality  : Find configuration for edi object search
+..*****************************************************************************
+.set trans -
+.input "DATEI.F"
+.type bool xbpreisausedi ? _F|defined(U|xbpreisausedi)
+.formula U|xbpreisausedi = false
+..
+.output new 'U|xtfehler'
+.continue NOPART ? F|empty(M|edifact^partner)
+..
+..find partner
+.load 3 customer 'F|formatstr("$,,;@gruppe=4;klnum=={1}", M|edifact^partner^id)'
+.continue NOCUST ? _G|mehr
+..
+..select line for edi message
+.load 3 line 'F|formatstr("$,,edinachr=={1}", M|edifact^edinachr)'
+.continue NOMSG  ? _G|mehr
+..
+..get value of field priceFromEDI
+.formula U|xbpreisausedi = 3|preisausedi
+.formula M|preisausedi   = 3|preisausedi
+.formula M|suchkonfig    = 3|suchkonfig^id
+..
+.load 6 ediconfiguration '3|suchkonfig^id'
+.continue NOCONFIG ? _G|mehr
+..
+..FOPs laden
+.input "EDIOBJECTSEARCH.LOAD.FOPS"
+..
+..*****************************************************************************
+!END
+..release locks and buffers
+.load 3 ? F|defined(3|id)
+.continue
+..
+..
+!NOCUST
+.set trans +
+FÅr den Kunden 'M|edinachr^partner' sind keine EDI-Nachrichten definiert.
+.set trans -
+.continue END
+..
+!NOMSG
+.set trans +
+Die Nachricht 'M|edifact^edinachr' ist fÅr den Kunden nicht definiert.
+.set trans -
+.continue END
+..
+!NOCONFIG
+.set trans +
+Die Nachricht hat keinen Eintrag fÅr die Konfiguration der EDI-Objektsuche.
+.set trans -
+.continue END
+..
+!NOPART
+.set trans +
+Es wurde kein Kunde zur Konfiguration der Verarbeitung gefunden.
+.set trans -
+.continue END

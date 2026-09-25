@@ -1,0 +1,103 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BSTL.TAB
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Erzeugt eine Tabellenzeile je Baukastenelement.
+.. Functionality  : Creates a row for each single-level BOM element.
+...Includes
+.. include st/GETICONPART
+..*****************************************************************************
+.set trans -
+..
+.type VPKS1  xtartid  ? _F|defined(xtartid)
+.type text   xticon   ? _F|defined(xticon)
+..
+.. Filter elements which do not fit with input parameters
+.continue END ? _M|bmitag   &  H|elart = 3
+.continue END ? _M|bmitfm   &  H|elart = 2
+.continue END ?  M|brelevant & _H|relevant
+..
+.. Create a table row
+.make screen line +O
+.colour -background 'M|komponente' 'M|aktzeile'
+.formula M|tbaumstufe = M|stufe
+.assign M|elart = H|elart
+.formula M|mge = H|anzahl
+.assign M|amge = H|amge
+.copy M|combiprod = F|equals(H|kompeig , "(Coproduct)")
+.copy M|kompeig = H|kompeig
+.formula M|kompeigz = ""
+.formula M|kompeigz = M|koppelz ? F|equals(H|kompeig, "(Coproduct)")
+.formula M|kompeigz = M|umbauz  ? F|equals(H|kompeig, "(ConversionProduct)")
+.copy M|elem = H|elem
+.assign M|tbasisartikel = H|elem^basisartikel
+.copy M|tele = H|elem^le ? H|elart <> 3
+.assign M|tbaumstat = "+" ? M|elem^ozeilen > 0
+..
+.. If part is relocated, use its warehouse group otherwise use warehouse group as known from parts list header
+.copy M|laggr = H|lgruppean
+.copy M|laggr = U|xintlg ? F|empty(H|lgruppean)
+..
+.copy U|xtartid = M|elem
+.formula M|tbaumicon = U|xtartid^elementicon
+.continue INTLGR ? M|laggr^intlager
+..
+.. externe Lagergruppe
+.type ID39:2 xtlgid   ? _F|defined(xtlgid)
+.assign U|xtlgid  = M|laggr
+.input "st/GETICONPART"
+.formula M|tbaumicon = U|xticon 
+..
+!INTLGR: interne Lagergruppe
+.continue NOPROD ? H|elart = 2 ; H|elart = 3
+.formula M|zeichn = H|elem^zeichn
+.assign M|wstoff = H|elem^wstoff
+.load 0 add H|elem
+.. Lagergruppe bestimmen
+.copy 0|lgruppean = M|laggr ? M|laggr^id <> U|xintlg^id ; F|equals(0|bsart, "(Relocation)")
+.continue WGROUP ? _F|equals(0|bsart, "(Relocation)") ; 0|tzeilen <> 1
+.load 0 line 1
+.continue WGROUP ? 0|elem^id <> 0|id
+.. skip destination warehouse group, continue with source warehouse group
+.copy 0|lgruppean = 0|umllg
+..
+!WGROUP
+.load 0 header
+.copy 0|flistean = M|fertliste ? _F|empty(M|fertliste) & M|stufe = 1 & _F|equals(0|bsart, "(Relocation)")
+.copy 0|mitaufl = G|TRUE ? M|mitaufl
+.copy M|dispoa = 0|dispoa
+.assign M|bsart = 0|bsart ? _M|combiprod
+.copy M|tele = 0|le
+..
+!NOPROD: copy data from parts list row
+.formula M|vpos = H|vpos
+.formula M|laenge = H|lge
+.copy M|ellme = H|ellme ? M|laenge <> 0
+.formula M|breite = H|breite
+.copy M|elbme = H|elbme ? M|breite <> 0
+.copy M|elle = H|elle ? (M|laenge = 0) & (M|breite = 0)
+.copy M|ebu = H|bu
+.copy M|mgr = H|mgr
+.copy M|lgr = H|lgr
+.formula M|postext = H|ptext
+.copy M|filter = H|filter
+.copy M|filtervgl = H|filtervgl
+.copy M|filtervgl2 = H|filtervgl2
+.copy M|relevant = H|relevant
+.copy M|auslaufstatusicon = H|auslaufstatusicon
+.assign M|tnachfolgeartikel = H|tnachfolgeartikel
+.copy M|tlbsdatum = H|tlbsdatum
+.copy M|tlverwdatum = H|tlverwdatum
+.copy M|tvgltermin = H|tvgltermin
+.continue OPERAT ? H|elart = 3
+.formula M|gesamt = H|gesamtm
+.continue END
+..
+!OPERAT: Total quantity for operation
+.formula M|gesamt = H|gesamtz
+.assign M|tele = "(HUR)"
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,155 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : DFVUSTVA.EV
+..  Datum          : 29.03.2004
+..  Version        : 1
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : Allgemeines EFOP des Infosystems DFVUSTVA zum
+..                   Antrag auf Dauerfristverl„ngerung
+..
+..  Schnittstelle (Parameter und ihre Bedeutung)
+..    verwendet Arrayparameter (arg.i)          : nein
+..    verwendet Namensparameter (xpname=wert)   : nein
+..
+..    Parameter    Bedeutung
+..    ---------------------------------------------------------
+..    xp...        ...
+..
+..  Ablauf         :
+..
+..  Functionality  :
+..
+..  Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    ---------------------------------------------------------
+..    xp...        ...
+..
+..  Program flow  :
+... Includes      :
+..*****************************************************************************
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.continue FORM      ? (G|evtartengl = "FIELD_EXIT") & (G|evtvar = "ustvaf")
+.continue SUMANTEIL ? (G|evtartengl = "FIELD_EXIT") & (G|evtvar = "sumanteil")
+.continue BERECH    ? (G|evtartengl = "FIELD_EXIT") & (G|evtvar = "vorjahr"   ; G|evtvar = "sumvoraus")
+.continue INTERVAL  ? (G|evtartengl = "FIELD_EXIT") & (G|evtvar = "monatlich" ; G|evtvar = "quartal")
+.continue FAMT      ? (G|evtartengl = "FIELD_EXIT") & (G|evtvar = "famt")
+.continue END
+..
+..*****************************************************************************
+!FAMT: financial institute changed
+..*****************************************************************************
+.formula M|faname = "" ? F|empty(M|famt)
+.continue END           ? F|empty(M|famt)
+.continue FORM          ? F|empty(M|famt) & G|evtvar = "famt"
+.formula M|faname = M|famt^name
+.continue END
+..
+..*****************************************************************************
+!FORM: form chosen
+..*****************************************************************************
+.continue END ? F|empty(M|ustvaf)
+.load 0 add M|ustvaf
+.continue END ? _G|mehr
+.formula M|fname      = 0|name
+.copy M|bukreis  = 0|bukreis
+.assign M|famt     = 0|famt
+.formula M|faname     = 0|famt^name ? _F|empty(0|famt)
+.formula M|steunr     = 0|steunr    ? G|evtvar = "ustvaf"
+.formula M|datum      = 0|melddat   ? G|evtvar = "ustvaf"
+.formula M|datum      = G|datum     ? F|empty(M|datum)
+.. Variable ist nicht in allen Versionen definiert
+.formula M|bufanr     = 0|bufanr    ? F|defined(0|bufanr)
+.formula M|berater    = 0|mitwirk^name ? _F|empty(0|mitwirk)
+..
+.continue END ? F|empty(0|ganjahr)
+.select year '0|ganjahr'
+.assign M|jahr = F|year(G|adatum)
+.load 0
+.continue END
+..
+..*****************************************************************************
+!INTERVAL: Reporting interval
+..*****************************************************************************
+..
+.formula M|monatlich = G|false ?  M|quartal   & G|evtvar = "quartal"
+.formula M|quartal   = G|false ?  M|monatlich & G|evtvar = "monatlich"
+.formula M|.G|evtvar   = G|true  ? _M|monatlich & _M|quartal
+..
+.. nur bei monatlicher Abgabe Anmeldung zu Sondervorauszahlung
+..
+.continue SPERR ? _M|monatlich
+..
+.protection -reset bericht
+.protection -reset verrech
+.protection -reset einzug
+.protection -reset sumvoraus
+.protection -reset vorjahr
+.protection -reset sumanteil
+..
+.select evaluation "$,,@gruppe=4;@zeilen=ja;bempos^nummer=83"
+.continue END ? _G|mehr
+.select line 'H|selzeile'
+.formula M|sumvoraus = F|condexpr(H|stbetrag >= 0, H|stbetrag, 0)
+.select evaluation "$,,@gruppe=4;@zeilen=ja;stpos^nummer=39"
+.continue END ? _G|mehr
+.select line 'H|selzeile'
+.formula M|vorjahr = H|stbetrag
+..
+..*****************************************************************************
+!BERECH
+..*****************************************************************************
+.formula M|gesamt    = F|trunc(M|sumvoraus + M|vorjahr)
+.formula M|sumanteil = F|trunc((M|sumvoraus + M|vorjahr) / 11)
+.continue SUMANTEIL
+..
+..*****************************************************************************
+!SUMANTEIL
+..*****************************************************************************
+.. muss positiv sein
+.formula M|sumanteil = 0 ? M|sumanteil < 0
+.continue END
+..
+..*****************************************************************************
+!START
+..*****************************************************************************
+.continue END
+..
+..*****************************************************************************
+!SPERR: No monthly report
+..*****************************************************************************
+.formula M|sumvoraus = 0
+.formula M|vorjahr   = 0
+.formula M|sumanteil = 0
+.formula M|gesamt    = 0
+.formula M|bericht = G|false
+.formula M|verrech = G|false
+.formula M|einzug  = G|false
+.protection sumvoraus
+.protection vorjahr
+.protection sumanteil
+.protection bericht
+.protection verrech
+.protection einzug
+.continue END
+..
+..
+..*****************************************************************************
+!ERROR1: No period in form
+..*****************************************************************************
+.error Kein Zeitraum im UStVA-Formular 'M|ustvaf' angegeben.
+.cursor ustvaf
+.end 1
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

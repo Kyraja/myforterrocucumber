@@ -1,0 +1,698 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : WORKLIST.EV
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Function       : Buttonbehandlung der Tabelle
+..                  H|-> Arbeitsschein
+.. Functionality  : Treatment of table buttons
+..                  H|-> work slip
+..  Includes       :
+.. include fe/WORKLIST.INFOTIMER
+.. include is/PDC.DURATION
+.. include fe/WORKLIST.APSDAT
+.. include fe/WORKLIST.STATUS
+.. include fe/WORKLIST.CUMQUAN
+.. include fe/WORKLIST.EDP
+.. include fe/SCAN.REFRESH
+..
+.. Meta
+..<META M| = 'fe/WORKLIST'>
+..*****************************************************************************
+.set trans -
+.type text xtsys         ? _F|defined(U|xtsys)
+.type text xtsel         ? _F|defined(U|xtsel)
+.type text xtcmd         ? _F|defined(U|xtcmd)
+.type M4.2 xzendezeit    ? _F|defined(U|xzendezeit)
+.. xbzeitfehler wird in is/PDC.DURATION gesetzt
+.type bool xbzeitfehler  ? _F|defined(U|xbzeitfehler)
+.type GD2  xdstart       ? _F|defined(U|xdstart)
+.type GD2  xdaktuell     ? _F|defined(U|xdaktuell)
+.type GD2  xdende        ? _F|defined(U|xdende)
+.type Z    xzanfschicht  ? _F|defined(U|xzanfschicht)
+.type Z    xzendschicht  ? _F|defined(U|xzendschicht)
+.type bool xbnormal      ? _F|defined(U|xbnormal)
+.type text xtkomm        ? _F|defined(U|xtkomm)
+.type text xtdatei       ? _F|defined(U|xtdatei)
+.type text xtfertstatus  ? _F|defined(U|xtfertstatus)
+..
+.. M|iev = 1 = "RÅsten anfangen"
+.. M|iev = 2 = "RÅsten abmelden"
+.. M|iev = 3 = "Produktion anfangen"
+.. M|iev = 4 = "Abbruch"
+.. M|iev = 5 = "Unterbrechung"
+.. M|iev = 7 = "KomplettrÅckmeldung mit Dialog"
+.. M|iev = 8 = "KomplettrÅckmeldung ohne Dialog"
+.. M|iev = 9 = "TeilrÅckmeldung"
+.continue NOINIT    ? G|evtvar = "fertig"
+.continue NOINIT    ? G|evtvar = "istmge"
+.continue NOINIT    ? G|evtvar = "ausmge"
+.continue NOINIT    ? G|evtvar = "namge"
+.continue NOINIT    ? G|evtvar = "agrund"
+.continue NOINIT    ? G|evtvar = "sgrund"
+.continue NOINIT    ? G|evtvar = "oeffneliste"
+.formula M|iev = 0  
+!NOINIT
+.formula M|kiev = 0
+..
+.continue RUESTEN    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "truesten"
+.continue PRODUKTION ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tproduktion"
+.continue ABBRUCH    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tabbruch"
+.continue UNTBREC    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tunterbrechen"
+.continue BEENDEN    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tbeenden"
+.continue RUECKMELD  ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "trueckmeld"
+.continue KOMPLETT   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tkomplettrueck"
+.continue KURZL      ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tkurzlauf"
+.continue STATUS     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tstatus"
+.continue HINWEIS    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "thinweis"
+.continue DOK        ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tfertdok"
+.continue FBU        ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "fbu"
+.continue UEBERGEBEN ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "fertig"
+.continue QLZEIGEN   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "oeffneliste"
+.continue RESET      ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "namge"
+.continue RESET      ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "ausmge"
+.continue BUCHEN     ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "istmge"
+.continue END 
+..
+!QLZEIGEN 
+.continue NOQL ? _M|qualliste 
+.continue QL   ?  M|qualliste
+!QL
+.formula U|xtsel = "$,,such=;ma="+'M|mitarb'+";@gruppe=3;@autostart=ja;"
+.select qualifications 'U|xtsel'
+.command -parallel 'H|id'
+.continue END
+!NOQL
+.set trans +
+.box
+Der Mitarbeiter hat keine Qualifikationsliste.
+..
+.set trans -
+.continue END
+!BUCHEN
+.continue FEHL5 ? M|istmge > M|ofmge & _M|ueberbuchen
+.continue END
+..
+!RESET
+.protection -reset ngrund ? M|namge > 0
+.protection -reset agrund ? M|ausmge > 0
+.protection ngrund        ? M|namge = 0
+.protection agrund        ? M|ausmge = 0
+.continue END
+..
+!FBU: Materialentnahme, Button Feld in FO geschÅtz!!!
+.continue END ? F|empty(M|fbu)
+.formula U|xtkomm = "(WOIssue)"+ " ? auftrag=" + M|taschein^id +" | 0:stlvblad=1 | [autoclose]=1"     ? _M|matentn
+.formula U|xtkomm = "(WOIssue)"+ " ? auftrag=" + M|taschein^snba^id +" | 0:stllad=1 | [autoclose]=1"  ?  M|matentn
+.command -parallel 'U|xtkomm'
+.continue
+..
+!HINWEIS
+.continue END ? F|empty(M|thinweis)
+.box 
+'F|regreplaceall(M|taflptext, ";", "\u000A")' 
+..
+.continue END
+..
+!RUESTEN: Anlage des Fertigungsereignisses RÅsten Start und Bearbeitung Start
+.continue END ? F|empty(M|truesten)
+.. Gibt es den Arbeitschein noch?
+.formula U|xtsel = "$,,nummer="+'M|taschein'+";art=;mgr=;@ablageart=(Active);@gruppe=1"
+.select workorder nolock 'U|xtsel'
+.continue RFEHL1 ? _G|mehr
+.. hat der AS schon den Status Bearbeitung
+.continue RFEHL3 ? F|equals(M|taschein^fertstatus, "(StartProcessing)") & _M|mehrruesten
+.. ist der AS schon abgeschlossen
+.continue RFEHL4 ? F|equals(M|taschein^fertstatus, "(Completed)")
+..
+.. hat der Mitarbeiter bereits einen offenen Arbeitsschein
+.formula U|xtsel = "$,,offen=true;asnr="+'M|taschein'+";ma="+'M|mitarb^id'+";fertstatus=(Setup);"
+.select pdc 'U|xtsel'
+.continue RFEHL1 ? G|mehr
+..
+.. hier noch keine offene RÅst-Auftragszeit
+.. Anlage des Fertigungsereignis
+.. Auftragszeit anlegen
+..
+.formula M|iev = 1
+.input "fe/WORKLIST.EDP"
+..
+.. PrÅfen, ob Datensatz geschrieben worden ist
+.continue RFEHL2 ? _G|mehr
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};RÅsten angestempelt;Anf-Zeit: {3};MA: {4}", 'M|aktzeile', 'M|taschein', 'G|zeit', 'M|mitarbname')
+.set trans -
+.formula M|bdestatus = M|leg6 
+.protection -reset ugrund 'M|aktzeile'
+..
+.. Arbeitsschein auf Status RÅsten umstellen, wenn er sich noch nicht in Bearbeitung befindet
+.formula U|xtsel = "$,,nummer="+'M|taschein'+";art=;mgr=;fertstatus=`;@ablageart=(Active);@gruppe=1"
+.select workorder nolock 'U|xtsel'
+.continue NOBA ? _G|mehr
+.formula M|iev = 11
+.formula U|xtfertstatus = "(Setup)"
+.input "fe/WORKLIST.EDP"
+!NOBA
+.select -
+..
+.. apsanfdat fÅr abas APS setzen
+.input "fe/WORKLIST.APSDAT"
+..
+.. Fertigungsereignisse prÅfen
+.input "fe/WORKLIST.STATUS"
+.input "fe/SCAN.REFRESH"     ? F|defined(M|scan)
+.continue RENDE
+..
+!RFEHL1: es gibt schon eine offene Auftragszeit
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Der Mitarbeiter {3} hat schon eine offene RÅst-Auftragszeit.", 'M|aktzeile', 'M|taschein', 'M|mitarbname')
+.set trans -
+.formula M|bdestatus = M|leg9
+.continue RENDE
+..
+!RFEHL2: Auftragszeit konnte nicht angestempelt werden
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};RÅsten konnte nicht angestempelt werden.", 'M|aktzeile', 'M|taschein')
+.set trans -
+.formula M|bdestatus = M|leg9
+.continue RENDE
+..
+!RFEHL3: AS schon im Status Bearbeitung
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Bearbeitung hat schon begonnen.", 'M|aktzeile', 'M|taschein')
+.set trans -
+.formula M|bdestatus = M|leg9
+.continue RENDE
+..
+!RFEHL4: AS schon abgeschlossen
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Bearbeitung ist abgeschlossen.", 'M|aktzeile', 'M|taschein')
+.set trans -
+.formula M|bdestatus = M|leg9
+.continue RENDE
+..
+!RENDE
+.input "fe/WORKLIST.INFOTIMER"  ? _F|defined(M|scan)
+.continue END
+..
+!PRODUKTION: wenn es eine RÅstauftragszeit gibt, wird diese Auftragszeit abgemeldet
+.continue END ? F|empty(M|tproduktion)
+.. eine neue Auftragszeit vom Typ "Bearbeitung" wird angestempelt
+.. Gibt es den Arbeitschein noch?
+.formula U|xtsel = "$,,nummer="+'M|taschein'+";art=;mgr=;@ablageart=(Active);@gruppe=1"
+.select workorder nolock 'U|xtsel'
+.continue PFEHL1 ? _G|mehr
+..
+.. ist die Bearbeitung schon abgeschlossen
+.continue PFEHL3 ? F|equals(M|taschein^fertstatus, "(Completed)")
+.. hat der Mitarbeiter bereits einen offenen Arbeitsschein
+.formula U|xtsel = "$,,offen=true;asnr="+'M|taschein'+";ma="+'M|mitarb^id'+";fertstatus=(StartProcessing)"
+.select pdc 'U|xtsel'
+.continue PFEHL1 ? G|mehr
+..
+.. hier noch keine offene Bearbeitungs- Auftragszeit
+..
+.. PrÅfen ob es einen offene RÅstauftragszeit gibt 
+.. danach die Auftragszeit fÅr die Bearbeitung anstempeln
+.. Alle offenen RÅstzeiten fÅr AS  prÅfen und ggf. abstempeln
+.formula U|xtsel = "$,,offen=true;asnr="+'M|taschein'+";ma=;fertstatus=(Setup)"
+.select pdc 'U|xtsel'
+.continue BEARB ? _G|mehr
+..
+!AZLOOP
+.input "is/PDC.DURATION"
+.continue NEXT ? U|xbzeitfehler
+.formula M|iev = 2
+.input "fe/WORKLIST.EDP"
+..
+!NEXT
+.select pdc
+.continue AZLOOP ? G|mehr
+..
+!BEARB: Auftragszeit fÅr Bearbeitung anstempeln
+.formula M|iev = 3
+.input "fe/WORKLIST.EDP"
+..
+.. PrÅfen, ob Datensatz geschrieben worden ist
+.continue PFEHL2 ? _G|mehr
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Bearbeitung angestempelt;Anf-Zeit: {3};MA: {4}", 'M|aktzeile', 'M|taschein', 'G|zeit', 'M|mitarbname')
+.set trans -
+.protection -reset ugrund 'M|aktzeile'
+.formula M|bdestatus = M|leg6
+..
+.. Arbeitsschein auf Status RÅsten umstellen
+.formula U|xtsel = "$,,nummer="+'M|taschein'+";art=;mgr=;@ablageart=(Active);@gruppe=1"
+.select workorder nolock 'U|xtsel'
+.formula M|iev = 11
+.formula U|xtfertstatus = "(StartProcessing)"
+.input "fe/WORKLIST.EDP"
+.select -
+..
+.. apsanfdat fÅr abas APS setzen
+.input "fe/WORKLIST.APSDAT"
+..
+.. Fertigungsereignisse prÅfen
+.input "fe/WORKLIST.STATUS"
+.input "fe/SCAN.REFRESH"   ? F|defined(M|scan)
+.continue PENDE
+..
+!PFEHL1: es gibt schon eine offene Auftragszeit
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Der Mitarbeiter {3} hat schon eine offene Bearbeitungs-Auftragszeit.", 'M|aktzeile', 'M|taschein', 'M|mitarbname')
+.set trans -
+.formula M|bdestatus = M|leg9
+.continue PENDE
+..
+!PFEHL2: Auftragszeit konnte nicht angestempelt werden
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Bearbeitung konnte nicht angestempelt werden.", 'M|aktzeile', 'M|taschein')
+.set trans -
+.formula M|bdestatus = M|leg9
+.continue PENDE
+..
+!PFEHL3: AS schon abgeschlossen
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Bearbeitung ist abgeschlossen.", 'M|aktzeile', 'M|taschein')
+.set trans -
+.formula M|bdestatus = M|leg9
+.continue PENDE
+.set trans -
+..
+!PENDE: Programmende
+.input "fe/WORKLIST.INFOTIMER" ? _F|defined(M|scan)
+.continue END
+..
+!BEENDEN: Beendet bedeutet, die angestempelte RÅst- oder Bearbeitungszeit mit einer End-Zeit ohne Gutmenge abgemeldet wird
+.formula M|iev = 12
+.continue ANOSICH
+!ABBRUCH: Abbruch bedeutet, der Status im Arbeitsschein wird geleert: Der Werker kann erneut rÅsten
+.formula M|iev = 4
+.continue END      ?  F|empty(M|tabbruch) & G|evtvar = "tabbruch"
+.continue ANOSICH  ? _M|sicherheit
+.box -button no:yes
+Achtung: Sie brechen die Arbeit an diesem Arbeitsschein fÅr alle Mitarbeiter ab.
+Wollen Sie das wirklich?
+?Sie haben keinen Unterbrechungsgrund eingetragen! ? F|empty(M|ugrund)
+..
+.continue END  ? G|box = G|boxno 
+.continue END  ? G|box = G|boxcancel 
+.continue ANOSICH
+..
+!UNTBREC: Unterbrechen bedeutet, der Status im Arbeitsschein wird nicht geleert: Der Werker kann ohne Verzîgerungen weiterarbeiten.
+.formula M|iev = 5
+.continue END      ?  F|empty(M|tunterbrechen) & G|evtvar = "tunterbrechen"
+.continue ANOSICH  ? _M|sicherheit
+.box -button no:yes
+Achtung: Sie unterbrechen die Arbeit an diesem Arbeitsschein.
+Wollen Sie das wirklich?
+?Sie haben keinen Unterbrechungsgrund eingetragen! ? F|empty(M|ugrund)
+.continue END  ? G|box = G|boxno 
+.continue END  ? G|box = G|boxcancel
+.continue ANOSICH
+..
+!ANOSICH: offene Auftragszeiten abmelden
+.. beim Unterbrechen und Beenden wird nur der Arbeitsschein des MAs unterbrochen
+.formula U|xtsel = "$,,offen=true;asnr="+'M|taschein'+";ma="+'M|mitarb'+";fertstatus="  ? M|iev = 5 ; M|iev = 12
+.. beim Abbrechen werden alle offenen Arbeitsscheine auf diesen AG in einer Schleife abgebrochen
+.formula U|xtsel = "$,,offen=true;asnr="+'M|taschein'+";ma=;fertstatus="               ? M|iev = 4
+.select pdc 'U|xtsel'
+!MEHRABB    
+.continue AFEHL1 ? _G|mehr
+.input "is/PDC.DURATION"
+.continue AFEHL2  ? U|xbzeitfehler
+..
+.input "fe/WORKLIST.EDP"
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Abgestempelt wg. Unterbrechung;End-Zeit: {3};MA: {4}", 'M|aktzeile', 'M|taschein', 'G|zeit', 'M|mitarbname') ? G|evtvar = "tunterbrechen"
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Abgestempelt wg. Abbruch;End-Zeit: {3};MA: {4}", 'M|aktzeile', 'M|taschein', 'G|zeit', 'M|mitarbname') ? G|evtvar = "tabbruch"
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Auftragzeit beendet;End-Zeit: {3};MA: {4}", 'M|aktzeile', 'M|taschein', 'G|zeit', 'M|mitarbname') ? G|evtvar = "tbeenden"
+.set trans -
+.formula M|bdestatus = M|leg6
+.select pdc               ? M|iev = 4
+.continue MEHRABB ? G|mehr & M|iev = 4
+.formula M|ugrund = ""
+..
+.. Konfiguration beenden
+.continue STATBLE ? G|evtvar = "tunterbrechen" ; G|evtvar = "tbeenden"
+.. hier sitzt der Schalter auf ja, der Fertigungsstatus im Arbeitschein wird auf leer gesetzt
+.formula U|xtsel = "$,,nummer="+'M|taschein'+";art=;mgr=;@ablageart=(Active);@gruppe=1"
+.select workorder nolock 'U|xtsel'
+.formula M|iev = 11
+.formula U|xtfertstatus = "(EmptyEntry)"
+.input "fe/WORKLIST.EDP"
+.select -
+.formula M|ttextstatus = ""
+..
+!STATBLE: Fertigungsereignisse prÅfen
+.input "fe/WORKLIST.STATUS"
+.input "fe/SCAN.REFRESH"   ? F|defined(M|scan)
+.continue END
+..
+!AFEHL1: Der Mitarbeiter hat keine offene Auftragszeit
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};MA {3} hat keine offene Auftragszeit.", 'M|aktzeile', 'M|taschein', 'M|mitarbname')
+.set trans -
+.formula M|bdestatus = M|leg9
+.continue END
+..
+!AFEHL2:  Auftragszeit lÑuft Åber mehrer Tage
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Auftragszeit konnte nicht abgestempelt werden. Zu lange Bearbeitungszeit.", 'M|aktzeile', 'M|taschein')
+.set trans - 
+.formula M|bdestatus = M|leg9
+.continue END
+..
+!RUECKMELD: TeilrÅckmeldung
+.continue END ? F|empty(M|trueckmeld)
+..
+.. ist die Bearbeitung schon abgeschlossen?
+.continue FEHL3 ? F|equals(M|taschein^fertstatus, "(Completed)")
+..
+.protection -reset istmge 
+.formula P|maskkontextfop = ""
+.formula M|aschein = M|taschein^id
+.formula U|xtsel = "$,,offen=true;asnr="+'M|aschein'+";ma="+'M|mitarb^id'+";fertstatus=(StartProcessing)"
+.select pdc 'U|xtsel'
+.formula M|anfzeit = H|anfzeit
+.formula M|endzeit = G|zeit
+.formula M|anfdat  = H|anfdat
+.formula M|enddat  = G|datum
+.formula M|istmge = 0
+.formula M|ausmge = 0
+.formula M|namge = 0
+.formula M|charge = ""
+.protection ngrund
+.protection agrund
+.formula M|ngrund = ""
+.formula M|agrund = ""
+.formula M|subnr = M|zn
+.formula M|ofmge = M|tofmge
+.copy M|bkomplett   = G|FALSE
+.copy M|bkurzlauf   = G|FALSE
+.copy M|bteilrueck  = G|FALSE
+.copy M|bteilrueck  = G|TRUE ? G|evtvar = "trueckmeld"
+..
+.cursor istmge 0
+.continue END
+..
+!UEBERGEBEN
+.continue FEHL5 ? M|istmge > M|ofmge & _M|ueberbuchen
+.. Bei einer TeilrÅckmeldung geht eine Submaske der Auftragszeit auf und der Werker gibt Daten wie Gutmenge, Ausschuss ein
+.. Bei weiteren TeilrÅckmeldungen muss nun der Kalender berÅcksichtigt werden                     
+..    
+.. PlausibilitÑtsprÅfungen: Gibt es den Arbeitschein noch?
+.formula U|xtsel = "$,,nummer="+'M|aschein'+";art=;mgr=;@ablageart=(Active);@gruppe=1"
+.select workorder nolock 'U|xtsel'
+.continue FEHL1 ? _G|mehr
+..
+.. ist die Bearbeitung schon abgeschlossen?
+.continue FEHL3 ? F|equals(M|aschein^fertstatus, "(Completed)")
+.. hat der Mitarbeiter bereits einen offenen Arbeitsschein?
+.continue NOCHECK ? M|bkurzlauf
+.formula U|xtsel = "$,,offen=true;asnr="+'M|aschein'+";ma="+'M|mitarb^id'+";fertstatus=(StartProcessing)"
+.select pdc 'U|xtsel'
+.continue FEHL1 ? _G|mehr
+..
+!AUTFALS: hier gibt es eine offene Bearbeitungs- Auftragszeit
+.. in dieser Einstellung ist die 24 Stundengrenze zu beachten
+.input "is/PDC.DURATION"
+.continue FEHL4  ? U|xbzeitfehler 
+..
+!NOCHECK
+.select screen line 'M|subnr'
+.formula M|iev = 9   ?  M|bteilrueck
+.formula M|iev = 7   ? _M|bteilrueck
+.formula M|iev = 10  ?  M|bkurzlauf
+.input "fe/WORKLIST.EDP"
+..
+.cursor trueckmeld 1
+.continue AKTUAL ?  M|bkurzlauf 
+.continue PRUEF  ? _M|bteilrueck
+.. PrÅfen, ob Datensatz geschrieben worden ist
+.. man muss die Auftragszeit nochmal laden, damit man die Endzeit abprÅfen kann
+.. im Dialog kann den Anwender den Datensatz ja nicht speichern
+.formula U|xtsel = "$,,id="+'H|id'+";"
+.select pdc 'U|xtsel'
+.continue FEHL2 ?  F|empty(H|endzeit)
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Bearbeitung abgestempelt;Anf-Zeit: {3};MA: {4}", 'M|aktzeile', 'M|taschein', 'G|zeit', 'M|mitarbname')
+.set trans -
+.formula M|bdestatus = M|leg6
+..
+.continue ABLAG ? M|taschein/"*\****"
+.. apsanfdat fÅr abas APS setzen
+.. Datum nur aktualisieren, wenn Gut-Menge gemeldet wurde
+.input "fe/WORKLIST.APSDAT" ? H|istmge > 0
+.continue AKTUAL
+..
+!AKTUAL: Aktualiseren
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};KurzlÑufer gestempelt;Anf-Zeit: {3};MA: {4}", 'M|aktzeile', 'M|taschein', 'G|zeit', 'M|mitarbname') ? M|bkurzlauf
+.set trans -
+.formula M|bdestatus = M|leg6 ? M|bkurzlauf
+.continue ABLAG ? M|taschein/"*\****"
+.. -> Fortschritt berechenen
+.. -> Fertigungsereignisse neu schreiben
+..
+.input "fe/WORKLIST.CUMQUAN"
+.input "fe/WORKLIST.STATUS"
+.cursor mitarb             ? F|defined(M|scan)
+.input "fe/SCAN.REFRESH"   ? F|defined(M|scan)
+.continue RUEENDE
+..
+!RUE4: kein Kalender gefunden
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Kein Kalender gefunden.; Die Bearbeitung wurde nicht abgestempelt.", 'M|aktzeile', 'M|taschein')
+.set trans -
+.formula M|bdestatus = M|leg9
+.continue RUEENDE
+..
+!RUE6: Anfangs- und Enddatum unlogisch
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Anfangsdatum grî·er als Enddatum.;Die Bearbeitung wurde nicht abgestempelt.", 'M|aktzeile', 'M|taschein')
+.set trans -
+.formula M|bdestatus = M|leg9
+.continue RUEENDE
+..
+!RUE7: kein Tagesplan gefunden
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Kein Tagesplan AVL.TP gefunden.;Die Bearbeitung wurde  nicht abgestempelt.", 'M|aktzeile', 'M|taschein')
+.set trans -
+.formula M|bdestatus = M|leg9
+.continue RUEENDE
+..
+!RUE9: Auftragszeit von heute wurde nicht abgestempelt
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Bearbeitung von heute konnte nicht abgestempelt werden.", 'M|aktzeile', 'M|taschein')
+.set trans -
+.formula M|bdestatus = M|leg9
+.. alte Bearbeitungen wurden abgestempelt, die Bearbeitung von heute wurde abgebrochen
+.input "fe/WORKLIST.STATUS"
+.continue RUEENDE
+..
+!RUEENDE
+.input "fe/WORKLIST.INFOTIMER" ? _F|defined(M|scan)
+.continue END
+..
+!KURZL: KurzlÑufer melden
+.continue END ? F|empty(M|tkurzlauf)
+.protection -reset istmge 
+.formula P|maskkontextfop = "KURZLAUF"
+.formula M|anfzeit        = 'G|zeit'
+.formula M|anfdat          = 'G|datum'
+.formula M|endzeit        = ""
+.formula M|enddat         = ""
+.formula M|aschein = M|taschein^id
+.formula M|istmge  = 0
+.formula M|istzeit = 0
+.formula M|ausmge  = 0
+.formula M|namge   = 0
+.protection ngrund
+.protection agrund
+.formula M|charge = ""
+.formula M|ngrund = ""
+.formula M|agrund = ""
+.formula M|subnr = M|zn
+.formula M|ofmge = M|tofmge
+.copy M|bkomplett   = G|FALSE
+.copy M|bteilrueck  = G|FALSE
+.copy M|bkurzlauf   = G|FALSE
+.copy M|bkurzlauf   = G|TRUE ? G|evtvar = "tkurzlauf"
+..
+.cursor istmge 0
+
+.continue END
+!KOMPLETT: komplett rÅckmelden
+.continue END ? F|empty(M|tkomplettrueck)
+.. der Mitarbeiter signalisiert dadurch, dass der Arbeitsgang komplett abgeschlossen ist
+.. die angestempelte Auftragszeit wird mit der offenen Menge abgestempelt 
+.. der Arbeitsschein bekommt den Status abgeschlossen
+..
+.. ist die Bearbeitung schon abgeschlossen
+.continue FEHL3 ? F|equals(M|taschein^fertstatus, "(Completed)")
+..
+.continue KOMPLRUECK ? _M|rmimdialog
+..
+.formula P|maskkontextfop = ""
+.formula M|aschein = M|taschein^id
+.formula U|xtsel = "$,,offen=true;asnr="+'M|aschein'+";ma="+'M|mitarb^id'+";fertstatus=(StartProcessing)"
+.select pdc 'U|xtsel'
+.formula M|anfzeit = H|anfzeit
+.formula M|endzeit = G|zeit
+.formula M|anfdat  = H|anfdat
+.formula M|enddat  = G|datum
+.formula M|istmge = M|tofmge
+.protection istmge 
+.formula M|ausmge = 0
+.formula M|namge = 0
+.formula M|charge = ""
+.protection ngrund
+.protection agrund
+.formula M|ngrund = ""
+.formula M|agrund = ""
+.formula M|subnr = M|zn
+.formula M|ofmge = M|tofmge
+.copy M|bkomplett  = G|TRUE
+.copy M|bkurzlauf  = G|FALSE
+.copy M|bteilrueck = G|FALSE
+..
+.cursor istmge 0
+.continue END
+..
+!KOMPLRUECK
+.. PlausibilitÑtsprÅfungen
+.. wenn im Arbeitsgang rmimdialog gesetzt ist, geht die Auftragszeit im Dialog auf
+.. bei bestimmten ArbeitsgÑngen ist dies auch bei einer KomplettrÅckmeldung sinnvoll
+..-> deswegen in diesem Fall keine Sicherheitsabfrage
+.continue NOSICH  ? M|rmimdialog
+.continue NOSICH  ? _M|sicherheit
+.box -button no:yes
+Achtung: Sie lîsen eine KomplettrÅckmeldung aus.
+Wollen Sie das wirklich?
+..
+.continue ENDE ? G|box = G|boxno 
+.continue ENDE ? G|box = G|boxcancel 
+..
+!NOSICH: Gibt es den Arbeitschein noch?
+.formula U|xtsel = "$,,nummer="+'M|taschein'+";art=;mgr=;@ablageart=(Active);@gruppe=1"
+.select workorder nolock 'U|xtsel'
+.continue FEHL1 ? _G|mehr
+..
+.. hat der Mitarbeiter bereits einen offenen Arbeitsschein
+.formula U|xtsel = "$,,offen=true;asnr="+'M|taschein'+";ma="+'M|mitarb^id'+";fertstatus=(StartProcessing)"
+.select pdc 'U|xtsel'
+.continue FEHL1 ? _G|mehr
+..
+.. hier gibt es eine offene Bearbeitungs- Auftragszeit
+.. diese Bearbeitungszeit abstempeln
+.. Eine KomplettrÅckmeldung darf sich nicht Åber mehrere Tage erstecken
+.input "is/PDC.DURATION"
+.continue FEHL4  ? U|xbzeitfehler
+.. bei einer KomplettrÅckmeldung wird die offene vzeit aus dem Arbeitsschein verwendet
+.. da man die Auftragszeit nicht direkt eingeben kann, wird aus der Anfangzeit + vzeit die Endzeit errechnet.
+.. mîchte der Anwender hier etwas korrigieren, kann er z. B. das Korrekturfeld verwenden
+..
+.. xzendezeit = offenen Menge * Einzelzeit in Stunden 
+.formula U|xzendezeit = (M|taschein^zesek * M|taschein^te / 3600) * M|tofmge
+.formula M|iev = 8
+.input "fe/WORKLIST.EDP"
+..
+!PRUEF: PrÅfen, ob Datensatz geschrieben worden ist
+.. man muss die Auftragszeit nochmal laden, damit man die Endzeit abprÅfen kann
+.. im Dialog kann den Anwender den Datensatz ja nicht speichern
+.formula U|xtsel = "$,,id="+'H|id'+";"
+.select pdc 'U|xtsel'
+.continue FEHL2     ? F|empty(H|endzeit)
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Bearbeitung abgestempelt;Anf-Zeit: {3};MA: {4}", 'M|aktzeile', 'M|taschein', 'G|zeit', 'M|mitarbname')
+.set trans -
+.formula M|bdestatus = M|leg6
+.continue ABLAG ? M|taschein/"*\****"
+.. apsanfdat fÅr abas APS setzen
+..
+.. Datum nur aktualisieren, wenn Gut-Menge gemeldet wurde
+.input "fe/WORKLIST.APSDAT" ? H|istmge > 0
+..
+.. Fortschrittsberechnung 
+.. -> wenn Fortschritt > 100 %  wird Arbeitsgang abgeschlossen
+.. einfache Mengenverrechnung: Addition aller Gutmengen der Auftragszeiten fÅr diesen Arbeitsschein
+.. sobald die offene Menge aus dem Arbeitsschein erreicht ist, kann der Arbeitsgang als abgeschlossen markiert werden 
+.. zu produzierende Menge aus AFL-Reservierung
+.input "fe/WORKLIST.CUMQUAN"
+..
+.. Fertigungsereignisse prÅfen
+.input "fe/WORKLIST.STATUS"
+.cursor mitarb 0           ? F|defined(M|scan)
+.input "fe/SCAN.REFRESH"   ? F|defined(M|scan)
+.continue ENDE
+..
+!FEHL1: es gibt keinen offenen Arbeitsschein
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Der Mitarbeiter {3} hat keine offene Bearbeitungs-Auftragszeit.", 'M|aktzeile', 'M|taschein', 'M|mitarbname')
+.set trans -
+.formula M|bdestatus = M|leg9
+.continue RUEENDE ? G|evtvar = "trueckmeld"
+.error
+.end 1
+..
+!FEHL2: Bearbeitung konnte nicht abgestempelt werden
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Bearbeitung konnte nicht abgestempelt werden.", 'M|aktzeile', 'M|taschein')
+.set trans -
+.formula M|bdestatus = M|leg9
+.continue RUEENDE ? G|evtvar = "trueckmeld"
+.error
+.end 1
+..
+!FEHL3: AS schon abgeschlossen
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Bearbeitung ist abgeschlossen.", 'M|aktzeile', 'M|taschein')
+.set trans -
+.formula M|bdestatus = M|leg9
+.continue RUEENDE ? G|evtvar = "trueckmeld"
+.error
+.end 1
+..
+!FEHL4: Auftragszeit lÑuft Åber mehrere Tage
+.set trans +
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Bearbeitung konnte nicht abgestempelt werden. Zu lange Bearbeitungszeit.", 'M|aktzeile', 'M|taschein') ?  F|defined(M|taschein)
+.formula M|bdetext = F|formatstr("Zeile {1}: {2};Bearbeitung konnte nicht abgestempelt werden. Zu lange Bearbeitungszeit.", 'M|subnr', 'M|aschein')     ? _F|defined(M|taschein)
+.set trans -
+.formula M|bdestatus = M|leg9
+.select screen line 'M|subnr'
+.cursor tkomplettrueck 1
+.continue RUEENDE ? G|evtvar = "trueckmeld"
+.error
+.end 1
+..
+!FEHL5: Ein öberbuchen ist nicht erlaubt.
+.error Ein öberbuchen ist nicht erlaubt.
+.end 1
+..
+!FEHL6: fÅr gesperrte Artikel, keine positiven Gutmengen zulassen
+.error Keine positiven Gutmengen fÅr gesperrte Artikel erlaubt.
+.continue END
+!ABLAG: durch das direkte Durchbuchen, kann der BA und die AS gelîscht werden
+.make screen line -o
+.cursor mitarb 0
+.continue ENDE
+!ENDE
+.input "fe/WORKLIST.INFOTIMER" ? _F|defined(M|scan)
+.continue END
+..
+!STATUS: Aufruf des Infosystems MISSINGPARTSLIST, rote Box = Materialengpass
+.continue END  ? M|tstatus <> M|leg3
+.command -parallel 'F|formatstr("<(Infosystem)>{1}<(Call)> ? kba={2}|wterm=.|detail=true|bstart =", "10426", M|taschein)'
+.continue END 
+..
+!DOK: Fertigungsdokument aufmachen
+.continue END ? F|empty(M|tfertdoku)
+.. Pfade kînnen Leerzeichen enthalten, deswegen umschlossen mit G|dblquote
+.formula U|xtdatei = G|dblquote + M|tfertdoku + G|dblquote
+.pc.open 'U|xtdatei'
+.continue END
+..*****************************************************************************
+!END: Programmende
+.continue

@@ -1,0 +1,262 @@
+..!interpreter english translate
+..*****************************************************************************
+..
+..  Name      : VRST
+..  Datum     : 11.12.98
+..  Vers.     : 9.1
+..  Autor     : System 3
+..
+..  Verantwortlich : cl
+..
+..  Funktion  : Verkaufsstatistik
+..
+..  Ablauf    : s. online-hilfe
+..
+..*****************************************************************************
+..                           SUBROUTINE
+..                           ----------
+!G1
+.input DRUCKER
+.input "ARB"
+..
+..*****************************************************************************
+!START
+.set trans +
+.type date xstop xnulldat xdanf xdend
+.type bool xbaktuell mm
+.type text kn:8 mkn:8 an:8 xdn:16 vo:9 xtger:15 xyw
+.type text xM1 xM2 xm1 xm2
+.type real xnsum xrne xbrutto xstsu xrst xbsum gns gss gbs
+.type integer xpi i
+.formula U|mkn = "-1"
+..
+.formula U|ds = "X" + pid + ".TMP"
+.formula U|xdn = U|xarb + tname + ".SRT"
+.formula U|xM1 = "A" ? tname="VRST"
+.formula U|xM1 = "B" ? tname="ERST"
+.reserve -
+.select -
+.formula U|xtger  = G|geraet
+.formula U|xtger  = "Bildschirm"  ? G|geraet = ""
+.set thoussep
+.set decpoint
+..
+!BRONX
+.output terminal
+.input BILD.F
+?                    Nach Kunden sortierte Rechnungsstatistik     ?  U|xM1 = "A"
+?                  Nach Lieferanten sortierte Rechnungsstatistik  ?  U|xM1 = "B"
+
+.menu Ausw„hlen
+Neue Statistik aufstellen                        >>  .formula U|xm2 = "A"
+Letzten Druck wiederholen                        >>  .formula U|xm2 = "B"
+Wechsel des Ausgabemediums: 'U|xtger           ' >>  .continue G1
+?Ausgabew„hrung,  z.Zt. 'auswaehr '               >> .continue AWAEHR  ?  eurokurs > 0.0
+Beenden                                          >>  .continue BEENDEN
+..
+.continue BEENDEN  ?  F|empty(G|menue)
+..
+.formula U|xM1 = "C" ? U|xM2/"B*"
+..
+..  zum SCHONSORT wird gesprungen, wenn im Men Wiederholung gew„hlt wurde
+.continue SCHONSORT ? U|xM1 = "C"
+..
+.input ZEITRAUM
+
+'txname': Selektieren der Daten l„uft ...
+
+.output new 'ds'
+.input "DATEI.F"
+$ 'U|xm1' 'U|xanf:8' 'U|xend:8' 'auswaehr'
+.formula U|xstop = U|xanf - 20
+..
+!M0
+.select sales filingsystem       ?  U|xM1 = "A"
+.select purchasing filingsystem  ?  U|xM1 = "B"
+.continue SORT           ? _G|mehr
+.continue M0             ?  H|typ <> reko
+.formula U|i = U|i + 1   ?  H|vom < U|xstop
+.continue SORT    ? U|i >= 20
+.continue M0      ? H|vom < U|xanf ; H|vom > U|xend
+.formula U|i = 0
+..
+!MU: Unterpositionen durchlaufen, USt-Pos aufaddieren
+.reserve
+.formula U|xrst = 0.00
+.formula U|xrne = 0.00
+.continue ZEILE
+..
+!HOAB
+.select sales      ? U|xM1 = "A"
+.select purchasing ? U|xM1 = "B"
+.continue SORT ? _G|mehr
+.continue HOAB ? H|typ <> reko
+.continue HOAB ? H|vom < U|xanf ; U|xend < H|vom
+.continue MU
+..
+!ZEILE
+.select line
+.continue MS      ? _G|mehr
+.continue ZEILE   ?  H|typ<>stpos
+.formula U|xrst = U|xrst + H|pwert
+.continue ZEILE
+..
+!MS
+.select
+.formula U|xyw     = H|iwbu
+.formula U|xrst    = U|xrst / H|kurs
+.formula U|xbrutto = rebetr / H|kurs
+..
+..  noch kein Euro bekannt, Inlandsw„hrung eindeutig
+.continue BOSTON  ?  eurokurs = 0.0
+..
+..  Ausgabew„hrung und Vorgangsw„hrung identisch
+.continue BOSTON  ?  U|xyw = auswaehr
+..
+..  Umrechnen in gew„hlte W„hrung
+.formula U|xrst    = U|xrst    / eurokurs  ?  U|xyw = ainland
+.formula U|xbrutto = U|xbrutto / eurokurs  ?  U|xyw = ainland
+.formula U|xrst    = U|xrst    * eurokurs  ?  U|xyw = ninland
+.formula U|xbrutto = U|xbrutto * eurokurs  ?  U|xyw = ninland
+..
+!BOSTON
+.formula U|xrne = U|xbrutto - U|xrst
+..
+.formula U|xnum = H|nummer
+.add kunde  ?  U|xm1 = "A"
+.add lief   ?  U|xm1 = "B"
+.formula U|vo=vom
+.formula U|vo="ohne Dat." ? vom = U|xnulldat
+'D|such' 'D|num ' '  xnum' '   U|vo' # '    U|xrne'  '    U|xrst'  ' U|xbrutto'
+.add
+.continue HOAB ? U|xbaktuell
+.continue M0
+..
+!SORT
+.occupy WERF.WEG
+.output new WERF.WEG
+.formula U|sy="sort +0 -1 +1n -2 +2n -3 -o "+U|ds+" "+U|ds
+.system 'U|sy' background
+..
+..  die sortierte ds=Xpid.TMP wird auf U|xdn=ERST.SRT/VRST.SRT kopiert
+.occupy 'U|xdn'
+.formula U|xkom = "cp " + U|ds + " " + U|xdn
+.system 'U|xkom' background
+..
+!SCHONSORT: sortierte Datei als Liste ausgeben
+.output 'geraet'
+.input BLANKO.F
+.set thoussep 'tsdtrenn'
+.set decpoint 'dezpunkt'
+.occupy 'U|xdn'
+.select from 'U|xdn' xm1 xm1 xdate8 xdate81 xyw
+.formula U|xdanf = U|xdate8
+.formula U|xdend = U|xdate81
+.page 1
+.continue EINKOBEN ? U|xM1="B"
+..
+!VERKOBEN
+.up
+'mandant          '         Ausgangsrechnungen   '   datum'    Seite' sei'
+'txname           '         ==================   '    zeit'
+                                in 'U|xyw        '
+                         ' U|xdanf' - 'U|xdend '
+
+  RechNr      Datum              Netto           Steuer             Brutto
+ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+.continue UNTEN
+
+!EINKOBEN
+.up
+'mandant          '         Eingangsrechnungen   '   datum'    Seite' sei'
+'txname           '         ==================   '    zeit'
+                                in 'U|xyw        '
+                         ' U|xdanf' - 'U|xdend '
+
+  RechNr      Datum              Netto           Steuer             Brutto
+ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+..
+!UNTEN
+.down
+?                    ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ? _(U|xnsum = 0 & U|xbsum = 0)
+?                    '         U|xnsum' '       U|xstsu' '         U|xbsum' ? _(U|xnsum = 0 & U|xbsum = 0)
+..
+!NHOLE: Hole n„chste Dateizeile
+.select from 'U|xdn' su kn an vo # xrne xrst xbr
+.copy U|mm = G|mehr
+.continue SUM ? _G|mehr
+.continue SUM ? U|kn <> U|mkn
+..
+!NZEILE
+.para 4
+'    an' '    U|vo' '          U|xrne' '         0xrst' '           U|xbr'
+.formula U|xpi = U|xpi + 1
+.formula U|xnsum = U|xnsum + U|xrne
+.formula U|xbsum = U|xbsum + U|xbr
+.formula U|xstsu = U|xstsu + U|xrst
+.continue NHOLE
+..
+!SUM: Summe ber letzten Kund/Lief
+.continue FEHLER1 ? U|mkn = "-1" & _U|mm
+.continue KULI    ? U|mkn = "-1"
+.continue LEERZEI ? U|xpi =1 ; (U|xstsu = 0 & U|xnsum = 0)
+                    ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+                    '         U|xnsum' '       U|xstsu' '         U|xbsum'
+!LEERZEI
+
+.continue GESSUM ? _U|mm
+..
+!KULI: Hol n„chsten Kunden falls G|mehr=ja
+.formula U|gns = U|gns + U|xnsum
+.formula U|gss = U|gss + U|xstsu
+.formula U|gbs = U|gbs + U|xbsum
+.formula U|xnsum = 0
+.formula U|xstsu = 0
+.formula U|xbsum = 0
+.para 10
+.formula U|mkn = U|kn
+.formula U|xpi = 0
+.select customer 'U|kn' ? U|xM1 = "A"
+.select supplier 'U|kn' ? U|xM1 = "B"
+?Kunde ' H|num' 'such  ' 'H|name                                     '? U|xM1= "A" & U|mm
+?Lieferant ' H|num' 'such  ' 'H|name                                     '? U|xM1 = "B" & U|mm
+?Kunde 'U|kn' gel”scht     ? U|xM1 = "A" & _U|mm
+?Lieferant 'U|kn' gel”scht ? U|xM1 = "B" & _U|mm
+.continue NZEILE
+..
+!GESSUM: Gesamtsumme ausgeben
+.formula U|gns = U|gns + U|xnsum
+.formula U|gss = U|gss + U|xstsu
+.formula U|gbs = U|gbs + U|xbsum
+.down
+.para 3
+                    ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+Gesamtsummen        '           U|gns' '         U|gss' '           U|gbs'
+                    ================== ================ ==================
+.output terminal ...  ? G|geraet  = ""
+.formula U|xnsum = 0
+.formula U|xstsu = 0
+.formula U|xbsum = 0
+.formula U|gns = 0
+.formula U|gss = 0
+.formula U|gbs = 0
+.continue START
+..
+!FEHLER1
+.output terminal
+.input BILD.F
+.box(0,0)
+Keine Rechnungen im angegebenen Zeitraum
+..
+.continue START
+..
+!BEENDEN
+.end .
+..
+..  *** WAEHRUNG ***
+!AWAEHR: Ausgabew„hrung bestimmen
+..
+.input IWAEHRWAHL
+.set outcurr 'U|xxwaehr'
+.continue BRONX
+..  *** WAEHRUNG - Ende ***

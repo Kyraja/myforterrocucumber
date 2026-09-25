@@ -1,0 +1,105 @@
+..!interpreter english translate
+..*****************************************************************************
+..
+..  Name      : ABLEK
+..  Datum     : 07.12.98
+..  Vers.     : 9.1
+..  Autor     : Margit D”hler / Sabine Riemer
+..
+..  Verantwortlich : cl
+..
+..  Funktion  : UPRO, wird von sk/STATEK aufgerufen
+..              ABLE.DAT erzeugen / erg„nzen
+..              Variablendefinition im bergeordneten Programm
+..
+.end .  ?  txname / "*ABLEK"
+..*****************************************************************************
+.set trans -
+.type text xsel ? _F|defined(U|xsel)
+.type bool xfakt xmehr
+..  xtdo -> ABLE.DAT
+..  xtzw -> ABLE.TMP
+.formula U|xtsys="touch " + U|xtdo
+.system 'U|xtsys' background
+.occupy 'U|xtdo'
+.select from
+.select from 'U|xtdo' xtlsa #
+.. xtdo unbedingt schliessen, weiter unten wird sie ueberschrieben !
+.select from
+.output new 'U|xtzw'
+.input "DATEI.F"
+..
+.formula U|xsel = "$,,id=;ktyp=5;kl=;@ablage=abgelegt;@richtung=rueckwaerts;@ordnung=ablagen"
+..
+!ABL1
+.select
+.select purchasing 'U|xsel'
+.continue ABLENDE ? _G|mehr
+..
+!ABL1LOOP
+.reserve
+.formula U|xtasa=dnsn >> "asn=" << " "
+.continue ABLENDE ? U|xtasa = U|xtlsa
+.formula U|xtknr  = H|resteller^nummer
+.formula U|xtksu  =  H|resteller^such
+.formula U|xtren  = H|nummer
+.formula U|xdre   = H|vom
+.formula U|xrkurs = H|kurs
+.formula U|xyw    = H|iwbu
+.copy U|xfakt = H|fakt
+.continue ABL2
+..
+!ABLLOOP
+.select
+.select purchasing
+.continue ABLENDE ? _G|mehr
+.continue ABL1LOOP
+..
+!ABL2: Alle Positionen einer Rechnung verarbeiten
+.copy U|xmehr = G|TRUE
+.select line
+.continue ABLLOOP  ? _G|mehr
+.. Bruttorechnungen sind bei Endsumme zu ende
+.continue ABLLOOP  ? (H|typ = 16 ; H|typ = 19) & H|kobrutto
+.continue ABL2 ? H|typ = zspos ; H|typ = stpos ; H|typ = espos ; H|typ = supos ; H|typ = sipos
+.continue ABL2 ? mge = 0 & pwert = 0
+.add H|orig
+.continue DAZU ? _G|mehr
+.add
+.continue ARTIKEL
+..
+!DAZU: keine Lagerbewegung, kein Vorg„nger -> Menge muss 0 werden
+.copy U|xmehr = G|FALSE      ? _U|xfakt
+.add
+..
+!ARTIKEL
+.add art
+.continue ABL2                 ? _G|mehr
+.formula U|xtle  = ""
+.formula U|xtanr = D|nummer
+.formula U|xtasu = D|such
+.formula U|xtle  = D|le             ? gruppe = 1
+.formula U|xtwgr = ""
+.add
+.formula U|xrpw  = H|pwert
+.formula U|xrpw  = H|pwert / U|xrkurs ? U|xrkurs <> 0.00
+.formula U|xrpw  = H|npwert          ? H|kobrutto
+.formula U|xrpw  = H|npwert / U|xrkurs ?  U|xrkurs <> 0.00  & H|kobrutto
+.formula U|xrmge = H|mge * H|lehe
+.formula U|xrmge = 0                ? _U|xmehr
+..
+..  in die Datei ABLE.TMP wird gespeichert
+..  xtasa - Satznum, xtren - Rechnum, xtknr - LiefNr, xtksu - Liefsuchwo
+..  xdre  - RechDat, xrpw  - Poswert, xtanr - ArtNum, xtasu - ArtSuwo
+..  xrmge - Menge in Einh. xtle - Lagereinh. xtwgr - ArtWagruppe xyw - W„hrung
+'U|xtasa'#'U|xtren'#'U|xtknr'#'U|xtksu'#'U|xdre:8'#'U|xrpw'#'U|xtanr'#'U|xtasu'#'U|xrmge'#'U|xtle'#'U|xtwgr'#'U|xyw'
+.continue ABL2
+..
+!ABLENDE
+.output new WERF.WEG
+.formula U|xtsys="cat " + U|xtdo + " >> " + U|xtzw
+.system 'U|xtsys' background
+.formula U|xtsys="mv " + U|xtzw + " " + U|xtdo
+.system 'U|xtsys' background
+.occupy
+.continue

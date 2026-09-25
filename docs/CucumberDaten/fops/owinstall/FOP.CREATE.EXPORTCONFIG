@@ -1,0 +1,96 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : FOP.CREATE.EXPORTCONFIG
+.. Date           :
+.. Version        :
+.. Author         :
+.. Copyright      :
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text xtsys xttmpfile xtdatname xtedpfile xterrdat xtyfile xtdb xttmpfofile
+.type text xtsuch xtedpopt xtgroup xtaction xtrange
+.type text xtsel xtvartab xtziel xtyfile
+.type integer xtdatdesc
+.file -tempname U|xttmpfile
+.file -tempname U|xtedpfile
+.file -tempname U|xterrdat
+.formula U|xtsys = "cp win/tmp/*.EDP rmtmp/"
+.system 'U|xtsys'
+.formula U|xtsys = "ls rmtmp/*.EDP >" + 'U|xttmpfile'
+.system 'U|xtsys'
+.output new 'U|xtedpfile'
+.input "DATEI.F"
+#!ACTION=STORE
+#!DATABASE=80
+#!GROUP=2
+#!CHARSET=EKS
+such;such;name;yftext;yfile;yfilenum;ygroup;ynew;yrange;yfile;ywin;yvartabakt
+.. LOP throug all existing EDP-Files
+!FLOOP
+.select from 'U|xttmpfile' xtdatname^
+.formula U|xttmpfofile = F|regreplace(F|regreplaceall(U|xtdatname,"-","."),"/","/I")
+.formula U|xtsys = "cp " + U|xtdatname + " " + U|xttmpfofile
+.system 'U|xtsys'
+.continue FLOOPE ? _G|mehr
+..output TERMINAL  
+.. Daten auslesen
+.. Daten aus Dateinamen ermitteln
+.formula U|xtsuch = F|substr(U|xtdatname,F|strindex(U|xtdatname,"/")+1,F|length(U|xtdatname)-F|strindex(U|xtdatname,"/")-4)
+.formula U|xtyfile = F|substr(U|xtdatname,F|strindex(U|xtdatname,"tmp/"),F|length(U|xtdatname)-F|strindex(U|xtdatname,"tmp/")+1)
+.formula U|xtrange = F|substr(U|xtdatname,F|strindex(U|xtdatname,"/")+1,F|strindex(U|xtdatname,"-")-F|strindex(U|xtdatname,"/")-1)
+.formula U|xtziel = "win/"+'U|xtyfile'
+.. Daten aus Datei lesen 
+.file -open U|xtdatdesc 'U|xttmpfofile'
+!F2LOOP
+.file -read U|xtdatdesc xtedpopt^
+.continue F2LOOPE ? _G|mehr
+.. Look for database
+.formula U|xtdb = F|substr(U|xtedpopt,F|strindex(U|xtedpopt,"=")+1,F|strindex(U|xtedpopt,":")-F|strindex(U|xtedpopt,"=")-1) ? F|regmatch(U|xtedpopt,".*database=.*",G|true) & F|regmatch(U|xtedpopt,".*:.*") 
+.formula U|xtdb = F|substr(U|xtedpopt,F|strindex(U|xtedpopt,"=")+1,F|length(U|xtedpopt)-F|strindex(U|xtedpopt,"="))         ? F|regmatch(U|xtedpopt,".*database=.*",G|true) & _F|regmatch(U|xtedpopt,".*:.*")
+.. Look for group
+.formula U|xtgroup = F|substr(U|xtedpopt,F|strindex(U|xtedpopt,"=")+1,F|length(U|xtedpopt)-F|strindex(U|xtedpopt,"=")) ? F|regmatch(U|xtedpopt,".*group=.*",G|true) 
+.formula U|xtgroup = F|substr(U|xtedpopt,F|strindex(U|xtedpopt,":")+1,F|length(U|xtedpopt)-F|strindex(U|xtedpopt,":")+1)         ? F|regmatch(U|xtedpopt,".*database=.*",G|true) & F|regmatch(U|xtedpopt,".*:.*")
+.. Look for action
+.formula U|xtaction = F|substr(U|xtedpopt,F|strindex(U|xtedpopt,"=")+1,F|length(U|xtedpopt)-F|strindex(U|xtedpopt,"=")) ? F|regmatch(U|xtedpopt,".*action=.*",G|true)
+.continue F2LOOP
+!F2LOOPE
+.file -close U|xtdatdesc
+.. END of reading EDP-File
+.. Create Configuration in FILE 40 with EDP
+..find vartab
+.formula U|xtsel = "$,,nummer=;vdn=="+'U|xtdb'+";vgr=="+'U|xtgroup'
+.cont DH ? U|xtgroup = "Sachmerkmal"
+.load 0 company 'U|xtsel'
+.cont DH ? _G|mehr
+.formula U|xtvartab = 0|id   ? G|mehr
+.load 0
+!DH
+I-'U|xtsuch';I-'U|xtsuch';;'U|xtyfile';;'U|xtdb';'U|xtgroup';'U|xtaction';'U|xtrange';'U|xtvartab';'U|xtziel';1
+..'H|namebspr';'H|id';'H|vdn';'H|vgr';\
+..
+.continue FLOOP
+..
+!FLOOPE
+..dh/abas keine Anzeige der Datei
+..editing 'U|xtedpfile'
+!IMPORT
+.formula U|xtsys = "edpimport.sh -p abas123 -I "+'U|xtedpfile' + " > " + 'U|xterrdat' + " 2>&1 "
+.system 'T|xtsys' background
+.editing 'U|xterrdat' ? _G|mehr
+..
+!RMFILES
+.formula U|xtsys = "rm rmtmp/*.EDP"
+.system 'U|xtsys' background
+.continue

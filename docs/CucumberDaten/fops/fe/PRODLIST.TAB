@@ -1,0 +1,525 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..
+..  FOP-Name       : PRODLIST.TAB
+..  Datum          : 01.10.2004
+..  Autor          : jn
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..
+..  Funktion       : Infosystem, Liste der FertigungsvorschlÑge
+..                   Tabellenzeigfop
+..
+..  Ablauf         :
+..  Includes       :
+..
+.. include fe/PRODLIST.BDE
+.. include fe/PRODLIST.ENG
+.. include is/PRUEFEVERFUEG
+..*****************************************************************************
+.set trans -
+.type text xartle        ? _F|defined(U|xartle)
+.type bool xbdazuas      ? _F|defined(U|xbdazuas)
+.type bool xbreskrit     ? _F|defined(U|xbreskrit)
+.type text xselect       ? _F|defined(U|xselect)
+.type R9.2 xabw          ? _F|defined(U|xabw)
+.type bool xfixterm      ? _F|defined(U|xfixterm)
+.type integer  xdiff     ? _F|defined(U|xdiff)
+.type VPK2 xidverfueg    ? _F|defined(U|xidverfueg)
+.type GD   xwunschtermin ? _F|defined(U|xwunschtermin)
+.type bool xtableempty   ? _F|defined(U|xtableempty)
+.type text xlabel        ? _F|defined(U|xlabel)
+.type VPS1 xart          ? _F|defined(U|xart)
+.type P9   xorder        ? _F|defined(U|xorder)
+.type GD2  xdvom         ? _F|defined(U|xdvom)
+.type integer xianzahlrm ? _F|defined(U|xianzahlrm)
+..
+.assign P|maskkontextfop = "Artikel"
+.formula U|xabw   = 0
+.formula U|xartle = ""
+.copy U|xbdazuas  = G|FALSE
+..
+!START
+.continue      ?  F|empty(H|ba) & M|bba
+.continue      ?  M|bba & M|loeschpruef & (_H|ba^noloesch ; (H|ba^noloesch & F|empty(H|ba^status)))
+.continue      ? _F|empty(H|ba) & M|bfv
+.continue      ?  F|empty(H|ba) & M|bfvfreigeben & _H|mfreig
+.continue      ? _F|empty(H|ba) & M|bfvfreigeben &  H|mfreig
+.continue      ?  F|empty(H|ba) & H|ablagef & M|selektion
+.continue TOL  ?  M|tol <> 0
+.continue KRIT ?  M|krit = G|TRUE
+.continue BILD
+..
+!KRIT: kritisch
+.continue BILD  ? _F|equals(H|krit, "(Uncritical)")
+.continue
+..
+!TOL: kritisch und Toleranz
+.continue BILD  ? _F|equals(H|krit, "(Uncritical)") & H|tfterm - H|tterm > M|tol
+.continue
+..
+!BILD
+.continue     ? _F|empty(M|basisartikel) & 'M|basisartikel^id' <> 'H|art^basisartikel^id'
+.make screen line +O
+.colour -background 'M|farbe1' order 'M|aktzeile'
+.colour -background 'M|farbe1' 'M|aktzeile'
+.copy M|bkost      = G|FALSE
+.formula M|kenn    = "icon:folder_closed" ? _M|detail
+.formula M|kenn    = M|lkenn              ?  M|detail
+.formula M|kenn2   = "-"                  ?  M|detail
+.formula M|kenn2   = "+"                  ? _M|detail
+.assign M|art      = H|art
+.assign M|tbasisartikel = H|art^basisartikel
+.assign M|fertart  = H|art
+.assign P|maskkontextfop = "Artikel"       ? 'M|art^dnr' = "2"
+.assign P|maskkontextfop = "Arbeitsgang"   ? 'M|art^dnr' = "7"
+.assign M|maskkontextfop = P|maskkontextfop
+.add H|art
+.continue NEXT                          ? _G|mehr
+.formula M|vorgnachficon = ""           ?  F|empty(D|nachfolgeartikel)
+.formula M|vorgnachficon = M|vorgnachz  ? _F|empty(D|nachfolgeartikel) & D|lbsdatum < G|datum
+.copy M|artle      = D|le
+.formula U|xartle  = D|le
+.continue ADD ? D|gruppe <> 1
+.formula M|packmit = 0
+.formula M|packmit = 1 ? D|packmit
+.copy M|bpackmit = D|packmit
+.formula M|chpflicht = D|chpflicht
+!ADD
+.add
+..
+!NEXT
+.copy M|freigeben  = H|mfreig
+.formula M|verw    = H|verw
+.formula M|verwerbtxt = H|verwerbtxt
+.assign M|projekt  = H|projekt
+.formula M|vorgang = H|id
+.protection freigeben 'M|aktzeile'   ? _H|disponiert
+.assign M|packanw  = H|packanw
+.formula M|fmenge  = H|fmenge
+.copy M|icoattdispo = M|attdispo  ? H|dispofehler <> 0
+.assign M|lgruppe  = H|lgruppe
+.formula M|mge     = H|mge
+.formula M|netmge  = H|netmge
+.formula M|limge   = H|frgmge
+.formula M|frgmge  = H|limge
+.formula M|planmge = H|planmge
+.formula M|aumge   = H|aumge
+.formula M|tsterm  = ""
+.formula M|tterm   = ""
+.continue ENDL     ? 'H|tsterm' = "--.--.--" ; 'H|tsterm' = "++.++.++"
+.formula M|tsterm  = H|tsterm 
+.continue ENDL     ? 'H|tterm' = "--.--.--" ; 'H|tterm' = "++.++.++"
+.formula M|tterm   = H|tterm 
+!ENDL
+.formula M|tfterm  = H|fterm
+.formula M|twterm  = H|twterm
+.copy M|fix        = H|fix
+.copy M|fixterm    = H|fixterm
+.copy U|xfixterm   = H|fixterm
+.formula M|dispo   = H|dispo
+.formula M|fahnez  = G|icokrit   ? F|equals(H|krit, "(ProcessIsCritical)")
+.formula M|fahnez  = G|icovkrit  ? F|equals(H|krit, "(PathIsCritical)")
+.formula M|fahnez  = G|icoukrit  ? F|equals(H|krit, "(Uncritical)")
+.formula M|fbuz    = ""
+.formula M|fbuz    = M|lnreleaz       ? _M|bfbuerlaub
+.formula M|buzeit  = ""
+.formula M|buzeit  = M|zeitz ? _F|empty(M|fbuz)
+.. kein rot, kein gruen, wenn kein ba
+.formula M|buchenz   = ""
+.formula M|tbetreuer = ""
+.continue DAZUBA                      ?  F|empty(M|aufzu)
+.copy M|tbetreuer    = H|betreuer     ? _F|empty(H|betreuer)
+..
+!DAZUBA
+.add H|ba
+.continue XX                 ? _G|mehr
+.continue XX                 ? D|gruppe <> 1
+.formula M|order     = D|id
+.formula M|ba        = D|id
+.formula M|emge      = D|emge
+.formula M|rverlust  = D|rverlust
+.formula M|rgutmge   = D|rgutmge
+.formula M|mehrentnahme = M|emge - M|rverlust - M|rgutmge ? D|typ = 1
+.formula M|mehrentnahme = M|emge - M|rgutmge ? D|typ = 2
+.formula M|sorder    = D|status
+.formula M|printable = D|druck
+..
+.. erkennen ob gebuchte RÅckmeldungen auf BAs und Arbeitsscheinen vorhanden sind (Auge setzen)
+.. ngrm -> Anzahl der gebuchten UND ungebuchten RÅckmeldungen
+.. nrm  -> Anzahl der ungebuchten RÅckmeldungen
+.. U|xianzahlrm -> Anzahl der gebuchten RÅckmeldungen
+.formula U|xianzahlrm = 0
+.formula U|xianzahlrm = M|order^ngrm - M|order^nrm
+.formula M|rueckz = M|lrueckz      ?  U|xianzahlrm > 0
+.formula M|burueckz = M|rueckbauz ? M|order^rgutmge  > 0
+.formula M|burueckz = M|rueckbauz ? M|order^rverlust > 0
+.formula M|burueckz = M|lnreleaz  ? M|burueckz = M|rueckbauz & _M|breterlaub 
+..
+.. rÅckgemeldete Arbeits- und Maschinenzeiten auf den BAs 
+.continue ASBETR  ? F|empty(M|rueck)
+.formula U|xorder = 'M|order'>>-3  ?  F|empty(M|aufzu)
+.formula U|xorder = 'M|order'      ? _F|empty(M|aufzu)
+.. 
+.formula U|xselect = "$,,lres=="+M|order^lres^id+";@.gruppe=2;@.ablage=(Filed)"
+.load 5 workorder 'U|xselect'
+.continue OUTPUT
+..
+!LOAD5
+.load 5 workorder
+..
+!OUTPUT
+.continue ASBETR   ? _G|mehr
+.formula M|bzeit = M|bzeit + 5|bzeit
+.formula M|mzeit = M|mzeit + 5|mzeit
+.continue LOAD5
+..
+!ASBETR
+.copy M|noloesch = D|noloesch
+.colour -background 'M|farbe1' order 'M|aktzeile'
+.colour -background 'M|farbe2' order 'M|aktzeile' ? H|limge<>H|mge
+.colour -background 'M|farbe3' order 'M|aktzeile' ? H|frgmge <= 0
+.protection frgmge 'M|aktzeile'           ? _F|empty(M|order)
+.protection freigeben 'M|aktzeile'        ?  M|release <> M|lreleaz
+.formula M|compz = M|lcompz             ? _F|empty(M|order)
+.formula M|compz = M|lnreleaz           ? _F|empty(M|order) & _M|brmerlaub
+.add D|barm
+.. RÅckmeldung vorhanden wenn aus barm D|id <> ""
+.continue BARM                          ? G|mehr
+.formula M|buchenz = ""
+.. ba-Puffer schlie·en
+.add
+.protection frgmge 'M|aktzeile'           ?  F|empty(M|release)
+.formula M|fbuz = " "
+.formula M|fbuz = M|lfbuz               ? _F|empty(M|order)
+.formula M|fbuz = M|lnreleaz            ? _F|empty(M|order) & _M|bfbuerlaub
+.formula M|buzeit = ""
+.formula M|buzeit = M|zeitz ? _F|empty(M|fbuz)
+.continue XX
+..
+!BARM: RÅckmeldung vorhanden
+.formula M|barm    = D|id
+.formula M|buchenz = M|lbuchenz
+.formula M|fbuz = " "
+.formula M|fbuz = M|lfbuz               ? _F|empty(M|order)
+.formula M|fbuz = M|lnreleaz            ? _F|empty(M|order) & _M|bfbuerlaub
+.formula M|buzeit = ""
+.formula M|buzeit = M|zeitz ? _F|empty(M|fbuz)
+.. barm-Puffer schlie·en
+.add
+..
+!XX
+.. M|bbde wird in fe/PRODLIST.INI vorbelegt
+.input "fe/PRODLIST.BDE" ? M|bbde & _F|empty(M|order)
+.formula M|releasez  = M|lreleaz    ?  F|empty(M|order)
+.formula M|releasez  = M|lnreleaz   ? _M|bfreierlaub
+.. restriktiv gesperrte Artikel dÅrfen nicht freigegeben werden
+.continue FREIG   ? _F|empty(M|order)
+.formula M|releasez = M|lnreleaz  ? F|equals(M|art^sperrkonfiguration^sperrwirkung,"(Locked)")  
+!FREIG
+.protection noloesch 'M|aktzeile'     ? _F|empty(M|order)
+.protection noloesch 'M|aktzeile'     ?  M|releasez = M|lnreleaz 
+.assign M|kstelle = H|kstelle
+.protection kstelle 'M|aktzeile'      ? _F|empty(M|kstelle) ; _F|empty(M|order)
+.protection kstelle 'M|aktzeile'      ?  F|empty(M|kstelle) & (_M|bew & _M|fkkonfig)
+.copy M|bkost   = G|TRUE            ? _F|empty(M|kstelle)
+.assign M|platz   = H|platz
+.assign M|abtlg   = H|abtlg
+.continue ENGPASS                   ? _F|empty(M|abtlg) & M|kapazdetails
+.continue END                       ? _M|detail
+..
+!DETAIL
+.formula M|engmatz = M|prverfuegz ? M|art^gruppe = 1 & (F|empty(H|dispoa) ; F|equals(H|dispoa, "(RemainingQuantitiesRelated)") ; F|equals(H|dispoa, "(RemainingQuantityRelatedNone)") ; F|equals(H|dispoa, "(MinimumStockLevelRelated)") ; F|equals(H|dispoa, "(EmptyNone)") ;  F|equals(H|dispoa, "(MinimumStockLevelRelatedNone)"))
+.assign U|xidverfueg  = M|vorgang^id
+.. FrÅhester End-Termin aus FV
+.formula U|xwunschtermin = 'H|tfterm'         
+.. Endtermin aus FV 
+.formula U|xwunschtermin = 'M|vorgang^wtterm'  ?  F|empty(U|xwunschtermin)
+.. VerfÅgbarkeitstermin aus Maske
+.formula U|xwunschtermin = M|wterm             ? _F|empty(M|wterm)
+.formula U|xwunschtermin = G|datum             ? 'U|xwunschtermin:8' < 'G|datum:8'
+.input "is/PRUEFEVERFUEG"
+.continue VERFUEG ? _U|xtableempty
+.formula U|xlabel = "RES" 
+..
+!NOVERFUEG
+.set trans +
+.formula M|hinweis = "VerfÅgbarkeitsprÅfung fÅr noch nicht eingeplante Bedarfe nicht mîglich."  ? M|art^gruppe = 1             
+.formula M|hinweis = "VerfÅgbarkeitsprÅfung fÅr ArbeitsgÑnge nicht mîglich."                    ? M|art^gruppe = 3 
+.formula M|hinweis = "VerfÅgbarkeitsprÅfung fÅr Termine mit Datum +- unendlich nicht mîglich."  ? 'H|fterm' = "++.++.++" ; 'H|fterm' = "--.--.--"   
+.formula M|hinweis = "VerfÅgbarkeitsprÅfung fÅr Termine mit Datum +- unendlich nicht mîglich."  ? 'M|vorgang^wtterm' = "++.++.++" ; 'M|vorgang^wtterm' = "--.--.--"   
+.set trans -
+.formula M|ofmge = U|xofmge         ? F|defined(U|xofmge)
+.formula M|engmatz = M|ldengmatz    ? M|ofmge > 0 & M|art^gruppe = 1
+.continue 'U|xlabel'
+..
+!VERFUEG
+.formula M|verfuegmge = U|xverfuegmge
+.formula M|vplgmge    = U|xvplgmge
+.formula M|vpbsmge    = U|xvpbsmge
+.formula M|ofmge      = U|xofmge
+.formula M|engmatz = M|lengmatz       ? (M|vplgmge + M|vpbsmge) < M|ofmge
+.formula M|hinweis = ""
+..
+!RES
+.copy U|xbreskrit = G|FALSE
+.. lade dazu Reservierung
+.select add H|eres
+.continue                            ? _G|mehr
+..
+!MACHZEILE
+.. ist die RES aufgrund ihrer zugeordneten Beschaffungen kritisch?
+.copy U|xbreskrit = _F|empty(H|fbsterm)  ; H|tterm < G|datum
+.. keinen Arbeitsgang ausgeben wenn Anfahrmenge und Anzahl null sind oder Beistellteile
+.continue HZ                         ? (H|amge = 0 & H|anzahl = 0) ; H|lfbeist
+.. nicht relevante Reservierungen Åberspringen
+.continue HZ ? _H|relevant
+..
+.assign U|xart = M|fertart^id
+.make screen line +O
+.colour -background 'M|farbe1' 'M|aktzeile'
+.colour -background 'M|farbe1' order 'M|aktzeile'
+.protection noloesch 'M|aktzeile'      ?  F|empty(M|releasez)
+.copy M|bkost   = G|FALSE
+.formula M|kenn2     = "O"
+.assign M|art     = H|elem
+.copy M|kompeig   = H|kompeig
+.formula M|kompeigz = ""
+.formula M|kompeigz = M|koppelz ? F|equals(H|kompeig, "(Coproduct)")
+.formula M|kompeigz = M|umbauz  ? F|equals(H|kompeig, "(ConversionProduct)")
+.formula M|verwerbtxt = H|verwerbtxt
+.assign M|fertart = U|xart
+.assign P|maskkontextfop = "Artikel"       ? 'M|art^dnr' = "2"
+.assign P|maskkontextfop = "Arbeitsgang"   ? 'M|art^dnr' = "7"
+.assign M|maskkontextfop = P|maskkontextfop
+.copy M|vorgnachficon = H|vorgnachficon
+.formula M|vorgnachfkenn = H|vorgnachfkenn
+.copy M|packmdispo = H|packmdispo
+.copy M|manbu     = H|manbu
+.continue ELART                             ? H|elart = 3
+.add H|elem
+.copy M|artle   = D|le
+.continue ADD2 ? D|gruppe <> 1
+.formula M|packmit = 0
+.formula M|packmit = 1 ? D|packmit
+.copy M|bpackmit = D|packmit
+.formula M|chpflicht = D|chpflicht
+!ADD2
+.add
+..
+!ELART
+.formula M|artle  = U|xartle                ? H|elart = 3
+.assign M|abtlg   = H|mgr                   ? H|elart = 3
+.formula M|tsterm = ""
+.formula M|tterm  = ""
+.continue EENDL    ? 'H|tsterm' = "--.--.--" ; 'H|tsterm' = "++.++.++"
+.formula M|tsterm  = H|tsterm
+.continue EENDL    ? 'H|tterm' = "--.--.--" ; 'H|tterm' = "++.++.++"
+.formula M|tterm   = H|tterm
+!EENDL
+.formula M|tfterm = H|fterm
+.formula M|twterm = H|twterm
+.copy M|fix       = H|fix
+.copy M|fixterm   = U|xfixterm
+.formula M|fahnez   = G|icokrit   ? F|equals(H|krit, "(ProcessIsCritical)")
+.formula M|fahnez   = G|icovkrit  ? F|equals(H|krit, "(PathIsCritical)")
+.formula M|fahnez   = G|icoukrit  ? F|equals(H|krit, "(Uncritical)")
+.assign M|lgruppe = H|lgruppe
+.formula M|mge    = H|mge
+.formula M|netmge = H|mge
+.formula M|limge  = H|frgmge
+.formula M|frgmge = H|limge
+.formula M|limge  = 0                   ? H|dispo/"*.*" ; H|dispo/"*(az)*"
+.formula M|vzeit  = H|vzeit
+.assign M|platz   = H|platz             ? H|elart=1 ; H|elart=4
+.assign M|kstelle = H|mgr^kstelle       ? H|elart=3
+.protection kstelle 'M|aktzeile'          ? H|elart=3
+.copy M|bkost     = G|TRUE              ? H|mgr^kstelle <> "" & H|elart=3
+.assign M|vorgang = H|id
+.copy M|icoattdispo = M|attdispo  ? H|dispofehler <> 0
+.. kein rot, kein gruen, wenn kein as
+.formula M|buchenz   = ""
+.formula M|tbetreuer = ""
+.continue DAZUAS                        ?  F|empty(M|aufzu)
+.copy M|tbetreuer = H|betreuer          ? _F|empty(H|betreuer)
+..
+!DAZUAS
+.formula M|engmatz = M|prverfuegz ? H|elart<>3 & (F|empty(H|dispoa) ; F|equals(H|dispoa, "(RemainingQuantitiesRelated)") ; F|equals(H|dispoa, "(RemainingQuantityRelatedNone)") ; F|equals(H|dispoa, "(MinimumStockLevelRelated)") ; F|equals(H|dispoa, "(EmptyNone)") ;  F|equals(H|dispoa, "(MinimumStockLevelRelatedNone)"))
+.assign U|xidverfueg  = M|vorgang^id
+.. FrÅhester End-Termin aus FV
+.formula U|xwunschtermin = 'H|tfterm'
+.. Endtermin aus FV
+.formula U|xwunschtermin = 'M|vorgang^wtterm'  ?  F|empty(U|xwunschtermin)
+.. VerfÅgbarkeitstermin aus Maske
+.formula U|xwunschtermin = M|wterm             ? _F|empty(M|wterm)
+.formula U|xwunschtermin = G|datum             ? 'U|xwunschtermin:8' < 'G|datum:8'
+.input "is/PRUEFEVERFUEG"
+.continue VER1FUEG ? _U|xtableempty
+.formula U|xlabel = "ADDAS"
+..
+.continue NOVERFUEG
+..
+!VER1FUEG
+.formula M|verfuegmge = U|xverfuegmge
+.formula M|vplgmge    = U|xvplgmge
+.formula M|vpbsmge    = U|xvpbsmge
+.formula M|ofmge      = U|xofmge
+.formula M|engmatz = M|lengmatz       ? (M|vplgmge + M|vpbsmge) < M|ofmge
+.formula M|hinweis = ""
+..
+!ADDAS
+.copy U|xbdazuas = G|TRUE               ? _F|empty(M|abtlg)
+.add H|as
+.continue ENGPASS                       ? _G|mehr & _F|empty(M|abtlg) & M|kapazdetails
+.continue NOTMEHR ? _G|mehr
+.formula M|order     = D|id
+.formula M|ba        = M|order^snba
+.formula M|sorder    = D|status
+.formula M|emge      = D|emge
+.formula M|rverlust  = D|rverlust
+.formula M|rgutmge   = D|rgutmge
+.formula M|netmge    = D|egutmge
+.formula M|mehrentnahme = M|emge - M|rverlust - M|rgutmge ? D|typ = 1
+.formula M|mehrentnahme = M|emge - M|rgutmge              ? D|typ = 2
+..
+!NOTMEHR
+.colour -background 'M|farbe1' order 'M|aktzeile'
+.colour -background 'M|farbe2' 'M|aktzeile'       ?  M|kenn2/"O*"
+.colour -background 'M|farbe2' order 'M|aktzeile' ? H|limge <> H|mge & M|art^gruppe = 2 & _F|empty(M|comp)
+.colour -background 'M|farbe3' order 'M|aktzeile' ?  M|frgmge <= 0
+.colour -background 'M|farbe4' mge 'M|aktzeile'   ?  M|mge <= 0
+.add D|barm                             ? G|mehr
+.continue AS                            ? G|mehr
+.. RÅckmeldung vorhanden wenn aus barm D|id <> ""
+.formula M|buchenz   = ""               ? _F|empty(M|order)
+.continue ENGPASS                       ? _F|empty(M|abtlg) & M|kapazdetails
+.continue FARB
+..
+!ENGPASS
+.reserve
+.select capacity 'M|abtlg^id'
+.continue NOKAPA   ? _G|mehr
+.continue NOKAPA   ? F|empty(M|tsterm)
+.continue NOKAPA   ? M|tterm < G|datum
+.assign G|adatum = M|tsterm
+.assign G|edatum = M|tterm
+.formula U|xdiff = M|tterm - M|tsterm
+.formula M|engkapazz = M|mbelz            ? U|xdiff >= 1461
+.continue NOKAPA                          ? U|xdiff >= 1461
+.select machloading
+.continue NOKAPA                          ? _G|mehr
+.formula U|xabw = G|mbel + ((M|prozeng / 100) * G|mbel)
+.formula M|engkapazz = M|lengkapaz        ? U|xabw > G|astd
+..
+!NOKAPA
+.select
+.continue FARB   ? U|xbdazuas
+.continue DETAIL ? M|detail
+.continue END
+..
+!AS
+.formula M|barm      = D|id
+.formula M|buchenz   = M|lbuchenz              ? _F|empty(M|order)
+.continue ENGPASS                              ? _F|empty(M|abtlg) & M|kapazdetails
+..
+!FARB
+.add
+.formula M|rueckz = ""
+.formula M|burueckz  = ""
+.continue WEITER  ? F|empty(M|order)
+.. erkennen ob es gebuchte RÅckmeldungen auf den Arbeitsschein gibt (Auge setzen)
+.formula U|xselect = "$,,lres=="+M|order^lres^id+";@.gruppe=2;@.ablage=(Filed)"
+.load 5 workorder 'U|xselect'
+.formula M|rueckz = ""             ? _G|mehr
+.continue WEITER                   ? _G|mehr
+.formula M|rueckz = M|lrueckz  
+.formula M|burueckz = M|rueckbauz ? M|order^rgutmge  > 0
+.formula M|burueckz = M|rueckbauz ? M|order^rverlust > 0    
+.formula M|burueckz = M|lnreleaz  ? M|burueckz = M|rueckbauz & _M|breterlaub    
+..
+.formula U|xorder = 'M|order'>>-3  ?  F|empty(M|aufzu)
+.formula U|xorder = 'M|order'      ? _F|empty(M|aufzu)
+..
+.. Arbeits- und Maschinenzeiten der RM auf die Arbeitsscheine addieren
+.formula U|xselect = "$,,lres=="+M|order^lres^id+";mzeit=;bzeit=;@.gruppe=2;@.ablage=(Filed)"
+.load 6 workorder 'U|xselect'
+.continue O6UTPUT
+..
+!LOAD6
+.load 6 workorder
+..
+!O6UTPUT
+.continue WEITER   ? _G|mehr
+.formula M|bzeit = M|bzeit + 6|bzeit
+.formula M|mzeit = M|mzeit + 6|mzeit
+.continue LOAD6
+..
+!WEITER
+.continue NICHTELART3 ? H|elart <> 3
+.formula M|limge     = H|frgmge
+.formula M|limge     = 0                  ? H|dispo/"*.*" ; H|dispo/"*(az)*"
+.formula M|frgmge    = H|limge
+.formula M|frgmge    = M|frgmge + M|mehrentnahme ? M|mehrentnahme > 0
+.formula M|fbuz      = ""
+.formula M|fbuz      = M|lnreleaz               ? _M|bfbuerlaub
+.formula M|fbuz      = M|lfbuz                  ? _F|empty(M|order)
+.formula M|fbuz      = M|lnreleaz               ? _F|empty(M|order) & _M|bfbuerlaub
+.formula M|buzeit    = ""
+.formula M|buzeit    = M|zeitz ? _F|empty(M|fbuz)
+..
+!NICHTELART3
+.formula M|compz     = M|lcompz                 ? _F|empty(M|order)
+.formula M|compz     = M|lnreleaz               ? _F|empty(M|order) & _M|brmerlaub
+.colour -background 'M|farbe2' order 'M|aktzeile' ? _F|empty(M|order) & M|limge <> M|mge
+.colour -background 'M|farbe3' order 'M|aktzeile' ? M|frgmge <= 0
+.colour -background 'M|farbe4' 'M|aktzeile' ? M|mge<=0
+.protection frgmge 'M|aktzeile'                    ?  F|empty(M|release)
+.protection freigeben 'M|aktzeile'                 ?  M|release <> M|lreleaz
+.input "fe/PRODLIST.BDE"                     ? M|bbde & _F|empty(M|order)
+..
+!HZ
+.select line
+.continue HZE         ? _G|mehr
+.. keinen Arbeitsgang ausgeben wenn Anfahrmenge und Anzahl null sind oder Beistellteile
+.continue HZ          ? (H|amge = 0 & H|anzahl = 0) ; H|lfbeist
+.continue HZ          ? _H|relevant
+.continue MACHZEILE
+..
+!HZE
+.select add
+.continue END
+..
+!END
+.formula M|engmatz = M|prverfuegz ?  M|art^gruppe = 1 & (F|empty(H|dispoa) ; F|equals(H|dispoa, "(RemainingQuantitiesRelated)") ; F|equals(H|dispoa, "(RemainingQuantityRelatedNone)") ; F|equals(H|dispoa, "(MinimumStockLevelRelated)") ; F|equals(H|dispoa, "(EmptyNone)") ;  F|equals(H|dispoa, "(MinimumStockLevelRelatedNone)"))
+.assign U|xidverfueg  = M|vorgang^id
+.. FrÅhester End-Termin aus FV
+.formula U|xwunschtermin = 'H|tfterm'
+.. Endtermin aus FV
+.formula U|xwunschtermin = 'M|vorgang^wtterm'  ?  F|empty(U|xwunschtermin)
+.. VerfÅgbarkeitstermin aus Maske
+.formula U|xwunschtermin = M|wterm             ? _F|empty(M|wterm)
+.formula U|xwunschtermin = G|datum             ? 'U|xwunschtermin:8' < 'G|datum:8'
+.continue LABEL ? 'H|fterm' = "--.--.--" ; 'H|fterm' = "++.++.++"
+.continue LABEL ? 'M|vorgang^wtterm'  = "--.--.--" ; 'M|vorgang^wtterm' = "++.++.++"
+.input "is/PRUEFEVERFUEG"
+.continue VER2FUEG ? _U|xtableempty
+!LABEL 
+.formula U|xlabel = "TOTAL"
+.continue NOVERFUEG
+..
+!VER2FUEG
+.formula M|verfuegmge = U|xverfuegmge
+.formula M|vplgmge    = U|xvplgmge                            
+.formula M|vpbsmge    = U|xvpbsmge
+.formula M|ofmge      = U|xofmge
+.formula M|engmatz = M|lengmatz       ? (M|vplgmge + M|vpbsmge) < M|ofmge
+.formula M|hinweis = ""
+..
+!TOTAL: set colour
+.colour -background 'M|farbe1' 'M|aktzeile'
+.colour -background 'M|farbe2' 'M|aktzeile'       ?  M|kenn2/"O*"
+.colour -background 'M|farbe2' order 'M|aktzeile' ? _F|empty(M|order) & M|limge <> M|mge
+.colour -background 'M|farbe3' order 'M|aktzeile' ?  M|frgmge <= 0
+.colour -background 'M|farbe1' mge 'M|aktzeile'
+.colour -background 'M|farbe4' mge 'M|aktzeile'   ?  M|mge <= 0
+.continue

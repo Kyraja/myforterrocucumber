@@ -1,0 +1,172 @@
+..!interpreter english declaration noabbrev
+.. at 2017-06-19, 11:38
+.set TRANS -
+..========================================================================
+..==  Name              : FOP.CL.CHECKLISTE.EV
+..==  Pfad              : allpstart
+..==  Funktion          : EFOP an Checkliste
+..==  Erstellungsdatum  : 10.11.2009
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2016 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/CL.KONFIG.INI"
+.input "allpstart/PRJM.KONFIG.INI"
+..====================================================
+.type text    xtsys xtsel xtcmd xtstatus xttitel xttext
+.type text    xtaufgabe xtpvorgang
+.type integer xistufe
+.type bool    xbmehr xbistzeit
+.type integer   xprocsp      ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue BRK001 ? _(G|evtart = "maskein")
+.continue EL001 ? _((_(G|wartung)) & (M|ysperre) & ((G|evtkommd = G|kaktname13) ; (G|evtkommd = G|kaktname10)))
+.set TRANS +
+.box Hinweis
+Der Datensatz wird aktuell im Infosystem bearbeitet:
+Benutzer: 'M|ysperrzeich'
+Zeitpunkt: 'M|ysperrzp'
+
+Bearbeitung zur Zeit nicht mîglich.
+.set TRANS -
+.error
+.end 1
+.continue FI001
+!EL001
+.continue EL002 ? _(G|evtkommd = G|kaktname14)
+.copy    M|ysperre     = G|FALSE
+.formula M|ysperrzeich = ""
+.formula M|ysperrzp    = ""
+.assign  M|ystatusk    = "01"
+.formula M|yzeich      = G|bzeichen
+.formula M|yma         = G|passw^mitarb^id  ? F|empty(M|yma)
+!EL002
+!FI001
+.continue EL003 ? _(_(G|evtkommd = G|kaktname10))
+.select screen header
+.assign M|yobjektvp = M|yobjektid     ? _F|empty(M|yobjektid)
+.select screen line
+!LOOP001: ==============================
+.continue ELOP001 ? _(T|mehr)
+.assign M|ytverweisvp = M|ytverweisid         ? _M|ytverweisid = ""
+.assign M|ytsdokdatei = M|ytdokument^datei    ? _M|ytdokument = ""
+.select screen line
+.continue LOOP001
+!ELOP001: ==============================
+!EL003
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "maskpruef")
+.continue EL004 ? _((_(G|evtkommd = G|kaktname12)) & (_(F|empty(M|yobjektid))))
+.load 0 object 'M|yobjektid'
+.continue EL005 ? _(G|mehr)
+.continue EL006 ? _(F|defined(0|yclclvorhanden))
+.copy    U|xbmehr   = G|TRUE    ? _G|evtkommd = G|kaktname10
+.copy    U|xbmehr   = G|FALSE   ?  G|evtkommd = G|kaktname10
+.formula U|xtstatus = "ABS"
+.formula U|xtsel = "$,,yobjektid==" + M|yobjektid
+.formula U|xtsel = U|xtsel + ";id<>" + M|id         ? G|evtkommd = G|kaktname10
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 9 group 'U|xydbgrclcheckl' 'U|xtsel'
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.copy    U|xbmehr   = G|TRUE
+.formula U|xtstatus = ""        ? _9|ystatusk = "ABS" & 9|id <> M|id
+.load 9 continue
+.continue LOOP002
+!ELOP002: ==============================
+.formula U|xtstatus = ""    ? _M|ystatusk = "ABS"
+.continue EL007 ? _(((_(U|xbmehr)) & (_(0|yclclvorhanden = "icon:text_empty"))) ; ((U|xbmehr) & ((F|empty(0|yclclvorhanden)) ; (0|yclclvorhanden = "icon:text_empty"))) ; ((U|xbmehr) & (U|xtstatus = "ABS") & (0|yclclvorhanden = "icon:preferences")) ; ((U|xbmehr) & (_(U|xtstatus = "ABS")) & (0|yclclvorhanden = "icon:preferences_disabled")))
+.select lock waitlong add 0|id
+.continue EL008 ? _(G|mehr)
+.continue EL009 ? _(G|gesperrt)
+.formula H|yclclvorhanden = "icon:preferences"          ? _U|xtstatus = "ABS"
+.formula H|yclclvorhanden = "icon:preferences_disabled" ?  U|xtstatus = "ABS"
+.formula H|yclclvorhanden = "icon:text_empty"           ? _U|xbmehr
+.rewrite
+.select -
+.continue EL010 ? _((0|dnr    = U|xydbaufgabe) & (0|gruppe = U|xygraufgabe))
+.formula U|xbistzeit  = G|FALSE
+.formula U|xtaufgabe  = ""
+.formula U|xtaufgabe  = 0|id
+.formula U|xtpvorgang = ""
+.input "allpstart/FOP.PRJM.UP.SVORGANG.AKT"
+!EL010
+.continue FI009
+!EL009
+.set trans +
+.formula U|xttitel = "Fehler"
+
+.formula U|xttext =
+.formula U|xttext = F|formatstr("Das Projekt {1}", 0|such)          ? 0|dnr = U|xydbprojekt  & 0|gruppe = U|xygrprojekt
+.formula U|xttext = F|formatstr("Der Projektvorgang {1}", 0|nummer) ? 0|dnr = U|xydbpvorgang & 0|gruppe = U|xygrpvorgang
+.formula U|xttext = F|formatstr("Die Aufgabe {1}", 0|nummer)        ? 0|dnr = U|xydbaufgabe  & 0|gruppe = U|xygraufgabe
+
+.formula U|xttext = U|xttext +" kann nicht bearbeitet werden."
+.box 'U|xttitel'
+'U|xttext'
+
+'G|sperrtext                                                                   '
+
+Die énderung kann nicht gespeichert werden.
+.set trans -
+.error (0)
+.end 1
+!FI009
+.continue FI008
+!EL008
+.set trans +
+.formula U|xttitel = "Fehler"
+
+.formula U|xttext =
+.formula U|xttext = F|formatstr("Das Projekt {1}", 0|such)          ? 0|dnr = U|xydbprojekt  & 0|gruppe = U|xygrprojekt
+.formula U|xttext = F|formatstr("Der Projektvorgang {1}", 0|nummer) ? 0|dnr = U|xydbpvorgang & 0|gruppe = U|xygrpvorgang
+.formula U|xttext = F|formatstr("Die Aufgabe {1}", 0|nummer)        ? 0|dnr = U|xydbaufgabe  & 0|gruppe = U|xygraufgabe
+
+.formula U|xttext = U|xttext +" kann nicht bearbeitet werden."
+.box 'U|xttitel'
+'U|xttext'
+
+Die énderung kann nicht gespeichert werden.
+.set trans -
+.error (0)
+.end 1
+!FI008
+!EL007
+!EL006
+.load 0
+!EL005
+!EL004
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtart = "maskende")
+.end 1          ? M|ybmaskezu
+.continue ESAC001
+!BRK003
+.continue BRK004 ? _(G|evtart = "feldaus")
+.continue BRK005 ? _(T|evtvar = "yobjektvp")
+.assign M|yobjektid = ""
+.assign M|yobjektid = M|yobjektvp^id          ? _M|yobjektvp = ""
+.continue ESAC002
+!BRK005
+.continue BRK006 ? _(T|evtvar = "ytverweisvp")
+.assign M|ytverweisid = ""
+.assign M|ytverweisid = M|ytverweisvp^id      ? _M|ytverweisvp = ""
+.continue ESAC002
+!BRK006
+.continue BRK007 ? _(T|evtvar = "ytdokument")
+.assign M|ytsdokdatei = ""
+.assign M|ytsdokdatei = M|ytdokument^datei    ? _M|ytdokument = ""
+.continue ESAC002
+!BRK007
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK004
+!ESAC001: =====   ENDCASE   =====
+.continue

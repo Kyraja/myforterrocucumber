@@ -1,0 +1,186 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SQDELETE.EV
+.. Author         : tiwe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Function       : Event-FOP fÅr IS SQDELETE
+..                 
+.. Functionality  : Lîschen von Null-Platzmengen
+..
+.. Includes:
+.. include la/SQDELETE.EDP
+.set trans -
+..*****************************************************************************
+.. Variablendefinition
+..*****************************************************************************
+.type text xtsel ? _F|defined(U|xtsel)
+.type text xtcmd ? _F|defined(U|xtcmd)
+..
+..*****************************************************************************
+.. Eventhandling
+..*****************************************************************************
+.continue BUAFTER    ? G|evtartengl = "BUTTON_AFTER" 
+.continue FIEEXIT    ? G|evtartengl = "FIELD_EXIT" 
+.continue MASKEIN    ? G|evtartengl = "SCREEN_ENTER" 
+.continue ENDE
+..*****************************************************************************
+.. Maskeneintritt
+..*****************************************************************************
+!MASKEIN
+.formula M|loeschenokay = "icon:ok"
+.formula M|loeschenfehler = "icon:stop"
+.formula M|vorgang = "icon:view"
+.continue ENDE
+..*****************************************************************************
+.. Button nach
+..*****************************************************************************
+!BUAFTER
+.continue BSTART ? G|evtvar = "bstart"
+.continue ALLEAN ? G|evtvar = "allean"
+.continue ALLEAB ? G|evtvar = "alleab"
+.continue LOESCH ? G|evtvar = "auswahlloeschen"
+.continue SHOWPL ? G|evtvar = "tshowplatzmenge"
+.continue SHOWZL ? G|evtvar = "tshowzliste"
+.continue TSTATUS ? G|evtvar = "tstatus"
+.continue ENDE
+..******************************************
+.. Start-Button
+..******************************************
+!BSTART
+.copy M|edpfehler = G|false
+.input "is/TABLEEREN"
+.select screen header
+.select screen line
+.. Selektion der Platzmengen, die Nullbestand ausweisen
+.formula U|xtsel = "$,,artikel="+'M|artikel^id'+";platz="+'M|lplatz^id'+";lgruppe="+'M|lgruppe^id'+";bestand==0;inv=;platzelemvorh=;"
+.select group "40:3" 'U|xtsel'
+.continue ENDE ? _G|mehr
+!PLMGELP: Schleife Åber die Platzmengen
+.make screen line +o
+.assign M|tplatzmenge = H|id
+.formula M|tshowplatzmenge = M|vorgang ? _F|empty(M|tplatzmenge)
+.assign M|tartikel = H|artikel
+.assign M|tlplatz = H|platz
+.assign M|tlgruppe = H|lgruppe
+.copy M|tplatzelemvorh = H|platzelemvorh
+.formula M|tinv = H|inv
+.continue NOINV ? F|empty(M|tinv)
+.formula U|xtsel = "$,,nummer=;artikel="+'M|tartikel^id'+";platz="+'M|tlplatz^id'+";abschluss=nein;"
+.load 1 stocktaking 'U|xtsel'
+.continue NOINV ? _G|mehr
+.assign M|tzliste   = 1|zlsnr
+.formula M|tshowzliste = "icon:view" ? _F|empty(M|tzliste)
+!NOINV
+.. Schreibschutz setzen, wenn Inventurkennzeichen gefÅllt ist oder es Platzmengenelemente gibt
+.protection -field tauswahl 'M|aktzeile'   ? _F|empty(M|tinv)
+.protection -field tauswahl 'M|aktzeile'   ?  M|tplatzelemvorh
+.select squantity
+.continue PLMGELP ? G|mehr
+.continue ENDE
+..******************************************
+.. Alle auswÑhlen
+..******************************************
+!ALLEAN
+.select screen header
+.select screen line
+.continue ENDE ? _G|mehr
+!LIN1LOP: Schleife Åber die Tabelle
+.continue NOHAKEN ? _F|empty(M|tinv)
+.continue NOHAKEN ? M|tplatzelemvorh
+.copy M|tauswahl = G|true
+!NOHAKEN
+.select screen line
+.continue LIN1LOP ? G|mehr
+.continue ENDE
+..******************************************
+.. Alle abwÑhlen
+..******************************************
+!ALLEAB
+.select screen header
+.select screen line
+.continue ENDE ? _G|mehr
+!LIN2LOP: Schleife Åber die Tabelle
+.copy M|tauswahl = G|false
+.select screen line
+.continue LIN2LOP ? G|mehr
+.continue ENDE
+..******************************************
+.. AusgewÑhlte Platzmengen lîschen
+..******************************************
+!LOESCH
+.select screen header
+.select screen line
+.continue ENDE ? _G|mehr
+!LOELOOP
+.continue NXTLINE ? _M|tauswahl
+.continue NXTLINE ? _F|empty(M|tstatus)
+..ausgewÑhlte Zeilen per EDP lîschen
+.input "la/SQDELETE.EDP"
+!NXTLINE
+.select screen line
+.continue LOELOOP ? G|mehr
+.continue EDPPRUE
+..******************************************
+.. ôffnen der Platzmenge
+..******************************************
+!SHOWPL
+.continue ENDE ? F|empty(M|tshowplatzmenge) 
+.continue ENDE ? M|tstatus = M|loeschenokay      
+.formula U|xtcmd = "<(Object)>" + 'M|tplatzmenge^id' + "<(View)>"
+.command -parallel 'U|xtcmd'
+.continue ENDE
+..******************************************
+.. Zeigen der ZÑhlliste
+..******************************************
+!SHOWZL
+.continue ENDE ? F|empty(M|tshowzliste)       
+.formula U|xtcmd = "<(Object)>" + 'M|tzliste^id' + "<(View)>"
+.command -parallel 'U|xtcmd'
+.continue ENDE
+..******************************************
+.. Anzeige der EDP-Fehler
+..******************************************
+!TSTATUS
+.continue ENDE ? _F|equals(M|loeschenfehler,M|tstatus)
+.editing 'M|tedperrdat'
+.continue ENDE
+..*****************************************************************************
+.. Feldaustritt
+..*****************************************************************************
+!FIEEXIT
+.continue LPLATZ ? G|evtvar  = "lplatz"
+.continue LGRUPPE ? G|evtvar = "lgruppe"
+.continue ENDE
+..******************************************
+.. Lagerplatz
+..******************************************
+!LPLATZ
+.continue ENDE ? F|empty(M|lplatz)
+.assign M|lgruppe = M|lplatz^lgruppe
+.continue ENDE
+..******************************************
+.. Lagergruppe
+..******************************************
+!LGRUPPE
+.continue ENDE ? F|empty(M|lgruppe)
+.continue ENDE ? F|empty(M|lplatz)
+.formula M|lplatz = "" ? _F|equals(M|lgruppe,M|lplatz^lgruppe)
+.continue ENDE
+..*****************************************************************************
+.. EDP-PrÅfung
+..*****************************************************************************
+!EDPPRUE
+.continue ERR01 ? M|edpfehler
+.continue ENDE
+..*****************************************************************************
+.. Programmende
+..*****************************************************************************
+!ENDE
+.continue
+..*****************************************************************************
+.. Fehlerhandling
+..*****************************************************************************
+!ERR01: EDP-Fehler beim Lîschen
+.error Es konnten nicht alle Platzmengen gelîscht werden. Bitte die markierten Zeilen kontrollieren.
+.end

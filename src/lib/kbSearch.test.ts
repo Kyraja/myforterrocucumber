@@ -242,3 +242,135 @@ describe('kbSearch scoring', () => {
     expect(results.length).toBe(0);
   });
 });
+
+// ── Agent-provided keyword scoring ─────────────────────────────
+
+describe('kbSearch keyword scoring', () => {
+  const artikelTable: TableDef = {
+    name: 'Artikel',
+    nameDe: 'Artikel',
+    nameEn: 'Article',
+    tableRef: '2:1',
+    kind: 'database',
+    fields: [],
+  };
+
+  it('compound keyword "Chargenpflicht" matches heading "Charge" via reverse-contains', () => {
+    const chargeChunk = makeChunk({
+      id: 'charge',
+      heading: 'Charge',
+      text: 'Beschreibung der Chargenverwaltung in abas.',
+    });
+
+    const results = searchKnowledgeBase([chargeChunk], {
+      tables: [artikelTable],
+      keywords: ['Chargenpflicht'],
+    }, 10);
+
+    expect(results.length).toBe(1);
+    expect(results[0].matchedTerms.some(t => t.startsWith('Kw:'))).toBe(true);
+  });
+
+  it('keyword "Charge" matches heading "Chargenpflichtige Artikel" via forward-contains', () => {
+    const cpChunk = makeChunk({
+      id: 'chargenpflichtige',
+      heading: 'Chargenpflichtige Artikel',
+      text: 'Sonderbehandlung von chargenpflichtigen Artikeln.',
+    });
+
+    const results = searchKnowledgeBase([cpChunk], {
+      tables: [artikelTable],
+      keywords: ['Charge'],
+    }, 10);
+
+    expect(results.length).toBe(1);
+    expect(results[0].matchedTerms.some(t => t.startsWith('Kw:'))).toBe(true);
+  });
+
+  it('keyword match in heading scores higher than match in body text', () => {
+    const headingChunk = makeChunk({
+      id: 'heading-hit',
+      heading: 'Sperrkennzeichen',
+      text: 'Allgemeine Beschreibung.',
+    });
+    const bodyChunk = makeChunk({
+      id: 'body-hit',
+      heading: 'Allgemeines',
+      text: 'Hier wird das Sperrkennzeichen erwähnt aber nicht im Titel.',
+    });
+
+    const results = searchKnowledgeBase([headingChunk, bodyChunk], {
+      tables: [artikelTable],
+      keywords: ['Sperrkennzeichen'],
+    }, 10);
+
+    const headingRes = results.find(r => r.chunk.id === 'heading-hit');
+    const bodyRes = results.find(r => r.chunk.id === 'body-hit');
+    expect(headingRes).toBeDefined();
+    expect(bodyRes).toBeDefined();
+    expect(headingRes!.score).toBeGreaterThan(bodyRes!.score);
+  });
+
+  it('empty keywords array does not change baseline scores', () => {
+    const chunk = makeChunk({
+      id: 'baseline',
+      heading: 'Artikel bearbeiten',
+      text: 'Artikeldaten werden hier verwaltet.',
+    });
+
+    const baseline = searchKnowledgeBase([chunk], { tables: [artikelTable] }, 10);
+    const withEmpty = searchKnowledgeBase([chunk], { tables: [artikelTable], keywords: [] }, 10);
+
+    expect(baseline.length).toBe(withEmpty.length);
+    expect(baseline[0].score).toBe(withEmpty[0].score);
+  });
+
+  it('multi-word keyword "Sperrkennzeichen Lager" partial-matches via tokens', () => {
+    const chunk = makeChunk({
+      id: 'partial',
+      heading: 'Sperren im Lager',
+      text: 'Lagerbuchungen können gesperrt werden.',
+    });
+
+    const results = searchKnowledgeBase([chunk], {
+      tables: [artikelTable],
+      keywords: ['Sperrkennzeichen Lager'],
+    }, 10);
+
+    expect(results.length).toBe(1);
+    // Either a full Kw: match (one of the two whole tokens hit the heading) or a partial Kw~: hit.
+    const matched = results[0].matchedTerms;
+    expect(matched.some(t => t.startsWith('Kw:') || t.startsWith('Kw~:'))).toBe(true);
+  });
+
+  it('keywords work without any tables (pure thematic search)', () => {
+    const chunk = makeChunk({
+      id: 'thematic',
+      heading: 'Mehrwertsteuer',
+      text: 'Berechnung der Mehrwertsteuer in Belegen.',
+    });
+
+    const results = searchKnowledgeBase([chunk], {
+      tables: [],
+      keywords: ['Mehrwertsteuer'],
+    }, 10);
+
+    expect(results.length).toBe(1);
+    expect(results[0].matchedTerms.some(t => t.startsWith('Kw:'))).toBe(true);
+  });
+
+  it('keyword shorter than 3 chars is ignored', () => {
+    const chunk = makeChunk({
+      id: 'short',
+      heading: 'XY',
+      text: 'XY ist ein Kürzel.',
+    });
+
+    const results = searchKnowledgeBase([chunk], {
+      tables: [],
+      keywords: ['XY'],
+    }, 10);
+
+    expect(results.length).toBe(0);
+  });
+});

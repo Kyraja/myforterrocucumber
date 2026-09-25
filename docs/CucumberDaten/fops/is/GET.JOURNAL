@@ -1,0 +1,63 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : GET.JOURNAL
+.. Autor          : fwester/tiwe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Ermittelt den Lagerjournaleintrag U|xjournal zu einem bestimmten
+.. Materialbeweger U|xmover und benutzt dazu den Ladepuffer 9. Erlaubte Materialbeweger
+.. sind Verkaufs- und Einkaufspositionen, Reservierungen, Fertigungsvorschlaege sowie
+.. Rueckmeldungen.
+.. Ablauf         : Unterprogramm
+..
+.. Functionality  : Gets the journal entry U|xjournal from a certain mover of
+.. materials U|xmover using the buffer 9. Valid mover of materials are positions of
+.. sales and purchasing, reservations, work order suggestions and completion confirmations.
+.. Program flow   : Subroutine
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type VID19  xmover   ? _F|defined(U|xmover)
+.type ID10:1 xjournal ? _F|defined(U|xjournal)
+.type text   xselect  ? _F|defined(U|xselect)
+.type P2:1   xartikel ? _F|defined(U|xartikel) 
+..
+.. Nothing to do?
+.continue END ? F|empty(U|xmover)
+..
+.. Initializations
+.assign U|xjournal = ""
+.assign U|xselect = "$,,;"
+..
+.continue DOCTYPE ? U|xmover^dnr = 3 ; U|xmover^dnr = 4
+.continue PROCESS ? U|xmover^dnr = 9
+.continue ERROR1
+..
+!DOCTYPE: sales or purchasing
+.continue ERROR1  ? U|xmover^gruppe = 1
+.continue PROCESS ? U|xmover^gruppe = 2 & (U|xmover^kopf^ktyp = G|REKO ; U|xmover^kopf^ktyp = G|LIKO)
+.continue PROCURE
+..
+!PROCESS: position in sales or purchasing
+.formula U|xselect = "$,,;vorgang=" + U|xmover^id + ";@gruppe=1;@ablageart=(Both)"
+.continue JOURNAL
+..
+!PROCURE: procurement
+.formula U|xselect = "$,,;bsres=" + U|xmover^id + ";@gruppe=1;@ablageart=(Both)"
+.continue JOURNAL
+..
+!JOURNAL: load journal entry
+.formula U|xselect =  U|xselect  + ";artikel=" + 'U|xartikel'    
+.formula U|xselect =  U|xselect  + ";@gruppe=1;@ablageart=(Both)" 
+.load 9 journal 'U|xselect'
+.continue END ? _G|mehr
+.assign U|xjournal = 9|id
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1: incompatible argument
+.error -message Der Wert des Parameters U|xmover ist inkompatibel!
+.end 1

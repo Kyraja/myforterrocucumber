@@ -1,0 +1,114 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ATLASAUSFUHR.EDI
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Schreibt die Nachrichtendaten aus der IHSS-Datei in
+..                  eine neue EDI-Nachricht.
+.. Functionality  : Writes message data from IHSS-file into a new
+..                  edi message.
+..*****************************************************************************
+.set trans -
+.type text   xtmpfile          ? _F|defined(U|xtmpfile)
+.type text   xtout             ? _F|defined(U|xtout)
+.type text   xterr             ? _F|defined(U|xterr)
+.type text   xname             ? _F|defined(U|xname)
+..
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+.continue NOARGS  ?  F|empty(T|xvatvorgang)  ;  F|empty(T|xtatausfuhrtmpdatei)
+..
+.type text   xtzeile     ? _F|defined(T|xtzeile)
+.type integer    xii         ? _F|defined(T|xii)
+..
+.type text   xediSUCH
+.type text   xediVORART
+.type text   xediINTBEZEICHNUNG
+.type VPK17  xediHANDELSPARTNER
+..
+.formula T|xediSUCH   = "ATAUS"
+.formula T|xediVORART = "80"
+.set trans +
+.formula T|xediINTBEZEICHNUNG = "Anmeldung zur Ausfuhr"
+.set trans -
+..
+.assign T|xediHANDELSPARTNER = T|xvatvorgang^kunde^id  ?  T|xvatvorgang^dnr = 3
+.assign T|xediHANDELSPARTNER = T|xvatvorgang^lief^id  ?  T|xvatvorgang^dnr = 4
+..
+..
+..  --------------------------
+.. make edifact: Suchwort, Interne Bezeichnung, Status, Vorgangsnumme, Fehlercode, Import/Export-Flag setzen, Vorgangsart
+.. Identnummer fr Kunde (Besteller) bei Lieferant, Identnummer fr Debitor bei Lieferant, 
+.. Identnummer fr Kunde (Warenempf„nger) bei Lieferant, Identnummer fr lieferant bei Kunde, Identnummer Rahmenauftrag
+.. Werk, Abladestelle
+.formula U|xname = T|xediINTBEZEICHNUNG + ": " + T|xvatvorgang^nummer
+..
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=53
+#!action=new
+#!charset=eks
+such;name;status;ideksvor;fcode;imex;vorart;idkundeab;idkunderab;idkundesab;idabkunde;ideksrah;verwschl;werk;ablstelle;
+'T|xediSUCH';'U|xname';99;'T|xvatvorgang^nummer';99;EX;'T|xediVORART';'T|xediHANDELSPARTNER^nummer';;;;;;;;
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERREDI  ? _G|mehr
+..
+.select lock edifact 'F|formatstr("$,,;@gruppe=0;such={1};status=99;ideksvor={2};fcode=99;imex=EX;vorart={3};idkundeab={4}", T|xediSUCH, T|xvatvorgang^nummer, T|xediVORART, T|xediHANDELSPARTNER^nummer)' 
+.continue ERREDI  ? _G|mehr
+.assign T|xvatedi = H|id
+..
+..
+!NROW
+.select from 'T|xtatausfuhrtmpdatei' xtzeile^
+.continue EROW    ? _T|mehr
+..
+.make line
+.formula T|xii = 0
+!NFIELD
+.continue EFIELD  ?  F|empty(T|xtzeile)  ;  T|xii = 25
+.formula T|xii = T|xii + 1
+.formula H|text.xii = T|xtzeile << "#"
+.formula T|xtzeile = T|xtzeile >> "#"
+.continue NFIELD
+!EFIELD
+.rewrite
+..
+.continue NROW
+!EROW
+..
+..
+..  --------------------------
+..
+..
+.select lock edifact 'T|xvatedi^id'
+.continue ERREDI  ? _T|mehr
+..
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=53
+#!action=modify
+#!charset=eks
+id;status;fcode
+'T|xvatedi^id';2;0
+.output
+.select
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERREDI  ? _G|mehr
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!NOARGS
+.error Kann EDI-Nachricht nicht erstellen: Keine Parameter angegeben.
+.end 1
+..
+!ERREDI
+.input 'U|xterr'
+.error Das Erstellen der EDI-Nachricht ist gescheitert.
+.end 1

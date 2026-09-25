@@ -1,0 +1,179 @@
+..!interpreter english declaration noabbrev
+.set trans -
+..========================================================================
+..==  Name              : SERVICE.COSTOBJECT.PROJECT
+..==  Pfad              : allpstart
+..==  Funktion          : Serviceprogramm zur öbernahme Projekt aus Kostenobjekt
+..==  Erstellungsdatum  : 24.08.2015
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2015 alltrotec GmbH
+..==  Menuepunkte       :
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..==
+.
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+..====================================================
+.type text    xtsel xtsys xtprot xtid xtedpdat xtedpout xtedpmsg xtedperr
+.type text    xtbz xtbu xtktr xtkst
+.type text    xt001 xt002
+.type real    xrvsatzwert
+.type integer ximenu ximonat
+.type GD      xbudat xdkonddat xdatum xd1
+.type GJ      xgjahr
+.type bool    xbmehr xbbz xbbu xbktr xbkst
+.type P86:1   xpprojekt
+.type P149:3  xpaufgabe
+.type P3:2    xpaupos
+.type integer xprocsp      ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- BuchungBuchungszeile -----
+.load 0 line '0|selzeile'   ? 0|dnr = 6
+.continue EL001 ? _((0|kstelle^gruppe = 2) ; (0|kstelle^gruppe = 4))
+.load 1 group "86:1" 'F|expr("$,,yktr==" + 0|kstelle^id)'
+.continue EL002 ? _(G|mehr)
+.println -screen '0|dnr' -> '0|kstelle' - '1|such'
+.copy    U|xbmehr = G|true
+.formula U|xtid   = 1|id
+.continue EL003 ? _((_(U|xbkst)) & (0|kstelle^gruppe = 2))
+.load 1 continue
+.copy U|xbmehr = G|false    ? G|mehr
+!EL003
+.continue EL004 ? _((_(U|xbktr)) & (0|kstelle^gruppe = 4))
+.load 1 continue
+.copy U|xbmehr = G|false    ? G|mehr
+!EL004
+.continue EL005 ? _(U|xbmehr)
+    <Record id="'0|id'">
+.continue EL006 ? _(0|dnr = 131)
+      <Field name="projekt">'U|xtid'</Field>
+.continue FI006
+!EL006
+      <Row number="'0|selzeile'">
+        <Field name="projekt">'U|xtid'</Field>
+      </Row>
+!FI006
+    </Record>
+!EL005
+!EL002
+!EL001
+.load 0 continue
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+'G|txname                           ' öbernahme Projekt aus Kostenobjekt
+
+.copy U|xbbz  = G|true
+.copy U|xbbu  = G|true
+.copy U|xbktr = G|true
+.copy U|xbkst = G|false
+!REPT001: ==============================
+.formula U|ximenu = 0
+.set trans +
+.formula U|xtbz  = "Buchungszeilen"
+.formula U|xtbu  = "Buchungen"
+.formula U|xtktr = "Projekt mit erstem Treffer fÅllen"  ?  U|xbktr
+.formula U|xtktr = "Projekt nicht fÅllen"               ? _U|xbktr
+.formula U|xtkst = "Projekt mit erstem Treffer fÅllen"  ?  U|xbkst
+.formula U|xtkst = "Projekt nicht fÅllen"               ? _U|xbkst
+.set trans -
+.formula U|xtbz  = " > " + U|xtbz  + " < "  ? U|xbbz
+.formula U|xtbu  = " > " + U|xtbu  + " < "  ? U|xbbu
+.set trans +
+.menu(0,0,11) Auswahl
+Projekt in folgenden Datenbanken aus dem Kostenobjekt fÅllen
+'U|xtbz'                                                >>.copy U|xbbz = _U|xbbz
+'U|xtbu'                                                >>.copy U|xbbu = _U|xbbu
+
+Wenn mehrere Projekte zum KostentrÑger gefunden werden:
+   'U|xtktr'                                            >>.copy U|xbktr = _U|xbktr
+
+Wenn mehrere Projekte zur Kostenstelle gefunden werden:
+   'U|xtkst'                                            >>.copy U|xbkst = _U|xbkst
+
+Servicelauf starten                                     >>.formula U|ximenu = 99
+.set trans -
+.continue REPT001 ? _((G|menue  = 0) ; (U|ximenu = 99))
+.continue EL007 ? _(_(G|menue = 0))
+.input DATEI.F
+.formula U|xtid = F|tostring(G|VERSIONNEU)
+.formula U|xtedpdat = "rmtmp/X.SERVICE.COSTOBJECT.PROJECT." + U|xtid + ".EDP.TMP"
+.formula U|xtedpout = "rmtmp/X.SERVICE.COSTOBJECT.PROJECT." + U|xtid + ".OUT.TMP"
+.formula U|xtedpmsg = "rmtmp/X.SERVICE.COSTOBJECT.PROJECT." + U|xtid + ".MSG.TMP"
+.formula U|xtedperr = "rmtmp/X.SERVICE.COSTOBJECT.PROJECT." + U|xtid + ".ERR.TMP"
+.formula U|xtprot   = "rmtmp/X.SERVICE.COSTOBJECT.PROJECT." + U|xtid + ".PROT.TMP"
+.output new 'U|xtedpdat'
+.output terminal
+
+.set trans +
+Projekt in folgenden Datenbanken aus dem Kostenobjekt fÅllen
+?'U|xtbz'                                               ?  U|xbbz
+?'U|xtbu'                                               ?  U|xbbu
+
+Wenn mehrere Projekte zum KostentrÑger gefunden werden:
+   'U|xtktr'
+
+Wenn mehrere Projekte zur Kostenstelle gefunden werden:
+   'U|xtkst'
+
+
+.set trans -
+.output new 'U|xtedpdat'
+.input DATEI.F
+.set substitution "+LX,&,&amp;, ,<,&lt;, ,>,&gt;,"
+<?xml version="1.0" encoding="UTF-8"?>
+<?edp langcode 'G|bsprache'?>
+<?edp updatemode STRICT?>
+<ABASData>
+.continue EL008 ? _(U|xbbz)
+  <RecordSet database="131" action="update" >
+.println -screen Buchungszeilen
+.load 0 group "131:0.1" "$,,projekt==`;kstelle<>`"
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.load 0 continue
+.continue LOOP001
+!ELOP001: ==============================
+  </RecordSet>
+
+.println -screen
+!EL008
+.continue EL009 ? _(U|xbbu)
+  <RecordSet database="6" action="update" >
+.println -screen Buchungen
+.load 0 group "6:0.1" "$,,projekt==`;kstelle<>`"
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+.continue LOOP002
+!ELOP002: ==============================
+  </RecordSet>
+
+.println -screen
+!EL009
+</ABASData>
+.formula U|xtsys = "xmlimport.sh -p " + G|einmalpw + " -r REF -o UPDATEMODE=STRICT -I " + U|xtedpdat + " -H " + U|xtedpmsg + " 1>" + U|xtedpout + " 2>" + U|xtedperr
+.input allpstart/FOP.ALL.EDP.CHECK
+.set trans +
+
+.println -screen fertig
+.set trans -
+!EL007
+.continue

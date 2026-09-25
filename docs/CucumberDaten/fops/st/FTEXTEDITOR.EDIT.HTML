@@ -1,0 +1,109 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : FTEXTEDITOR.EDIT.HTML
+.. Author         : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      : lei
+.. Functionality  : Calls html editor for file given in M|freitextedit. If
+.. M|ftexteditierbar = false, the file is readonly; otherwise not. Returns
+.. xdiffer = true, if file has changes; otherwise false.
+..
+.. 1st Converts file from s3 to utf 8 charset
+.. 2nd Copys converted file to client
+.. 3rd Calls editor and waits for end of its session
+.. 4th Copys edited client file into a temporary server file
+.. 5th Does nothing if freetext should be a new one and temporary server file size is 0.
+..     Does nothing if temporary server file has size but no differences
+.. 6th Copys temporary server file into original
+.. 7th Converts original from utf 8 into s3 charset
+..*****************************************************************************
+.set trans -
+..
+.. Declaration
+.type text xjava     ? _F|defined(U|xjava)
+.type text xjar      ? _F|defined(U|xjar)
+.type text xfile     ? _F|defined(U|xfile)
+.type text xlanguage ? _F|defined(U|xlanguage)
+.type text xlog4jcfg ? _F|defined(U|xlog4jcfg)
+.type text xcmd      ? _F|defined(U|xcmd)
+.type text xtemp     ? _F|defined(U|xtemp)
+.type bool xdiffer   ? _F|defined(U|xdiffer)
+.type text xlogoname ? _F|defined(U|xlogoname)
+..
+.. Initialization
+.assign U|xjava = ""
+.input "st/FTEXTEDITOR.HTML.INI"
+.assign U|xjava = "javaw" ? F|empty(U|xjava)
+.assign U|xjar = "./ftexteditor/lib/abas-htmleditor.jar"
+.assign U|xfile = F|formatstr("{1}{2}/ftext{3}.txt{1}", G|dblquote, G|cltempdir, G|versionneu)
+.assign U|xlanguage = "-lang " + G|bspri
+.assign U|xlog4jcfg = "-Dlog4j.configuration=log4j_error.properties"
+.assign U|xlog4jcfg = "-Dlog4j.configuration=log4j_debug.properties" ? P|loglevel > 3
+.copy U|xdiffer = G|FALSE
+.file -tempname U|xtemp
+.output new 'U|xtemp'
+..
+.. Copy freetext to client
+.system 'F|formatstr("s3_conv 50 {1}{2}{1}", G|apostroph, M|freitextedit)' background
+.continue ERROR02 ? _G|mehr
+.pc.copy -PC 'M|freitextedit' 'U|xfile'
+.continue ERROR01 ? _G|mehr
+..
+.. Start editor on client and wait
+.formula U|xcmd = U|xjava + " " + 'U|xlog4jcfg' + " -jar " + U|xjar + " -file " + U|xfile
+.formula U|xcmd = U|xcmd + " -aenderbar" ? M|ftexteditierbar
+.formula U|xcmd = U|xcmd + " -isnew" ? M|ftextisnew
+.formula U|xcmd = U|xcmd + " " + U|xlanguage + " -aufnum " + G|aufrufernr + " -bzeich " + G|DBLQUOTE + G|bzeichen + G|DBLQUOTE
+.formula U|xcmd = U|xcmd + " -logo " + U|xlogoname ? _F|empty(U|xlogoname)
+.formula U|xcmd = U|xcmd + " -client " + G|DBLQUOTE + G|mandant + G|DBLQUOTE
+.pc.exec -wait 'U|xcmd'
+.continue ERROR01 ? _G|mehr
+..
+.. Copy freetext back to server
+.pc.copy 'U|xfile' 'U|xtemp'
+.continue ERROR01 ? _G|mehr
+..
+.continue FTEMPTY ? F|filesize('U|xtemp') = 0
+.continue FTDIFF  ? M|ftextisnew
+..
+.. Compare and stop if files not differ
+.system 'F|formatstr("cmp -s {1} {2}", U|xtemp, M|freitextedit)' background
+.continue END ? F|empty(G|status)
+.continue FTDIFF
+..
+!FTEMPTY: File size is 0.
+.. Finish program while editor was cancelled without saving.
+.continue END ? M|ftextisnew
+.. Clear freetext while editor saves a different empty file.
+.assign M|freitextedit = ""
+.copy U|xdiffer = G|TRUE
+.continue END
+..
+!FTDIFF: Files differ
+.copy U|xdiffer = G|TRUE
+..
+!FTCOPY: Copy into original and convert
+.system 'F|formatstr("cp -f {1} {2}", U|xtemp, M|freitextedit)' background
+.continue ERROR03 ? _G|mehr
+..
+.. TODO: Datei wieder vom Client loeschen
+.system 'F|formatstr("s3_conv 51 {1}", M|freitextedit)' background
+.continue ERROR02 ? _G|mehr
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR01: Client command failed!
+.. Core gives error message
+.continue BREAK
+..
+!ERROR02: Conversion of freetext failed!
+.error -message Das Konvertieren des Freitextes ist gescheitert!
+.continue BREAK
+..
+!ERROR03: Copy failed!
+.error -message Kopieren gescheitert!
+..
+!BREAK
+.end 1

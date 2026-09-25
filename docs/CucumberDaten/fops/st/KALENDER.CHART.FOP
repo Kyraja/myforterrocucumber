@@ -1,0 +1,259 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..
+.. FOP-Name       : KALENDER.CHART.FOP
+.. Datum          : 31.08.2010
+.. Version        : 1.0
+.. Autor          : foe
+.. Verantwortlich : foe
+.. Kontrolle      : cl
+.. Funktion       : Maske "Dispokalender" und "KapazitÑtsangebot" Register "Diagramm"-
+..                  Darstellung via Gant-Diagramm der KapazitÑten
+..                  der zuvor ausgewÑhlten Kalenders.
+.. Functionality  :
+.. Ablauf         : Vorbelegung in "FOP.CHART.DATE" der Felder "von" und "bis"
+..                  oder freie Auswahl des Zeitraumes.
+..
+.. Includes       :
+..
+..  include fe/FOP.CHART.PARA
+..  include is/ABASFARBEN.DEF
+..
+..*****************************************************************************
+.. Uebersetzung ausschalten
+.set trans -
+... nur in GUI mîglich
+.end 0 ? _G|grafik
+..
+..*****************************************************************************
+.type date xdanf      ? _F|defined(U|xdanf)
+.type date xdend      ? _F|defined(U|xdend)
+.type date xdleer     ? _F|defined(U|xdleer)
+.type GD    xdms       ? _F|defined(U|xdms)
+.type GD    xdmin      ? _F|defined(U|xdmin)
+.type GD    xdmax      ? _F|defined(U|xdmax)
+.type integer   ximin      ? _F|defined(U|ximin)
+.type integer   ximax      ? _F|defined(U|ximax)
+.type integer   ximaxs     ? _F|defined(U|ximaxs)
+.type integer   ximaxanz   ? _F|defined(U|ximaxanz)
+.type integer   xibereich  ? _F|defined(U|xibereich)
+.type integer   ximaxber   ? _F|defined(U|ximaxber)
+.type text  xdatform   ? _F|defined(U|xdatform)
+.type integer   xianztage  ? _F|defined(U|xianztage)
+.type A247  xatyp      ? _F|defined(U|xatyp)
+.type R9.2  xrbstd     ? _F|defined(U|xrbstd)
+.type realx xrmax      ? _F|defined(U|xrmax)
+.type realx xrmin      ? _F|defined(U|xrmin)
+.type text  xname      ? _F|defined(U|xname)
+.type text  xttip:100  ? _F|defined(U|xttip)
+.. X-Achsenbeschriftung
+.type VID26 xbezobjid  ? _F|defined(U|xbezobjid)
+.type ID39  xlgrid     ? _F|defined(U|xlgrid)
+.type integer   xipstd
+.type text  xttitel    ? _F|defined(U|xttitel)
+.type text  xttitely   ? _F|defined(U|xttitely)
+.. Farben
+.type text  xtfarbe    ? _F|defined(U|xtfarbe)
+.type text  xtfarbe1   ? _F|defined(U|xtfarbe1)
+.type text  xtfarbe2   ? _F|defined(U|xtfarbe2)
+.type bool  xbfwechsel ? _F|defined(U|xbfwechsel)
+.type bool  xbgeskapaz ? _F|defined(U|xbgeskapaz)
+..
+.type text  xmerktsdtrenn ? _F|defined(U|xmerktsdtrenn)
+.type text  xmerkdezpunkt ? _F|defined(U|xmerkdezpunkt)
+..
+.formula U|xmerktsdtrenn = G|tsdtrennchar
+.formula U|xmerkdezpunkt = G|dezpunktchar
+.set thoussep ""
+.set decpoint .
+..
+.. Vorgabeparameter einlesen
+.input "fe/FOP.CHART.PARA"
+.. Farben festlegen
+.input "is/ABASFARBEN.DEF"
+.. Farbe innerhalb des Kalender: HellgrÅn (verfÅgbar)
+.. Farbe au·erhalb des Kalender: Hellblau
+.formula U|xtfarbe1 = U|xabaslightgreen
+.formula U|xtfarbe2 = U|xabaslightblue
+..
+.. Anzeige des Chart bei Neuanlegen nicht mîglich
+.continue BEENDEN ? G|evtkommd = G|kaktname14
+..
+.. Zeitraum: von M|adat bis M|edat
+.. Allgemeine Datumwerte
+.formula U|xdms    = "30.12.1899"
+..
+.. Datumsbereich adat/edat auswerten
+.formula U|xdanf = M|adat
+.formula U|xdend = M|edat
+.continue DATUM
+..
+!DATUM: PrÅfung und Korrektur, falls notwendig
+..
+.continue VOMBISDATFEHLT ? U|xdanf = U|xdleer & U|xdend = U|xdleer
+.continue BISDATFEHLT    ? U|xdanf<>U|xdleer & U|xdend = U|xdleer
+.continue VOMDATFEHLT    ? U|xdanf = U|xdleer & U|xdend<>U|xdleer
+.continue BISDATGROESSER ? U|xdanf > U|xdend & U|xdend<>U|xdleer
+.continue UEBERNAHME
+..
+!VOMBISDATFEHLT: Datumsbereich fehlt -> vorbelegen
+.formula U|xdanf  = "."
+.continue BISDATFEHLT
+..
+!BISDATFEHLT: Bis-Datum fehlt
+.formula U|xdend  = U|xdanf + U|xianztage -1
+.continue UEBERNAHME
+..
+!VOMDATFEHLT: Von-Datum fehlt
+.formula U|xdanf  = U|xdend - U|xianztage +1
+.continue UEBERNAHME
+..
+!BISDATGROESSER: Datum fehlerhaft
+.error Bis-Datum kleiner als Vom-Datum, Bis-Datum wird neu belegt.
+.formula U|xdend  = U|xdanf + U|xianztage -1
+..
+!UEBERNAHME: Korrigierte Werte ubernehmen
+..
+.formula M|adat = U|xdanf
+.formula M|edat = U|xdend
+..
+.set separator #
+.chart -INIT
+.chart -PARAM -CHARTTYPE BAR
+..
+!ALLGKOPF
+.select screen header
+.formula   U|xname     = M|sucherw
+.copy U|xbezobjid = M|bezobj
+.copy U|xlgrid    = M|lgruppe
+..
+!ALLGEMEIN
+.formula G|adatum = U|xdanf
+.formula G|edatum = U|xdend
+.set trans +
+.formula U|xatyp  = "Arbeitstage"
+.set trans -
+.formula U|xatyp  = M|chtyp ? M|gruppe = 1
+.copy U|xbgeskapaz = TRUE ? M|gruppe = 2
+
+.formula U|xtfarbe    = U|xtfarbe1
+.formula U|xibereich  = 1
+.formula U|ximaxber   = 1
+.formula U|xbfwechsel = FALSE
+.continue VORKAL  ? _F|empty(M|gltvon) & G|adatum < M|gltvon
+.continue NACHKAL ? _F|empty(M|gltbis) & G|adatum > M|gltbis
+.formula U|xbfwechsel = TRUE ? _F|empty(M|gltbis) & G|edatum > M|gltbis
+.formula U|ximaxber   = 2 ? U|xbfwechsel
+.continue DATBEST
+!VORKAL
+.. Vor Kalenderbeginn
+.formula U|xtfarbe    = U|xtfarbe2
+.formula U|xibereich  = 0
+.formula U|xbfwechsel = TRUE ? G|edatum >= M|gltvon
+.formula U|ximaxber   = 0 ? _U|xbfwechsel
+.formula U|ximaxber   = 2 ? _F|empty(M|gltbis) & G|edatum > M|gltbis
+.continue DATBEST
+!NACHKAL
+.. Nach Kalenderende
+.formula U|xtfarbe    = U|xtfarbe2
+.formula U|xibereich  = 2
+.formula U|xbfwechsel = FALSE
+.formula U|ximaxber   = 2
+..
+!DATBEST
+.. Datumsformat bestimmen
+.select company "$,@gruppe=18;gruppe=18"
+.formula U|xdatform = H|bdatform.bsprache
+.select
+.formula U|xdatform = "D" + F|regreplace(F|regreplace(F|regreplace(F|condexpr(F|empty(U|xdatform), "D.M.Y", U|xdatform), "D", "dd"), "M", "MM"), "Y", "yy")
+..
+.formula U|xrmin = 0
+.formula U|xrmax = 0
+..
+.. X-Achsenbereich festlegen
+.formula U|xdmax  = U|xdend+1
+.formula U|xdmin  = U|xdanf
+.formula U|ximin  = U|xdmin - U|xdms
+.formula U|ximax  = U|xdmax - U|xdms
+.. Max. Anzahl X-Werte: 6 Wochen
+.formula U|ximaxanz = 42
+.formula U|ximaxs = U|ximin + U|ximaxanz - 1
+.. Y-Achsenbereich festlegen
+.formula U|xipstd = 24
+..
+.set trans +
+.. Ueberschrift zusammensetzen
+.formula U|xttitel = "KapazitÑtsÅbersicht" + " "
+.formula U|xttitel = U|xttitel + U|xname
+.formula U|xttitel = U|xttitel + " - " + "Bezugsobjekt " + ": " + 'U|xbezobjid^sucherw'
+.formula U|xttitel = U|xttitel + " - " + "Lagergruppe " + ": " + 'U|xlgrid^sucherw' ? 'U|xlgrid^sucherw' <> ""
+.formula U|xttitel = U|xttitel + "   " + "Zeitraum" + ": " + 'U|xdmin' + " - " + 'U|xdmax'
+.set trans -
+..
+.. Beschriftung der Y-Achse zusammensetzen
+.formula U|xttitely = "Stunden"
+..
+!CHARTPARA
+.set separator #
+.chart -INIT
+.chart -PARAM -CHARTTYPE BAR
+.chart -PARAM -TITLECHART 'U|xttitel'
+.chart -PARAM -STACKTYPE STACKED
+.chart -PARAM -TITLEY 'U|xttitely'
+.chart -PARAM -SCROLLY 0 'U|xipstd'
+.chart -PARAM -FORMATY NUMBER
+.chart -PARAM -MINMAXX 'U|ximin' 'U|ximax'
+.chart -PARAM -SCROLLX 'U|ximin' 'U|ximaxs'
+..
+.chart -PARAM -FORMATX 'U|xdatform'
+.continue BEGWERT
+..
+!BEGWERT
+.. Beginn verfuegbar
+.formula G|adatum = U|xdanf
+.formula G|edatum = G|adatum
+.chart -STARTVALUES "verfÅgbar"
+..
+!BSTD: Schleife verfuegbar
+.set trans +
+.. GesamtkapazitÑt fÅr KapazitÑtsangebote (Enddatum einschliesslich)
+.formula U|xrbstd = F|totalcapacityhours(U|xbezobjid, U|xlgrid, G|adatum, G|edatum) ? U|xatyp = "Arbeitstage" & U|xbgeskapaz
+.formula G|edatum = G|adatum + 1
+.. EinzelkapazitÑt sonst ((Enddatum ausschliesslich)
+.formula U|xrbstd = F|numworkhours(U|xbezobjid, U|xlgrid, G|adatum, G|edatum)    ? U|xatyp = "Arbeitstage" & _U|xbgeskapaz
+.formula U|xrbstd = F|numdelivhours(U|xbezobjid, U|xlgrid, G|adatum, G|edatum)   ? U|xatyp = "Liefertage"
+.formula U|xrbstd = F|numreceipthours(U|xbezobjid, U|xlgrid, G|adatum, G|edatum) ? U|xatyp = "Anliefertage"
+.formula U|xrmin  = U|xrbstd         ? U|xrbstd < U|xrmin
+.formula U|xrmax  = U|xrbstd         ? U|xrbstd > U|xrmax
+.formula U|xttip  = ""
+.formula U|xttip  = 'G|adatum' + " " + "verfÅgbar" + ": " + 'U|xrbstd' + " Stunden"
+.set trans -
+.chart -VALUE 'U|xrbstd' -RGBCOLOR 'U|xtfarbe' -TIP 'U|xttip'
+.formula G|adatum = G|edatum
+.continue OHNEFW                    ? _U|xbfwechsel
+.continue OHNEFW                    ? U|xibereich = 0 & G|adatum < M|gltvon
+.continue OHNEFW                    ? U|xibereich = 1 & _F|empty(M|gltbis) & G|adatum <= M|gltbis
+.. NÑchster Abschnitt -> Farbwechsel
+.formula U|xibereich = U|xibereich + 1
+.formula U|xtfarbe   = U|xtfarbe1 ? U|xibereich = 1
+.formula U|xtfarbe   = U|xtfarbe2 ? U|xibereich = 2
+.formula U|xbfwechsel = FALSE ?  U|xibereich =  U|ximaxber
+!OHNEFW
+.continue BSTD                      ? _(G|adatum > U|xdend)
+..
+.. Runden auf nÑchsthîhere Zahl + 2
+.formula U|xrmax    = (U|xrmax + 0.5):0 + 2
+.chart -PARAM -MINMAXY 'U|xrmin' 'U|xrmax'
+.chart -SHOW chart 0
+..
+!BEENDEN
+.error Bitte zuerst Kalender speichern.    ? G|evtkommd = G|kaktname14
+.continue
+..
+!DATENDE
+.set thoussep 'U|xmerktsdtrenn'
+.set decpoint 'U|xmerkdezpunkt'
+.end 0
+
+!END
+.continue

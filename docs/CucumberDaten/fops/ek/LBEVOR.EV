@@ -1,0 +1,143 @@
+..!interpreter english translate noabbrev
+..******************************************************************************
+.. FOP-Name       : LBEVOR.EV
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Infosystem, BestellvorschlÑge
+.. Ablauf         : Buttonvor - vor Start  -> Selectfeld fÅllen
+..*****************************************************************************
+..
+.set trans -
+.type text  xtsel       ? _F|defined(U|xtsel) 
+..
+.continue BUTTON    ?  G|evtartengl = "BUTTON_AFTER" & G|evtvar = "angefragt"
+.continue SCHED     ?  G|evtartengl = "BUTTON_AFTER" & G|evtvar = "icoattdispo"
+..
+.input "is/TABLEEREN"
+.continue BV        ? G|evtartengl="BUTTON_BEFORE"   & G|evtvar="bstart"
+.continue BSEL      ? G|evtartengl="BUTTON_AFTER"    & G|evtvar="bselect"
+.continue FAV       ? G|evtartengl="FIELD_EXIT"      & G|evtvar="btermvon"
+.continue AUSWAHL   ? G|evtartengl="FIELD_EXIT"      & G|evtvar="btermbis"
+.continue AUSWAHL   ? G|evtartengl="FIELD_EXIT"      & G|evtvar="klgruppe"
+.continue KART      ? G|evtartengl="FIELD_EXIT"      & G|evtvar="kart"
+.continue BASIS     ? G|evtartengl="FIELD_EXIT"      & G|evtvar="kbasisartikel"
+.continue AUSWAHL   ? G|evtartengl="FIELD_EXIT"      & G|evtvar="klief"
+.continue TOL       ? G|evtartengl="FIELD_EXIT"      & G|evtvar="tol"
+.continue KRIT      ? G|evtartengl="FIELD_EXIT"      & G|evtvar="krit"
+.continue FIX       ? G|evtartengl="FIELD_EXIT"      & G|evtvar="vorgfix"
+.continue END
+..
+!SCHED
+.continue END ? F|empty(M|icoattdispo)
+.command -parallel 'F|formatstr("<(Infosystem)>{1}<(Call)> ? artikel={2}|lgruppe={3}|bstart=", "10430", M|art^id, M|lgruppe^id)'
+.continue END
+..
+!BASIS
+.formula M|kart = "" ? _F|empty(M|kbasisartikel)
+.continue AUSWAHL
+..
+!KART
+.assign M|kbasisartikel = M|kart^basisartikel ? _F|empty(M|kart)
+.formula M|klgruppe = ""  ? M|kart^gruppe = 4
+.continue AUSWAHL
+..
+!BUTTON
+.continue ERROR ? F|empty(M|angefragt)
+.formula U|xtsel = "<(Purchasing)> "+'M|vorgang^id'+" <(View)>  ? 1:angefragtbu= | [invisible]=1"
+.command -wait 'U|xtsel'
+.continue ERROR2 ? _G|mehr
+.continue END
+..
+!BV
+.continue ? M|selektion
+.copy M|krit = G|TRUE ? M|tol <> 0
+.continue F02     ? 'M|btermbis' <> "" & M|btermbis < M|btermvon
+.formula M|selektion = "n"
+.formula M|select    = "$,,bsart=(ExternalProcurement);"
+.formula M|select    = M|select + "projekt="+M|kprojekt^id+";" ? _F|empty(M|kprojekt)
+.formula M|select    = M|select + "tsterm="+'M|btermvon'+"!"+'M|btermbis'+";"
+.add M|kart
+.continue BV1     ? _G|mehr
+.formula M|select  = M|select + "art="      + D|id + ";"
+.add
+..
+!BV1
+.add M|klief
+.continue BV2     ? _G|mehr
+.formula M|select  = M|select + "lief="     + D|id + ";"
+.add
+..
+!BV2
+.add M|klgruppe
+.continue BV3     ? _G|mehr
+.formula M|select  = M|select + "lgruppe="  + D|id + ";"
+.add
+..
+!BV3
+.add M|betreuer
+.continue BV4     ? _G|mehr
+.formula M|select  = M|select + "betreuer=" + D|id + ";"
+.add
+..
+!BV4
+.formula M|select  = M|select + "fix=TRUE;"                            ?  M|vorgfix
+.formula M|select  = M|select + "@gruppe=2;@ablageart=(Active);"
+.formula M|select  = M|select + "kopf==`;bveinplan=1;@ordnung=sterm"   ?  F|empty(M|kart)
+.formula M|select  = M|select + "@ordnung=term"                        ? _F|empty(M|kart) & M|kart^gruppe <> 1
+.formula M|select  = M|select + "einplan=1;mateinplan=1;@ordnung=term" ? _F|empty(M|kart) & M|kart^gruppe = 1
+.continue AUSWAHL
+..
+!BSEL
+.formula M|select    = ""
+.formula M|btermbis  = ""
+.formula M|btermvon  = ""
+.formula M|kart      = ""
+.formula M|klief     = ""
+.formula M|klgruppe  = ""
+.formula M|kprojekt  = ""
+.formula G|evtfeldneu  = "%"
+.input "is/AUSWAHL"
+.formula M|selektion = M|select <> "!"
+.continue END
+..
+!FAV:
+.formula M|btermbis  = M|btermvon
+..
+!AUSWAHL
+.copy M|selektion = G|FALSE
+.formula M|kartname    = ""    ? F|empty(M|kart)
+.continue END
+..
+!TOL:
+.copy M|krit = G|TRUE
+.continue AUSWAHL
+..
+!KRIT:
+.copy M|krit = G|TRUE ? M|tol <> 0
+.continue AUSWAHL
+..
+!FIX
+.copy M|vorgfix = G|TRUE   ?  M|vorgfix
+.copy M|vorgfix = G|FALSE  ? _M|vorgfix
+.continue AUSWAHL
+..
+..*****************************************************************************
+!END
+.continue
+..
+!F02:
+.error von-Termin ist grî·er als bis-Termin.
+.end 1
+..
+!ERROR
+.error Es gibt noch keine Anfragen zum Bestellvorschlag.
+.end 1
+..
+!ERROR2
+.output terminal
+Fehlerdatei:
+.input 'U|xterr'
+.error DrÅcken des Buttons gescheitert!
+.end 1
+

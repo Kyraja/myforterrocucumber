@@ -16,6 +16,8 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/mft-auth/, ''),
         secure: true,
+        timeout: 600000,
+        proxyTimeout: 600000,
         // Strip WWW-Authenticate so the browser doesn't show its native auth dialog on 401
         configure: (proxy) => {
           proxy.on('proxyRes', (proxyRes) => {
@@ -28,6 +30,8 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/mft-api/, ''),
         secure: true,
+        timeout: 600000,
+        proxyTimeout: 600000,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq, req) => {
             console.log(`[Proxy] ${req.method} ${req.url} -> ${proxyReq.protocol}//${proxyReq.host}${proxyReq.path}`)

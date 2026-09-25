@@ -1,0 +1,222 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : CHANGECURRENCY.YTBUEXP.BA
+.. Date           : 04.03.15
+.. Version        : 2015r2n04
+.. Author         : si/dr
+.. Copyright      : (c) 2015 SABA International
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xtcmd      ? _F|defined(U|xtcmd)
+.type text U|xttmp      ? _F|defined(U|xttmp)
+.type text U|xtout      ? _F|defined(U|xtout)
+.type text U|xterr      ? _F|defined(U|xterr)
+.type text U|xtsel      ? _F|defined(U|xtsel)
+.type text U|xtvar      ? _F|defined(U|xtvar)
+.type text U|xttyp      ? _F|defined(U|xttyp)
+.type text U|xtrest     ? _F|defined(U|xtrest)
+.type text U|xtzrest    ? _F|defined(U|xtzrest)
+.type text U|xtdata     ? _F|defined(U|xtdata)
+.type R7.2 U|xr72       ? _F|defined(U|xr72)
+.type R7.4 U|xr74       ? _F|defined(U|xr74)
+.type R7.4 U|xr76       ? _F|defined(U|xr76)
+.type bool U|xb72       ? _F|defined(U|xb72)
+.type bool U|xb74       ? _F|defined(U|xb74)
+.type bool U|xb76       ? _F|defined(U|xb76)
+..
+.continue NOELISTE      ? F|empty(M|ytefliste)
+.continue NODATE        ? F|empty(M|ydate)
+.continue END           ? M|ytausschl
+..
+.file -TEMPNAME U|xttmp
+.file -TEMPNAME U|xtout
+.file -TEMPNAME U|xterr
+..
+.formula M|ytdone       = G|false
+.formula M|ytimport     = ""
+.formula M|yterror      = ""
+..
+.output NEW 'U|xttmp'
+.input DATEI.F
+.input 'M|ytefliste'
+.output
+.select from
+.select from 'U|xttmp' U|xtsel^
+.formula U|xtcmd        = "edpexport.sh -P -l " + 'M|ytvdn' + ":" + 'M|ytvgr'
+.formula U|xtcmd        = U|xtcmd + " -s Nummer -k " + G|dblquote + M|ytkrit + G|dblquote        ? _F|empty(M|ytkrit)
+.formula U|xtcmd        = U|xtcmd + " -Z "                                                       ? M|yttab
+.formula U|xtcmd        = U|xtcmd + " -F -f " + U|xtsel + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' PASSWORD background
+..
+.continue NOEXPORT      ? F|filesize(U|xterr) > 0
+.formula M|ytexport     = U|xtout
+..
+.continue NOFLISTE      ? F|empty(M|ytfliste)
+.set separator @
+.output NEW 'U|xttmp'
+.input DATEI.F
+.input 'M|ytefliste'
+.output
+.select from
+.select from 'U|xttmp' U|xtsel^
+.continue NOFLISTE      ? F|empty(U|xtsel)
+.formula U|xtsel        = 'F|regreplaceall(U|xtsel, "\,", ";")'
+..
+.output NEW 'U|xttmp'
+.input DATEI.F
+.input 'M|ytfliste'
+..
+.formula U|xtcmd        = "$,@database="+'M|ytvdn'+";@group="+'M|ytvgr'+";@sort=Nummer;"
+.formula U|xtcmd        = U|xtcmd + 'M|ytkrit'+";"      ? _F|empty(M|ytkrit)
+.formula U|xtcmd        = U|xtcmd + "nummer=!;"         ?  F|empty(M|ytkrit)
+.formula U|xtcmd        = U|xtcmd + "ozeilen=0;"        ? _M|yttab & _M|ytvvtab
+.formula U|xtcmd        = U|xtcmd + "ozeilen>0;"        ?  M|yttab
+..
+.load 0 nolock object 'U|xtcmd'
+.continue NODATA        ? _G|mehr
+!DATA
+.continue OUTPUT        ? _G|mehr
+..
+..den eigenen WÑhrungskurs und den WÑhrungskurs fÅr die Umrechnung nicht Ñndern
+.continue NEXT          ? 0|dnr = 95 & ('0|id' = 'M|yown^id' ; '0|id' = 'M|yrate^id')
+..
+.formula U|xtrest       = U|xtsel
+..erste Stelle abschneiden, da <nummer>
+.formula U|xtrest       = U|xtrest >> ";"
+.formula U|xtdata       = '0|nummer' + ";"
+..
+!REST
+.continue NEXT          ? F|empty(U|xtrest)
+.formula U|xtvar        = U|xtrest << ";"
+.formula U|xtrest       = U|xtrest >> ";"
+.continue DTAB          ? M|yttab & ('U|xtvar' = 'M|ytfld')
+.formula U|xb72         = G|false
+.formula U|xb74         = G|false
+.formula U|xb76         = G|false
+..
+.formula U|xtcmd        = "formula U|xb72       = G|true        ? 'F|typeof(0|" + U|xtvar + ")'/" + G|dblquote + "R*.2" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xb72       = G|true        ? 'F|typeof(0|" + U|xtvar + ")'/" + G|dblquote + "R*.3" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xb74       = G|true        ? 'F|typeof(0|" + U|xtvar + ")'/" + G|dblquote + "R*.4" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xb74       = G|true        ? 'F|typeof(0|" + U|xtvar + ")'/" + G|dblquote + "R*.6" + G|dblquote
+.'U|xtcmd'
+.formula U|xtdata       = U|xtdata + 'M|ycurr' + ";"    ? _U|xb72 & _U|xb74 & _U|xb76
+.continue REST                                          ? _U|xb72 & _U|xb74 & _U|xb76
+.formula U|xtcmd        = "formula U|xr72       = 0|" + U|xtvar + " * " + 'M|ycalc' + " ? U|xb72"
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xr74       = 0|" + U|xtvar + " * " + 'M|ycalc' + " ? U|xb74"
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xr76       = 0|" + U|xtvar + " * " + 'M|ycalc' + " ? U|xb76"
+.'U|xtcmd'
+..
+.continue NOROUND       ? _U|xb72
+.formula U|xtcmd        = "formula U|xr72       = " + G|apostroph + "F|round(U|xr72, M|yfact)" + G|apostroph
+.'U|xtcmd'
+!NOROUND
+.formula U|xtcmd        = "formula U|xtdata     = U|xtdata + 'U|xr72' + " + G|dblquote + ";" + G|dblquote   ? U|xb72
+.formula U|xtcmd        = "formula U|xtdata     = U|xtdata + 'U|xr74' + " + G|dblquote + ";" + G|dblquote   ? U|xb74
+.formula U|xtcmd        = "formula U|xtdata     = U|xtdata + 'U|xr76' + " + G|dblquote + ";" + G|dblquote   ? U|xb76
+.'U|xtcmd'
+.continue REST
+..
+!DTAB
+.output ADDEDTO 'U|xttmp'
+?'U|xtdata'\    ? _F|empty(U|xtdata)
+.formula U|xtdata       = ""
+..
+!DLINES
+.load 0 nolock line
+.continue NEXT          ? _G|mehr
+..
+.formula U|xtzrest      = U|xtrest
+.continue NEXT          ? F|empty(U|xtzrest)
+.formula U|xtdata       = '0|aktzeile' + ";"
+..
+!ZREST
+.continue ZNEXT         ? F|empty(U|xtzrest)
+.formula U|xtvar        = U|xtzrest << ";"
+.formula U|xtzrest      = U|xtzrest >> ";"
+.formula U|xb72         = G|false
+.formula U|xb74         = G|false
+.formula U|xb76         = G|false
+..
+.formula U|xtcmd        = "formula U|xb72       = G|true        ? 'F|typeof(0|" + U|xtvar + ")'/" + G|dblquote + "R*.2" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xb74       = G|true        ? 'F|typeof(0|" + U|xtvar + ")'/" + G|dblquote + "R*.4" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xb74       = G|true        ? 'F|typeof(0|" + U|xtvar + ")'/" + G|dblquote + "R*.6" + G|dblquote
+.'U|xtcmd'
+.formula U|xtdata       = U|xtdata + 'M|ycurr' + ";"    ? _U|xb72 & _U|xb74 & _U|xb76
+.continue ZREST                                         ? _U|xb72 & _U|xb74 & _U|xb76
+.formula U|xtcmd        = "formula U|xr72       = 0|" + U|xtvar + " * " + 'M|ycalc' + " ? U|xb72"
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xr74       = 0|" + U|xtvar + " * " + 'M|ycalc' + " ? U|xb74"
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xr74       = 0|" + U|xtvar + " * " + 'M|ycalc' + " ? U|xb76"
+.'U|xtcmd'
+..
+.continue NOZROUND       ? _U|xb72
+.formula U|xtcmd        = "formula U|xr72       = " + G|apostroph + "F|round(U|xr72, M|yfact)" + G|apostroph
+.'U|xtcmd'
+!NOZROUND
+.formula U|xtcmd        = "formula U|xtdata     = U|xtdata + 'U|xr72' + " + G|dblquote + ";" + G|dblquote   ? U|xb72
+.formula U|xtcmd        = "formula U|xtdata     = U|xtdata + 'U|xr74' + " + G|dblquote + ";" + G|dblquote   ? U|xb74
+.formula U|xtcmd        = "formula U|xtdata     = U|xtdata + 'U|xr76' + " + G|dblquote + ";" + G|dblquote   ? U|xb76
+.'U|xtcmd'
+.continue ZREST
+..
+!ZNEXT
+.output ADDEDTO 'U|xttmp'
+?'U|xtdata'\    ? _F|empty(U|xtdata) & 0|aktzeile <> 0|ozeilen
+?'U|xtdata'     ? _F|empty(U|xtdata) & 0|aktzeile = 0|ozeilen
+.formula U|xtdata       = ""
+.continue DLINES
+..
+!NEXT
+.output ADDEDTO 'U|xttmp'
+?'U|xtdata'     ? _F|empty(U|xtdata)
+.formula U|xtdata       = ""
+.load 0 nolock continue
+.continue DATA          ? G|mehr
+!OUTPUT
+.output
+.formula M|ytimport     = U|xttmp
+.continue END
+..
+!NOFLISTE
+.continue END           ? G|evtvar = "ybuexport"
+.error "Keine Feldliste fÅr den Export vorhanden!"
+.continue END
+..
+!NODATA
+.continue END           ? G|evtvar = "ybuexport"
+.error "Keine DatensÑtze vorhanden!"
+.continue END
+..
+!NOEXPORT
+.continue END           ? G|evtvar = "ybuexport"
+.error "Daten konnten nicht exportiert werden!"
+.edi 'U|xterr'
+.continue END
+..
+!NODATE
+.continue END           ? G|evtvar = "ybuexport"
+.error "Kein Datum fÅr den Umrechnungskurs eingegeben"
+.continue END
+..
+!END
+.continue

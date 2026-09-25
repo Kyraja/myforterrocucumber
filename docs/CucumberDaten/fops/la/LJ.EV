@@ -1,0 +1,278 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LJ.EV
+.. Autor          : doe/bs
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Fuehrt je nach Ereignis und Ereignisausloeser unterschiedliche
+..                  Funktionen aus.
+..                  Feldaustritte      -> Infofelder fuellen, Tabelle leeren.
+..                  Button bstart      -> Fuellt die Tabelle.
+..                  Buttons bplan1/2   -> Opens infosystem plan-chart (PLANKARTE).
+..                  Button bubestand   -> Lagerbestand des Artikels anzeigen
+.. Ablauf         : Zentrales Ereignis-EFOP
+..
+.. Functionality  : Executes particular functionality according to the event and event variable.
+..                  Field exits        -> Fills information fields and clears table.
+..                  Button bstart      -> Fills table.
+..                  Buttons bplan1/2   -> Opens infosystem plan-chart (PLANKARTE).
+..                  Button bubestand   -> Shows stock of the product.
+..
+..  Program flow   : Central event FOP
+.. Includes        :
+.. include is/HOL.CHARGE
+.. include is/HOL.LISTE
+.. include is/BN.PLAN
+.. include JOURN.DAT
+.. include la/LJ.ME
+.. include is/BN.BESTAND
+..*****************************************************************************
+.set trans -
+..---------------------------- Kopfteil/Header:--------------------------------
+.continue BSEL    ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "bselect"
+.continue CLRTAB  ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bstart"
+.continue BSTART  ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "bstart"
+.continue ARTIKEL ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "artikel"
+.continue LPLATZ  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "lplatz"
+.continue INITTAB ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kstelle"
+.continue INITTAB ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "charge"
+.continue INITTAB ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "klgruppe"
+.continue INITTAB ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "beleg"
+.continue INITTAB ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "adatum"
+.continue INITTAB ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "edatum"
+.continue INITTAB ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kbunr"
+.continue INITTAB ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kbunrue"
+.continue INITTAB ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "bewmge2le"
+.continue INITTAB ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "richtung"
+.continue INITTAB ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bmatfluss"
+.continue INITTAB ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bewertmgekorr"
+.continue ZUGANG  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "zugang"
+.continue ABGANG  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "abgang"
+.continue UMLAG   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "umlag"
+.continue KDET    ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kdetursache"
+.continue PROJEKT ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kprojekt"
+.continue KURSACHE ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "kursache"
+.continue P2ROJEKT ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "kprojekt2"
+.continue BASIS    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "basisartikel"
+..---------------------------- Tab-Teil/Table: --------------------------------
+.continue STOCK   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bubestand"
+.continue BPLAN   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar/"bplan/12/"
+.continue MOVEMAT ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "buvorgang"
+.continue PROCURE ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bubsres"
+..=============================================================================
+.continue END
+..
+!ARTIKEL
+.formula M|basisartikel = M|artikel^basisartikel ? _F|empty(M|artikel)
+.continue INITTAB
+..
+!BASIS
+.formula M|artikel = "" ? _F|empty(M|basisartikel)
+.continue INITTAB
+..
+!KURSACHE
+.copy M|umlag = G|FALSE ? _F|empty(M|kursache)
+.continue INITTAB
+..
+!KDET
+.copy M|umlag = G|FALSE ? _F|empty(M|kdetursache)
+.continue INITTAB
+..
+!PROJEKT
+.formula M|kprojekt2 = ""   ? _F|empty(M|kprojekt)
+.continue INITTAB
+..
+!P2ROJEKT
+.formula M|kprojekt = ""    ? _F|empty(M|kprojekt2)
+.continue INITTAB
+..
+!BSEL: Try to open a defined dynamic selection bar
+.formula G|evtfeldneu  = "%,,;@.richtung=(0);@.zeilen=(0);@.ablageart=(1)"
+.input "is/AUSWAHL"
+.copy M|selektion = M|select <> "!"
+.continue CLRHEAD ? M|selektion
+.continue END
+..
+!CLRHEAD: Selection defined by selection bar
+.input "is/KOPFLEEREN"
+.copy M|selektion = G|TRUE
+.continue CLRTAB
+..
+!BPLAN: Opens infosystem plan-chart (PLANKARTE)
+.select screen line 'G|evtzeile'
+.continue ERROR3 ? M|art = ""
+.assign M|lgruppe = M|vlgruppe ? G|evtvar = "bplan1"
+.assign M|lgruppe = M|nlgruppe ? G|evtvar = "bplan2"
+.continue ERROR4 ? _G|mehr
+.continue ERROR4 ?  M|lgruppe = ""
+.input "is/BN.PLAN"
+.continue END
+..
+!UMLAG
+.assign M|kdetursache = "" ? M|umlag
+.continue INITTAB
+..
+!ZUGANG
+.copy M|abgang = G|FALSE ? M|zugang
+.continue INITTAB
+..
+!ABGANG
+.copy M|zugang = G|FALSE ? M|abgang
+.continue INITTAB
+..
+!BSTART: sets select pattern and query database
+.continue ERROR7 ? M|umlag & F|empty(M|artikel)
+.continue GET ? M|selektion
+.type ID2  xtaid ? _F|defined(U|xtaid)
+.type ID38 xtlid ? _F|defined(U|xtlid)
+.type ID5  xtkid ? _F|defined(U|xtkid)
+.type ID59 xtcid ? _F|defined(U|xtcid)
+..
+.. Out von JOURN.DAT
+.type text x1tjourn ? _F|defined(U|x1tjourn)
+..
+.. In von JOURN.DAT
+.type text  x1tnum  ? _F|defined(U|x1tnum)
+.type date  x1danf  ? _F|defined(U|x1danf)
+.type date  x1dend  ? _F|defined(U|x1dend)
+..
+.. Initialize
+.formula U|x1tnum = ""
+.assign U|xtaid = M|artikel
+.continue ERROR2 ? _G|mehr
+.formula U|x1tnum = M|artikel^nummer
+.assign U|xtlid = M|lplatz
+.continue ERROR2 ? _G|mehr
+.assign U|xtkid = M|kstelle
+.continue ERROR2 ? _G|mehr
+.assign U|xtcid = M|charge
+.continue ERROR2 ? _G|mehr
+..
+.. test validation of date area
+.continue ERROR1 ? M|adatum > M|edatum & 'M|edatum' <> ""
+.formula U|x1danf = M|adatum
+.formula U|x1danf = "19810101" ? 'U|x1danf' = ""
+.formula U|x1dend = M|edatum
+.formula U|x1dend = "." ? 'U|x1dend' = ""
+..
+.formula M|select = "$,,"
+.input "JOURN.DAT" ? U|x1tnum <> ""
+.formula M|select = M|select + ";nummer=" + U|x1tjourn                         ? _U|x1tjourn = ""
+.formula M|select = M|select + ";such==" + "L" + M|beleg                       ? _M|beleg = ""
+.formula M|select = M|select + ";art=" + U|xtaid                               ? _F|empty(U|xtaid)
+.formula M|select = M|select + ";kstelle=" + U|xtkid                           ? _F|empty(U|xtkid)
+.formula M|select = M|select + ";bunr=" + 'M|kbunr'                            ? _M|kbunr = ""
+.formula M|select = M|select + ";bunrue=" + 'M|kbunrue'                        ? _M|kbunrue = ""
+.formula M|select = M|select + ";budat=" + 'M|adatum' + "!" + 'M|edatum'       ? _'M|adatum' = "" ; _'M|edatum' = ""
+.formula M|select = M|select + ";projekt=" + M|kprojekt^id                        ? _F|empty(M|kprojekt)
+.formula M|select = M|select + ";projekt2=" + M|kprojekt2^id                      ? _F|empty(M|kprojekt2)
+.formula M|select = M|select + ";@richtung=(Backwards)"                        ? F|equals(M|richtung, "(Backwards)")
+.formula M|select = M|select + ";ursache=" + F|value(M|kursache, "AS27")       ? _F|empty(M|kursache)
+.formula M|select = M|select + ";detursache=" + F|value(M|kdetursache, "AS29") ? _F|empty(M|kdetursache)
+.. wenn Bool Umlagerung gesetzt ist, muss buart= Umlagern gefunden werden, daher keine EinschrÑnkung auf Abgang oder Zugang
+.formula M|select = M|select + ";buart=1"                                      ? M|zugang
+.formula M|select = M|select + ";buart=2"                                      ? M|abgang
+.. 
+!SORT: sort key if we have a selection without batch data
+.continue GOON  ? M|charge <> ""
+.continue PART  ? _U|x1tjourn = ""
+.continue DOCU  ? _M|beleg = ""
+.continue COST  ? _M|kstelle = ""
+.continue BOOK1 ? _M|kbunr = ""
+.continue BOOK2 ? _M|kbunrue = ""
+.. standard sort key
+.formula M|select = M|select + ";@gruppe=1;@ablageart=(Active);@ordnung=budat,erfass,sn;@zeilen=" + 'G|FALSE'
+.continue GET
+..
+!PART
+.formula M|select = M|select + ";@gruppe=1;@ablageart=(Active);@ordnung=num10,sn;@zeilen=" + 'G|FALSE'
+.continue GET
+!DOCU
+.formula M|select = M|select + ";@gruppe=1;@ablageart=(Active);@ordnung=such10,budat,sn;@zeilen=" + 'G|FALSE'
+.continue GET
+!COST
+.formula M|select = M|select + ";kostflag=" + 'G|TRUE' + ";@gruppe=1;@ablageart=(Active);@ordnung=kstelle,budat,sn;@zeilen=" + 'G|FALSE'
+.continue GET
+!BOOK1
+.formula M|select = M|select + ";buflag=" + 'G|TRUE' + ";@gruppe=1;@ablageart=(Active);@ordnung=bunr,kstelle,budat,sn;@zeilen=" + 'G|FALSE'
+.continue GET
+!BOOK2
+.formula M|select = M|select + ";buueflag=" + 'G|TRUE' + ";@gruppe=1;@ablageart=(Active);@ordnung=bunrue,kstelle,budat,sn;@zeilen=" + 'G|FALSE'
+..
+!GET: query database
+.input "is/HOL.LISTE"
+.continue END
+..
+!GOON: get the batch
+.input "is/HOL.CHARGE"
+.continue END
+..
+!LPLATZ
+.assign M|zklgruppe = M|lplatz^lgruppe
+.continue INITTAB ? M|klgruppe = "" & M|lplatz = ""
+.assign M|klgruppe = M|lplatz^lgruppe ? M|klgruppe = "" & M|lplatz <> ""
+.continue INITTAB
+..
+!INITTAB
+.formula M|select = "!"
+.continue CLRTAB ? _M|selektion
+.copy M|selektion = G|FALSE
+.continue CLRTAB ? _F|empty(M|adatum) ; _F|empty(M|edatum)
+..
+.. Set start date to 1st day one month ago and end to today.
+.input "la/LJ.SET.DATE.PERIOD"
+..
+!CLRTAB
+.input "is/TABLEEREN"
+.continue END
+..
+!STOCK: shows stock of the product
+.input "is/BN.BESTAND"
+.continue END
+..
+!MOVEMAT: Open dialog for mover of the material
+.continue ERROR5 ? F|empty(M|vorgang)
+.type VP99 xxmyobject
+.copy U|xxmyobject = M|vorgang
+.input "is/EXEC.COMMAND4REFERENCE"
+.continue END
+..
+!PROCURE: Open dialog for procurement or reservation
+.continue ERROR6 ? F|empty(M|bsres)
+.type VP99 xxmyobject
+.copy U|xxmyobject = M|bsres
+.input "is/EXEC.COMMAND4REFERENCE"
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERROR1
+.error -field M|adatum -message Zeitraum ist ungÅltig. Bitte Ñndern.
+.end 1
+..
+!ERROR2
+.error -field M|adatum -message Zuweisung schlug fehl. Auswahl nicht mîglich.
+.input "la/LJ.ME"
+.end 1
+..
+!ERROR3
+.error -message Kein Artikel vorhanden. Plankarte wird nicht aufgerufen.
+.end 1
+..
+!ERROR4
+.error -message Keine Lagergruppe vorhanden. Plankarte wird nicht aufgerufen.
+.end 1
+..
+!ERROR5: The mover of material is empty!
+.error -line 'G|evtzeile' -field M|vorgang -message Der Vorgang ist leer!
+.end 1
+..
+!ERROR6: Procurement or reservation is empty!
+.error -line 'G|evtzeile' -field M|bsres -message Die Beschaffung bzw. Reservierung ist leer!
+.end 1
+..
+!ERROR7: Relocation only in combiation with product
+.error -field M|artikel -message Bitte einen Artikel eintragen.
+.end 1
+

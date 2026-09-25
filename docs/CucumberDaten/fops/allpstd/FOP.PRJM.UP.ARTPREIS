@@ -1,0 +1,335 @@
+..!interpreter english declaration noabbrev
+.. at 2017-01-11, 17:30
+.set TRANS -
+..========================================================================
+..==  Name              : FOP.PRJM.UP.ARTPREIS
+..==  Pfad              : allpstd
+..==  Funktion          : Ermittlung des Preises eine Artikel
+..==  Erstellungsdatum  : 27.04.2011
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2016 alltrotec GmbH
+..==
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird ber EasyCase bearbeitet und mit easy2lg generiert!
+..==  Žnderungen auáerhalb von EasyCase werden nach der n„chsten Žnderung
+..==  im EasyCase wieder berschrieben und drfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"  ? _F|defined(U|xydbgrprojleistkat)
+..====================================================
+.type text       xtsel          ? _F|defined(U|xtsel)
+.type VP5        xpakl          ? _F|defined(U|xpakl)
+.type NT8        xpaklprg       ? _F|defined(U|xpaklprg)
+.type NT8        xpaklrab       ? _F|defined(U|xpaklrab)
+.type PS2:1.4.5  xpaartikel     ? _F|defined(U|xpaartikel)
+.type P3:2       xpaupos        ? _F|defined(U|xpaupos)
+.type M6.3       xpamge         ? _F|defined(U|xpamge)
+.type GD2        xpakonddat     ? _F|defined(U|xpakonddat)
+.type A7         xpaev          ? _F|defined(U|xpaev)
+.type VP10       xparahmen      ? _F|defined(U|xparahmen)
+.type bool       xpabrutto      ? _F|defined(U|xpabrutto)
+.type PS94:1     xpaland        ? _F|defined(U|xpaland)
+.type RPN7.2     xpapreis       ? _F|defined(U|xpapreis)
+.type real       xylepreis      ? _F|defined(U|xylepreis)
+.type real       xyhpreis       ? _F|defined(U|xyhpreis)
+.type TAZ1       xpape          ? _F|defined(U|xpape)
+.type TAZ1       xpahe          ? _F|defined(U|xpahe)
+.type MN3.2      xpaproz        ? _F|defined(U|xpaproz)
+.type MPN2.2     xpanrab        ? _F|defined(U|xpanrab)
+.type MN3.2      xpaiproz       ? _F|defined(U|xpaiproz)
+.type RN7.2      xpapwert       ? _F|defined(U|xpapwert)
+.type BGL35      xpakuartnr     ? _F|defined(U|xpakuartnr)
+.type IPN4       xpavorlauf     ? _F|defined(U|xpavorlauf)
+.type TAZ1       xpale          ? _F|defined(U|xpale)
+.type real       xrwert         ? _F|defined(U|xrwert)
+.type GD         xdkonddat      ? _F|defined(U|xdkonddat)
+.type bool       xybabaspreise  ? _F|defined(U|xybabaspreise)
+.type bool       xyprok         ? _F|defined(U|xyprok)
+.type bool       xybpart        ? _F|defined(U|xybpart)
+.type TAZ7       xeinh          ? _F|defined(U|xeinh)
+.type P149:3     xpaufgabe      ? _F|defined(U|xpaufgabe)
+.continue                       ?  F|empty(U|xpakl)  &  F|empty(U|xpaartikel) & F|empty(U|xpaupos)
+.type integer    xprocsp        ? _F|defined(U|xprocsp)
+.type bool       xbmerkhol      ? _F|defined(U|xbmerkhol)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- PreisAusAuftrag -----
+.add U|xpaupos
+.continue EL001 ? _(G|mehr)
+.assign U|xeinh = 'D|pe(L=":")'
+.continue EL002 ? _((G|mehr) & (_(D|preis = 0)))
+.formula U|xpapreis  = D|preis
+.copy    U|xpape     = D|pe
+.formula U|xylepreis = D|preis * D|pehe / D|lehe
+!EL002
+!EL001
+.continue 'xprocst.xprocsp'
+!PROC002: ----- PM_Preise -----
+.copy U|xyprok = G|FALSE
+.continue EL003 ? _((_(U|xyprok)) & (_(F|empty(U|xpakl))))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";artex=="  + U|xpaartikel^id
+.formula U|xtsel = U|xtsel + ";kotyp==(BlanketOrder)"
+.formula U|xtsel = U|xtsel + ";kunde=="  + U|xpakl^id       ? U|xpakl^gruppe = 1
+.formula U|xtsel = U|xtsel + ";kunde=="  + U|xpakl^firma^id ? U|xpakl^gruppe = 2
+.formula U|xtsel = U|xtsel + ";@group=2;@filingmode=(Active)"
+.load 9 group "P3:2" 'U|xtsel'
+.continue EL004 ? _(G|mehr)
+.formula U|xpapreis  = 9|preis
+.assign  U|xpape     = 9|pe
+.formula U|xylepreis = 9|preis * 9|pehe
+.copy U|xyprok = G|TRUE
+.load 9
+!EL004
+!EL003
+.continue EL005 ? _((_(U|xyprok)) & (_(F|empty(U|xpaklprg))))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";typ==(49)"
+.formula U|xtsel = U|xtsel + ";artpg=="  +  U|xpaartikel^vprg
+.formula U|xtsel = U|xtsel + ";klpg=="   +  U|xpaklprg
+.formula U|xtsel = U|xtsel + ";@group=1;@filingmode=(Active)"
+.load 9 group "P82:1" 'U|xtsel'
+.continue EL006 ? _(G|mehr)
+!REPT001: ==============================
+.continue EL007 ? _(((U|xpakonddat >= 9|gltvon) ; (F|empty(9|gltvon))) & ((U|xpakonddat <= 9|gltbis) ; (F|empty(9|gltbis))))
+.load 9 line
+.continue EL008 ? _(G|mehr)
+.formula U|xpapreis  = 9|mpreis
+.assign  U|xpape     = 9|mpe                ? _F|empty(9|mpe)
+.assign  U|xpape     = U|xpaartikel^vpe     ?  F|empty(9|mpe)
+.formula U|xylepreis = 9|mpreis * U|xpaartikel^vpehe / U|xpaartikel^vlehe
+.copy U|xyprok = G|TRUE
+.continue FI008
+!EL008
+.load 9 continue
+!FI008
+.continue FI007
+!EL007
+.load 9 continue
+!FI007
+.continue REPT001 ? _((U|xyprok) ; (_(G|mehr)))
+.load 9
+!EL006
+!EL005
+.add U|xpaartikel
+.continue EL009 ? _(_(U|xyprok))
+.formula U|xpapreis  = D|vpr
+.assign  U|xpape     = D|vpe
+.formula U|xylepreis = D|vpr * D|vpehe / D|vlehe
+!EL009
+.continue 'xprocst.xprocsp'
+!PROC003: ----- PreisProStunde -----
+.continue EL010 ? _(_(F|empty(U|xypmstunden)))
+.continue EL011 ? _((_(F|empty(U|xpaartikel))) & (U|xypmstunden = U|xpaartikel^le))
+.formula U|xyhpreis = U|xylepreis
+.continue FI011
+!EL011
+.continue EL012 ? _(U|xypmstunden = U|xpape)
+.formula U|xyhpreis = U|xpapreis
+.continue FI012
+!EL012
+.continue EL013 ? _(_(F|empty(U|xpape)))
+.assign U|xeinh = 'U|xpape(L="0")'
+.continue EL014 ? _(G|mehr)
+.continue EL015 ? _((U|xypmstunden <> U|xpape) & (F|unitconvfactor(U|xypmstunden,U|xpape) <> 1))
+.formula U|xyhpreis = U|xpapreis * F|unitconvfactor(U|xypmstunden,U|xpape)
+.continue FI015
+!EL015
+.formula U|xyhpreis = U|xpapreis
+!FI015
+.continue FI014
+!EL014
+.formula U|xyhpreis = 0
+!FI014
+.continue FI013
+!EL013
+.formula U|xyhpreis = 0
+!FI013
+!FI012
+!FI011
+!EL010
+.continue 'xprocst.xprocsp'
+!PROC004: ----- Preisauskunft -----
+.formula U|xbmerkhol  =  F|defined(H|id)
+.reserve   ?  U|xbmerkhol
+.make pricing group2
+.formula H|ev     = 'U|xpaev(L="0")'    ? _F|empty(U|xpaev)
+.formula H|kl      = U|xpakl^id         ? _F|empty(U|xpakl)
+.formula H|klprg   = U|xpaklprg         ? _F|empty(U|xpaklprg)
+.formula H|klrab   = U|xpaklrab         ? _F|empty(U|xpaklrab)
+.formula H|artikel = U|xpaartikel^id    ? _F|empty(U|xpaartikel)
+.formula H|konddat = U|xpakonddat       ? _F|empty(U|xpakonddat)
+.formula H|rahmen  = U|xparahmen^id     ? _F|empty(U|xparahmen)
+.formula H|brutto  = U|xpabrutto        ? _F|empty(U|xpabrutto)
+.formula H|land    = U|xpaland^id       ? _F|empty(U|xpaland)
+.formula H|mge     = U|xpamge           ? _F|empty(U|xpamge)
+.assign U|xpapreis   = H|preis
+.assign U|xpaland    = H|land
+.assign U|xpape      = H|pe
+.assign U|xpahe      = H|he
+.assign U|xpaproz    = H|proz
+.assign U|xpanrab    = H|nrab
+.assign U|xpaiproz   = H|iproz
+.assign U|xpapwert   = H|pwert
+.assign U|xpakuartnr = H|kuartnr
+.assign U|xpavorlauf = H|vorlauf
+.assign U|xpaev      = H|ev
+.assign U|xpale      = H|le
+.continue EL016 ? _(H|tzeilen > 0)
+.select header
+.select line
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.copy U|xybpart = G|TRUE    ? H|herkunft^dnr = 2
+.select line
+.continue LOOP001
+!ELOP001: ==============================
+!EL016
+.select -
+.select   ?  U|xbmerkhol
+.continue 'xprocst.xprocsp'
+!PROC005: ----- Preisfindung -----
+.assign U|xpakl      = ""
+.assign U|xpakl      = U|xpprojekt^ykunde^id    ? _F|empty(U|xpprojekt)
+.assign U|xpakl      = U|xpprojekt^ykunde^id    ? _F|empty(U|xpprojekt) &  U|xpprojekt^yprgtypk = "RA"
+.assign U|xpakl      = U|xpaufgabe^ykunde^id    ?  F|empty(U|xpprojekt) & _F|empty(U|xpaufgabe)
+.assign U|xpaklprg   = 9|yprg                   ?  F|defined(9|yprg)
+.assign U|xpaev      = "(Sales)"
+.assign U|xpaland    = G|inland
+.assign U|xpamge     = 1.0
+.assign U|xpakonddat = U|xdkonddat
+.copy   U|xybpart    = G|FALSE
+.add U|xpaartikel
+.continue EL017 ? _(D|gruppe = 4)
+.continue EL018 ? _('D|zptyp(L=":")' <> "(SOPOItemPOS)")
+.formula U|xpapreis  = D|vpr
+.copy    U|xpape     = D|vpe
+.formula U|xylepreis = D|vpr * D|vpehe / D|vlehe
+.copy    U|xybpart   = G|TRUE
+.continue FI018
+!EL018
+.continue EL019 ? _(U|xybabaspreise)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC004
+!RET001
+.formula xprocsp = xprocsp - 1
+.add U|xpaartikel
+.formula U|xylepreis = U|xpapreis * D|vpehe / D|vlehe
+.continue FI019
+!EL019
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC002
+!RET002
+.formula xprocsp = xprocsp - 1
+!FI019
+!FI018
+.continue FI017
+!EL017
+.continue EL020 ? _(U|xybabaspreise)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC004
+!RET003
+.formula xprocsp = xprocsp - 1
+.add U|xpaartikel
+.formula U|xylepreis = U|xpapreis * D|vpehe / D|vlehe
+.continue FI020
+!EL020
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC002
+!RET004
+.formula xprocsp = xprocsp - 1
+!FI020
+!FI017
+.copy    U|xpape      =  D|vpe  ? F|empty(U|xpape) & _F|empty(D|vpe)
+.copy    U|xpape      =  D|le   ? F|empty(U|xpape) &  F|empty(D|vpe)
+.continue EL021 ? _((_(F|empty(U|xpaupos))) & ((U|xpapreis = 0) ; (U|xybpart)))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC001
+!RET005
+.formula xprocsp = xprocsp - 1
+!EL021
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.copy U|xybabaspreise = G|TRUE
+.formula U|xpapreis   = 0
+.formula U|xylepreis  = 0
+.formula U|xyhpreis   = 0
+.formula U|xrwert     = 0
+.assign  U|xdkonddat  = G|datum         ? F|empty(U|xdkonddat)
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"       ? _F|defined(5|ybleistkat)
+.continue EL022 ? _(_(F|empty(U|xpaartikel)))
+.continue EL023 ? _((_(F|empty(U|xtprojleistkatid))) & (_(U|xtprojleistkatid = "(0,0,0)")) & (5|ybleistkat))
+.formula U|xtsel = "$,,id==" + U|xtprojleistkatid + ";yteil==" + U|xpaartikel^id + ";@filingmode=(Active);@rows=(Yes)"
+.load 9 group 'U|xydbgrprojleistkat' 'U|xtsel'
+.continue EL024 ? _((U|xdkonddat = G|datum ) & (G|mehr))
+.load 9 line '9|selzeile'
+.continue EL025 ? _(G|mehr)
+.formula U|xpapreis   =  9|yprjmpreis
+.copy    U|xpape      =  9|ype
+.copy    U|xpape      =  9|yteil^vpe        ? F|empty(9|ype) & _F|empty(9|yteil^vpe)
+.copy    U|xpape      =  9|yteil^le         ? F|empty(9|ype) &  F|empty(9|yteil^vpe)
+.formula U|xylepreis  =  9|yprjmpreis * U|xpaartikel^vpehe / U|xpaartikel^vlehe
+.continue FI025
+!EL025
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC005
+!RET006
+.formula xprocsp = xprocsp - 1
+!FI025
+.load 9
+.continue FI024
+!EL024
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC005
+!RET007
+.formula xprocsp = xprocsp - 1
+!FI024
+.continue FI023
+!EL023
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC005
+!RET008
+.formula xprocsp = xprocsp - 1
+!FI023
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC003
+!RET009
+.formula xprocsp = xprocsp - 1
+.continue FI022
+!EL022
+.continue EL026 ? _(_(F|empty(U|xpaupos)))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC001
+!RET010
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC003
+!RET011
+.formula xprocsp = xprocsp - 1
+!EL026
+!FI022
+.continue

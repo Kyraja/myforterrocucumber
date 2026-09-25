@@ -1,0 +1,127 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EVVORGANG.ZUGFERDKOPF
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type R13.2 xnettosum       ? _F|defined(U|xnettosum)
+.type R13.2 xrundungsbetrag ? _F|defined(U|xrundungsbetrag)
+.type R13.2 xgesamtsum      ? _F|defined(U|xgesamtsum)
+.type R13.2 xvorauszahlsum  ? _F|defined(U|xvorauszahlsum)
+.type bool  xbhatartikel    ? _F|defined(U|xbhatartikel)
+..
+.formula U|xnettosum = ""
+.formula U|xrundungsbetrag = ""
+.formula U|xgesamtsum = ""
+.formula U|xvorauszahlsum = ""
+..
+.formula M|buyernum = H|kunde^nummer
+.formula M|buyerduns = H|kunde^duns
+.formula M|buyergln = H|kunde^gln
+.formula M|buyernamebspr = H|kunde^ans
+.formula M|buyercontactname = H|kunde^kontakt
+.formula M|buyercontactabt = H|kunde^funktion
+.formula M|buyercontacttel = M|kunde^tele
+.formula M|buyercontactemail = M|kunde^email
+.formula M|buyeruniversalmail = M|kunde^erechmail 
+.formula M|buyeruniversalmail = M|kunde^email ? F|empty(M|buyeruniversalmail)
+.formula M|buyersteunr = M|kunde^steunr      ? M|kunde^gruppe=1
+.formula M|buyersteunr = M|kunde^firma^steunr      ? M|kunde^gruppe=2
+.formula M|kustid = M|kunde^ustid
+..
+.formula M|shiptonum = M|kunde3^nummer
+.formula M|shiptoduns = M|kunde3^duns
+.formula M|shiptogln = M|kunde3^gln
+.formula M|shiptonamebspr = M|kunde3^ans
+.formula M|shiptocontactname = M|kunde3^kontakt
+.formula M|shiptocontactabt = M|kunde3^funktion
+.formula M|shiptocontacttel = M|kunde3^tele
+.formula M|shiptocontactemail = M|kunde3^email
+.formula M|shiptouniversalmail =  M|kunde3^erechmail
+..
+.formula M|beabt = H|betreuer^abtlg^nameaspr
+.formula M|frbezku2 = H|kunde2^frbez
+..
+.. abweichender RechnungsempfÑnger
+.copy M|abwreempf = G|FALSE
+.copy M|abwreempf = G|TRUE ? M|str <> M|str2 ; M|plz <> M|plz2 ; M|nort <> M|nort2
+..
+!LEITWEG: Leitweg-ID ab Version 22.1
+.continue NOLEITWEG  ? _F|defined(H|leitwegid)
+.formula M|leitwegid = H|leitwegid
+.continue STORNO ? _F|empty(M|leitwegid)
+..
+!NOLEITWEG: individuelles Feld yleitwegid in Rechnungsmaske
+.continue NOINDLEITWEG ? _F|defined(H|yleitwegid)
+.formula M|leitwegid = H|yleitwegid 
+.continue STORNO ? _F|empty(M|leitwegid)
+..
+!NOINDLEITWEG: Leitweg-ID aus "Ihr Zeichen"
+.formula M|leitwegid = H|frzeich
+..
+!STORNO: Storno Vorgang fÅllen
+.formula M|stornopartnervorggl = M|stornopartnervorg^nummer ? _F|empty(M|stornopartnervorg)
+..
+.. nicht in Rechnung, daher erst mal leer
+...formula M|spedaufdate = H|sped^datum 
+...formula M|spedaufnummer = H|sped^nummer
+.formula M|spedaufdate = ""
+.formula M|spedaufnummer = ""
+..
+.formula M|sepauci = M|kunde2^sepauci
+.formula M|steuerwaehr = F|sysinfo(18)^inlwaehr^iso3a       
+.. 
+.formula M|landiso = H|waehr^iso3a 
+.formula M|zahlmit = M|zaform
+.formula M|sepamandatref = H|sepamand^sepamref
+..
+.assign M|stornopartnervorgdat = M|stornopartnervorg^budat
+.assign M|rechperiodstart = H|vom
+.assign M|rechperiodend = H|vom
+..
+.. Aufzaehlungen Rechnungskopf
+.. AZ 20406
+.assign M|zahltyp = H|zfpaymenttyp
+.. AZ 20401
+.assign M|doctyp = H|zfdoctyp
+.. AZ 20402
+.assign M|duedatetyp = H|zfduedatetyp
+..
+..set debug+
+!BANKRE: Bankverbindung Rechnung
+.formula M|iban = F|sysinfo(10)^iban ? (M|zahltyp="30" ; M|zahltyp="58")
+.continue BKUNDE ? F|empty(H|bverb)
+.formula M|ibanlast = H|bverb^iban ? _(M|zahltyp="30" ; M|zahltyp="58")            
+.formula M|kontoinhaber = H|bverb^konto
+.formula M|bic = H|bverb^iident
+.continue WEITER
+..
+!BKUNDE: Bankverbindung Kunde
+.formula M|ibanlast = H|kunde2^bverb^iban ? _(M|zahltyp="30" ; M|zahltyp="58")
+.formula M|kontoinhaber = H|kunde2^bverb^konto
+.formula M|bic = H|kunde2^bverb^iident 
+..
+!WEITER
+.. Fuer ZUGFeRD muss mindestens eine Artikelposition exportiert werden.
+.. Ist mindestens eine Artikelposition in der Rechnung vorhanden ?
+.select line "$,1:typa==(SOPOItemPOS)"
+.formula U|xbhatartikel = G|TRUE ? G|mehr
+.select header
+..
+.. Folgende Felder bleiben erst mal leer
+.formula M|paytonum = ""
+.formula M|paytoduns = ""
+.formula M|paytogln = ""
+.formula M|paytonamebspr = ""
+.formula M|paytocontactname = ""
+.formula M|paytocontactabt = ""
+.formula M|paytocontacttel = ""
+.formula M|paytocontactemail = ""
+.formula M|paytouniversalmail = ""
+..
+..*****************************************************************************
+!END
+.continue

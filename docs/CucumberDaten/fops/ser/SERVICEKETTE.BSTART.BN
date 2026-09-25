@@ -1,0 +1,324 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SERVICEKETTE.BSTART.BN
+.. Autor          : cl
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Datenbeschaffung
+.. Ablauf         : Button-nach-EFOP
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type bool    xbvorgda   ? _F|defined(U|xbvorgda)
+.type bool    xbpos      ? _F|defined(U|xbpos)
+.type bool    xbservice  ? _F|defined(U|xbservice)
+.type text    xtid       ? _F|defined(U|xtid)
+.type text    xtpid      ? _F|defined(U|xtpid)
+.type text    xtsel      ? _F|defined(U|xtsel)
+.type text    xtrid      ? _F|defined(U|xtrid)
+.type text    xtdat      ? _F|defined(U|xtdat)
+.type integer xitstufe   ? _F|defined(U|xitstufe)
+.type integer xitzeile   ? _F|defined(U|xitzeile)
+.type integer xtzeilen   ? _F|defined(U|xtzeilen)
+.type bool    xkostv     ? _F|defined(U|xkostv)
+.type bool    xserau     ? _F|defined(U|xserau)
+.type bool    xrepau     ? _F|defined(U|xrepau)
+.type bool    xeinkauf   ? _F|defined(U|xeinkauf)
+.type bool    xtreffer   ? _F|defined(U|xtreffer)
+.type text    xtext      ? _F|defined(U|xtext)
+..
+.copy U|xkostv   = G|FALSE
+.copy U|xserau   = G|FALSE
+.copy U|xrepau   = G|FALSE
+.copy U|xeinkauf = G|FALSE
+.copy U|xtreffer = G|FALSE
+..
+.. Initializing
+.atext -language 'G|lsprache' U|xtdat 660 Verkauf
+.atext -language 'G|lsprache' U|xtdat 661 Einkauf ? M|svorgang^dnr = 4
+.formula M|stufe = 0
+..
+.. Clear table
+.input "is/TABLEEREN" ? _U|xbservice
+..
+.copy M|bservice = G|TRUE  ? M|svorgang^dnr=122 & M|tzeilen = 0
+.copy M|bservice = G|TRUE  ? M|vorgart = 'U|xtext' 
+.continue SERVICE          ? M|bservice
+..
+!DATABASE: Query database
+.select object 'M|select'
+.continue END              ? _G|mehr
+.. Rechnungen nur rÅckwÑrts durchsuchen
+.assign M|richtung = "(Backwards)" ? H|typ = 5
+.copy M|rueckw   = G|TRUE          ? H|typ = 5
+.copy M|vorw     = G|FALSE         ? H|typ = 5
+..
+.formula U|xtid = M|select
+.continue ITEM                     ? H|gruppe = 2
+..
+!NEXT0: If legal show all items of the document in table
+.select line
+.formula M|stufe = M|stufe + 1  ? _G|mehr
+.continue BACKW                 ? _G|mehr & M|rueckw
+.continue FORW                  ? _G|mehr & M|vorw
+.continue NEXT0                 ?  H|typ <> G|ARPOS & H|typ <> G|ZUPOS
+.input 'M|tab'
+.continue NEXT0
+..
+!ITEM: If legal show item in table
+.continue ERROR02               ? H|typ <> G|ARPOS & H|typ <> G|ZUPOS
+.input 'M|tab'
+.formula M|stufe = M|stufe + 1
+.continue FORW                  ? M|vorw
+..
+!BACKW: Backtracking of items
+.copy U|xbvorgda = G|FALSE
+.select screen header
+..
+!NEXT1: If legal read next row in table of mask buffer
+.select screen line
+.continue END                  ? _G|mehr & _U|xbvorgda
+.formula M|stufe = M|stufe + 1 ? _G|mehr &  U|xbvorgda
+.continue BACKW                ? _G|mehr &  U|xbvorgda
+.continue NEXT1   ? F|empty(M|artikel) ; F|empty(M|tnvorg) ; F|empty(M|tnvorp) ; _M|tbverfolg
+..
+.. Save parent document and item
+.continue NEXT1                 ? F|empty(M|tnvorg)
+.formula U|xtid = M|tnvorg^id
+.copy U|xbvorgda = G|TRUE
+..
+.continue NEXT1                 ? F|empty(M|tnvorp)
+.formula U|xtpid = M|tnvorp^id
+..
+.. Deactivate backtracking in row
+.copy M|tbverfolg = G|FALSE
+..
+.. Load parent item
+.select object 'U|xtpid'
+.continue ERROR01               ? _G|mehr
+.input 'M|tab'
+.continue NEXT1
+..
+!FORW: Tracking of items
+.select screen header
+..
+!NEXT2: If legal read next row in table of mask buffer
+.select screen line
+.continue END   ? _G|mehr
+.continue NEXT2 ? F|empty(M|artikel) ; F|empty(M|tvorp) ; _M|tbvverfolg
+..
+.. Deactivate backtracking in row
+.copy M|tbvverfolg = G|FALSE
+.assign U|xitstufe   = M|tstufe
+.continue ERROR03 ? _G|mehr
+.formula U|xtsel = "$,,;@gruppe=2;gruppe==2;orig=" + M|tvorp^id + ";@ablageart=(Both)"
+.select 'U|xtdat' 'U|xtsel'
+..
+!NEXT3: Is loaded original item legal?
+.continue FORW ? _G|mehr
+.continue FORW ?  F|empty(H|kopf)
+.formula U|xtid = H|kopf^id
+..
+.. Save and show item
+.formula U|xtpid = H|id
+.formula M|stufe = U|xitstufe + 1
+.input 'M|tab'
+.select 'U|xtdat'
+.continue NEXT3
+..
+!END
+.select screen line 'M|tzeilen' ?  M|tzeilen <> 0  & M|svorgang^dnr=122
+.continue LADEVERTEIL           ?  M|svorgang^dnr=122
+.input 'bfuss' ? _F|empty(M|bfuss) & M|analyse
+.continue
+..
+!SERVICE: Serviceanfrage: nur vorwÑrts durchsuchen
+.assign M|richtung = "(Forwards)"
+.copy M|rueckw   = G|FALSE
+.copy M|vorw     = G|TRUE
+..
+.load 9 object 'M|select'
+.continue END                ? _G|mehr
+.formula U|xtid = M|select
+.continue SSERVICE           ?  M|bservice & _U|xbservice
+.continue SITEM              ?  9|gruppe = 2
+.continue SNEXT0
+..
+!SNEXT0: If legal show all items of the document in table
+.load 9 line
+.copy M|rueckw = F|equals(M|richtung, "(Backwards)")
+.copy M|vorw   = F|equals(M|richtung, "(Forwards)")
+.continue SBACKW   ? _G|mehr & M|rueckw
+.continue SFORW    ? _G|mehr & M|vorw
+.continue SNEXT0   ? 9|typ <> G|ARPOS & 9|typ <> G|ZUPOS
+.input 'M|tab'
+.continue SNEXT0
+..
+!SSERVICE
+.formula U|xitzeile = 1
+.formula U|xtzeilen = 9|tzeilen
+.load 9 line
+..
+.continue SEREND   ? _G|mehr
+..
+!LADEZEILE: Verweise prÅfen
+.. 1. Verweis: kostenv / 2. Verweis: serau / 3. Verweis: repau / 4. Verweis: bextdl
+.formula M|stufe   = 0
+.copy U|xkostv     = G|TRUE  ? _F|empty(9|kostenv)
+.copy U|xserau     = G|TRUE  ? _F|empty(9|serau)
+.copy U|xrepau     = G|TRUE  ? _F|empty(9|repau)
+.copy U|xeinkauf   = G|TRUE  ? _F|empty(9|bextdl)
+.continue SCHLEIFE ? _U|xkostv & _U|xserau & _U|xrepau & _U|xeinkauf
+..
+!LADEVERTEIL
+.continue NOTREFFER ? _U|xtreffer
+.make screen line +O
+.formula M|tstufe = "++++"
+.formula M|vart   = "-+++-+++-+++-+++-+++-+++-+++-+++-"
+.formula M|pnum   = "++++++"
+.assign M|land    = ""
+..
+!NOTREFFER 
+.continue KOSTENV ? U|xkostv
+.continue SERAU
+..
+!KOSTENV
+.select sales '9|kostenv^id'
+.copy M|bservice = G|FALSE      ? _G|mehr
+.continue SERAU                 ? _G|mehr
+.copy U|xtreffer = G|FALSE
+.copy U|xtreffer = G|TRUE       ? U|xserau ; U|xrepau ; U|xeinkauf 
+.formula M|select = H|id
+.copy M|bservice = G|FALSE
+.copy U|xkostv = G|FALSE
+.atext -language 'G|lsprache' U|xtdat 660 Verkauf
+.continue DATABASE
+..
+!SERAU
+.continue REPAU ? _U|xserau
+.select sales '9|serau^id'
+.copy U|xserau = G|FALSE        ? _G|mehr
+.continue REPAU                 ? _G|mehr
+.copy M|bservice = G|FALSE
+.copy U|xserau = G|FALSE
+.copy U|xtreffer = G|FALSE
+.copy U|xtreffer = G|TRUE  ?  U|xrepau ; U|xeinkauf 
+.atext -language 'G|lsprache' U|xtdat 660 Verkauf
+.formula M|select = H|id
+.continue DATABASE
+..
+!REPAU
+.continue EINKAUF ? _U|xrepau
+.select sales '9|repau^id'
+.copy U|xrepau = G|FALSE        ? _G|mehr
+.continue EINKAUF               ? _G|mehr
+.copy M|bservice = G|FALSE
+.copy U|xrepau  = G|FALSE
+.atext -language 'G|lsprache' U|xtdat 660 Verkauf
+.copy U|xtreffer = G|FALSE
+.copy U|xtreffer = G|TRUE     ? U|xeinkauf
+.formula M|select = H|id
+.continue DATABASE
+..
+!EINKAUF
+.continue SCHLEIFE ? _U|xeinkauf
+.select purchasing '9|bextdl^id'
+.copy U|xeinkauf = G|FALSE      ? _G|mehr
+.continue SCHLEIFE              ? _G|mehr
+.atext -language 'G|lsprache' U|xtdat 661 Einkauf
+.copy M|bservice = G|FALSE
+.copy U|xeinkauf = G|FALSE
+.copy U|xtreffer = G|FALSE
+.formula M|select  = H|id
+.copy U|xeinkauf   = G|FALSE
+.continue DATABASE
+..
+!SCHLEIFE
+.load 9 line
+.continue SEREND                ? _G|mehr
+.select screen line 'M|tzeilen' ?  M|tzeilen <> 0
+.make screen line +O
+.formula M|tstufe = "xxxx"
+.formula M|vart   = "-xxx-xxx-xxx-xxx-xxx-xxx-xxx-xxx-"
+.formula M|pnum   = "xxxxxx"
+.assign M|land    = ""
+.continue LADEZEILE
+..
+!SITEM: If legal show item in table
+.continue ERROR02     ? 9|typ <> G|ARPOS & 9|typ <> G|ZUPOS
+.input 'M|tab'
+.continue FORW        ? M|vorw
+..
+!SBACKW: Backtracking of items
+.copy U|xbvorgda = G|FALSE
+.select screen header
+..
+!SNEXT1: If legal read next row in table of mask buffer
+.select screen line
+.continue SEREND ? _G|mehr & _U|xbvorgda
+.continue SBACKW ? _G|mehr &  U|xbvorgda
+.continue SNEXT1 ?  F|empty(M|artikel) ; F|empty(M|tnvorg) ; F|empty(M|tnvorp) ; _M|tbverfolg
+..
+.. Save parent document and item
+.continue SNEXT1 ? F|empty(M|tnvorg)
+.formula U|xtid  = M|tnvorg^id
+.copy U|xbvorgda = G|TRUE
+..
+.continue SNEXT1 ? F|empty(M|tnvorp)
+.formula U|xtpid = M|tnvorp^id
+..
+.. Deactivate backtracking in row
+.copy M|tbverfolg = G|FALSE
+..
+.. Load parent item
+.load 9 object 'U|xtpid'
+.continue ERROR01  ? _G|mehr
+.input 'M|tab'
+.continue SNEXT1
+..
+!SFORW: Tracking of items
+.select screen header
+..
+!SNEXT2: If legal read next row in table of mask buffer
+.select screen line
+.continue SEREND  ? _G|mehr
+.continue SNEXT2  ?  F|empty(M|artikel) ; F|empty(M|tvorp) ; _M|tbvverfolg
+..
+.. Deactivate backtracking in row
+.copy M|tbvverfolg = G|FALSE
+.assign U|xitstufe = M|tstufe
+.continue ERROR03 ? _G|mehr
+.formula U|xtsel = "$,,;@gruppe=2;gruppe==2;orig=" + M|tvorp^id + ";@ablageart=(Both)"
+.load 9 'U|xtdat' 'U|xtsel'
+..
+!SNEXT3: Is loaded original item legal?
+.continue SFORW ? _G|mehr
+.continue SFORW ? F|empty(9|kopf)
+.formula U|xtid = 9|kopf^id
+..
+.. Save and show item
+.formula U|xtpid = 9|id
+.input 'M|tab'
+.load 9 'U|xtdat'
+.continue SNEXT3
+..
+!SEREND
+.continue                      ? M|tzeilen = 0
+.select screen line 'M|tzeilen'
+.make screen line -O           ? M|tstufe = "----" ; M|tstufe = "xxxx"
+.input 'bfuss' ? _F|empty(M|bfuss) & M|analyse
+.continue
+..
+!ERROR01
+.error Der VorgÑnger wurde nicht gefunden!
+.end 1
+..
+!ERROR02
+.error Die Positionsart '9|typa' ist nicht erlaubt!
+.end 1
+..
+!ERROR03
+.error Zuweisung gescheitert!
+.end 1
+

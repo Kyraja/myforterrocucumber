@@ -1,0 +1,204 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : PRICEMAINTENANCE.CHECK.RECORD
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  : Validates the pricing. If all needed prices, discounts,
+.. currencies and quantities are set and scaling is in a ascending order, pricing
+.. will be valid. Flags currenciescomplete, scaledqtycomplete, scaleascending,
+.. tcurrycomplete, tscaledqtycomplete and tscaledquantityasc are set to true;
+.. otherwise not. If not this gives a status message and colours wrong items.
+.. According to that the status icon is set to ok or attention.
+..*****************************************************************************
+.set trans -
+..
+.continue END ? F|empty(M|aktzeile)
+..
+.. Declarations
+.type integer startrowno          ? _F|defined(U|startrowno)
+.type integer headerrowno         ? _F|defined(U|headerrowno)
+.type ID82:1  header              ? _F|defined(U|header)
+.type ID94:1  regularcurrency     ? _F|defined(U|regularcurrency)
+.type ID94:1  alternativecurrency ? _F|defined(U|alternativecurrency)
+.type bool    headerqueryactive   ? _F|defined(U|headerqueryactive)
+..
+.. Initializations
+.formula U|startrowno = M|aktzeile
+.assign U|header = ""
+.assign U|regularcurrency = ""
+.assign U|alternativecurrency = ""
+.copy U|headerqueryactive = G|false
+..
+.. Before checking reinitialize status items in mask header
+.copy M|currenciescomplete = G|false
+.copy M|scaleascending = G|false
+.copy M|scaledqtycomplete = G|false
+.copy M|datesmatching = G|false
+..
+.. Before checking reinitialize status items in mask row
+.copy M|teditstatus = M|editstatuswrong
+.copy M|tscaledqtycomplete = G|false
+.copy M|tscaledquantityasc = G|false
+.copy M|tcurrycomplete = G|false
+.copy M|tdatesmatching = G|false
+..
+.continue LOADH ? M|tbaumstufe = M|rowlevel
+..
+.. Current row already represents record header
+.. In header rows scaling is always fine
+.copy M|scaledqtycomplete = G|true
+.copy M|scaleascending = G|true
+.continue HEADER
+..
+!LOADH: Current row represents scaling row in record, we have to load header row
+.select screen line 'F|formatstr("$,,;tnum=={1};tbaumstufe={2};zn<{3};@ordnung=zn", M|theader^id, M|headerlevel, M|aktzeile)'
+.continue FATAL ? _G|mehr
+.copy U|headerqueryactive = G|true
+..
+!HEADER: Current row is header row
+.. Reset colours before checking
+.colour -background "-1 -1 -1" mlandneu  'M|aktzeile'
+.colour -background "-1 -1 -1" mnlandneu 'M|aktzeile'
+.colour -background "-1 -1 -1" tvonneu 'M|aktzeile'
+.colour -background "-1 -1 -1" tbisneu 'M|aktzeile'
+..
+.copy U|header = M|tnum
+.formula U|headerrowno = M|aktzeile
+.copy U|regularcurrency = M|mlandneu
+.copy U|alternativecurrency = M|mnlandneu
+..
+.. Check conditions valid from - until
+.continue DATESOK ? F|empty(M|tvonneu) ; F|empty(M|tbisneu)
+.continue WARN00 ? M|tvonneu > M|tbisneu
+..
+!DATESOK
+.copy M|datesmatching = G|true
+..
+!CURRY: Check currencies in header row
+.continue CURRYOK ? _F|empty(M|mlandneu)  & _F|empty(M|mnlandneu)
+.continue WARN01  ?  F|empty(M|mnlandneu) & _(F|empty(M|nrpreisneu) & F|empty(M|nspreisneu))
+.continue WARN02  ?  F|empty(M|mlandneu)  & _(F|empty(M|rpreisneu)  & F|empty(M|spreisneu))
+!CURRYOK
+.copy M|currenciescomplete = G|true
+.continue PARAM ? _M|datesmatching
+..
+!SCALING: Check scaling data
+.continue DECLARE ? _U|headerqueryactive
+.copy U|headerqueryactive = G|false
+.select screen header
+.continue FATAL ? _G|mehr
+..
+!DECLARE: Declarations
+.type ARTR51101 temporaryquantity ? _F|defined(U|temporaryquantity)
+.type bool      showwarning1      ? _F|defined(U|showwarning1)
+.type bool      showwarning2      ? _F|defined(U|showwarning2)
+.type bool      showwarning3      ? _F|defined(U|showwarning3)
+..
+.. Initializations
+.assign U|temporaryquantity = ""
+.copy U|showwarning1 = G|false
+.copy U|showwarning2 = G|false
+.copy U|showwarning3 = G|false
+..
+.. In scaling rows header is always fine
+.copy M|datesmatching = G|true
+..
+.select screen line 'F|formatstr("$,,;theader=={1};tbaumstufe={2};zn>{3};tremoverow=0;@ordnung=zn", U|header, M|rowlevel, U|headerrowno)'
+.continue RETURN ? _G|mehr
+..
+.. Before checking reinitialize status items in mask header
+.copy M|currenciescomplete = G|false
+.copy M|scaleascending = G|false
+.copy M|scaledqtycomplete = G|false
+..
+!WARNING
+.. Before checking reinitialize status items in mask row
+.copy M|teditstatus = M|editstatuswrong
+.copy M|tscaledqtycomplete = G|false
+.copy M|tscaledquantityasc = G|false
+.copy M|tcurrycomplete = G|false
+.copy M|tdatesmatching = G|true
+..
+.. Reset colours before checking
+.colour -background "-1 -1 -1" mgrenzeneu 'M|aktzeile'
+.colour -background "-1 -1 -1" mpreisneu  'M|aktzeile'
+.colour -background "-1 -1 -1" mnpreisneu 'M|aktzeile'
+..
+.. Check currencies
+.continue WARN03A ? _F|empty(M|mpreisneu)  & F|empty(U|regularcurrency)
+.continue WARN03  ? _F|empty(M|mnpreisneu) & F|empty(U|alternativecurrency)
+.copy M|tcurrycomplete = G|true
+!NOTZERO: Check upper limit quantity (zero allowed)
+.copy M|tscaledqtycomplete = G|true
+.. Check upper limit quantity ascending
+.continue WARN05 ? _F|empty(U|temporaryquantity) & M|mgrenzeneu <= U|temporaryquantity
+.copy M|tscaledquantityasc = G|true
+.copy M|teditstatus = M|editstatusok
+..
+!NEXT
+.copy U|temporaryquantity = M|mgrenzeneu
+.select screen line
+.continue WARNING ? G|mehr
+..
+!RETURN: Set return values in header of mask buffer
+.copy M|currenciescomplete = _U|showwarning1
+.copy M|scaledqtycomplete = _U|showwarning2
+.copy M|scaleascending = _U|showwarning3
+.continue PARAM ? M|aktzeile = U|headerrowno
+.select screen line 'U|headerrowno'
+.continue FATAL ? _G|mehr
+..
+!PARAM: Set flags in header row
+.copy M|tdatesmatching = M|datesmatching
+.copy M|tcurrycomplete = M|currenciescomplete
+.copy M|tscaledqtycomplete = M|scaledqtycomplete
+.copy M|tscaledquantityasc = M|scaleascending
+.continue RESET ? _M|tdatesmatching ; _M|tcurrycomplete ; _M|tscaledqtycomplete ; _M|tscaledquantityasc
+.copy M|teditstatus = M|editstatusok
+..
+!RESET: Reset row cursor to number of start row
+.continue END ? U|startrowno = M|aktzeile
+.select screen line 'U|startrowno'
+.continue FATAL ? _G|mehr
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+!FATAL
+.error -number 1111
+.end 1
+..
+..
+!WARN00: Dates did not match!
+.colour -background 'M|warning' tvonneu 'U|headerrowno'
+.note -immediately -update Zeile 'U|headerrowno': Das Anfangsdatum des Gltigkeitsbereichs darf nicht jnger als Enddatum sein!
+.continue CURRY
+..
+!WARN01
+.colour -background 'M|warning' mnlandneu 'U|headerrowno'
+.note -immediately -update Zeile 'U|headerrowno': Es fehlt die Angabe der alternativen W„hrung!
+.continue PARAM
+..
+!WARN02
+.colour -background 'M|warning' mlandneu 'U|headerrowno'
+.note -immediately -update Zeile 'U|headerrowno': Es fehlt die Angabe der regul„ren W„hrung!
+.continue PARAM
+..
+!WARN03
+.copy U|showwarning1 = G|true
+.colour -background 'M|warning' mnlandneu 'U|headerrowno'
+.note -immediately -update Zeile 'U|headerrowno': Es fehlt die Angabe der alternativen W„hrung!
+.continue NOTZERO
+..
+!WARN03A
+.copy U|showwarning1 = G|true
+.colour -background 'M|warning' mlandneu 'U|headerrowno'
+.note -immediately -update Zeile 'U|headerrowno': Es fehlt die Angabe der regul„ren W„hrung!
+.continue NOTZERO
+..
+!WARN05
+.copy U|showwarning3 = G|true
+.colour -background 'M|warning' mgrenzeneu 'M|aktzeile'
+.note -immediately -update Zeile 'M|aktzeile': Die Staffelmenge ist nicht aufsteigend sortiert.
+.continue NEXT

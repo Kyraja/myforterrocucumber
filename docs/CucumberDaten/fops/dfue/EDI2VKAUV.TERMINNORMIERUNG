@@ -1,0 +1,121 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDI2VKAUV.TERMINNORMIERUNG
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Ermittelt normierte Abruftermine und Abrufmenengen aus
+..                  den Abrufzeilen und schreibt diese in konkrete Felder
+..                  in die Zeilen der EDI-Nachricht.
+.. Functionality  : Extracts normalized Schedule and quanatity from rows
+..                  of a forecasts and writes these values into specialized
+..                  fields into the rows of the edi message.
+..
+..      Bedeutung               Field Name      Type        English Variable
+..      ----------------------- --------------- ----------- ------------------
+..      Abrufdatumstyp          (ed)abdattyp    A270        typeOfCallOffDate
+..      normiertes Abrufdatum   (ed)nabdat      GD19        delivSchedDateNorm
+..      normierte Abrufmenge    (ed)nabmge      M8.3        delivSchedQtyNorm
+..
+.. Includes       :
+...     include     dfue/EDI2VKAUV.ABRUFTERMIN
+...     include     dfue/EDI2VKAUV.ABTERM.KONST
+...     include     dfue/EDI2VKAUV.ABTERM.VDA
+...     include     dfue/EDI2VKAUV.ABTERM.DELFOR
+..*****************************************************************************
+.set trans -
+..
+.type bool xbsingle          ? _F|defined(U|xbsingle)
+.type text xtediparam        ? _F|defined(U|xtediparam)
+.type text xtselEDI          ? _F|defined(U|xtselEDI)
+.type bool xistabrzeitraum   ? _F|defined(U|xistabrzeitraum)
+.type realx xmge             ? _F|defined(U|xmge)
+..
+.formula U|xbsingle = _F|empty(U|xtediparam)
+.formula U|xtselEDI = ""
+.formula U|xmge = 0.0
+..
+..
+.. event evaluation
+.. ----------- ---------- ---------- -------------------------------------------
+.continue PARAM  ?  U|xbsingle
+.continue QUERY
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+..
+.. Get forecast from parameter
+!PARAM
+.load 1 edifact 'U|xtediparam'
+.continue ENDE  ? _G|mehr
+.continue SPERREN
+..
+..
+.. Pick forecasts with query
+!QUERY
+.formula U|xtselEDI = "%,,nummer=;such=VKAUV;ideksrah=;ideksart=;erfass=;nachrtyp=;datenart=;einfzahl=;@ordnung=nummer;@bereich=ja;@auto=nein"
+.load 1 edifact 'U|xtselEDI'
+.continue ENDE  ? _G|mehr
+.continue SPERREN
+!NEXTQUE
+.load 1 edifact
+.continue ENDE  ? _G|mehr
+.continue SPERREN
+..
+..
+.. Process single EDI message from buffer 1
+!SPERREN
+.continue ERREDI  ?   F|empty(1|such)
+.continue ERREDI  ? _(1|such/"VKAUV*")
+..
+.select lock nowait edifact '1|id'
+.continue ERRLOCK ? _G|mehr
+.continue ERRLOCK ? _G|gesperrt
+.copy U|xistabrzeitraum = G|false
+..
+.. Read import configuration
+.input "EDI.GET.CUSTOMERCONFIG"
+..
+!NEXTROW
+.select lock line
+.continue ENDROWS  ? _G|mehr
+.continue NEXTROW  ?  H|text1 <> "521" & H|text1 <> "821"
+.formula U|xmge = text5
+..
+.input "dfue/EDI2VKAUV.ABRUFTERMIN"
+.continue ENDE     ?  U|xitermintyp = U|kobiUNBEKANNT  &  _F|empty(U|xtfehler)
+.continue NEXTROW  ?  U|xistabrzeitraum  &  F|empty(U|xtterm)
+.continue NEXTROW  ?  U|xitermintyp = U|kobiUNBEKANNT  &  U|xmge=0.0
+.formula H|abdattyp = U|xitermintyp
+.formula H|nabdat = U|xtterm
+.copy H|nabdat = U|xdelivscheddate ? _F|empty(U|xdelivscheddate)
+.formula H|nabdatende = U|xforecastperiodend ? _F|empty(U|xforecastperiodend)
+.formula H|nabmge = U|xmge
+.continue NEXTROW
+..
+.. Save EDI message
+!ENDROWS
+.rewrite
+.select -
+..
+!SUCCESS
+.continue ENDE  ? U|xbsingle
+'1|nummer'
+.continue NEXTQUE
+..
+!ERRLOCK
+.continue ENDE  ? U|xbsingle
+'1|nummer' - cannot lock
+.continue NEXTQUE
+..
+!ERREDI
+.continue ENDE  ? U|xbsingle
+'1|nummer' - not a forecast
+.continue NEXTQUE
+..
+!ENDE
+.load 1  ?  F|defined(1|id)
+..
+..*****************************************************************************
+!END
+.continue

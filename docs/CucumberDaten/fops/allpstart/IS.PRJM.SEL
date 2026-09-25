@@ -1,0 +1,686 @@
+..!interpreter english declaration noabbrev
+.. at 2017-06-26, 15:48
+.set TRANS -
+..========================================================================
+..==  Name              : IS.PRJM.SEL
+..==  Pfad              : allpstart
+..==  Funktion          : Belegung der Kopffelder in den Projektmanagement IS, Cursorsteuerung
+..==  Erstellungsdatum  : 24.02.2011
+..==  Autor             : Sebastian Strobel, Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"      ? _F|defined(U|xydbprojekt)
+.input "allpstart/FOP.PRJM.UP.DEF"      ? _F|defined(U|xtupprjmsel)
+..====================================================
+.type text    xytmp         ? _F|defined(U|xytmp)
+.type text    xtcmd         ? _F|defined(U|xtcmd)
+.type text    xykoobjekt    ? _F|defined(U|xykoobjekt)
+.type text    xytselindex   ? _F|defined(U|xytselindex)
+.type text    xytselindtp   ? _F|defined(U|xytselindtp)
+.type text    xytselindnum  ? _F|defined(U|xytselindnum)
+.type integer xivar         ? _F|defined(U|xivar)
+.type integer xytpstufe     ? _F|defined(U|xytpstufe)
+.type integer xyiselindex   ? _F|defined(U|xyiselindex)
+.type GD19    xdvon         ? _F|defined(U|xdvon)
+.type GD19    xdbis         ? _F|defined(U|xdbis)
+.type GD      xddat         ? _F|defined(U|xddat)
+.type bool    xbleer        ? _F|defined(U|xbleer)
+.type bool    xbprok        ? _F|defined(U|xbprok)
+.type bool    xyberlaubt    ? _F|defined(U|xyberlaubt)
+.type bool    xbaufparam    ? _F|defined(U|xbaufparam)
+.type bool    xbselhist     ? _F|defined(U|xbselhist)
+.type bool    xbseltp       ? _F|defined(U|xbseltp)
+.type bool    xbselhp       ? _F|defined(U|xbselhp)
+.type bool    xybnobox      ? _F|defined(U|xybnobox)
+.type bool    xybselkst     ? _F|defined(U|xybselkst)
+.type P86:1   xpproject     ? _F|defined(U|xpproject)
+.type symtab  xstselproj    ? _F|defined(U|xstselproj)
+.type symtab  xstselpnum    ? _F|defined(U|xstselpnum)
+.type symtab  xstseltp      ? _F|defined(U|xstseltp)
+.type symtab  xsttptp       ? _F|defined(U|xsttptp)
+.type symtab  xsttpindex    ? _F|defined(U|xsttpindex)
+.type integer xprocsp       ? _F|defined(U|xprocsp)
+.set  demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Zeitraum_vorbelegen -----
+.continue EL001 ? _(F|defined(M|yvondatum))
+.formula U|xdvon     = "<Y"
+.formula M|yvondatum = U|xdvon
+!EL001
+.continue EL002 ? _(F|defined(M|ybisdatum))
+.formula U|xdbis     = ">M"
+.formula M|ybisdatum = U|xdbis
+!EL002
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Kostenstellen_leeren -----
+.formula U|xivar = 1
+!LOOP001: ==============================
+.continue ELOP001 ? _(F|defined(M|ykst.xivar))
+.formula M|ykst.xivar     = ""
+.formula U|xivar = U|xivar + 1
+.continue LOOP001
+!ELOP001: ==============================
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Rechtepruefung -----
+.copy U|xyberlaubt = G|true
+.continue EL003 ? _((U|xypmrepruefind) ; (_(U|xbselhp)))
+.assign U|xpproject = H|id
+.input "allpstart/CHECK.PROJECT"
+.continue EL004 ? _(_(U|xyberlaubt))
+.error
+.end 1
+!EL004
+!EL003
+.continue 'xprocst.xprocsp'
+!PROC004: ----- Teilprojekte -----
+.assign U|xsttptp = ""
+.formula U|xytpstufe = U|xytpstufe + 1
+.type symtab F|row(U|xstseltp, U|xytpstufe)     ? _F|defined(F|row(U|xstseltp, U|xytpstufe))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yteilprojektzu==" + H|id
+.formula U|xtsel = U|xtsel + ";bebuchbar==(Yes)"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.select group "86:1" 'U|xtsel'
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC003
+!RET001
+.formula xprocsp = xprocsp - 1
+.formula U|xytmp = F|tostring(U|xytpstufe) + F|tolower(H|such) + H|id
+.type P86:1  F|map(U|xsttptp, U|xytmp)     ? _F|defined(F|map(U|xsttptp, U|xytmp))
+.assign F|map(U|xsttptp, U|xytmp)  = H|id
+.select continue
+.continue LOOP002
+!ELOP002: ==============================
+.formula F|row(U|xstseltp, U|xytpstufe) = U|xsttptp
+.formula U|xytselindtp = ""
+.formula U|xytselindtp = F|nextelem(F|map(U|xsttptp, ""), U|xytselindtp, G|true)
+!LOOP003: ==============================
+.continue ELOP003 ? _(_(F|empty(U|xytselindtp)))
+.select add F|map(U|xsttptp, U|xytselindtp)
+.input 'M|tab'
+.type text F|row(U|xsttpindex, U|xytpstufe)     ? _F|defined(F|row(U|xsttpindex, U|xytpstufe))
+.formula F|row(U|xsttpindex, U|xytpstufe) = U|xytselindtp
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC004
+!RET002
+.formula xprocsp = xprocsp - 1
+.formula U|xytselindtp = F|row(U|xsttpindex, U|xytpstufe)
+.formula U|xsttptp = F|row(U|xstseltp, U|xytpstufe)
+.formula U|xytselindtp = F|nextelem(F|map(U|xsttptp, ""), U|xytselindtp, G|true)
+.continue LOOP003
+!ELOP003: ==============================
+.formula U|xytpstufe = U|xytpstufe - 1
+.continue 'xprocst.xprocsp'
+!PROC005: ----- Projekt -----
+.copy U|xbprok = G|true
+.continue EL005 ? _(_(F|defined(M|yprojstatus)))
+.continue EL006 ? _(F|defined(M|ybproffen))
+.copy U|xbprok = G|false
+.copy U|xbprok = G|true     ? M|ybproffen         & (_H|yablage & _H|ystatusk = "FTAB")
+.copy U|xbprok = G|true     ? M|ybproffen         & (_H|yablage &  H|ystatusk = "FTAB" & H|yprojekttyp^ybftaboffen)
+!EL006
+.continue EL007 ? _(F|defined(M|ybprabgeschlossen))
+.copy U|xbprok = G|true     ? M|ybprabgeschlossen & ( H|yablage           & (H|yabldat    >= M|yvondatum ; F|empty(M|yvondatum)) & (H|yabldat    <= M|ybisdatum ; F|empty(M|ybisdatum)))
+.copy U|xbprok = G|true     ? M|ybprabgeschlossen & ( H|ystatusk = "FTAB" & (H|yftabdatum >= M|yvondatum ; F|empty(M|yvondatum)) & (H|yftabdatum <= M|ybisdatum ; F|empty(M|ybisdatum)) & _H|yprojekttyp^ybftaboffen)
+!EL007
+.continue FI005
+!EL005
+.continue EL008 ? _(F|empty(M|yprojstatus))
+.continue EL009 ? _(F|defined(M|ybproffen))
+.copy U|xbprok = G|false
+.copy U|xbprok = G|true     ? M|ybproffen         & (_H|yablage & _H|ystatusk = "FTAB")
+.copy U|xbprok = G|true     ? M|ybproffen         & (_H|yablage &  H|ystatusk = "FTAB" & H|yprojekttyp^ybftaboffen)
+!EL009
+.continue EL010 ? _(F|defined(M|ybprabgeschlossen))
+.copy U|xbprok = G|true     ? M|ybprabgeschlossen & ( H|yablage           & (H|yabldat    >= M|yvondatum ; F|empty(M|yvondatum)) & (H|yabldat    <= M|ybisdatum ; F|empty(M|ybisdatum)))
+.copy U|xbprok = G|true     ? M|ybprabgeschlossen & ( H|ystatusk = "FTAB" & (H|yftabdatum >= M|yvondatum ; F|empty(M|yvondatum)) & (H|yftabdatum <= M|ybisdatum ; F|empty(M|ybisdatum)) & _H|yprojekttyp^ybftaboffen)
+!EL010
+!EL008
+!FI005
+.continue EL011 ? _(U|xbprok)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC003
+!RET003
+.formula xprocsp = xprocsp - 1
+.continue EL012 ? _(U|xyberlaubt)
+.continue EL013 ? _(U|xbseltp)
+.formula U|xyiselindex = U|xyiselindex + 1
+.formula U|xytselindex = ("0000000" + 'U|xyiselindex')>>8
+.formula U|xytselindnum = H|nummer
+.type P86:1 F|map(U|xstselproj, U|xytselindex)    ? _F|defined(F|map(U|xstselproj, U|xytselindex))
+.type P86:1 F|map(U|xstselpnum, U|xytselindnum)   ? _F|defined(F|map(U|xstselpnum, U|xytselindnum))
+.assign F|map(U|xstselproj, U|xytselindex)  = H|id
+.assign F|map(U|xstselpnum, U|xytselindnum) = H|id
+.continue FI013
+!EL013
+.input 'M|tab'          ? _F|empty(M|tab)
+!FI013
+!EL012
+!EL011
+.continue 'xprocst.xprocsp'
+!PROC006: ----- Start_Button -----
+.copy U|xybnobox = G|true
+.assign U|xstselproj = ""
+.assign U|xstselpnum = ""
+.formula U|xyiselindex = 0
+.copy U|xbseltp = M|ybteilprojekte  ? F|defined(M|ybteilprojekte)
+.copy U|xbselhp = G|true
+.continue EL014 ? _(true)
+.copy U|xybselkst = G|false
+.continue EL015 ? _(F|empty(M|yprojekt))
+.copy U|xybselkst = G|true  ?  U|xypmrepruefkst & _G|passw^yprjmallekoobj
+.continue EL016 ? _(F|defined(M|yballekst))
+.copy U|xybselkst = G|true  ? _M|yballekst
+!EL016
+!EL015
+.continue EL017 ? _(U|xybselkst)
+.input 'U|xtupkstarray'
+.formula U|xyiselindex = 0
+.formula U|xtindex    = ""
+.formula U|xtindex    = F|nextelem(U|xtkst, xtindex)
+!LOOP004: ==============================
+.continue ELOP004 ? _(_(F|empty(U|xtindex)))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yverantwkst=="  + U|xtkst.xtindex        ? _F|empty(U|xtkst.xtindex)
+.formula U|xtsel = U|xtsel + ";yverantwkst==`" + U|xtkst.xtindex        ?  F|empty(U|xtkst.xtindex)
+.formula U|xtsel = U|xtsel + ";yprojleit=="    + M|yprojleit^id         ?  F|defined(M|yprojleit)
+.formula U|xtsel = U|xtsel + ";yprojverantw==" + M|yprojverantw^id      ?  F|defined(M|yprojverantw)
+.formula U|xtsel = U|xtsel + ";yprojekttyp=="  + M|yprojekttyp^id       ?  F|defined(M|yprojekttyp)
+.formula U|xtsel = U|xtsel + ";ykunde=="       + M|ykunde^id            ?  F|defined(M|ykunde)
+.formula U|xtsel = U|xtsel + ";ykunde2=="      + M|ykunde2^id           ?  F|defined(M|ykunde2)
+.formula U|xtsel = U|xtsel + ";ystatus=="      + M|yprojstatus^id       ?  F|defined(M|yprojstatus)
+.continue EL018 ? _(F|defined(M|yprojstatus))
+.formula U|xtsel = U|xtsel + ";yablage==(No)"   ? _M|ybprabgeschlossen & F|empty(M|yprojstatus)
+.continue FI018
+!EL018
+.formula U|xtsel = U|xtsel + ";yablage==(No)"   ? _M|ybprabgeschlossen
+!FI018
+.formula U|xtsel = U|xtsel + ";bebuchbar==(Yes)"
+.formula U|xtsel = U|xtsel + ";@order=such"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.select group "86:1" 'U|xtsel'
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC005
+!RET004
+.formula xprocsp = xprocsp - 1
+.select continue
+.continue LOOP005
+!ELOP005: ==============================
+.formula U|xtindex = F|nextelem(U|xtkst, xtindex)
+.continue LOOP004
+!ELOP004: ==============================
+.continue FI017
+!EL017
+.formula U|xtsel = M|yprojekt^id    ? _F|empty(M|yprojekt)
+.continue EL019 ? _(F|empty(M|yprojekt))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojleit=="    + M|yprojleit^id         ?  F|defined(M|yprojleit)
+.formula U|xtsel = U|xtsel + ";yprojverantw==" + M|yprojverantw^id      ?  F|defined(M|yprojverantw)
+.formula U|xtsel = U|xtsel + ";yprojekttyp=="  + M|yprojekttyp^id       ?  F|defined(M|yprojekttyp)
+.formula U|xtsel = U|xtsel + ";ykunde=="       + M|ykunde^id            ?  F|defined(M|ykunde)
+.formula U|xtsel = U|xtsel + ";ykunde2=="      + M|ykunde2^id           ?  F|defined(M|ykunde2)
+.formula U|xtsel = U|xtsel + ";ystatus=="      + M|yprojstatus^id       ?  F|defined(M|yprojstatus)
+.continue EL020 ? _(F|defined(M|yprojstatus))
+.formula U|xtsel = U|xtsel + ";yablage==(No)"   ? _M|ybprabgeschlossen & F|empty(M|yprojstatus)
+.continue FI020
+!EL020
+.formula U|xtsel = U|xtsel + ";yablage==(No)"   ? _M|ybprabgeschlossen
+!FI020
+.formula U|xtsel = U|xtsel + ";bebuchbar==(Yes)"
+.formula U|xtsel = U|xtsel + ";@order=such"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+!EL019
+.select group "86:1" 'U|xtsel'
+!LOOP006: ==============================
+.continue ELOP006 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC005
+!RET005
+.formula xprocsp = xprocsp - 1
+.select continue
+.continue LOOP006
+!ELOP006: ==============================
+!FI017
+.continue FI014
+!EL014
+.continue EL021 ? _((F|empty(M|yprojekt)) & (((U|xypmrepruefkst) & (_(G|passw^yprjmallekoobj))) ; (_(M|yballekst))))
+.input 'U|xtupkstarray'
+.formula U|xyiselindex = 0
+.formula U|xtindex    = ""
+.formula U|xtindex    = F|nextelem(U|xtkst, xtindex)
+!LOOP007: ==============================
+.continue ELOP007 ? _(_(F|empty(U|xtindex)))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yverantwkst=="  + U|xtkst.xtindex        ? _F|empty(U|xtkst.xtindex)
+.formula U|xtsel = U|xtsel + ";yverantwkst==`" + U|xtkst.xtindex        ?  F|empty(U|xtkst.xtindex)
+.formula U|xtsel = U|xtsel + ";yprojleit=="    + M|yprojleit^id         ?  F|defined(M|yprojleit)
+.formula U|xtsel = U|xtsel + ";yprojverantw==" + M|yprojverantw^id      ?  F|defined(M|yprojverantw)
+.formula U|xtsel = U|xtsel + ";yprojekttyp=="  + M|yprojekttyp^id       ?  F|defined(M|yprojekttyp)
+.formula U|xtsel = U|xtsel + ";ykunde=="       + M|ykunde^id            ?  F|defined(M|ykunde)
+.formula U|xtsel = U|xtsel + ";ykunde2=="      + M|ykunde2^id           ?  F|defined(M|ykunde2)
+.formula U|xtsel = U|xtsel + ";ystatus=="      + M|yprojstatus^id       ?  F|defined(M|yprojstatus)
+.continue EL022 ? _(F|defined(M|yprojstatus))
+.formula U|xtsel = U|xtsel + ";yablage==(No)"   ? _M|ybprabgeschlossen & F|empty(M|yprojstatus)
+.continue FI022
+!EL022
+.formula U|xtsel = U|xtsel + ";yablage==(No)"   ? _M|ybprabgeschlossen
+!FI022
+.formula U|xtsel = U|xtsel + ";bebuchbar==(Yes)"
+.formula U|xtsel = U|xtsel + ";@order=such"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.select group "86:1" 'U|xtsel'
+!LOOP008: ==============================
+.continue ELOP008 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC005
+!RET006
+.formula xprocsp = xprocsp - 1
+.select continue
+.continue LOOP008
+!ELOP008: ==============================
+.formula U|xtindex = F|nextelem(U|xtkst, xtindex)
+.continue LOOP007
+!ELOP007: ==============================
+.continue FI021
+!EL021
+.formula U|xtsel = M|yprojekt^id    ? _F|empty(M|yprojekt)
+.continue EL023 ? _(F|empty(M|yprojekt))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojleit=="    + M|yprojleit^id         ?  F|defined(M|yprojleit)
+.formula U|xtsel = U|xtsel + ";yprojverantw==" + M|yprojverantw^id      ?  F|defined(M|yprojverantw)
+.formula U|xtsel = U|xtsel + ";yprojekttyp=="  + M|yprojekttyp^id       ?  F|defined(M|yprojekttyp)
+.formula U|xtsel = U|xtsel + ";ykunde=="       + M|ykunde^id            ?  F|defined(M|ykunde)
+.formula U|xtsel = U|xtsel + ";ykunde2=="      + M|ykunde2^id           ?  F|defined(M|ykunde2)
+.formula U|xtsel = U|xtsel + ";ystatus=="      + M|yprojstatus^id       ?  F|defined(M|yprojstatus)
+.continue EL024 ? _(F|defined(M|yprojstatus))
+.formula U|xtsel = U|xtsel + ";yablage==(No)"   ? _M|ybprabgeschlossen & F|empty(M|yprojstatus)
+.continue FI024
+!EL024
+.formula U|xtsel = U|xtsel + ";yablage==(No)"   ? _M|ybprabgeschlossen
+!FI024
+.formula U|xtsel = U|xtsel + ";bebuchbar==(Yes)"
+.formula U|xtsel = U|xtsel + ";@order=such"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+!EL023
+.select group "86:1" 'U|xtsel'
+!LOOP009: ==============================
+.continue ELOP009 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC005
+!RET007
+.formula xprocsp = xprocsp - 1
+.select continue
+.continue LOOP009
+!ELOP009: ==============================
+!FI021
+!FI014
+.continue EL025 ? _(U|xbseltp)
+.copy U|xbselhp = G|false
+.formula U|xytselindex = ""
+.formula U|xytselindex = F|nextelem(F|map(U|xstselproj, ""), U|xytselindex, G|true)
+!LOOP010: ==============================
+.continue ELOP010 ? _(_(F|empty(U|xytselindex)))
+.continue EL026 ? _(_(F|empty(F|map(U|xstselproj, U|xytselindex))))
+.select add F|map(U|xstselproj, U|xytselindex)
+.continue EL027 ? _(G|mehr)
+.copy U|xbprok = G|true
+.continue EL028 ? _(_(F|empty(H|yteilprojektzu)))
+.formula U|xytselindnum = H|yteilprojektzu^nummer
+.copy    U|xbprok       = G|false           ? F|defined(F|map(U|xstselpnum, U|xytselindnum))
+!EL028
+.continue EL029 ? _(U|xbprok)
+.input 'M|tab'          ? _F|empty(M|tab)
+.assign  U|xstseltp = ""
+.formula U|xytpstufe = 0
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC004
+!RET008
+.formula xprocsp = xprocsp - 1
+!EL029
+!EL027
+!EL026
+.formula U|xytselindex = F|nextelem(F|map(U|xstselproj, ""), U|xytselindex, G|true)
+.continue LOOP010
+!ELOP010: ==============================
+!EL025
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.copy U|xbaufparam = M|ybaufparam       ? F|defined(M|ybaufparam)
+.continue BRK001 ? _(G|evtart = "maskein")
+.copy   M|yballekst         = G|true    ? F|defined(M|yballekst)
+.copy   M|ybproffen         = G|true    ? F|defined(M|ybproffen)
+.protection yvondatum 0                 ? F|defined(M|yvondatum)
+.protection ybisdatum 0                 ? F|defined(M|ybisdatum)
+.assign M|yprojstatus       = "(AKT)"   ? F|defined(M|yprojstatus)
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "maskende")
+.end .          ? M|ybmaskezu
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtart = "feldaus")
+.continue BRK004 ? _(G|evtvar = "ybaufparam")
+.continue EL030 ? _(M|ybaufparam)
+.protection -RESET yvondatum      0
+.protection -RESET ybisdatum      0
+.continue FI030
+!EL030
+.protection        yvondatum      0     ? _M|ybprabgeschlossen
+.protection -RESET yvondatum      0     ?  M|ybprabgeschlossen
+.protection        ybisdatum      0     ? _M|ybprabgeschlossen
+.protection -RESET ybisdatum      0     ?  M|ybprabgeschlossen
+!FI030
+.continue ESAC002
+!BRK004
+.continue BRK005 ? _(G|evtvar = "ymonat")
+.continue EL031 ? _((M|ymonat < 1) ; (M|ymonat > 12))
+.set TRANS +
+.box Hinweis
+Es sind nur Werte zwischen 1 und 12 erlaubt.
+.set TRANS -
+.formula M|ymonat =  F|month(G|datum)
+!EL031
+.continue ESAC002
+!BRK005
+.continue BRK006 ? _(G|evtvar = "yjahr")
+.formula M|yjahr  = 'F|year(G|datum)'    ?  F|empty(M|yjahr)
+.continue ESAC002
+!BRK006
+.continue BRK007 ? _(G|evtvar = "yvondatum")
+.formula U|xdbis     = ">" + 'F|year(M|yvondatum)' + "Y" + 'F|month(M|yvondatum)' + "M"
+.formula M|ybisdatum = U|xdbis
+.continue ESAC002
+!BRK007
+.continue BRK008 ? _(G|evtvar = "ybisdatum")
+.continue EL032 ? _(M|ybisdatum < M|yvondatum)
+.formula U|xdbis     = ">" + 'F|year(M|yvondatum)' + "Y" + 'F|month(M|yvondatum)' + "M"
+.formula M|ybisdatum = U|xdbis
+!EL032
+.cursor yprojekt 0      ? F|defined(M|yprojekt)
+.continue ESAC002
+!BRK008
+.continue BRK009 ? _(G|evtvar = "yprojekt")
+.continue EL033 ? _((_(F|empty(M|yprojekt))) & (_(M|yprojekt^bebuchbar)))
+.set trans +
+.box Hinweis
+Es darf nur ein bebuchbares Projekt eingetragen werden.
+.set trans -
+.assign M|yprojekt = ""
+!EL033
+.continue EL034 ? _((_(F|empty(M|yprojekt))) & (_(U|xbaufparam)))
+.formula M|yprojleit    = ""                    ? F|defined(M|yprojleit)
+.formula M|yprojverantw = ""                    ? F|defined(M|yprojverantw)
+.formula M|ykunde       = ""                    ? F|defined(M|ykunde)
+.formula M|ykunde2      = ""                    ? F|defined(M|ykunde2)
+.formula M|yprojekttyp  = ""                    ? F|defined(M|yprojekttyp)
+.copy    M|yballekst    = G|true                ? F|defined(M|yballekst)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC002
+!RET009
+.formula xprocsp = xprocsp - 1
+!EL034
+.continue EL035 ? _(_(F|empty(M|yprojekt)))
+.copy U|xpproject = M|yprojekt
+.input "allpstart/CHECK.PROJECT"
+.continue EL036 ? _(_(U|xyberlaubt))
+.error
+.end 1
+!EL036
+!EL035
+.assign M|yprojstatus       = "(AKT)"   ?  F|empty(M|yprojekt) & F|defined(M|yprojstatus)
+.assign M|yprojstatus       = ""        ? _F|empty(M|yprojekt) & F|defined(M|yprojstatus)
+.cursor yprojleit 0                     ? F|defined(M|yprojleit)
+.continue ESAC002
+!BRK009
+.continue BRK010 ? _(G|evtvar = "yprojversion")
+.continue EL037 ? _((_(F|empty(M|yprojversion))) & (_(U|xbaufparam)))
+.copy    M|yprojekt     = M|yprojversion^yprojekt   ? F|defined(M|yprojekt)
+.formula M|yprojleit    = ""                        ? F|defined(M|yprojleit)
+.formula M|yprojverantw = ""                        ? F|defined(M|yprojverantw)
+.formula M|ykunde       = ""                        ? F|defined(M|ykunde)
+.formula M|ykunde2      = ""                        ? F|defined(M|ykunde2)
+.formula M|yprojekttyp  = ""                        ? F|defined(M|yprojekttyp)
+.copy    M|yballekst    = G|true                    ? F|defined(M|yballekst)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC002
+!RET010
+.formula xprocsp = xprocsp - 1
+!EL037
+.continue EL038 ? _(_(F|empty(M|yprojversion)))
+.continue EL039 ? _(U|xypmrepruefkst)
+.formula U|xykoobjekt = M|yprojversion^yverantwkst^id
+.input 'U|xypmrepruefkstprog'
+.continue EL040 ? _(_(U|xyberlaubt))
+.continue EL041 ? _((_(F|empty(M|yprojversion^yteilprojektzu))) & (M|yprojversion^ybfreifuerhpl))
+.assign U|xyberlaubt = M|yprojversion^yteilprojektzu^yprojleit^id = G|passw^passmitarb^id
+!EL041
+.continue EL042 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderliche Rechte fÅr dieses Projekt.
+.set TRANS -
+.formula M|yprojversion  = ""
+.formula M|yprojversname = ""
+.continue
+!EL042
+!EL040
+!EL039
+.continue EL043 ? _(U|xypmrepruefktr)
+.formula U|xykoobjekt = M|yprojversion^yktr^id
+.input 'U|xypmrepruefktrprog'
+.continue EL044 ? _(_(U|xyberlaubt))
+.continue EL045 ? _((_(F|empty(M|yprojversion^yteilprojektzu))) & (M|yprojversion^ybfreifuerhpl))
+.assign U|xyberlaubt = M|yprojversion^yteilprojektzu^yprojleit^id = G|passw^passmitarb^id
+!EL045
+.continue EL046 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderliche Rechte fÅr dieses Projekt.
+.set TRANS -
+.formula M|yprojversion  = ""
+.formula M|yprojversname = ""
+.continue
+!EL046
+!EL044
+!EL043
+.continue EL047 ? _(U|xypmrepruefind)
+.input 'U|xypmrepruefindprog'
+.continue EL048 ? _(_(U|xyberlaubt))
+.continue EL049 ? _((_(F|empty(M|yprojversion^yteilprojektzu))) & (M|yprojversion^ybfreifuerhpl))
+.assign U|xyberlaubt = M|yprojversion^yteilprojektzu^yprojleit^id = G|passw^passmitarb^id
+!EL049
+.continue EL050 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderliche Rechte fÅr dieses Projekt.
+.set TRANS -
+.formula M|yprojversion  = ""
+.formula M|yprojversname = ""
+.continue
+!EL050
+!EL048
+!EL047
+!EL038
+.assign M|yprojstatus       = "(AKT)"   ?  F|empty(M|yprojekt) & F|defined(M|yprojstatus)
+.assign M|yprojstatus       = ""        ? _F|empty(M|yprojekt) & F|defined(M|yprojstatus)
+.cursor yprojleit 0                     ? F|defined(M|yprojleit)
+.continue ESAC002
+!BRK010
+.continue BRK011 ? _(G|evtvar = "yprojleit")
+.continue EL051 ? _(_(U|xbaufparam))
+.formula M|yprojekt      = ""                   ? F|defined(M|yprojekt)
+.formula M|yprojversion  = ""                   ? F|defined(M|yprojversion)
+.formula M|yprojversname = ""                   ? F|defined(M|yprojversname)
+!EL051
+.continue ESAC002
+!BRK011
+.continue BRK012 ? _(G|evtvar = "yprojverantw")
+.continue EL052 ? _(_(U|xbaufparam))
+.formula M|yprojekt   = ""                      ? F|defined(M|yprojekt)
+!EL052
+.continue ESAC002
+!BRK012
+.continue BRK013 ? _(G|evtvar = "ykunde")
+.continue EL053 ? _(_(U|xbaufparam))
+.formula M|yprojekt   = ""                      ? M|yprojekt^ykunde^id <> M|ykunde^id
+!EL053
+.continue ESAC002
+!BRK013
+.continue BRK014 ? _(G|evtvar = "ykunde2")
+.continue EL054 ? _(_(U|xbaufparam))
+.formula M|yprojekt   = ""                      ? M|yprojekt^ykunde2^id <> M|ykunde2^id
+!EL054
+.continue ESAC002
+!BRK014
+.continue BRK015 ? _(G|evtvar = "yprojekttyp")
+.continue EL055 ? _(_(U|xbaufparam))
+.formula M|yprojekt      = ""                   ? F|defined(M|yprojekt)
+.formula M|yprojversion  = ""                   ? F|defined(M|yprojversion)
+.formula M|yprojversname = ""                   ? F|defined(M|yprojversname)
+!EL055
+.continue ESAC002
+!BRK015
+.continue BRK016 ? _(G|evtvar = "yballekst")
+.continue EL056 ? _((M|yballekst) & (_(U|xbaufparam)))
+.formula M|yprojekt    = ""     ? F|defined(M|yprojekt)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC002
+!RET011
+.formula xprocsp = xprocsp - 1
+!EL056
+.continue ESAC002
+!BRK016
+.continue BRK017 ? _(G|evtvar = "ybprabgeschlossen")
+.continue EL057 ? _(_(U|xbaufparam))
+.continue EL058 ? _(_(M|ybprabgeschlossen))
+.formula M|yvondatum = ""
+.formula M|ybisdatum = ""
+.protection yvondatum 0
+.protection ybisdatum 0
+.continue FI058
+!EL058
+.protection -RESET yvondatum 0
+.protection -RESET ybisdatum 0
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC001
+!RET012
+.formula xprocsp = xprocsp - 1
+!FI058
+!EL057
+.continue ESAC002
+!BRK017
+.continue EL059 ? _(G|evtvar<<4 = "ykst")
+.continue EL060 ? _((_(F|empty(M|.evtvar))) & (U|xypmrepruefkst))
+.formula U|xykoobjekt = M|.evtvar^id
+.input 'U|xypmrepruefkstprog'
+.continue EL061 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie haben keine Rechte, Auswertungen zu dieser Kostenstelle einzusehen!
+.set TRANS -
+.formula M|.evtvar = ""
+!EL061
+!EL060
+.formula U|xivar = G|evtvar<<-4
+.continue EL062 ? _(_(U|xbaufparam))
+.formula M|yprojekt    = ""             ? F|defined(M|yprojekt)
+.copy    M|yballekst   = G|false        ? F|defined(M|yballekst)
+.formula U|xivar = U|xivar + 1                          ? _F|empty(M|.evtvar)
+.formula U|xtcmd = ".."
+.formula U|xtcmd = "cursor ykst" + 'U|xivar' + " 0"     ?  F|defined(M|ykst.xivar)
+.formula U|xtcmd = "cursor yprojekt 0"                  ? _F|defined(M|ykst.xivar) & F|defined(M|yprojekt)
+.'U|xtcmd'
+.formula U|xbleer = G|true
+.formula U|xivar  = 1
+!LOOP011: ==============================
+.continue ELOP011 ? _((F|defined(M|ykst.xivar)) & (U|xbleer))
+.formula U|xbleer = G|false     ? _F|empty(M|ykst.xivar)
+.formula U|xivar = U|xivar + 1
+.continue LOOP011
+!ELOP011: ==============================
+.formula M|yballekst = U|xbleer         ? F|defined(M|yballekst)
+!EL062
+!EL059
+!ESAC002: =====   ENDCASE   =====
+.continue EL063 ? _(_(U|xbaufparam))
+.continue EL064 ? _(F|defined(M|yballekst))
+.continue EL065 ? _(M|yballekst)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET013" 
+.continue PROC002
+!RET013
+.formula xprocsp = xprocsp - 1
+!EL065
+!EL064
+.continue EL066 ? _(_(F|defined(U|xbzeilenraus)))
+.make screen line --O
+.continue FI066
+!EL066
+.make screen line --O   ? _U|xbzeilenraus
+!FI066
+!EL063
+.continue ESAC001
+!BRK003
+.continue BRK018 ? _(G|evtart = "buttonnach")
+.continue BRK019 ? _(G|evtvar = "bstart")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET014" 
+.continue PROC006
+!RET014
+.formula xprocsp = xprocsp - 1
+.continue ESAC003
+!BRK019
+.continue EL067 ? _(F|defined(U|xbstart))
+.continue EL068 ? _(U|xbstart)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET015" 
+.continue PROC006
+!RET015
+.formula xprocsp = xprocsp - 1
+!EL068
+!EL067
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC001
+!BRK018
+!ESAC001: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJM.SEL")'      ? F|fileexists(F|foppath("IFOP.IS.PRJM.SEL"))
+.continue

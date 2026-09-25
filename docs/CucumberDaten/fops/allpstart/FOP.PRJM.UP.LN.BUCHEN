@@ -1,0 +1,198 @@
+..!interpreter english declaration noabbrev
+.. at 2015-12-04, 13:27
+.set TRANS -
+..========================================================================
+..==  Name              : FOP.PRJM.UP.LN.BUCHEN
+..==  Pfad              : allpstart
+..==  Funktion          : erzeugt eine Transaktion und die TransaktionsdatensÑtze
+..==                      zu einer Leistungsmeldung
+..==
+..==  Erstellungsdatum  : 17.06.2009
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2014 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..==
+..==
+..========================================================================
+..====================================================
+.type text    xttransini xttransdat xttransprot xttransleer
+.type text    xtsys     ? _F|defined(U|xtsys)
+.type text    xtcmd     ? _F|defined(U|xtcmd)
+.type text    xtname    ? _F|defined(U|xtname)
+.type text    xtpname   ? _F|defined(U|xtpname)
+.type text    xtedpdat  ? _F|defined(U|xtedpdat)
+.type text    xtedpout  ? _F|defined(U|xtedpout)
+.type text    xtedperr  ? _F|defined(U|xtedperr)
+.type text    xtedpmsg  ? _F|defined(U|xtedpmsg)
+.type text    xttyp     ? _F|defined(xttyp)
+.type integer xprocsp   ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- dummy -----
+.formula U|xtcmd = "$,,@gruppe=" + 'U|xygrtrans' + ";such==KEINE.BUCHUNG"
+.load 0 'G|hdatname.xydbtrans' 'U|xtcmd'
+.continue EL001 ? _(mehr)
+.formula U|xtcmd = 0|id
+.continue FI001
+!EL001
+.formula U|xtcmd      = "make " + 'G|hdatname.xydbtrans' + " group" + 'U|xygrtrans' + " " G|dblquote + G|dblquote + " KEINE.BUCHUNG"
+.'U|xtcmd'
+.formula h|name       = "Transaktion OHNE Transaktionsdatensatz"
+.formula h|ytrstatusk = "BUE"
+.formula h|yausfsperr = G|TRUE
+.formula h|yabldat    = "."
+.formula h|yerfzeit   = "."
+.formula h|yablzeit   = "."
+.formula h|ybabl      = G|TRUE
+.formula h|ystorno    = G|TRUE
+.rewrite
+.formula U|xtcmd      = H|id
+.select --
+!FI001
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue EL002 ? _(U|xybistkost)
+.continue EL003 ? _(F|empty(9|ytransaktion))
+.continue EL004 ? _(9|ybsperre)
+.set TRANS +
+.box Hinweis
+In der Leistungsmeldung ist die Buchungssperre gesetzt.
+Buchung ist nicht mîglich.
+.set TRANS -
+.continue
+.continue FI004
+!EL004
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"   ? _F|defined(5|ylmbuchenupg)
+.continue EL005 ? _(F|empty(5|ylmbuchenupg))
+.set TRANS +
+.box Hinweis
+In der ProjectSuite Konfiguration ist im Reiter Buchungstransaktionen kein
+Unterprogramm zur Erstellung der Buchungstransaktion fÅr Leistungsmeldungen eingetragen.
+
+Buchung ist nicht mîglich.
+.set TRANS -
+.continue
+.continue FI005
+!EL005
+.continue EL006 ? _(F|fileexists(F|foppath(5|ylmbuchenupg)))
+.formula U|xttransini  = F|foppath("TRANSACTION.LNACHWEIS.INI")
+.formula U|xttransdat  = "rmtmp/X.PRJM.LN.BUCHEN." + G|sekundenz + "." + G|pid + ".DAT.TMP"
+.formula U|xttransprot = "rmtmp/X.PRJM.LN.BUCHEN." + G|sekundenz + "." + G|pid + ".PROT.TMP"
+.formula U|xttransleer = "rmtmp/X.PRJM.LN.BUCHEN." + G|sekundenz + "." + G|pid + ".LEER.TMP"
+.continue EL007 ? _((F|empty(9|yadatum)) ; (F|empty(9|yedatum)) ; (F|empty(9|ypersonal)))
+.set TRANS +
+.box Hinweis
+Die Buchung fÅr die Leistungsmeldung '9|nummer'/'9|such'
+kann nicht erzeugt werden da:
+?Startdatum nicht gefÅllt ist           ? F|empty(9|yadatum)
+?Enddatum nicht gefÅllt ist             ? F|empty(9|yedatum)
+?der Bearbeiter nicht gefÅllt ist       ? F|empty(9|ypersonal)
+.set TRANS -
+.continue
+.continue FI007
+!EL007
+.input '5|ylmbuchenupg'
+.continue EL008 ? _(_(F|empty(U|xttyp)))
+.formula U|xtcmd = "TRANSACTION.NEW"
+.formula U|xtcmd = U|xtcmd + " " + U|xttransini
+.formula U|xtcmd = U|xtcmd + " " + U|xttransdat
+.formula U|xtcmd = U|xtcmd + " " + U|xttransprot
+.formula U|xtcmd = U|xtcmd + " " + U|xttransleer
+.formula U|xtcmd = U|xtcmd + " " + 9|id
+.formula U|xtcmd = U|xtcmd + " " + 9|nummer
+.add F|sysinfo(10)^ykonfigprjm
+.continue EL009 ? _(G|mehr)
+.assign G|neuespassw = D|ybatchuser     ? _F|empty(D|ybatchuser) & D|ybatchuser^fremdok
+!EL009
+.file -TEMPNAME U|xtedpout
+.file -TEMPNAME U|xtedperr
+.formula U|xtsys = "EKSPASSWORT=" + G|einmalpw + " export EKSPASSWORT ;batchlg.sh " + G|dblquote + U|xtcmd + G|dblquote + " >" + U|xtedpout + " 2>" + U|xtedperr
+.system 'U|xtsys' BACKGROUND
+.continue EL010 ? _(G|mehr)
+.continue EL011 ? _(F|filenotempty(U|xtedperr))
+.set TRANS +
+.box Hinweis
+Die Leistungsmeldung konnte nicht gebucht werden.
+Fehlerdatei: 'U|xtedperr'
+.set TRANS -
+.continue
+!EL011
+.continue FI010
+!EL010
+.set TRANS +
+.box Hinweis
+Die Leistungsmeldung konnte nicht gebucht werden.
+.set TRANS -
+.continue
+!FI010
+.select add 9|id
+.formula M|ytransaktion = H|ytransaktion        ?  F|defined(M|ytransaktion)
+.continue FI008
+!EL008
+.input "allpstart/TRANS.KONFIG.INI"
+.continue EL012 ? _(G|mehr)
+.continue EL013 ? _(_(F|empty(5|ypmkbuchtrans)))
+.formula U|xtcmd = 5|ypmkbuchtrans^id
+.continue FI013
+!EL013
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+!FI013
+.continue FI012
+!EL012
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+!FI012
+.select lock add 9|id
+.formula H|ytransaktion = U|xtcmd   ?  F|defined(H|ytransaktion)
+.rewrite
+.select -
+.formula M|ytransaktion = U|xtcmd   ?  F|defined(M|ytransaktion)
+!FI008
+!FI007
+.continue FI006
+!EL006
+.set TRANS +
+.box Hinweis
+Das in der ProjectSuite Konfiguration im Reiter Buchungstransaktionen eingetragene
+Unterprogramm zur Erstellung der Buchungstransaktion fÅr Leistungsmeldungen
+wurde nicht gefunden.
+
+Buchung ist nicht mîglich.
+.set TRANS -
+.continue
+!FI006
+!FI005
+!FI004
+.continue FI003
+!EL003
+.set TRANS +
+.box Hinweis
+Diese Leistungsmeldung ist bereits gebucht.
+Ein erneutes Buchen ist nicht mehr mîglich.
+.set TRANS -
+.continue
+!FI003
+.continue FI002
+!EL002
+.set TRANS +
+.box Fehler
+Die stundenbasierte Leistungsverrechnung ist nicht aktiviert.
+.set TRANS -
+.continue
+!FI002
+.continue

@@ -1,0 +1,152 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BRIEFMANAGER.BSTART.BV
+.. Datum          : 29.07.2007
+.. Version        : 2007
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Bestimmt aus den Eingabefeldern das Selektionskriterium M|select.
+..                  FÅhrt PlausibilitÑtsprÅfungen fÅr die Eingabefelder aus.
+..
+.. Ablauf         : Button-Vor-EFOP fÅr Feld "isbstart"
+..
+.. Functionality  : Defines parameter M|select from the input fields.
+..                  Performs consitency checks for input field data.
+..
+.. Program flow   : Before button EFOP for field "isbsart"
+..*****************************************************************************
+.type text xgruppe ? _F|defined(U|xgruppe)
+.set trans -
+..
+.input "is/ABASFARBEN.DEF"
+..
+!INITOK
+.input "is/TABLEEREN"
+.continue ERROR1   ? _M|bisach & _M|bsach & _M|bkunde & _M|binteressent & _M|bliefer & _M|bliefersach & _M|bmitarb
+.formula M|select = "$,,"
+.continue ERROR    ? (M|personvon/"(09)*" & _M|personbis/"(09)*" & (_F|empty(M|personvon) & _F|empty(M|personbis))) ; (_M|personvon/"(09)*" & M|personbis/"(09)*" & (M|personvon <> "" & M|personbis <> ""))
+..
+.continue SUPPLIER ? M|bliefer
+.continue SUPPCONT ? M|bliefersach
+.continue CUSTOM   ? M|bkunde
+.continue CUSTAFF  ? M|bsach
+.continue INTERST  ? M|binteressent
+.continue INSTAFF  ? M|bisach
+.continue EMPLOYEE ? M|bmitarb
+..
+!EMPLOYEE
+.formula U|xgruppe = U|xgruppe + "1"
+.continue AREA
+..
+!SNEXT1
+.continue SUPPCONT ? M|bliefersach
+..
+!SNEXT2
+.continue AREA
+..
+!SUPPLIER
+.formula U|xgruppe = U|xgruppe + "1"
+.continue SNEXT1
+..
+!SUPPCONT
+.formula U|xgruppe = U|xgruppe + "." ?  F|length(U|xgruppe) > 0
+.formula U|xgruppe = U|xgruppe + "2"
+.continue SNEXT2
+..
+!NEXT1
+.continue CUSTAFF ? M|bsach
+..
+!NEXT2
+.continue INTERST ? M|binteressent
+..
+!NEXT3
+.continue INSTAFF ? M|bisach
+.continue AREA
+..
+!CUSTOM
+.formula U|xgruppe = U|xgruppe + "1"
+.continue NEXT1
+..
+!CUSTAFF
+.formula U|xgruppe = U|xgruppe + "." ?  F|length(U|xgruppe) > 0
+.formula U|xgruppe = U|xgruppe + "2"
+.continue NEXT2
+..
+!INTERST
+.formula U|xgruppe = U|xgruppe + "." ?  F|length(U|xgruppe) > 0
+.formula U|xgruppe = U|xgruppe + "6"
+.continue NEXT3
+..
+!INSTAFF
+.formula U|xgruppe = U|xgruppe + "." ?  F|length(U|xgruppe) > 0
+.formula U|xgruppe = U|xgruppe + "7"
+.continue AREA
+..
+!AREA
+.formula M|select = M|select + ";@gruppe = " + U|xgruppe
+..
+.continue NORT     ? F|empty(M|personvon) & F|empty(M|personbis)
+.formula M|select = M|select + ";@numsuch=" + M|personvon + "!" + M|personbis
+..
+!NORT: create selection
+.continue PLZ      ? F|empty(M|knort)
+.formula M|select = M|select + ";nort=" + M|knort
+..
+!PLZ
+.continue STAAT    ? F|empty(M|kplz)
+.formula M|select = M|select + ";plz=" + 'M|kplz'
+..
+!STAAT
+.continue VERTRET  ? F|empty(M|kstaat)
+.formula M|select = M|select + ";staat=" + M|kstaat
+..
+!VERTRET
+.continue BETREUER                                       ? F|empty(M|kvertret)
+.continue ERROR2                                         ? M|bliefer ; M|bliefersach ; M|bmitarb
+.formula M|select = M|select + ";vertret=" + M|kvertret ? M|bkunde ; M|bsach ; M|binteressent ; M|bisach
+..
+!BETREUER
+.continue SELECT                                           ? F|empty(M|kbetreuer)
+.continue ERROR3                                           ? M|bmitarb
+.formula M|select = M|select + ";betreuer=" + M|kbetreuer ? M|bkunde ; M|bsach ; M|binteressent ; M|bisach ; M|bliefer ; M|bliefersach
+..
+!SELECT
+.select customer       'M|select' ? M|bkunde ; M|bsach ; M|binteressent ; M|bisach
+.select supplier   'M|select' ? M|bliefer ; M|bliefersach
+.select employee 'M|select' ? M|bmitarb
+.continue END                  ? _G|mehr
+.continue TAB                  ? F|empty(M|kkenn)
+..
+!KENN: auf Bestandteile im Kennzeichenfeld prÅfen
+.continue HOL                  ? F|strindex(H|kenn, M|kkenn) = 0
+..
+!TAB
+.input 'M|tab'             ? _F|empty(M|tab)
+..
+!HOL: Treffer Kunde, Lieferant oder Mitarbeiter
+.select continue
+.continue END       ? _G|mehr
+.continue TAB       ? F|empty(M|kkenn)
+.continue KENN
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR
+.error -message Bitte nach Suchwort oder Identnummer selektieren.
+.end 1
+..
+!ERROR1
+.error -message Bitte einen Personenkreis wÑhlen.
+.end 1
+..
+!ERROR2
+.error -message Es gibt keinen Vertreter fÅr die gewÑhlte Personengruppe.
+.formula M|kvertret = ""
+.end 1
+..
+!ERROR3
+.error -message Es gibt keinen Betreuer fÅr die gewÑhlte Personengruppe.
+.formula M|kbetreuer = ""
+.end 1

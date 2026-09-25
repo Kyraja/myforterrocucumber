@@ -1,0 +1,138 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ERLAUBNIS.EV
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : ba
+.. Funktion       : Behandelt Feld- und Zeilenereignisse im Infosystem Erlaubnisse.
+.. Ablauf         : Zentrales Ereignis-FOP
+..
+.. Functionality  : Handles field and row events of the infosystem Permissions.
+.. Program flow   : Central efop
+..*****************************************************************************
+.set trans -
+..
+..------------------------------- Header --------------------------------------
+.continue PASSWRD ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "passwort"
+.continue STAFFER ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "mitarbeiter"
+.continue SECTION ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "abteilung"
+.continue PERMISS ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "erlaubnis"
+.continue FILENAM ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "kdatname"
+.continue ACTNAME ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "kaktname"
+.continue TIPNAME ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "kkomname"
+.continue COMTYPE ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "nurselkom"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL" & G|evtvar = "tippkom"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL" & G|evtvar = "dateikom"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL" & G|evtvar = "inaktiv"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL" & G|evtvar = "erlinaktiv"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL" & G|evtvar = "kaktverbot"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL" & G|evtvar = "kkomverbot"
+..--------------------------------- Table  -------------------------------------
+.continue SHOWPER ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "terlshow"
+..==============================================================================
+.continue END
+..
+!PASSWRD
+.continue CLRTAB ? F|empty(M|passwort)
+.copy M|inaktiv = M|passwort^inaktiv
+.assign M|mitarbeiter = M|passwort^mitarb
+.assign M|abteilung = M|passwort^abteilung
+.assign M|erlaubnis = ""
+.continue CLRPERM
+..
+!STAFFER
+.continue CLRTAB ? F|empty(M|mitarbeiter)
+.assign M|passwort = ""
+.continue CLRTAB
+..
+!SECTION
+.continue CLRTAB ? F|empty(M|abteilung)
+.assign M|passwort = ""
+.continue CLRTAB
+..
+!PERMISS
+.continue CLRPERM ? F|empty(M|erlaubnis)
+.protection -reset erlinaktiv 0
+.assign M|passwort = ""
+.continue CLRTAB
+..
+!CLRPERM: Clearing name while reference was cleared
+.protection erlinaktiv 0
+.continue CLRTAB
+..
+!FILENAM: Set file number
+.copy M|kdatnr = M|kdatname
+.copy M|datkomda = M|kdatname <> ""
+.continue CLRFILE ? _M|datkomda
+.protection -reset kaktname 0
+.protection -reset nurselkom 0
+.protection -reset kaktverbot 0
+.continue CLRTAB
+..
+!CLRFILE
+.assign M|kaktname = ""
+.protection kaktname 0
+.copy M|kaktverbot = G|FALSE
+.protection kaktverbot 0
+.continue CLRTAB
+..
+!ACTNAME: Set action number
+.copy M|kaktnr = M|kaktname
+.copy M|datkomda = M|kdatname <> ""
+.continue CLRACT ? 'M|kaktname' = ""
+.protection -reset kaktverbot 0
+.protection -reset nurselkom 0
+.continue CLRTAB
+..
+!CLRACT
+.protection nurselkom 0 ? _M|tippkomda & _M|datkomda
+.continue CLRTAB
+..
+!TIPNAME: Set tipp command number
+.copy M|kkomnr = M|kkomname
+.copy M|tippkomda = M|kkomname <> ""
+.continue CLRTIPP ? _M|tippkomda
+.protection -reset kkomverbot 0
+.protection -reset nurselkom 0
+.continue CLRTAB
+..
+!CLRTIPP
+.copy M|kkomverbot = G|FALSE
+.protection kkomverbot 0
+.continue CLRTAB ? M|datkomda
+.copy M|nurselkom = G|FALSE
+.protection nurselkom 0
+.continue CLRTAB
+..
+!COMTYPE: setting the correct command type which have to be shown
+.continue SETON ? M|nurselkom
+.continue CLRTAB
+..
+!SETON: set on showing single command
+.copy M|dateikom = G|TRUE ? _M|dateikom & M|datkomda
+.copy M|tippkom = G|TRUE  ? _M|tippkom  & M|tippkomda
+.continue CLRTAB
+..
+!SHOWPER: Open permissions viewer for this password definition
+.continue ERROR1 ? _F|cmdpermitted(M|firmanr, M|kalknr, G|passw)
+.type integer  xrow
+.type text xerpcomm xerlparams
+.formula U|xrow = M|tdateinr
+.formula U|xrow = M|tdateinr + 1 ? M|tdateinr < M|textnr
+.formula U|xerpcomm = "<(Company)>" + M|tpasswort^id + "<(Cost)>"
+.formula U|xerlparams = "?[pos]=" + 'U|xrow' ? _M|tgetippt
+.formula U|xerlparams = "?[pos]=0:tpk" + 'M|tdateinr' ?  M|tgetippt
+.formula U|xerpcomm = U|xerpcomm + U|xerlparams
+.command -parallel 'U|xerpcomm'
+.continue END
+..
+!CLRTAB: clear table
+.make screen line -- ? M|tzeilen > 0
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1
+.error -message Die Funktion ist nicht erlaubt. Dem Bediener fehlt die Erlaubnis: Firma kalkulieren.
+.end 1

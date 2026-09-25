@@ -1,0 +1,662 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Author         : lei
+..
+.. Generator
+..    loads, checks and generates URL-AP Code
+..
+..assign P|loglevel = 1
+.set trans -
+..
+.type integer xapzeile xfunktionsnummer xlastfunktion
+.type text xeingabefelder xausgabefelder
+.type text xeinsep xaussep
+.type text xselect
+.type integer xdati xgri
+.type text xdatnr xgrnr xselgr xbedret
+.type bool xhatap xbedingt
+.type text xbednext
+.type text xanf xrest xvalue
+.input "is/A150VARS.FOP"
+.type ID87:16 xzuordnung
+.type bool xzuordnungtab xbase64 xquotation xor xand xbase64close xdmsmnumclose
+.type text xbackslash xline
+.assign U|xbackslash = "\"
+..
+.input "DATEI.F"
+.continue AVARTAB
+
+Aufrufschnittstelle des TAB FOPs:
+- Im H Puffer die Vartab/infosystem
+- Im Feld xschemam[] merken wir uns was wir ueber die Vartab/is noch brauchen
+     xschemam[xschemanummer] ist ein Record ueber die Identnummer der vartab mit den Feldern:
+            zieldat, zielname, zieltest, baumtext, zielobj,
+- Im Feld xschemam[]aps[] merken wir uns alle Aufrufparameter zu einem Infosystem
+- Im Feld xschemam[]verdname[] merken wir uns die dynamischen Feldnamen
+
+- Im Feld xschemaz[] die urlapz
+     xschemaz[xschemanummer][xindex] ist eine Map ueber die Identnummer mit den Feldern:
+           xindex  ist eine map indiziert mit buttonfeld
+
+- neu: ich merke mir die Vartabs wie zuvor.
+     Dann die Zuordnungen und der dort eingetragene AP in xschemaz
+     und die Namen der Felder die dazu gehoeren.
+
+Ablauf:
+1. xschemam definieren aus IS oder Vartab ab AVARTAB
+2. xschemaz definieren aus APFeldzuordnungen 87:16 ab APZLOAD
+3. URL Aufrufparameter 87:15 laden ab APLOAD
+4. Tabelle Infosystem fuellen laden ab LOADTAB
+5. Dateien M|movescript M|testscript erzeugen und urlap/* anlgen ab GENGRP
+6. LUA dateien erzeugen ab GENERATE
+
+!AVARTAB
+.println -loglevel 1 VARTAB Start
+.type symtab xschemam
+.type GL8 xschemanummer
+.select group  'M|grliste' 'M|select'
+!NVARTAB
+.continue APZLOAD ? _G|mehr
+.. Eintraege fur die Vartabs: 'H|nummer'
+.assign U|xschemanummer = H|nummer
+.type symtab F|map(U|xschemam, U|xschemanummer)
+.type GL F|rec(F|map(U|xschemam, U|xschemanummer), zieldat)
+.type GL F|rec(F|map(U|xschemam, U|xschemanummer), zielname)
+.type GL F|rec(F|map(U|xschemam, U|xschemanummer), zieltest)
+.type GL F|rec(F|map(U|xschemam, U|xschemanummer), baumtext)
+.type SYMTAB F|rec(F|map(U|xschemam, U|xschemanummer), verdname)
+.type symtab F|rec(F|map(U|xschemam, U|xschemanummer), aps)
+.type VID13 F|rec(F|map(U|xschemam, U|xschemanummer), zielobj)
+.assign F|rec(F|map(U|xschemam, U|xschemanummer), zielobj) = H|id
+.continue MERKVA ? M|isvartab
+.continue MERKIS
+
+!MERKVA
+.assign U|xdati = H|vdn
+.assign U|xgri = H|vgr
+.assign U|xselgr = "ID" + 'U|xdati' + ":" + 'U|xgri'
+.assign U|xdatnr = 'H|vdn'
+.assign U|xdatnr = "00" + U|xdatnr ? +U|xdatnr = 1
+.assign U|xdatnr = "0" + U|xdatnr ? +U|xdatnr = 2
+.assign U|xgrnr = 'H|vgr'
+.assign U|xgrnr = "0" + U|xgrnr ? +U|xgrnr = 1
+.assign F|rec(F|map(U|xschemam, U|xschemanummer), zieldat) = F|formatstr("urlap/d{1}/G{2}.LUA", U|xdatnr, U|xgrnr)
+.assign F|rec(F|map(U|xschemam, U|xschemanummer), zielname) = F|formatstr("V_{1}_{2}", U|xdatnr, U|xgrnr)
+.assign F|rec(F|map(U|xschemam, U|xschemanummer), zieltest) = F|formatstr("tdatgrp -d {1} -g {2} -l", U|xdatnr, U|xgrnr)
+.assign F|rec(F|map(U|xschemam, U|xschemanummer), baumtext) = F|formatstr("{1}:{2}", H|vdntxt, H|vgrtxt)
+.continue BVARTAB
+
+!MERKIS
+.assign F|rec(F|map(U|xschemam, U|xschemanummer), zieldat) = F|formatstr("urlap/{2}/I{1}.LUA", H|nummer, H|arb)
+.assign F|rec(F|map(U|xschemam, U|xschemanummer), zielname) = F|formatstr("I_{2}_{1}", H|nummer, H|arb)
+.assign F|rec(F|map(U|xschemam, U|xschemanummer), zieltest) = F|formatstr("tdatgrp -v {1} -l", H|nummer)
+.assign F|rec(F|map(U|xschemam, U|xschemanummer), baumtext) = 'H|namebspr'
+.continue BVARTAB
+
+!BVARTAB
+.select continue
+.continue NVARTAB
+
+!APZLOAD
+.println -loglevel 1 APZLOAD Start
+.type symtab xschemaz
+.type text xapzselect xindex
+.type bool xisvartab xverdicht xverwendbar
+.copy U|xverwendbar = G|true
+.type text xloaderrors
+.file -screen -tempname U|xloaderrors
+.output new 'U|xloaderrors'
+.assign U|xapzselect = "$,,gruppe==16;@ordnung=aufrktxt,buttonfeld;aufrktxt=="
+.assign U|xapzselect = U|xapzselect + 'M|kontext^id' ? _F|empty(M|kontext)
+.select group "87:16" 'U|xapzselect'
+!OAPZ
+.continue APLOAD ? _G|mehr
+.add H|aufrktxt
+.continue LAPZ ? _G|mehr
+.. context deleted?
+.continue LAPZ ? D|ablagef
+.assign U|xisvartab = (D|dnr = 12)
+.continue LAPZ ? M|isvartab & _U|xisvartab
+.continue LAPZ ? _M|isvartab & U|xisvartab
+.. in Feld eintragen
+.assign U|xschemanummer = D|nummer
+.continue AAPZ ? F|defined(F|map(U|xschemaz, U|xschemanummer))
+.continue NAPZ
+
+!NAPZ
+.. Variable definieren und Test eintragen
+.type symtab F|map(U|xschemaz, U|xschemanummer)
+!AAPZ
+.assign U|xindex = H|buttonfeld + 'F|value(H|aufrtab, "B1")'
+.type symtab F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex)
+.set trans +
+.println -loglevel 1 Eintrag: schemanummer: 'U|xschemanummer' xindex 'U|xindex'
+.set trans -
+.type ID87:16 F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), zuordnung)
+.assign F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), zuordnung) = H|id
+.type bool F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), defekt)
+.type GL20 F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), feldaktzeile)
+.type GL20 F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), zielneulad)
+.type bool F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), verdicht)
+.type GL20 F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), zielaufruf)
+.type GL20 F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), zielindex)
+.continue VERWEND ? H|verwendbar
+.copy U|xverwendbar = G|false
+'H|id': 'H|verwendbarerr'
+!VERWEND
+.assign F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), defekt) = _H|verwendbar
+.assign F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), feldaktzeile) = H|feldaktzeile ? H|feldaktzeiledef
+.assign F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), zielneulad) = H|zielneulad ? H|zielneuladdef
+..  Ein eventuell Eingetragener fester Aufrufparameter gewinnt.
+..  D.h. die dynamische Auswahl ist damit effektiv lahmgelegt.
+.copy U|xverdicht = F|empty(H|effaufruf)
+.assign F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), verdicht) = U|xverdicht
+.assign F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), zielaufruf) H|zielaufruf ? H|zielaufrufdef
+.assign F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), zielindex) H|zielindex ? H|zielindexdef
+.continue VERDL ? U|xverdicht
+.type ID87:15 F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), aufruf)
+.assign F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), aufruf) = H|effaufruf
+.continue LAPZ
+
+!VERDL
+.. map fuer die aps definieren
+.set trans +
+.println -loglevel 1 Dynamisch: 'U|xschemanummer', verdname: 'H|buttonfeld'
+.set trans -
+.continue DOUBLE ? F|defined(F|map(F|rec(F|map(U|xschemam, U|xschemanummer), verdname), H|buttonfeld))
+.type bool F|map(F|rec(F|map(U|xschemam, U|xschemanummer), verdname), H|buttonfeld)
+.assign F|map(F|rec(F|map(U|xschemam, U|xschemanummer), verdname), H|buttonfeld) = H|aufrtab
+!DOUBLE
+.continue LAPZ
+
+!LAPZ
+.select continue
+.continue OAPZ
+
+
+
+!APLOAD
+.println -loglevel 1 APLOAD Start
+..
+.type text xurlselect xapnummer
+.assign U|xurlselect = "$,,gruppe==15;@ordnung=aufrktxt,nummer;aufrktxt=="
+.assign U|xurlselect = U|xurlselect + 'M|kontext^id' ? _F|empty(M|kontext)
+.select group "87:15" 'U|xurlselect'
+!OAP
+.continue LOADTAB ? _G|mehr
+.add H|aufrktxt
+.continue LAP ? _G|mehr
+.. context deleted?
+.continue LAP ? D|ablagef
+.assign U|xisvartab = (D|dnr = 12)
+.continue LAP ? M|isvartab & _U|xisvartab
+.continue LAP ? _M|isvartab & U|xisvartab
+.. in Feld eintragen
+.assign U|xschemanummer = D|nummer
+.continue LAP ? F|empty(F|nextelem(F|map(F|rec(F|map(U|xschemam, U|xschemanummer), verdname), ""), ""))
+.. in aps eintragen
+.println -loglevel 1 aps: 'U|xschemanummer', ID: 'H|id'
+.type bool F|map(F|rec(F|map(U|xschemam, U|xschemanummer), aps), 'H|id')
+.continue LAP
+
+!LAP
+.select continue
+.continue OAP
+
+!LOADTAB
+.set trans +
+.println -loglevel 1 LOADTAB Start: Ausgabeschleife ber xschemanummer und xindex
+.set trans -
+.assign U|xschemanummer = ""
+.continue SCHNUMO
+
+!SCHNUMO
+.assign U|xschemanummer = F|nextelem(F|map(U|xschemam, ""), U|xschemanummer)
+.continue SCHNUME ? F|empty(U|xschemanummer)
+.copy U|xhatap = F|defined(F|map(U|xschemaz, U|xschemanummer))
+.println -loglevel 1 xschemanummer: 'U|xschemanummer' 'U|xhatap'
+.continue LOAD1 ? U|xhatap
+.continue DLOAD1
+
+!LOAD1
+.make screen line +O
+.copy M|hatap = F|defined(F|map(U|xschemaz, U|xschemanummer))
+.assign M|tbaumtext = F|rec(F|map(U|xschemam, U|xschemanummer), baumtext)
+.copy M|tbaumstufe = 1
+.assign M|zielobj = F|rec(F|map(U|xschemam, U|xschemanummer), zielobj)
+.assign U|xfunktionsnummer = 0
+.assign M|funktionsnummer = U|xfunktionsnummer
+.continue DLOAD1
+
+!DLOAD1
+.continue SCHNUMO ? _U|xhatap
+.. erster AP Test eintragen
+.println -loglevel 1 AP Test xschemanummer: 'U|xschemanummer'
+.assign U|xindex = ""
+.continue APZIEO
+
+!APZIEO
+.assign U|xindex = F|nextelem(F|map(F|map(U|xschemaz, U|xschemanummer), ""), U|xindex)
+.continue SCHNUMO ? F|empty(U|xindex)
+.copy U|xverdicht = F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), verdicht)
+.set trans +
+.println -loglevel 1 Feld xschemanummer: 'U|xschemanummer' 'U|xindex' 'U|xverdicht'
+.set trans -
+.assign U|xapnummer = ""
+.continue APNUMO ? U|xverdicht
+.load 3 add F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), aufruf)
+.continue APNUMO ? _G|mehr
+.continue APK
+
+!APNUMO
+.. wegen Schleife kommt man hier auch bei _U|xverdicht hin
+.continue APZIEO ? _U|xverdicht
+.assign U|xapnummer = F|nextelem(F|map(F|rec(F|map(U|xschemam, U|xschemanummer), aps), ""), U|xapnummer)
+.continue APZIEO ? F|empty(U|xapnummer)
+.println -loglevel 1 xschemanummer: 'U|xschemanummer' xindex: 'U|xindex' nummer: 'U|xapnummer'
+.load 3 group "87:15" 'U|xapnummer'
+.continue APK
+
+!APK
+.copy U|xzuordnung = F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), zuordnung)
+.copy U|xzuordnungtab = U|xzuordnung^aufrtab
+.continue APNUMO ? _U|xzuordnung^zieltab & 3|aufrtab
+..
+.. lade AP Kopfteil
+.make screen line +O
+.input "is/GENAPEVENT.GRF"
+.copy M|zielzuordnung = U|xzuordnung
+.copy M|zielzuordnungtab = U|xzuordnungtab
+.copy U|xapzeile = M|aktzeile
+.copy M|tbaumstufe = 2
+.assign U|xfunktionsnummer = U|xfunktionsnummer + 1
+.assign M|funktionsnummer = U|xfunktionsnummer
+.assign M|tbaumstat = "-"
+.assign M|zielfeld = U|xindex >> -1
+.copy M|bedingt = U|xverdicht
+.copy M|defekt = F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), defekt)
+.continue ERR3 ? _F|defined(3|gruppe)
+.assign M|tbaumtext = '3|zielschema^namebspr'
+.copy M|aufruf = 3|id
+.copy M|aufrktxt = 3|aufrktxt
+.copy M|aufrtab = 3|aufrtab
+.assign M|aufrfeld = 3|zielschema^message^token
+.assign M|aufrwert = 3|zielschema^struktur^token
+.assign M|base64 = F|regmatch(3|zielschema^struktur^token, ".*\+BASE64.*")
+.assign M|quotation = F|regmatch(3|zielschema^struktur^token, ".*\+QUOTATION.*")
+.assign M|dmsmnum = F|regmatch(3|zielschema^struktur^token, ".*\+DMSMNUM.*")
+.assign M|or = F|regmatch(3|zielschema^struktur^token, ".*\+OR.*")
+.copy U|xbase64 = M|base64
+.copy U|xquotation = M|quotation
+.copy U|xor = M|or
+.copy U|xand = M|and
+.continue NODESCRIPTION ? _F|regmatch(3|zielschema^struktur^token, ".*\+beschr.*")
+.assign M|aufrwert = "t={} t['D']='" + F|eval("3|zielschema^struktur^beschr") + "'"
+.assign M|aufrwert = M|aufrwert + " t['E']='" + F|eval("3|zielschema^struktur^beschr2") + "'"
+.assign M|aufrwert = M|aufrwert + " t['F']='" + F|eval("3|zielschema^struktur^beschr3") + "'"
+.assign M|aufrwert = M|aufrwert + " t['S']='" + F|eval("3|zielschema^struktur^beschr4") + "'"
+.assign M|aufrwert = M|aufrwert + " t['I']='" + F|eval("3|zielschema^struktur^beschr5") + "'"
+.assign M|aufrwert = M|aufrwert + " t['P']='" + F|eval("3|zielschema^struktur^beschr6") + "'"
+.assign M|aufrwert = M|aufrwert + " t['R']='" + F|eval("3|zielschema^struktur^beschr7") + "'"
+.assign M|aufrwert = M|aufrwert + " t['U']='" + F|eval("3|zielschema^struktur^beschr8") + "'"
+.assign M|aufrwert = M|aufrwert + " t['C']='" + F|eval("3|zielschema^struktur^beschr9") + "'"
+.assign M|aufrwert = M|aufrwert + " t['T']='" + F|eval("3|zielschema^struktur^beschr10") + "'"
+.assign M|aufrwert = M|aufrwert + " t['1']='" + F|eval("3|zielschema^struktur^beschr11") + "'"
+.assign M|aufrwert = M|aufrwert + " t['2']='" + F|eval("3|zielschema^struktur^beschr12") + "'"
+.assign M|aufrwert = M|aufrwert + " t['3']='" + F|eval("3|zielschema^struktur^beschr13") + "'"
+.assign M|aufrwert = M|aufrwert + " t['A']='" + F|eval("3|zielschema^struktur^beschr14") + "'"
+.assign M|aufrwert = M|aufrwert + " t['O']='" + F|eval("3|zielschema^struktur^beschr15") + "'"
+.assign M|aufrwert = M|aufrwert + " t['B']='" + F|eval("3|zielschema^struktur^beschr16") + "'"
+.assign M|aufrwert = M|aufrwert + " t['N']='" + F|eval("3|zielschema^struktur^beschr17") + "'"
+.assign M|aufrwert = M|aufrwert + " t['M']='" + F|eval("3|zielschema^struktur^beschr18") + "'"
+.assign M|aufrwert = M|aufrwert + " t['X']='" + F|eval("3|zielschema^struktur^beschr19") + "'"
+.assign M|aufrwert = M|aufrwert + " t['Y']='" + F|eval("3|zielschema^struktur^beschr20") + "'"
+.assign M|aufrwert = M|aufrwert + " t['L']='" + F|eval("3|zielschema^struktur^beschr21") + "'"
+.assign M|aufrwert = M|aufrwert + " t['W']='" + F|eval("3|zielschema^struktur^beschr22") + "'"
+.assign M|aufrwert = M|aufrwert + " t['G']='" + F|eval("3|zielschema^struktur^beschr23") + "'"
+.assign M|aufrwert = M|aufrwert + " t['Q']='" + F|eval("3|zielschema^struktur^beschr24") + "'"
+.assign M|aufrwert = M|aufrwert + " t['H']='" + F|eval("3|zielschema^struktur^beschr25") + "'"
+.assign M|aufrwert = M|aufrwert + " t['Z']='" + F|eval("3|zielschema^struktur^beschr26") + "'"
+.assign M|aufrwert = M|aufrwert + " t['K']='" + F|eval("3|zielschema^struktur^beschr27") + "'"
+.assign M|aufrwert = M|aufrwert + " t['V']='" + F|eval("3|zielschema^struktur^beschr28") + "'"
+.assign M|aufrwert = M|aufrwert + " t['J']='" + F|eval("3|zielschema^struktur^beschr29") + "'"
+.assign M|aufrwert = M|aufrwert + " t['9']='" + F|eval("3|zielschema^struktur^beschr30") + "'"
+.assign M|aufrwert = M|aufrwert + " t['8']='" + F|eval("3|zielschema^struktur^beschr31") + "'"
+.assign M|aufrwert = M|aufrwert + " t['7']='" + F|eval("3|zielschema^struktur^beschr32") + "'"
+!NODESCRIPTION
+!ERR3
+.assign U|xausgabefelder = U|xausgabefelder + U|xaussep + M|zielfeld
+.assign U|xaussep = ","
+.continue ROWO
+
+!ROWO
+.continue APNUMO ? _F|defined(3|gruppe)
+.load 3 line
+.continue APNUMO ? _G|mehr
+.continue ONEROW
+
+!ONEROW
+.make screen line +O
+.assign M|tbaumtext = F|rec(F|map(U|xschemam, U|xschemanummer), baumtext) + ":" + 3|aufrwert
+.copy M|tbaumstufe = 3
+.assign M|funktionsnummer = U|xfunktionsnummer
+.assign M|tbaumstat = "="
+.copy M|aufruf = 3|id
+.copy M|zielvar = 3|zielvar
+.copy M|aufrfeld = 3|aufrwert
+.copy M|aufrpflicht = 3|aufrpflicht
+.copy M|base64 = U|xbase64
+.copy M|quotation = U|xquotation
+.copy M|or = U|xor & 3|zn <> 1
+.copy M|and = U|xand & 3|zn <> 1
+.continue KOPF ? 3|aufrwtyp = U|xkopfvariable
+.continue TABELLE ? 3|aufrwtyp = U|xtabellenvariable
+.continue KONST ? 3|aufrwtyp = U|xkonstant
+.continue ERRTYP
+
+!KOPF
+.assign M|aufrtab = G|false
+.continue FELDZUG
+!TABELLE
+.assign M|aufrtab = G|true
+.continue FELDZUG
+
+!FELDZUG
+.. Bestimme ob es das Feld gibt und die Art, gegebenfalls unter abschneiden von ^id
+..assign U|xvalue = "F|tovalue("+'G|dblquote'+"(0,0,0)"+G|dblquote+","+G|dblquote+U|xselgr+G|dblquote+")^"
+..assign M|aufrart = F|typeof(F|eval(U|xvalue + M|aufrfeld))
+.assign U|xanf = M|aufrfeld << "^"
+.assign U|xrest = M|aufrfeld >> "^"
+.assign M|aufrfeld = U|xanf ? _F|empty(U|xanf)
+.assign M|aufrpfad = U|xrest
+.assign U|xeingabefelder = U|xeingabefelder + U|xeinsep + M|aufrfeld
+.assign U|xeinsep = ","
+.continue ROWO
+
+!KONST
+.copy M|aufrfeld = ""
+.copy M|aufrwert = 3|aufrwert
+.continue ROWO
+
+!SCHNUME
+.input "is/GENAPEVENT.GRF"
+.output terminal
+.continue ERRDEF ? _U|xverwendbar
+.continue GENGRP
+
+!GENGRP
+.type text xgentmp
+.set trans +
+.println -loglevel 1 GENGRP Start: Generatorschleife fr leere urlap-Dateien
+.set trans -
+.assign U|xschemanummer = ""
+!SLO1
+.assign U|xschemanummer = F|nextelem(F|map(U|xschemam, ""), U|xschemanummer)
+.continue SLE1 ? F|empty(U|xschemanummer)
+.file -screen -tempname U|xgentmp -suffix 'F|rec(F|map(U|xschemam, U|xschemanummer), zieldat)'
+.output new 'U|xgentmp'
+.continue SLO1
+
+!SLE1
+.set trans +
+.println -loglevel 1 Generatorschleife movescript
+.set trans -
+.file -screen -tempname M|movescript
+.output new 'M|movescript'
+.assign U|xschemanummer = ""
+!SLO2
+.assign U|xschemanummer = F|nextelem(F|map(U|xschemam, ""), U|xschemanummer)
+.continue SLE2 ? F|empty(U|xschemanummer)
+'F|rec(F|map(U|xschemam, U|xschemanummer), zieldat)'
+.continue SLO2
+
+!SLE2
+.set trans +
+.println -loglevel 1 Generatorschleife testscript
+.set trans -
+.file -screen -tempname M|testscript
+.output new 'M|testscript'
+.assign U|xschemanummer = ""
+!SLO3
+.assign U|xschemanummer = F|nextelem(F|map(U|xschemam, ""), U|xschemanummer)
+.continue SLE3 ? F|empty(U|xschemanummer)
+.file -screen -tempname U|xgentmp -suffix 'F|rec(F|map(U|xschemam, U|xschemanummer), zieldat)'
+'F|formatstr("{1} {2} > {2}.out", F|rec(F|map(U|xschemam, U|xschemanummer), zieltest), U|xgentmp)'
+.continue SLO3
+
+!SLE3
+.continue GENERATE
+
+!GENERATE
+.println -loglevel 1 GENERATE Start: Lua Dateien generieren
+.type symtab xbedingte
+.type text xbedingtgruppe xbedapnum xelseif
+.type text xendetext xurlsep xurlsep0 xurlsep1
+.type text xtestcall
+.type text xtmpdir xcall
+.type bool xfunktionausgeben
+.type symtab xfunktionfertig
+.set trans +
+.println -loglevel 1 Generatorschleife LUA:
+.set trans -
+.select screen head
+!ROWS
+.select screen line
+.continue EMV ? _G|mehr
+.continue 'F|expr("L" + F|tostring(tbaumstufe))'
+.continue FATAL
+
+!L1
+.continue ROWS ? _M|hatap
+.set trans +
+.println -loglevel 1 Generatorschleife LUA: 'M|tbaumtext' 'M|zielobj'
+.set trans -
+.continue OHNEDB ? F|empty(U|xendetext)
+?    .. ")") ? U|xbase64close & U|xdmsmnumclose
+?    ) ? U|xbase64close & _U|xdmsmnumclose
+.formula U|xbase64close = G|false
+'U|xendetext                                                                          '
+.assign U|xendetext = ""
+.assign U|xbedret = "OHNEDB"
+.continue OBEDAUS
+
+!OHNEDB
+.. nun sind die bedingten ausgegeben und die naechste Gruppe ist dran.
+.assign U|xfunktionfertig = ""
+.assign U|xbedingte = ""
+.assign U|xschemanummer = M|zielobj^nummer
+.assign U|xbedingtgruppe = ""
+.println -loglevel 2 L1 'M|aktzeile': 'M|tbaumtext'
+.. merken fuer Aufruf am Ende:
+.file -screen -tempname U|xgentmp -suffix 'F|rec(F|map(U|xschemam, U|xschemanummer), zieldat)'
+.. Neue Tempdatei oeffnen
+.output new 'U|xgentmp'
+-- 'F|rec(F|map(U|xschemam, U|xschemanummer), zieldat)'
+
+.continue ROWS
+
+!L2
+.continue LEEREX ? F|empty(U|xendetext)
+?    .. ")") ? U|xbase64close & U|xdmsmnumclose
+?    ) ? U|xbase64close & _U|xdmsmnumclose
+.formula U|xbase64close = G|false
+'U|xendetext                                                                          '
+
+!LEEREX
+.assign U|xendetext = ""
+.println -loglevel 2 L2 'M|aktzeile': 'M|tbaumtext'
+.assign U|xfunktionausgeben = G|false
+.continue NFUNKAUS ? F|defined(F|map(xfunktionfertig, 'M|aufruf^id'))
+.type bool F|map(xfunktionfertig, 'M|aufruf^id')
+.assign U|xfunktionausgeben = G|true
+!NFUNKAUS
+.assign U|xendetext = ""
+.assign U|xendetext = "end;" ? U|xfunktionausgeben
+.assign U|xendetext = U|xendetext + ";add_load_function("+'M|funktionsnummer'+", "+G|dblquote+"AP"+'M|aufruf^nummer'+G|dblquote+")"
+.assign U|xindex = M|zielfeld + 'M|zielzuordnungtabz'
+.continue BEDING ? M|bedingt
+.assign U|xendetext = U|xendetext + ";add_output_field("+'M|funktionsnummer'+", 0, "+'M|zielzuordnungtabz'+", "+G|dblquote+'M|zielfeld'+G|dblquote+")"
+.assign U|xendetext = U|xendetext + ";add_input_row("+'M|funktionsnummer'+", "+'M|zielzuordnungtabz'+", "+G|dblquote+'F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), feldaktzeile)'+G|dblquote+")" ? _F|empty(F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), feldaktzeile))
+.assign U|xendetext = U|xendetext + ";add_input_trigger("+'M|funktionsnummer'+", "+'M|zielzuordnungtabz'+", "+G|dblquote+'F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), zielneulad)'+G|dblquote+")" ? _F|empty(F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), zielneulad))
+.continue EBEDING
+
+!BEDING
+.println -loglevel 2 Bedingt: 'F|rec(F|map(U|xschemam, U|xschemanummer), zielname)' 'M|zielfeld'
+.continue BED2 ? F|defined(F|map(U|xbedingte, U|xindex))
+.type symtab F|map(U|xbedingte, U|xindex)
+.type text F|rec(F|map(U|xbedingte, U|xindex), name)
+.assign F|rec(F|map(U|xbedingte, U|xindex), name) = M|zielfeld
+.type B1 F|rec(F|map(U|xbedingte, U|xindex), tab)
+.assign F|rec(F|map(U|xbedingte, U|xindex), tab) = M|zielzuordnungtab
+.type symtab F|rec(F|map(U|xbedingte, U|xindex), aps)
+!BED2
+.type integer F|map(F|rec(F|map(U|xbedingte, U|xindex), aps), M|aufruf^nummerb) ? _F|defined(F|map(F|rec(F|map(U|xbedingte, U|xindex), aps), M|aufruf^nummerb))
+.assign F|map(F|rec(F|map(U|xbedingte, U|xindex), aps), M|aufruf^nummerb) = M|funktionsnummer
+.assign U|xbedingtgruppe = F|rec(F|map(U|xschemam, U|xschemanummer), zielname)
+.assign U|xendetext = U|xendetext + ";add_output_field("+'M|funktionsnummer'+", 1, "+'M|zielzuordnungtabz'+", "+G|dblquote+'M|zielfeld'+G|dblquote+")"
+.assign U|xendetext = U|xendetext + ";add_input_row("+'M|funktionsnummer'+", "+'M|zielzuordnungtabz'+", "+G|dblquote+'F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), feldaktzeile)'+G|dblquote+")" ? _F|empty(F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xindex), feldaktzeile))
+.continue EBEDING
+
+!EBEDING
+.assign U|xlastfunktion = M|funktionsnummer
+?-- function AP'M|aufruf^nummer'('M|eingabefelder')? _U|xfunktionausgeben
+.continue HFUNKAUS ? _U|xfunktionausgeben
+.continue URLSEP0 ? 'M|aufrwert' / "&*"
+.continue URLSEP0 ? 'M|aufrwert' / "\?*"
+.assign U|xurlsep0 = "/" ? _M|dmsmnum
+.assign U|xurlsep0 = "" ? M|dmsmnum
+.assign U|xurlsep1 = "?"
+.assign U|xurlsep1 = "&q=" + G|dblquote + " .. abas_base64_encode(" + G|dblquote ? M|base64
+.assign U|xurlsep1 = xurlsep1 + "[SUBSIDIARY]=" + U|xbackslash + G|dblquote + G|dblquote + " .. abas_getenv(" + G|dblquote + "DMSMNUM" + G|dblquote + ") .. " + G|dblquote + U|xbackslash + G|dblquote + " AND (" ? M|dmsmnum
+.copy U|xbase64close = M|base64
+.copy U|xdmsmnumclose = M|dmsmnum
+.continue FFUNKAUS
+!URLSEP0
+.assign U|xurlsep0 = ""
+.assign U|xurlsep1 = "&"
+.assign U|xurlsep1 = "" ? 'M|aufrwert' / "*&"
+!FFUNKAUS
+function AP'M|aufruf^nummer'('M|eingabefelder')
+?    'M|aufrwert' ? F|regmatch(M|aufrfeld, "DMS_DOCUWARE_URL")
+?    return abas_getenv("'M|aufrfeld'") .. "'U|xurlsep0'" .. "'M|aufrwert'" ? _F|regmatch(M|aufrfeld, "DMS_DOCUWARE_URL")
+?    return abas_getenv("'M|aufrfeld'") .. "'U|xurlsep0'" .. t[abas_get_bespr()] ? F|regmatch(M|aufrfeld, "DMS_DOCUWARE_URL")
+!HFUNKAUS
+.assign U|xurlsep = U|xurlsep1
+.continue ROWS
+
+!L3
+.println -loglevel 3 L3 'M|aktzeile': 'M|tbaumtext'
+.continue LFUNKAUS ? _U|xfunktionausgeben
+.assign U|xline = ".. " + G|dblquote + " OR " + G|dblquote + " .. " ? M|or
+.assign U|xline = ".. " + G|dblquote + " AND " + G|dblquote + " .. " ? M|and
+.assign U|xline = ".. " ? _M|or & _M|and
+.assign U|xurlsep = "" ? M|or ; M|and
+.assign U|xline = U|xline + G|dblquote + U|xurlsep + M|zielvar + "=" + M|aufrwert + G|dblquote ? F|empty(M|aufrfeld)
+.assign U|xline = U|xline + G|dblquote + U|xurlsep + M|zielvar + "=" + G|dblquote + " .. abas_url_encode(" + M|aufrfeld + ")" ? _F|empty(M|aufrfeld) & _M|quotation & _M|base64
+.assign U|xline = U|xline + G|dblquote + U|xurlsep + M|zielvar + "=" + G|dblquote + " .. " + M|aufrfeld + " .. " + G|dblquote ? _F|empty(M|aufrfeld) & _M|quotation & M|base64
+.assign U|xline = U|xline + G|dblquote + U|xurlsep + M|zielvar + "=" + U|xbackslash + G|dblquote + G|dblquote + " .. abas_url_encode(" + M|aufrfeld + ") " + G|dblquote + U|xbackslash + G|dblquote ? _F|empty(M|aufrfeld) & M|quotation & _M|base64
+.assign U|xline = U|xline + G|dblquote + U|xurlsep + M|zielvar + "=" + U|xbackslash + G|dblquote + G|dblquote + " .. " + M|aufrfeld + " .. " + G|dblquote + U|xbackslash + G|dblquote + G|dblquote ? _F|empty(M|aufrfeld) & M|quotation & M|base64
+    'U|xline'
+!LFUNKAUS
+.assign U|xurlsep = "&"
+.continue ROWS ? F|empty(M|aufrfeld)
+.assign U|xendetext = U|xendetext + ";add_input_field("+'M|funktionsnummer'+", "+'M|aufrtabz'+", "+G|dblquote+'M|aufrfeld'+G|dblquote+")" ? F|empty(M|aufrpfad)
+.assign U|xendetext = U|xendetext + ";add_input_field("+'M|funktionsnummer'+", "+'M|aufrtabz'+", "+G|dblquote+'M|aufrfeld'+G|dblquote+", "+G|dblquote+'M|aufrpfad'+G|dblquote+")" ? _F|empty(M|aufrpfad)
+.assign U|xendetext = U|xendetext + ";add_input_required("+'M|funktionsnummer'+", "+'M|aufrtabz'+", "+G|dblquote+'M|aufrfeld'+G|dblquote+")" ? M|aufrpflicht
+.continue ROWS
+
+!EMV
+?    .. ")") ? U|xbase64close & U|xdmsmnumclose
+?    ) ? U|xbase64close & _U|xdmsmnumclose
+.formula U|xbase64close = G|false
+'U|xendetext                                                                          '
+
+.assign U|xbedret = "EBEDAUS"
+.continue OBEDAUS
+
+!OBEDAUS
+.continue 'U|xbedret' ? F|empty(U|xbedingtgruppe)
+.assign U|xbednext = ""
+!BEDOUT
+.assign U|xbednext = F|nextelem(F|map(U|xbedingte, ""), U|xbednext)
+.continue BEDDONE ? F|empty(U|xbednext)
+.set trans +
+.println -loglevel 1 Bedingte aus: 'U|xbednext'
+
+-- Bedingungsfunktionen zu 'U|xbednext'
+
+.set trans -
+function AP'U|xbedingtgruppe'_'F|rec(F|map(U|xbedingte, U|xbednext), name)'(aufruf)
+.assign U|xbedapnum = ""
+.assign U|xelseif = "if"
+!OBEDAPS
+.assign U|xbedapnum = F|nextelem(F|map(F|rec(F|map(U|xbedingte, U|xbednext), aps), ""), U|xbedapnum)
+.continue UBEDAPS ? F|empty(U|xbedapnum)
+    'U|xelseif' aufruf == " 'U|xbedapnum'" then
+        return "'F|map(F|rec(F|map(U|xbedingte, U|xbednext), aps), U|xbedapnum)'"
+.assign U|xelseif = "elseif"
+.continue OBEDAPS
+!UBEDAPS
+    else
+        return "0"
+    end
+end
+
+add_load_function('F|expr(U|xlastfunktion+1)', "AP'U|xbedingtgruppe'_'F|rec(F|map(U|xbedingte, U|xbednext), name)'")
+add_output_field('F|expr(U|xlastfunktion+1)', 0, 'F|rec(F|map(U|xbedingte, U|xbednext), tab)', "'F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xbednext), zielindex)'")
+add_input_field('F|expr(U|xlastfunktion+1)', 'F|rec(F|map(U|xbedingte, U|xbednext), tab)', "'F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xbednext), zielaufruf)'", "nummer")
+
+add_load_function('F|expr(U|xlastfunktion+2)', "dummy_'F|rec(F|map(U|xbedingte, U|xbednext), name)'")
+add_output_field('F|expr(U|xlastfunktion+2)', 2, 'F|rec(F|map(U|xbedingte, U|xbednext), tab)', "'F|rec(F|map(U|xbedingte, U|xbednext), name)'")
+?add_input_trigger('F|expr(U|xlastfunktion+2)', 'F|rec(F|map(U|xbedingte, U|xbednext), tab)', "'F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xbednext), zielneulad)'") ? _F|empty(F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xbednext), zielneulad))
+add_input_field('F|expr(U|xlastfunktion+2)', 'F|rec(F|map(U|xbedingte, U|xbednext), tab)', "'F|rec(F|map(F|map(U|xschemaz, U|xschemanummer), U|xbednext), zielindex)'")
+.assign U|xlastfunktion = U|xlastfunktion + 2
+
+.continue BEDOUT
+!BEDDONE
+
+.assign U|xbedingte = ""
+.assign U|xbedingtgruppe = ""
+.continue 'U|xbedret'
+
+!EBEDAUS
+.set singleuser +-
+.continue SKIPTEST ? G|mehr
+.println -loglevel 1 Teste LUA:
+.assign U|xtestcall = F|formatstr("sh {1} > {2}.out 2> {2}.ERR", M|testscript, M|testscript)
+.system 'U|xtestcall' background
+.continue ERRTEST ? _G|mehr
+.continue ERRTEST ? F|filenotempty(F|expr(M|testscript + ".ERR"))
+.set trans +
+.println -loglevel 1 Test liefert: 'G|mehr': 'M|testscript'
+.set trans -
+!SKIPTEST
+.println -loglevel 1 Move LUA:
+.assign U|xtmpdir = 'M|movescript' << "/M.MOVESCRIPT"
+.assign U|xcall = F|formatstr("xargs s3cpio -I {2} -O abasbase/dgen.dat -KL < {1} > {1}.out 2> {1}.err", M|movescript, U|xtmpdir)
+.system 'U|xcall' background
+.error Aktivieren liefert Fehler siehe: 'M|movescript'.err ? _G|mehr
+.end 1 ? _G|mehr
+.println -loglevel 1 Done
+.continue
+!END
+.continue
+
+
+!FATAL
+.error Wert von Baumstufe in Zeile 'M|aktzeile' falsch: 'M|tbaumstufe'
+.end 1
+
+!ERRTEST
+.assign M|fehlerprotokoll = M|testscript + ".ERR"
+.error -field M|fehlerprotokoll -message Test liefert Fehler, siehe Freitextfeld "Fehler".
+.end 1
+
+!ERRDEF
+.assign M|fehlerprotokoll = U|xloaderrors
+.error -field M|fehlerprotokoll -message Es gibt nicht verwendbare Zuordnungen, siehe Freitextfeld "Fehler".
+.end 1
+
+!ERRTYP
+.error -line 'M|aktzeile' -field M|aufrfeld -message Im Aufrufparameter: 'M|aufruf', unbekannter Herkunftstyp 'G|dblquote''3|aufrwtyp''G|dblquote' von Feld 'M|zielvar'.
+.end 1

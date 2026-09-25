@@ -1,0 +1,280 @@
+..!interpreter english translate noabbrev
+.continue START ? F|defined(U|xbaeob)
+..*****************************************************************************
+.. FOP-Name       : CASHMGMT.SELECT.PS.COMMON
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Selektion und Ausgabe von Ein- und Verkaufspositionen im Rahmen der Liquiditaetsplanung
+.. Functionality  :
+.. include fb/CASHMGMT.SELECT.WRITE
+.. include fb/CASHMGMT.SELECT.PS.VALUES
+.. include fb/CASHMGMT.ZTERM
+.. include fb/CASHMGMT.DUEDATE.WRKDAY
+.. include fb/CASHMGMT.DATE2TAXPERIODDUEDATE
+..*****************************************************************************
+..
+.set trans -
+..
+.type bool xbbillpl ? _F|defined(U|xbbillpl)
+.type bool xbaeob   ? _F|defined(U|xbaeob)
+.. down payment
+.type bool xbdownp  ? _F|defined(U|xbdownp)
+.type GD   xdarpos  ? _F|defined(U|xdarpos)
+.type GD   xdtmp1   ? _F|defined(U|xdtmp1)
+.type bool xbnoresetdiscrate ? _F|defined(U|xbnoresetdiscrate)
+..
+..*****************************************************************************
+!START
+..*****************************************************************************
+.. Variablen fÅr erweiterung um Schlu·rechnungstermin zu berÅcksichtigen
+.type text xtsel    ? _F|defined(U|xtsel)
+.type GD xdfinvoice ? _F|defined(U|xdfinvoice)
+.type P186 xpfaktplan ? _F|defined(U|xpfaktplan)
+..
+.. Variablen initialisieren
+.assign U|xpfaktplan = ""
+.assign U|xdfinvoice = ""
+..
+.copy U|xbaeob = 0|aeob
+.. due date manually set? (Faelligkeit manuell fixiert?)
+.copy U|xbmterm = 0|mterm
+.copy U|xdhterm = 0|vom + U|xikarenztage
+.copy U|xdhterm = 0|vdat  ? 0|typ = G|reko & '0|vdat' <> ""
+.copy U|xddocdate = U|xdhterm
+.copy U|xddocdate = G|datum ? 'U|xddocdate' = "" ; (U|xddocdate < G|datum & U|xbredataktdat)
+.copy U|xddocdate = G|datum ? 'U|xddocdate' = ""
+.copy U|xdhterm = 0|tterm ? 0|typ = G|reko & '0|tterm' <> "" & 0|mterm
+.copy U|xdhterm = G|datum ? 'U|xdhterm' = "" ; (U|xdhterm < G|datum & U|xbredataktdat)
+..
+.copy U|xrexratefixed = 0|kurs
+.copy U|xbexratefixed = 0|kursfix
+.copy U|xpzbed = 0|zbed
+.copy U|xpzbedschl = 0|zbedschl
+.copy U|xpzbedvert = 0|zbedvert
+.continue RLOOP ? 0|typ <> G|reko ; _F|empty(U|xpzbedvert)
+..
+.formula   U|xeinout = "(OutgoingPayment)"
+.formula   U|xeinout = "(IncomingPayment)" ? (0|sumbrutto >= 0 & U|xepurchsales = "(Sales)") ; (0|sumbrutto < 0 & U|xepurchsales = "(Purchasing)")
+..
+.. invoice (not yet posted): compute expected payment date from due date in header
+.copy U|xddate = U|xdhterm
+.copy U|xdvaldate = U|xddocdate
+.input "fb/CASHMGMT.ZTERM"
+.. Berechnetes xdzterm in xddate umkopieren
+.copy U|xddate = U|xdzterm
+.input "fb/CASHMGMT.DUEDATE.WRKDAY"
+.copy U|xdhterm = U|xddate
+.continue RLOOP
+..
+..*****************************************************************************
+!RLOOP
+..*****************************************************************************
+.. 0 is type Auftrag <(Sales)> <(Empty)>, (SalesOrder)
+.load 0 line
+.continue END ? _G|mehr
+.continue RLOOP ? 0|typ=G|supos ; 0|typ=G|stpos ; 0|typ=G|espos ; 0|typ=G|zspos ; 0|typ=G|sipos ; 0|alternativpos
+.continue ROK ? F|empty(U|xpdocument)
+.continue ROK ? U|xpdocument^gruppe <> 2
+.continue ROK ? U|xpdocument^id = 0|id
+.continue RLOOP
+..
+!ROK
+.copy U|xpzbed = 0|zbed
+.copy U|xpzbedschl = 0|zbedschl
+.copy U|xpzbedvert = 0|zbedvert
+.copy U|xbdownp = 0|typ=G|zupos & F|equals(0|artikel^kategorie, "(Downpayment)")
+.copy U|xbbillpl = _F|empty(0|fktaplanpos) & U|xbdownp
+.input "fb/CASHMGMT.SELECT.PS.VALUES"
+.continue RLOOP ? U|xrpwert = 0
+..
+.formula   U|xeinout = "(OutgoingPayment)"
+.formula   U|xeinout = "(IncomingPayment)" ? (U|xrpwert >= 0 & U|xepurchsales = "(Sales)") ; (U|xrpwert < 0 & U|xepurchsales = "(Purchasing)")
+..
+.copy U|xcategory = 0|konto^lqkategorie ? U|xbevalcategories
+.copy U|xdtterm = 0|tterm
+..
+.. Fakturaplan ermitteln Auftrag ->Kopf   Lieferschein ->Kopf des Auftrags (okopf)
+.. Rechnung wird Åber Valutadatum gesteuert, daher keine BerÅcksichtigung notwendig
+.copy U|xpfaktplan = 0|kopf^fktaplan ?  0|kotyp  <> G|liko
+.copy U|xpfaktplan = 0|okopf^fktaplan ?  0|kotyp  =  G|liko
+.. Alle Zeilen, die nicht vom Typ Anzahlungen sind
+.continue NOFAKT ? U|xbdownp
+.continue NOFAKT ? F|empty(U|xpfaktplan)
+..
+.formula U|xtsel = "$,,kopf==" + U|xpfaktplan^id + ";reart==(Invoice);planredat<>`"
+.load 5 nolock billingplan 'U|xtsel'
+..
+!FAKTLIN
+.continue FAKTCHK ? _G|mehr
+.copy U|xdfinvoice = 5|planredat ? F|empty(U|xdfinvoice) ; U|xdfinvoice < 5|planredat
+.load 5 nolock billingplan
+.continue FAKTLIN
+..
+!FAKTCHK
+.continue NOFAKT ? F|empty(U|xdfinvoice)
+.copy U|xdtterm = U|xdfinvoice
+..
+!NOFAKT
+.. TODO: ACHTUNG! tterm kann leer erscheinen, ist es aber nicht, weil es den Wert "GD_Abruf" hat (++-1). F|empty liefert dann FALSE. Deshalb nicht so pruefen!
+.copy U|xdtterm = 0|oterm ? 'U|xdtterm' = "" & _F|empty(0|oterm) & F|equals(0|typ, "(NeutralItem)")
+.copy U|xdtterm = 0|kovom ? 'U|xdtterm' = ""
+.. Karenztage aufaddieren
+.formula   U|xdtterm = U|xdtterm + U|xikarenztage ? 'U|xdtterm' <> ""
+.copy U|xdtterm = G|datum ? 'U|xdtterm' = "" ; (U|xdtterm < G|datum & U|xbredataktdat)
+.copy U|xdtterm = U|xdarpos ? 0|typ = G|DELPOS ; 0|typ = G|PRPOS
+.copy U|xdarpos = U|xdtterm ? 0|typ = G|ARPOS
+.copy U|xddate = F|condexpr(0|kotyp = G|reko, U|xdhterm, U|xdtterm)
+.copy U|xdvaldate = F|condexpr(0|kotyp = G|reko, U|xddocdate, U|xdtterm)
+.. downpayment item with individual due date set (oterm)?
+.continue CHKDIST ? _U|xbdownp
+.continue BILLPLA ?  U|xbbillpl & 0|kotyp <> G|reko
+.continue CHKDIST ?  F|empty(0|oterm)
+.continue LEGACY
+..
+!BILLPLA: billing plan available
+.. billing plan item without already an invoice (flag set in fb/CASHMGMT.SELECT.PS.VALUES)?
+.continue PLANNED ? U|xbplanneditem
+.copy U|xddate = 0|fktaplanpos^verrterm
+.. no payment terms if a fixed date is used
+.formula U|xpzbed = ""
+.formula U|xpzbedschl = ""
+.formula U|xpzbedvert = ""
+.copy U|xdvaldate = U|xddate
+.input "fb/CASHMGMT.DUEDATE.WRKDAY"
+.continue NDREKO
+..
+!PLANNED: billing plan item without already an invoice
+.copy U|xddate = 0|fktaplanpos^planredat
+.copy U|xdvaldate = U|xddate
+.copy U|xpzbed = 0|fktaplanpos^zbed
+.copy U|xpzbedschl = 0|fktaplanpos^zbedschl
+.formula U|xpzbedvert = ""
+.continue NDIST
+..
+!LEGACY: Legacy temporary solution using "oterm" variable
+.copy U|xddate = 0|oterm
+.copy U|xdvaldate = 0|oterm
+.input "fb/CASHMGMT.DUEDATE.WRKDAY"
+.continue CHKDIST
+..
+!CHKDIST
+.continue NDIST ? F|empty(U|xpzbedvert)
+..
+.load 8 add U|xpzbedvert
+!DROW
+.load 8 line
+.continue TAX ? _G|mehr
+.copy U|xpzbed = 8|zbed
+.copy U|xpzbedschl = 8|zbedschl
+.input "fb/CASHMGMT.ZTERM"
+.. Berechnetes xdzterm in xddate umkopieren
+.copy U|xddate = U|xdzterm
+.input "fb/CASHMGMT.DUEDATE.WRKDAY"
+.formula   U|xttype  = "(OutstandingInvoices)"
+.copy U|xrvalue = U|xroutinv * (8|proz / 100)
+.copy U|xrdiscount = (U|xrvalue * U|xrdiscrate / 100)
+.copy U|xrvalue = U|xrvalue - U|xrdiscount
+.input "fb/CASHMGMT.SELECT.WRITE"
+.continue DROW ? U|xroutdel = 0
+.formula   U|xttype  = "(OutstandingDeliveries)"
+.copy U|xrvalue = U|xroutdel * (8|proz / 100)
+.copy U|xrdiscount = (U|xrvalue * U|xrdiscrate / 100)
+.copy U|xrvalue = U|xrvalue - U|xrdiscount
+.input "fb/CASHMGMT.SELECT.WRITE"
+.continue DROW
+..
+..*****************************************************************************
+!NDIST Invoice and Downpayment
+..*****************************************************************************
+.. no distributor and invoice -> due date already computed in header
+.continue NDREKO ? 0|kotyp = G|reko
+.input "fb/CASHMGMT.ZTERM"
+.. Berechnetes xdzterm in xddate umkopieren
+.copy U|xddate = U|xdzterm
+.input "fb/CASHMGMT.DUEDATE.WRKDAY"
+..
+..*****************************************************************************
+!NDREKO: Downpayment.
+..*****************************************************************************
+.formula   U|xttype  = "(OutstandingInvoices)"
+.copy U|xrdiscount = (U|xroutinv * U|xrdiscrate / 100)
+.copy U|xrvalue = U|xroutinv - U|xrdiscount
+.copy U|xdtmp1 = U|xdvaldate
+.copy U|xdvaldate = 0|fktaplanpos^verrterm ? _U|xbplanneditem
+.copy U|xpzbed = 0|fktaplan^evvorgang^zbed ? _U|xbplanneditem
+.copy U|xbnoresetdiscrate = G|True
+.input "fb/CASHMGMT.ZTERM"
+.copy U|xbnoresetdiscrate = G|False
+.copy U|xddate = U|xdzterm ? _U|xbplanneditem & _F|empty(U|xpzbed)
+.input "fb/CASHMGMT.DUEDATE.WRKDAY"
+.input "fb/CASHMGMT.SELECT.WRITE"
+.copy U|xdvaldate = U|xdtmp1
+.continue N2 ? _U|xbplanneditem
+.. ***************** planned item **************************
+.copy U|xrvalue = -U|xrvalue ? F|equals(U|xepurchsales, "(Sales)")
+.copy U|xdtmp1 = U|xdvaldate
+.copy U|xddate = 0|fktaplanpos^verrterm
+.copy U|xdvaldate = 0|fktaplanpos^verrterm
+.copy U|xpzbed = 0|fktaplan^evvorgang^zbed
+.input "fb/CASHMGMT.ZTERM"
+.formula U|xpzbedschl = ""
+.formula U|xpzbedvert = ""
+.copy U|xddate = U|xdzterm
+.input "fb/CASHMGMT.DUEDATE.WRKDAY"
+.input "fb/CASHMGMT.SELECT.WRITE"
+.copy U|xdvaldate = U|xdtmp1
+.continue N2
+!N2
+.continue TAX ? U|xroutdel = 0
+.formula   U|xttype  = "(OutstandingDeliveries)"
+.copy U|xrdiscount = (U|xroutdel * U|xrdiscrate / 100)
+.copy U|xrvalue = U|xroutdel - U|xrdiscount
+.input "fb/CASHMGMT.SELECT.WRITE"
+.continue TAX ? _U|xbplanneditem
+.copy U|xrvalue = -U|xrvalue ? F|equals(U|xepurchsales, "(Sales)")
+.copy U|xddate = 0|fktaplanpos^verrterm
+.. no payment terms if a fixed date is used
+.formula U|xpzbed = ""
+.formula U|xpzbedschl = ""
+.formula U|xpzbedvert = ""
+.input "fb/CASHMGMT.DUEDATE.WRKDAY"
+.input "fb/CASHMGMT.SELECT.WRITE"
+.continue TAX
+..
+..*****************************************************************************
+!TAX
+..*****************************************************************************
+.. doppelten Ausweis der Umsatzsteuer bei Anzahlungen vermeiden
+.continue RLOOP ? U|xrstwert = 0 ; (U|xbdownp & U|xbaeob)
+..
+.. Sollbesteuerung: Faelligkeit der Steuer (Berechnung der Zahllast) auf Belegdatum beziehen
+.. input: U|xdvaldate
+.input "fb/CASHMGMT.DATE2TAXPERIODDUEDATE"
+.copy U|xddate = U|xdvatterm
+.formula   U|xttype = "(AmountOfVATPayableFromOutstandingItems)"
+.copy U|xrvalue = U|xrstwert
+.copy U|xrvalue = U|xrvalue * -1 ? U|xepurchsales = "(Purchasing)"
+.copy U|xrdiscount = (U|xrvalue * U|xrdiscrate / 100)
+.copy U|xrvalue = U|xrvalue - U|xrdiscount
+.input "fb/CASHMGMT.SELECT.WRITE"
+.continue RLOOP ? _U|xbplanneditem
+.copy U|xrvalue = -U|xrvalue ? F|equals(U|xepurchsales, "(Sales)")
+.copy U|xdtmp1 = U|xddate
+.copy U|xddate = 0|fktaplanpos^verrterm
+.copy U|xdvaldate = U|xddate
+.input "fb/CASHMGMT.DATE2TAXPERIODDUEDATE"
+.copy U|xddate = U|xdvatterm
+.. no payment terms if a fixed date is used
+.formula U|xpzbed = ""
+.formula U|xpzbedschl = ""
+.formula U|xpzbedvert = ""
+.input "fb/CASHMGMT.SELECT.WRITE"
+.copy U|xddate = U|xdtmp1
+.continue RLOOP
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.load 8
+.continue

@@ -1,0 +1,69 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           :     CASHBOOK.CREATE.MONTHLY
+.. Date           :     17/11/2014
+.. Version        :     1.0
+.. Author         :     rasc
+.. Copyright      :
+.. Functionality  :     Export Templates for Cashbook, monthly
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xtdat      ? _F|defined(U|xtdat)
+.type text U|xtout      ? _F|defined(U|xtout)
+.type text U|xterr      ? _F|defined(U|xterr)
+.type text U|xtcmd      ? _F|defined(U|xtcmd)
+.type text U|xtref      ? _F|defined(U|xtref)
+.type integer U|xiz     ? _F|defined(U|xiz)
+..
+....input ARB
+.formula U|xiz          = G|gmonat
+..
+.file -TEMPNAME U|xtout
+.file -TEMPNAME U|xterr
+...formula U|xtdat        = U|xarb + "/CASHBOOK.TEMPLATE."+'U|xiz'
+.formula U|xtdat        = "ow1/CASHBOOK.TEMPLATE."+'U|xiz'
+.continue ERROR         ? _F|fileexists(U|xtdat)
+.continue ERROR         ? F|filesize(U|xtdat) = 0
+..
+.formula U|xtcmd        = "edpimport.sh -P -b 98:1 -a NEW -r REF -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtdat
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' PASSWORD background
+..
+.continue ERRIMP        ? F|filesize(U|xtout) = 0
+..
+.select from
+.formula U|xtref        = ""
+..
+.select from 'U|xtout' U|xtref^
+.continue ERRIMP        ? F|empty(U|xtref) ; 'U|xtref'="(0,0,0)"
+..
+..jetzt noch freigeben und buchen
+.formula U|xtcmd        = "<(CashBook)>" + U|xtref + "<(Release)>,(CashBook) ? [invisible]=1"
+.command -WAIT 'U|xtcmd'
+.formula U|xtcmd        = "<(CashBook)>" + U|xtref + "<(Transfer)>,(CashBook) ? [invisible]=1"
+.command -PARALLEL 'U|xtcmd'
+.continue END
+..
+!ERROR
+.error "Datei fÅr Monat 'U|xiz' nicht vorhanden oder leer!"
+.continue END
+..
+!ERRIMP
+.error "Der Import fÅr den Monat 'U|xiz' ist fehlgeschlagen!"
+.edi -READONLY 'U|xterr'
+.continue END
+..
+!END
+.continue
+

@@ -1,0 +1,1047 @@
+..!interpreter english declaration noabbrev 
+..============================================================================
+..  Author             : uklag
+..  Date of Creation   : 29.06.2026
+..  Name               : IS.BDEIMPORT.FO2
+..  Path/Pfad          : owbde/IS.BDEIMPORT.FO2
+..  Function           : Verarbeitet die Zeilen mit Satzart 2 (=Personalzeit)
+..  required Paths     :
+..  Menu Items         :
+..  Mask Priority      :
+..  for EFOP           :
+..  Starting Ticket    : AP 6.11.2
+..                     History of Changes
+..                     ==================
+.. Ticket of Change    : 
+..
+..============================================================================
+..<META P|='P88:10'>
+..<META M|='owbde/BDEIMPORT'>
+
+..<VAR folded>
+.var text U|xtSys
+.var text xtZeilenFehlerText
+.var text xtImpDateiName
+.var text xtFehlerProt
+.var text xttmp
+.var text xtBem
+.var text xtFehlerText
+.var text xtText
+.var integer xiFileVar
+.var text xtIdPersoZeit
+.var text U|xtSel
+.var text xtLeistungsmeldungSel
+.var text xtAuftragszeitSel
+.var Z xzUhrzeit
+.var text xtPersonalzeitSel
+.var text xtdummy
+.var text xtsystem
+.var text xtEdp5
+.var text xtEdp4
+.var text xtEdp3
+.var text xtEdp2
+.var text xtEdp1
+.var bool xbimp
+.var bool xbnoimp
+.var text xtgts
+.var bool xbgts
+.var bool xbdebug
+.var text xtdollarstring
+.var p149:3 xvArbeitsAufgabe
+.var P9:1 U|xvArbeitsSchein
+.var P109:2 xpStatus
+.var bool U|xbASchein
+.var bool U|xbAAufgabe
+.var bool U|xbDublette
+.var text U|xtDublettenID
+.var text U|xtAufgabenTitel
+.var text U|xtAufgabenText
+..</VAR>
+
+def main() 
+{
+    .call inputStdFiles()
+    switch (G|evtart) {
+        case ("buttonnach") {
+            ..<Block folded> Verarbeiten-Button
+            switch (G|evtvar) {
+                case ("yimportdatarecords") {
+                    if (F|empty(M|ypsdname) = G|false) {
+                        ..set trace +
+                        .formula U|xtImpDateiName = M|ypsdname >$ "/"
+                        .formula U|xtImpDateiName = F|regreplaceall(U|xtImpDateiName, "-", "")
+                        .formula U|xtFehlerProt = "rmtmp/X." + -U|xtImpDateiName + "." + 'G|versionneu' + ".TMP"
+                        ..
+                        .output NEW 'U|xtFehlerProt'
+                        .input DATEI.F
+                        .output 
+                        ..
+                        .select screen header
+                        .select screen line   
+                        while (G|mehr) {
+                            
+                            if (F|empty(M|ytpersonalnr) = G|false) { 
+                                .load 0 nolock group "11:01" 'M|ytpersonalnr'
+                                if (G|mehr = G|true) {
+                                    if (0|ykeinCamPlusImport = G|false) {
+                                        .load 0
+                                        .formula U|xzUhrzeit = 'M|ytfirstuhr' <$ ":"
+                                        
+                                        .call pruefeFANummerExistiert()
+                                        if (U|xbDublette = G|false) {
+                                            switch (M|ytsatzart) {
+                                                case ("2") {
+                                                    if (F|empty(M|ytPersonalzeit) = G|true) {
+                                                        switch (M|ytstatus2) {
+                                                            case ("K") {
+                                                                .call pruefePersoKommenDublette()
+
+                                                                if (U|xbDublette = G|false) {
+                                                                    .call pruefeOffenePersoZeit()
+
+                                                                    if (U|xbDublette = G|false) {
+                                                                        .call persoKommenEpi()
+                                                                    }
+                                                                }
+                                                            }
+                                                            case ("G") {
+                                                                .call pruefePersoGehenDublette()
+
+                                                                if (U|xbDublette = G|false) {
+
+                                                                    .call persoGehenEpi()
+                                                                    
+                                                                }                                  
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                case ("3") {  
+                                                    if (F|empty(M|ytLeistungsmeldung) = G|true) {                              
+                                                        switch (M|ytstatus2) {
+                                                            case ("1") {               
+                                                                .call pruefeLeistungsmeldungKommenDublette()
+
+                                                                if (U|xbDublette = G|false) {
+                                                                    
+                                                                    .call pruefeOffeneLeistungsmeldung()
+
+                                                                    if (U|xbDublette = G|false) {
+                                                                        .call alleOffenenDatensaetzeAbschliessen ( )                                                                              
+                                                                        .call leistungsMeldKommenEpi ( )
+                                                                    }    
+                                                                }                       
+                                                            }
+                                                            case ("3") {                                                                                 
+                                                                .call pruefeLeistungsmeldungGehenDublette()
+
+                                                                if (U|xbDublette = G|false) {
+
+                                                                    .call leistungsMeldGehenEpi()
+                                                                    
+                                                                }                              
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            .load 0
+                            .select screen line 
+                        }
+                        .formula U|xtSys = "rm -f " + 'M|ypsdname'
+                        .system 'U|xtSys' background
+                        .formula M|ypsdname = ""
+                        ..
+                        if (F|filenotempty('U|xtFehlerProt')) {
+                            .formula U|xtSys = "cp " + 'U|xtFehlerProt' + " ./win/import/bde/imp.err/"
+                            .system 'U|xtSys' background
+                        }
+                        ..
+                        .formula M|yhinweis = "Verarbeitung beendet."
+                    }
+                }
+            }   
+            ..</Block>         
+        }
+    }
+}
+
+..<BLOCK folded> pruefePersoKommenDublette
+def pruefePersoKommenDublette() {
+
+    .formula U|xbDublette = G|false
+
+    .formula U|xtSel = "$,,"
+    .formula U|xtSel = U|xtSel + ";yCamPlusKommtID==" + 'M|ytbdezeit'
+
+    .load 9 'G|hdatname.U|kodatBDE' nolock 'U|xtSel'
+
+    if (G|mehr) {
+
+        .formula U|xbDublette = G|true
+
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - Personalzeit Kommen bereits vorhanden. Datensatz-ID: " + '9|id'
+        .call fehlerMeldung()
+
+        .formula U|xtAufgabenTitel = "Doppelte Personalzeit Kommen"
+        .formula U|xtAufgabenText = "Personalnummer: " + 'M|ytpersonalnr' + ";Art: Personalzeit;Typ: Kommen;BDE-ID: " + 'M|ytbdezeit' + ";Datensatz-ID: " + '9|id'
+
+        .call AufgabeErzeugen()
+    }
+
+    .load 9
+}
+..</BLOCK>
+
+..<BLOCK folded> pruefePersoGehenDublette
+def pruefePersoGehenDublette() {
+
+    .formula U|xbDublette = G|false
+
+    .formula U|xtSel = "$,,"
+    .formula U|xtSel = U|xtSel + ";yCamPlusGehtID==" + 'M|ytbdezeit'
+
+    .load 9 'G|hdatname.U|kodatBDE' nolock 'U|xtSel'
+
+    if (G|mehr) {
+
+        .formula U|xbDublette = G|true
+
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - Personalzeit Gehen bereits vorhanden. Datensatz-ID: " + '9|id'
+        .call fehlerMeldung()
+
+        .formula U|xtAufgabenTitel = "Doppelte Personalzeit Gehen"
+        .formula U|xtAufgabenText = "Personalnummer: " + 'M|ytpersonalnr' + ";Art: Personalzeit;Typ: Gehen;BDE-ID: " + 'M|ytbdezeit' + ";Datensatz-ID: " + '9|id'
+
+        .call AufgabeErzeugen()
+    }
+
+    .load 9
+}
+..</BLOCK>
+
+..<BLOCK folded> pruefeOffenePersoZeit
+def pruefeOffenePersoZeit() {
+
+    .formula U|xbDublette = G|false
+
+    .formula U|xtSel = "$,,"
+    .formula U|xtSel = U|xtSel + ";ma=" + 'M|ytpersonalnr'
+    .formula U|xtSel = U|xtSel + ";enddat=`"
+    .formula U|xtSel = U|xtSel + ";@gruppe=1"
+
+    .load 9 'G|hdatname.U|kodatBDE' nolock 'U|xtSel'
+
+    if (G|mehr) {
+
+        .formula U|xbDublette = G|true
+
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - Erneute Personal-Kommen Zeit trotzt offener Personalzeit"
+        .call fehlerMeldung()
+
+        .formula U|xtAufgabenTitel = "Anfang ohne Ende"
+        .formula U|xtAufgabenText = "Personalnummer: " + 'M|ytpersonalnr' + ";Art: Personalzeit;Typ: Gehen;BDE-ID: " + 'M|ytbdezeit' + ";Neue Anfangszeit ohne Endzeit"
+
+        .call AufgabeErzeugen()
+    }
+
+    .load 9
+}
+..</BLOCK>
+
+..<BLOCK folded> pruefeLeistungsmeldungKommenDublette
+def pruefeLeistungsmeldungKommenDublette() {
+
+    .formula U|xbDublette = G|false
+
+    .formula U|xtSel = "$,,"
+    .formula U|xtSel = U|xtSel + ";yCamPlusStartzeitID==" + 'M|ytbdezeit'
+    .formula U|xtSel = U|xtSel + ";@gruppe=1"
+
+    .load 9 'G|hdatname.U|kodatPROJECTSUITEMELDUNGEN' nolock 'U|xtSel'
+
+    if (G|mehr) {
+
+        .formula U|xbDublette = G|true
+
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - Leistungsmeldung Kommen bereits vorhanden. Datensatz-ID: " + '9|id'
+        .call fehlerMeldung()
+
+        .formula U|xtAufgabenTitel = "Doppelte Leistungsmeldung Kommen"
+        .formula U|xtAufgabenText = "Personalnummer: " + 'M|ytpersonalnr' + ";Art: Leistungsmeldung;Typ: Kommen;BDE-ID: " + 'M|ytbdezeit' + ";Datensatz-ID: " + '9|id'
+
+        .call AufgabeErzeugen()
+    }
+
+    .load 9
+}
+..</BLOCK>
+
+..<BLOCK folded> pruefeLeistungsmeldungGehenDublette
+def pruefeLeistungsmeldungGehenDublette() {
+
+    .formula U|xbDublette = G|false
+
+    .formula U|xtSel = "$,,"
+    .formula U|xtSel = U|xtSel + ";yCamPlusEndezeitID==" + 'M|ytbdezeit'
+    .formula U|xtSel = U|xtSel + ";@gruppe=1"
+
+    .load 9 'G|hdatname.U|kodatPROJECTSUITEMELDUNGEN' nolock 'U|xtSel'
+
+    if (G|mehr) {
+
+        .formula U|xbDublette = G|true
+
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - Leistungsmeldung Gehen bereits vorhanden. Datensatz-ID: " + '9|id'
+        .call fehlerMeldung()
+
+        .formula U|xtAufgabenTitel = "Doppelte Leistungsmeldung Gehen"
+        .formula U|xtAufgabenText = "Personalnummer: " + 'M|ytpersonalnr' + ";Art: Leistungsmeldung;Typ: Gehen;BDE-ID: " + 'M|ytbdezeit' + ";Datensatz-ID: " + '9|id'
+
+        .call AufgabeErzeugen()
+    }
+
+    .load 9
+}
+..</BLOCK>
+
+..<BLOCK folded> pruefeOffeneLeistungsmeldung
+def pruefeOffeneLeistungsmeldung() {
+
+    .formula U|xbDublette = G|false
+
+    .formula U|xtLeistungsmeldungSel = "$,,"
+    .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";ypersonal=" + 'M|ytpersonalnr'
+    .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";yaufgabe=" + 'M|ytFANummer'
+    .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";yazeit<>`"
+    .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";yezeit=`"
+    .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";yarbzeit=0"
+    .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";@gruppe=1"
+
+    .load 9 'G|hdatname.U|kodatPROJECTSUITEMELDUNGEN' nolock 'U|xtLeistungsmeldungSel'
+
+    if (G|mehr = G|false) {
+
+        .formula U|xbDublette = G|true
+
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - Erneute Leistungsmeldung-Kommen Zeit trotzt offener Leistungsmeldung."
+        .call fehlerMeldung()
+
+        .formula U|xtAufgabenTitel = "Anfang ohne Ende"
+        .formula U|xtAufgabenText = "Personalnummer: " + 'M|ytpersonalnr' + ";Art: Leistungsmeldung;Typ: Gehen;BDE-ID: " + 'M|ytbdezeit' + ";FA-Nummer: " + 'M|ytFANummer' + ";Neue Anfangszeit ohne Endzeit"
+
+        .call AufgabeErzeugen()
+    }
+
+    .load 9
+}
+..</BLOCK>
+
+..<BLOCK folded> AufgabeErzeugen
+def AufgabeErzeugen() {
+
+    .copy U|xtdollarstring = "$"
+    .copy U|xbdebug = G|false
+    .copy U|xbgts = G|false
+    .copy U|xtgts = ""
+    .copy U|xbnoimp = G|false
+    .copy U|xbimp = G|false
+
+    .call edpTmpFiles()
+    .call edpKopf()
+
+    .output ADDEDTO 'U|xtEdp1'
+
+    .println -nomoreoptions EDI|1|NEW|86:6||||
+    .println -nomoreoptions SFV|1|0|name|'U|xtAufgabenTitel'|
+    .println -nomoreoptions SFV|1|0|beschr|'U|xtAufgabenText';'U|xtFehlerText'|    
+    .println -nomoreoptions SFV|1|0|such|'U|xypdmsuch'|
+    .println -nomoreoptions SFV|1|0|bearbeit|'U|xypdmma'|
+    .println -nomoreoptions SFV|1|0|bestaet|'U|xypdmma'|
+    
+    .println -nomoreoptions SFV|1|0|ursache|'9|id'| ? F|defined(9|id)
+
+    .output 
+
+    .call edpFuss()
+    .call edpAusfuehren()
+    
+    .formula M|ytAllEdpProtokoll = U|xttmp
+    
+    if (U|xbimp) {
+        .copy M|ytaufgabe = G|true  
+    } else {
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - FA-Nummer: " + 'M|ytFANummer' + " Aufgabe konnte nicht angelegt werden!"
+        .call fehlerMeldung()
+    }
+}
+..</BLOCK>
+
+..<BLOCK folded> pruefeFANummerExistiert
+def pruefeFANummerExistiert() {
+
+    .formula U|xbDublette = G|false
+
+    .call AScheinOderAAufgabe()
+
+    if (U|xbAAufgabe = G|false & M|ytsatzart = "3") {
+
+        .formula U|xbDublette = G|true
+
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - FA-Nummer: " + 'M|ytFANummer' + " existiert nicht."
+        .call fehlerMeldung()
+
+        .formula U|xtAufgabenTitel = "FA-Nummer nicht vorhanden"
+        .formula U|xtAufgabenText = "Personalnummer: " + 'M|ytpersonalnr' + ";FA-Nummer: " + 'M|ytFANummer' + ";BDE-ID: " + 'M|ytbdezeit' + ";Zur gemeldeten FA-Nummer wurde kein Datensatz gefunden"
+
+        .call AufgabeErzeugen()
+    }
+}
+..</BLOCK>
+
+..<Block folded> AScheinOderAAufgabe
+def AScheinOderAAufgabe() {
+    .. Ermittel, ob FA-Nummer ein Arbeitsschein oder eine Projekt-Arbeitsaufgabe ist
+    .formula U|xbASchein = G|false
+    .formula U|xbAAufgabe = G|false
+    ..
+    ..    .formula U|xtSel = "$,,;nummer==" + 'M|ytFaNummer' + ";typ==2"
+    ..    .load 9 nolock group "09:01" 'U|xtSel'
+    ..    if (G|mehr = G|true) {
+    ..        .formula U|xbASchein = G|true
+    ..    }
+    ..    .load 9
+    ..
+    .formula U|xtSel = "$,,;nummer==" + 'M|ytFaNummer'
+    .load 9 nolock group "149:03" 'U|xtSel'
+    if (G|mehr = G|true) {
+        .formula U|xbAAufgabe = G|true
+    }
+    .load 9
+}
+..</Block>
+
+..<BLOCK folded> Proz leistungsMeldGehenEpi
+def leistungsMeldGehenEpi( ) { 
+    
+    if (U|xbASchein = G|true & U|xbAAufgabe = G|false) {
+        .call AuftragszeitEndeErzeugen()
+    }
+    if (U|xbASchein = G|false & U|xbAAufgabe = G|true) {
+        .call LeistungsmeldungEndeErzeugen()        
+    }
+    
+    if (U|xbASchein = G|true & U|xbAAufgabe = G|true) {
+        .. ?? was tun ??
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - FA-Nummer: " + 'M|ytFANummer' + " konnte nicht zugeordnet werden."
+        .call fehlerMeldung()
+    }
+    if (U|xbAschein = G|false & U|xbAAufgabe = G|false) {
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - FA-Nummer: " + 'M|ytFANummer' + " existiert nicht."
+        .call fehlerMeldung()
+    }
+} 
+..</BLOCK>
+..
+..<BLOCK folded> Proz fehlerMeldung
+def fehlerMeldung( ) { 
+    .output ADDEDTO 'U|xtFehlerProt'
+    .println 'U|xtZeilenFehlerText'
+    .output 
+    .file -fop -tempname U|xttmp
+    .output NEW 'U|xttmp'
+    .input DATEI.F
+    .println 'U|xtZeilenFehlerText'
+    .output 
+    if (M|ytsatzart = "2") {
+        .formula M|ytPersoEdpProtokoll = U|xttmp 
+    } else {
+        if (U|xbAAufgabe = G|true) {
+            .formula M|ytLeistMeldEdpProtokoll = U|xttmp
+        }
+        if (U|xbASchein = G|true) {
+            .formula M|ytAuftrZeitEdpProtokoll = U|xttmp
+        }
+    }
+    .formula M|ytAllEdpProtokoll = U|xttmp
+    
+    
+} 
+..</BLOCK>
+..
+..<BLOCK folded> Proz leistungsMeldKommenEpi
+def leistungsMeldKommenEpi( ) {
+    ..: Kenner fÅr EDP festlegen
+    .copy U|xtdollarstring = "$"
+    .copy U|xbdebug = G|false
+    .copy U|xbgts = G|true
+    .copy U|xtgts = ""
+    .copy U|xbnoimp = G|false
+    .copy U|xbimp = G|false
+    ..
+    if (U|xbASchein = G|true & U|xbAAufgabe = G|false) {
+        .call AuftragszeitStartErzeugen()
+    }
+    if (U|xbASchein = G|false & U|xbAAufgabe = G|true) {
+        .call LeistungsmeldungStartErzeugen()        
+    }
+    
+    if (U|xbASchein = G|true & U|xbAAufgabe = G|true) {
+        .. ?? was tun ??
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - FA-Nummer: " + 'M|ytFANummer' + " konnte nicht zugeordnet werden."
+        .call fehlerMeldung()        
+    }
+    if (U|xbAschein = G|false & U|xbAAufgabe = G|false) {
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - FA-Nummer: " + 'M|ytFANummer' + " existiert nicht."
+        .call fehlerMeldung()
+    }
+} 
+..</BLOCK>
+..
+..<BLOCK folded> Proz persoGehenEpi
+..
+def persoGehenEpi( ) { 
+    .formula U|xtPersonalzeitSel = "$,,"
+    .formula U|xtPersonalzeitSel = U|xtPersonalzeitSel + ";ma=" + 'M|ytpersonalnr'
+    .formula U|xtPersonalzeitSel = U|xtPersonalzeitSel + ";enddat=`"
+    .formula U|xtPersonalzeitSel = U|xtPersonalzeitSel + ";@gruppe=1"
+    .load 9 'G|hdatname.U|kodatBDE' nolock 'U|xtPersonalzeitSel'  
+    if (G|mehr) {
+        .formula M|ytPersonalzeit = 9|id
+        .formula U|xtIdPersoZeit = 9|id
+        ..: Kenner fÅr EDP festlegen
+        .copy U|xtdollarstring = "$"
+        .copy U|xbdebug = G|false
+        .copy U|xbgts = G|true
+        .copy U|xtgts = ""
+        .copy U|xbnoimp = G|false
+        .copy U|xbimp = G|false
+
+        .call edpTmpFiles ( ) 
+        .call edpKopf ( ) 
+
+        ..<BLOCK> EDP-Kîrper anlegen
+        .output ADDEDTO 'U|xtEdp1'
+        .println -nomoreoptions EDI|1|UPDATE||REF|'U|xtIdPersoZeit'||
+        if (F|empty(9|bem)) {
+            .formula U|xtBem = M|ytbdezeit
+        } else {
+            .formula U|xtBem = U|xtBem + " - " + M|ytbdezeit
+        }        
+        .. .println -nomoreoptions SFV|1|0|bem|'U|xtBem'| 
+        .println -nomoreoptions SFV|1|0|yCamPlusGehtID|'M|ytbdezeit'|
+        .println -nomoreoptions SFV|1|0|enddat|'M|ytdfirstdat'|
+        .println -nomoreoptions SFV|1|0|endzeit|'U|xzUhrzeit'|
+        .println -nomoreoptions SFV|1|0|yFehlerText||
+        .output 
+        ..</BLOCK>l
+        .call edpFuss ( ) 
+        .call edpAusfuehren ( ) 
+        .formula M|ytPersoEdpProtokoll = U|xtEdp2
+        if (U|xbimp) {
+            .copy M|ytPersoErfolgreichVerarbeitet = G|true  
+        } else {  
+            
+            ..<BLOCK folded> Der Fehler wird ausgelesen und dann in den Personaldatensatz geschrieben. (Mit Fopmode 0)
+            .set separator #
+            ..            .call fehlerAuslesen          ( ) 
+            ..            .formula U|xtZeilenFehlerText = U|xtFehlerText
+            ..            .call fehlerMeldung ( )
+            .call edpTmpFiles ( )            
+            ..<BLOCK folded> EDP-Kopf anlegen
+            .output new 'U|xtEdp1'
+            .input DATEI.F
+            .println -nomoreoptions LGN|1|||3.33|||-|||
+            .println -nomoreoptions SET|1|CHARSET|EKS|
+            .println -nomoreoptions SET|1|ECHOMODE|1|
+            .println -nomoreoptions SET|1|FOPMODE|0|
+            .println -nomoreoptions SET|1|LANG|Deutsch|
+            .println -nomoreoptions SET|1|LOCKBEHAVIOR|WAIT:2|
+            .println -nomoreoptions SET|1|UPDATEMODE|STRICT|
+            .println -nomoreoptions EDI|1|UPDATE||REF|'U|xtIdPersoZeit'|| 
+            .println -nomoreoptions SFV|1|0|yFehlerText|'U|xtFehlerText'|
+            .output 
+            ..</BLOCK>
+            .call edpFuss ( ) 
+            .call edpAusfuehren ( )
+            ..</BLOCK>
+            .set separator
+            .formula U|xtAufgabenTitel = "Auftragszeit Ende"            
+            .call AufgabeErzeugen()
+            
+        }
+        
+        .load 9
+    }
+} 
+..</BLOCK>
+..
+..<Block folded> AuftragszeitStartErzeugen
+def AuftragszeitStartErzeugen() {
+    .assign U|xvArbeitsSchein = M|ytFANummer
+    .load 9 nolock add U|xvArbeitsSchein
+    if (G|mehr = G|true) {
+        .call edpTmpFiles ( ) 
+        .call edpKopf ( )
+        ..<BLOCK> EDP-Kîrper anlegen
+        .output ADDEDTO 'U|xtEdp1'
+        .println -nomoreoptions EDI|1|NEW|17:2|||| 
+        .println -nomoreoptions SFV|1|0|ma|'M|ytpersonalnr'|
+        .println -nomoreoptions SFV|1|0|asma|'9|nummer'|    
+        .println -nomoreoptions SFV|1|0|anfdat|'M|ytdfirstdat'|
+        .println -nomoreoptions SFV|1|0|anfzeit|'U|xzUhrzeit'|
+        .println -nomoreoptions SFV|1|0|yCamPlusStartzeitID|'M|ytbdezeit'|
+        .output 
+        ..</BLOCK>
+        .call edpFuss ( ) 
+        .call edpAusfuehren ( ) 
+        ..
+        .formula M|ytAuftrZeitEdpProtokoll = U|xtEdp2
+        if (U|xbimp) {
+            .assign M|yAuftragszeit = U|xtgts
+            .copy M|ytAuftrZeitErfolgreichVerarbeitet = G|true  
+        } else {
+            .call AufgabeErzeugen()
+        }              
+    } else {
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - Arbeitsschein: " + 'M|ytFANummer' + " existiert nicht"
+        .call fehlerMeldung()
+        .formula U|xtAufgabenTitel = "Auftragszeit Start"       
+        .call AufgabeErzeugen()
+    }
+    .load 9
+}
+..</Block>
+..
+..<Block folded> AuftragszeitEndeErzeugen
+def AuftragszeitEndeErzeugen() {
+    .assign U|xvArbeitsschein = M|ytFANummer
+    .load 9 nolock add U|xvArbeitsSchein
+    if (G|mehr = G|true) {
+        ..: Kenner fÅr EDP festlegen
+        .copy U|xtdollarstring = "$"
+        .copy U|xbdebug = G|false
+        .copy U|xbgts = G|true
+        .copy U|xtgts = ""
+        .copy U|xbnoimp = G|false
+        .copy U|xbimp = G|false
+        ..
+        .formula U|xtAuftragszeitSel = "$,,"
+        .formula U|xtAuftragszeitSel = U|xtAuftragszeitSel + ";ma=" + 'M|ytpersonalnr'
+        .formula U|xtAuftragszeitSel = U|xtAuftragszeitSel + ";as==" + 'U|xvArbeitsschein^nummer'
+        .formula U|xtAuftragszeitSel = U|xtAuftragszeitSel + ";endzeit=`"
+        .formula U|xtAuftragszeitSel = U|xtAuftragszeitSel + ";@gruppe=2"
+        .load 8 'G|hdatname.U|kodatBDE' nolock 'U|xtAuftragszeitSel' 
+        if (G|mehr) {
+            .call edpTmpFiles ( ) 
+            .call edpKopf ( ) 
+
+            ..<BLOCK> EDP-Kîrper anlegen
+            .output ADDEDTO 'U|xtEdp1'
+            .println -nomoreoptions EDI|1|UPDATE||REF|'8|id'||
+            .println -nomoreoptions SFV|1|0|endzeit|'U|xzUhrzeit'|
+            .println -nomoreoptions SFV|1|0|enddat|'M|ytdfirstdat'|
+            .println -nomoreoptions SFV|1|0|yCamPlusEndezeitID|'M|ytbdezeit'|            
+            .println -nomoreoptions SFV|1|0|sofort|1|
+            .output 
+            ..</BLOCK>
+            .call edpFuss ( ) 
+            .call edpAusfuehren ( ) 
+            .formula M|ytAuftrZeitEdpProtokoll = U|xtEdp2
+            if (U|xbimp) {
+                .assign M|yAuftragszeit = U|xtgts
+                .copy M|ytAuftrZeitErfolgreichVerarbeitet = G|true  
+            }
+            
+            .load 8
+        } 
+    } else {
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - Arbeitsschein: " + 'M|ytFANummer' + " existiert nicht"
+        .call fehlerMeldung ( )
+        .formula U|xtAufgabenTitel = "Auftragszeit Ende"       
+        .call AufgabeErzeugen()
+    } 
+}
+..</Block>
+..
+..<Block folded> LeistungsmeldungStartErzeugen
+def LeistungsmeldungStartErzeugen() {
+    .assign U|xvArbeitsAufgabe = M|ytFANummer
+    .. vorher noch prÅfen, ob Arbeitsaufgabe noch "In Bearbeitung"
+    .. wenn nicht, Wert merken und auf "In Bearbeitung" setzen
+    .load 9 nolock add U|xvArbeitsAufgabe
+    if (G|mehr = G|true) {
+        .formula U|xpStatus = ""
+        if ('9|ystatus(L=":")' <> "(InProgress)") {
+            .formula U|xpStatus = '9|ystatus^id'
+            ..
+            .select lock object '9|id'
+            .formula H|ystatus = "(InProgress)"
+            .rewrite 
+            .select -
+        } 
+    }    
+    .load 9
+    ..
+    .load 9 nolock add U|xvArbeitsAufgabe
+    if (G|mehr) {     
+        .call edpTmpFiles ( ) 
+        .call edpKopf ( )
+        ..<BLOCK> EDP-Kîrper anlegen
+        .output ADDEDTO 'U|xtEdp1'
+        .println -nomoreoptions EDI|1|NEW|147:1|||| 
+        .println -nomoreoptions SFV|1|0|ypersonal|'M|ytpersonalnr'|
+        .println -nomoreoptions SFV|1|0|yaufgabe|'9|id'|    
+        .println -nomoreoptions SFV|1|0|yadatum|'M|ytdfirstdat'|
+        .println -nomoreoptions SFV|1|0|yazeit|'U|xzUhrzeit'|
+        .println -nomoreoptions SFV|1|0|yCamPlusStartzeitID|'M|ytbdezeit'|        
+        .output 
+        ..</BLOCK>
+        .call edpFuss ( ) 
+        .call edpAusfuehren ( ) 
+        .. 
+        .formula M|ytLeistMeldEdpProtokoll = U|xtEdp2
+        if (U|xbimp) {
+            .formula M|ytLeistungsmeldung = U|xtgts
+            .copy M|ytLeistMeldErfolgreichVerarbeitet = G|true  
+        } else {
+            .call AufgabeErzeugen()
+        }
+        if (F|empty(U|xpStatus) = G|false) {
+            .select lock object '9|id'
+            .formula H|ystatus = 'U|xpStatus^id'
+            .rewrite 
+            .select -
+        }
+        .load 9
+        ..
+    } else {
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - Aufgabe: " + 'M|ytFANummer' + " existiert nicht"
+        .call fehlerMeldung()
+        .formula U|xtAufgabenTitel = "Leistungsmeldung Start"       
+        .call AufgabeErzeugen()
+    }
+}
+..</Block>
+..
+..<Block folded> LeistungsmeldungEndeErzeugen
+def LeistungsmeldungEndeErzeugen() {
+    .assign U|xvArbeitsAufgabe = M|ytFANummer
+    ..
+    .. vorher noch prÅfen, ob Arbeitsaufgabe noch "In Bearbeitung"
+    .. wenn nicht, Wert merken und auf "In Bearbeitung" setzen
+    .load 9 nolock add U|xvArbeitsAufgabe
+    if (G|mehr = G|true) {
+        .formula U|xpStatus = ""
+        if ('9|ystatus(L=":")' <> "(InProgress)") {
+            .formula U|xpStatus = '9|ystatus^id'
+            ..
+            .select lock object '9|id'
+            .formula H|ystatus = "(InProgress)"
+            .rewrite 
+            .select -
+        } 
+    }
+    .load 9
+    ..
+    .load 9 nolock add U|xvArbeitsAufgabe
+    if (G|mehr) {  
+        ..: Kenner fÅr EDP festlegen
+        .copy U|xtdollarstring = "$"
+        .copy U|xbdebug = G|false
+        .copy U|xbgts = G|true
+        .copy U|xtgts = ""
+        .copy U|xbnoimp = G|false
+        .copy U|xbimp = G|false
+        ..
+        .formula U|xtLeistungsmeldungSel = "$,,"
+        .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";ypersonal=" + 'M|ytpersonalnr'
+        .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";yaufgabe=" + 'M|ytFANummer'
+        .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";yazeit<>`"
+        .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";yezeit=`"
+        .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";yarbzeit=0"
+        .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";@gruppe=1"
+        .load 8 'G|hdatname.U|kodatPROJECTSUITEMELDUNGEN' nolock 'U|xtLeistungsmeldungSel'  
+        if (G|mehr) {
+            .call edpTmpFiles ( ) 
+            .call edpKopf ( ) 
+
+            ..<BLOCK> EDP-Kîrper anlegen
+            .output ADDEDTO 'U|xtEdp1'
+            .println -nomoreoptions EDI|1|UPDATE||REF|'8|id'||
+            .println -nomoreoptions SFV|1|0|yezeit|'U|xzUhrzeit'|
+            .println -nomoreoptions SFV|1|0|yedatum|'M|ytdfirstdat'|
+            .println -nomoreoptions SFV|1|0|yCamPlusEndezeitID|'M|ytbdezeit'|                                    
+            .output 
+            ..</BLOCK>
+            .call edpFuss ( ) 
+            .call edpAusfuehren ( ) 
+            .formula M|ytLeistMeldEdpProtokoll = U|xtEdp2
+            if (U|xbimp) {
+                .formula M|ytLeistungsmeldung = U|xtgts
+                .copy M|ytLeistMeldErfolgreichVerarbeitet = G|true  
+            } else {
+                .call AufgabeErzeugen()        
+            }
+            
+            .load 8
+        }   
+        if (F|empty(U|xpStatus) = G|false) {
+            .select lock object '9|id'
+            .formula H|ystatus = 'U|xpStatus^id'
+            .rewrite 
+            .select -
+        }     
+        .load 9
+    } else {
+        .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " - Aufgabe: " + 'M|ytFANummer' + " existiert nicht"
+        .call fehlerMeldung ( )
+        .formula U|xtAufgabenTitel = "Leistungsmeldung Ende"       
+        .call AufgabeErzeugen()
+        
+    } 
+}
+..</Block>
+..
+..<BLOCK folded> Fehler auslesen
+def fehlerAuslesen( ) { 
+    .. Fehler auslesen
+    .formula U|xtFehlerText = ""
+    .copy U|xtsystem = "grep 'ERROR' " + U|xtedp2 + " >" + U|xtedp3
+    .system 'U|xtsystem' BACKGROUND
+    ..
+    .copy U|xtsystem = "grep 'Fehler\\n' " + U|xtedp2 + " >>" + U|xtedp3
+    .system 'U|xtsystem' BACKGROUND
+    ..
+    .. .input 'U|xtedp3'
+    ..
+    .file -TEST -OPEN U|xiFileVar 'U|xtedp3'
+    if (G|mehr) {
+        .file -READ U|xiFileVar U|xtText^
+        while (G|mehr) {
+            if (U|xtText / "*ERROR*") {
+                .formula U|xtText = U|xtText << "|ERROR"
+                .formula U|xtText = U|xtText >$ "|"
+                if (F|empty(U|xtFehlerText)) {
+                    .formula U|xtFehlerText = U|xtText
+                } else {
+                    .formula U|xtFehlerText = U|xtFehlerText + ";" + U|xtText
+                }
+            } else {
+                if (U|xtText / "*Fehler\\n*") {
+                    .formula U|xtText = U|xtText >> "Fehler\n"
+                    .formula U|xtText = U|xtText << "|"
+                    if (F|empty(U|xtFehlerText)) {
+                        .formula U|xtFehlerText = U|xtText
+                    } else {
+                        .formula U|xtFehlerText = U|xtFehlerText + ";" + U|xtText
+                    }
+                }
+            }
+            
+            .file -READ U|xiFileVar U|xtText^
+        }
+        .file -CLOSE U|xiFileVar
+    }
+} 
+..</Block>
+..
+..<BLOCK folded> Proz persoKommenEpi
+def persoKommenEpi( ) {
+    ..: Kenner fÅr EDP festlegen
+    .copy U|xtdollarstring = "$"
+    .copy U|xbdebug = G|false
+    .copy U|xbgts = G|true
+    .copy U|xtgts = ""
+    .copy U|xbnoimp = G|false
+    .copy U|xbimp = G|false
+
+    .call edpTmpFiles ( ) 
+    .call edpKopf ( ) 
+
+    ..<BLOCK> EDP-Kîrper anlegen
+    .output ADDEDTO 'U|xtEdp1'
+    .println -nomoreoptions EDI|1|NEW|17:1|||| 
+    .println -nomoreoptions SFV|1|0|ma|'M|ytpersonalnr'|
+    .. .println -nomoreoptions SFV|1|0|bem|'M|ytbdezeit'|  
+    .println -nomoreoptions SFV|1|0|yCamPlusKommtID|'M|ytbdezeit'|  
+    .println -nomoreoptions SFV|1|0|anfdat|'M|ytdfirstdat'|
+    .println -nomoreoptions SFV|1|0|anfzeit|'U|xzUhrzeit'|
+    .output 
+    ..</BLOCK>
+    .call edpFuss ( ) 
+    .call edpAusfuehren ( ) 
+    .. 
+    ..set debug +
+    .formula M|ytPersoEdpProtokoll = U|xtEdp2
+    if (U|xbimp) {
+        .formula M|ytPersonalzeit = U|xtgts
+        .copy M|ytPersoErfolgreichVerarbeitet = G|true  
+    } else {
+        .formula U|xtAufgabenTitel = "Auftragszeit Starten"       
+        .call AufgabeErzeugen()        
+    }
+} 
+..</BLOCK>
+..
+..<BLOCK folded> Proz edpAusfuehren
+def edpAusfuehren( ) { 
+
+    if (_U|xbnoimp) {
+        if (U|xyservice & U|xbdebug & _G|batchmode) {
+            .editing 'U|xtEdp1'
+        }
+        .copy U|xtsystem = "epi < " + U|xtEdp1 + " >" + U|xtEdp2
+        .system 'U|xtsystem' PASSWORD BACKGROUND
+        ..<BLOCK folded> Debugausgabe
+        if (U|xyservice & U|xbdebug & _G|batchmode) {
+            .editing 'U|xtEdp2'
+        }
+        ..</BLOCK>
+        if (F|filenotempty('U|xtEdp2')) {
+            ..<BLOCK folded> Testen ob Datensatz erfolgreich gespeichert (aktiv)
+            .copy U|xtsystem = "grep 'Daten erfolgreich gespeichert' < " + U|xtEdp2 + " >" + U|xtEdp4
+            .system 'U|xtsystem' BACKGROUND
+            if (F|filenotempty('U|xtEdp4')) {
+                .copy U|xbimp = G|true
+                if (U|xbgts) {
+                    ..  Jetzt noch die Nummer des gerade erstellten Lieferscheins auslesen
+                    .copy U|xTSystem = "grep 'D|1|REF|' " + U|xtEdp2 + "|awk 'BEGIN{FS=" + G|dblquote + "|" + G|dblquote + "}{print " + 'U|xtdollarstring' + "4}' > " + U|xtEdp5
+                    .copy U|xTSystem = U|xTSystem + "; test -s " + U|xtEdp5
+                    .system 'U|xTSystem' BACKGROUND
+                    if (F|filenotempty('U|xtEdp5')) {
+                        .select from
+                        .select from 'U|xtEdp5' U|xtdummy
+                        if (G|mehr) {
+                            .formula U|xtgts = U|xtdummy
+
+                        }                                                        
+                    }
+                }
+            } else {
+                .call fehlerAuslesen()
+                .formula U|xtZeilenFehlerText = "BDE-ID:" + 'M|ytbdezeit' + " : " + U|xtFehlerText
+                .call fehlerMeldung()
+            }
+            ..</BLOCK>
+        }
+    }
+} 
+..</BLOCK>
+..
+..<BLOCK folded> Proz edpFuss
+def edpFuss( ) { 
+    .output ADDEDTO 'U|xtEdp1'
+    .println -nomoreoptions COM|1|  
+    .println -nomoreoptions GTS|1| 
+    .println -nomoreoptions END|1|
+    .output 
+} 
+..</BLOCK>
+..
+..<BLOCK folded> Proz edpTmpFiles
+def edpTmpFiles( ) { 
+    ..<BLOCK folded> TemporÑrdateien erstellen / initialisieren
+    .file -TEMPNAME U|xtEdp1
+    .file -TEMPNAME U|xtEdp2
+    .file -TEMPNAME U|xtEdp3
+    .file -TEMPNAME U|xtEdp4
+    .file -TEMPNAME U|xtEdp5
+    ..</BLOCK>
+} 
+..</BLOCK>
+..
+..<BLOCK folded> Proz edpKopf
+def edpKopf( ) { 
+    .output new 'U|xtEdp1'
+    .input DATEI.F
+    .println -nomoreoptions LGN|1|||3.33|||-|||
+    .println -nomoreoptions SET|1|CHARSET|EKS|
+    .println -nomoreoptions SET|1|ECHOMODE|1|
+    .println -nomoreoptions SET|1|FOPMODE|1|
+    .println -nomoreoptions SET|1|LANG|Deutsch|
+    .println -nomoreoptions SET|1|LOCKBEHAVIOR|WAIT:2|
+    .println -nomoreoptions SET|1|UPDATEMODE|STRICT|
+    .output 
+} 
+..</BLOCK>
+..
+..<BLOCK folded> Proz inputStdFiles
+def inputStdFiles( ) { 
+    .input SPINNER.INI
+    .input DEFAULT.INI
+    ...input KKOMNAME.KONST
+    .input KDATNAME.KONST
+    ...input KAKTNAME.KONST 
+} 
+..</BLOCK>
+.. 
+..<BLOCK folded> Proz alleOffenenDatensaetzeAbschliessen
+def alleOffenenDatensaetzeAbschliessen( ) { 
+    ..: Alle Auftragszeiten schlie·en
+    .formula U|xtAuftragszeitSel = "$,,"
+    .formula U|xtAuftragszeitSel = U|xtAuftragszeitSel + ";ma=" + 'M|ytpersonalnr'
+    .formula U|xtAuftragszeitSel = U|xtAuftragszeitSel + ";endzeit=`"
+    .formula U|xtAuftragszeitSel = U|xtAuftragszeitSel + ";@gruppe=2"
+    .load 9 'G|hdatname.U|kodatBDE' nolock 'U|xtAuftragszeitSel'  
+    if (G|mehr) {
+        ..: Kenner fÅr EDP festlegen
+        .copy U|xtdollarstring = "$"
+        .copy U|xbdebug = G|false
+        .copy U|xbgts = G|false
+        .copy U|xtgts = ""
+        .copy U|xbnoimp = G|false
+        .copy U|xbimp = G|false 
+        .call edpTmpFiles ( )
+        .call edpKopf ( )
+        ..<BLOCK> EDP-Kîrper anlegen
+        .output ADDEDTO 'U|xtEdp1'
+        .println -nomoreoptions EDI|1|UPDATE||REF|'9|id'|| 
+        .. .println -nomoreoptions SFV|1|0|endzeit|'9|anfzeit'|
+        .println -nomoreoptions SFV|1|0|endzeit|'U|xzUhrzeit'|
+        .println -nomoreoptions SFV|1|0|enddat|'M|ytdfirstdat'|
+        .println -nomoreoptions SFV|1|0|sofort|1|
+        .output 
+        ..</BLOCK>
+        .call edpFuss ( ) 
+        .call edpAusfuehren ( ) 
+        .load 9
+    } 
+    ..: Alle Leistungsmeldungen schlie·en
+    .formula U|xtLeistungsmeldungSel = "$,,"
+    .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";ypersonal=" + 'M|ytpersonalnr'
+    .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";yazeit<>`"
+    .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";yezeit=`"
+    .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";yarbzeit=0"
+    ...formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";yaufgabe<>" + 'M|ytFANummer'
+    .formula U|xtLeistungsmeldungSel = U|xtLeistungsmeldungSel + ";@gruppe=1"    
+    .load 9 'G|hdatname.U|kodatPROJECTSUITEMELDUNGEN' nolock 'U|xtLeistungsmeldungSel'  
+    if (G|mehr) {
+        ..: Kenner fÅr EDP festlegen
+        .copy U|xtdollarstring = "$"
+        .copy U|xbdebug = G|false
+        .copy U|xbgts = G|false
+        .copy U|xtgts = ""
+        .copy U|xbnoimp = G|false
+        .copy U|xbimp = G|false
+        .call edpTmpFiles ( )
+        .call edpKopf ( )
+        ..<BLOCK> EDP-Kîrper anlegen
+        .output ADDEDTO 'U|xtEdp1'
+        .println -nomoreoptions EDI|1|UPDATE||REF|'9|id'|| 
+        .. .println -nomoreoptions SFV|1|0|yezeit|'9|yazeit'|
+        .println -nomoreoptions SFV|1|0|yezeit|'U|xzUhrzeit'|
+        .println -nomoreoptions SFV|1|0|yedatum|'M|ytdfirstdat'|
+        .output 
+        ..</BLOCK>
+        .call edpFuss ( ) 
+        .call edpAusfuehren ( ) 
+        .load 9
+    } 
+} 
+..</BLOCK>

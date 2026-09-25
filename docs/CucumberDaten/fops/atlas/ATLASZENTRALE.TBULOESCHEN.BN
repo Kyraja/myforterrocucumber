@@ -1,0 +1,67 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ATLASZENTRALE.TBULOESCHEN.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Stornieren einer Zollanmeldung durch Aufruf von Infosystem
+..                  ATLASEXPORT + Vorgang + Button:L”schen
+.. Functionality  : cancel customs registration by calling infosystem
+..                  ATLASEXPORT + transaction no + button:delete
+..  include     atlas/ATLASPARAMS
+..  include     atlas/ATLASSTATUS
+..*****************************************************************************
+.set trans -
+..
+.continue END     ?  F|empty(M|tedi)
+.continue END     ?  M|tedi^status = -9
+..
+.type text   xtfehler
+.type text   xtsystem
+..
+.type text   xtdelatlasvorgang    ? _F|defined(xtdelatlasvorgang)
+.type text   xtdelatlasvorgangout ? _F|defined(xtdelatlasvorgangout)
+.type text   xtdelatlasvorgangerr ? _F|defined(xtdelatlasvorgangerr)
+..
+..
+.. assign temporary files
+.file -tempname T|xtdelatlasvorgang
+.file -tempname T|xtdelatlasvorgangout
+.file -tempname T|xtdelatlasvorgangerr
+..
+.output new 'T|xtdelatlasvorgang'
+.input "DATEI.F"
+#!action=do
+#!typedcmd=38
+#!flddelimiter=#
+such         #kedi          #kvorgang          #kbuloeschen
+ATLASEXPORT  #'M|tedi^id'   #'M|tvorgang^id'   #1
+.output
+..
+.formula T|xtsystem = "edpimport.sh -p " + 'T|einmalpw' + " -c EKS -I " + 'T|xtdelatlasvorgang' + " >> " + 'T|xtdelatlasvorgangout' + " 2>> " + 'T|xtdelatlasvorgangerr'
+.system 'T|xtsystem'  background
+..
+..*****************************************************************************
+..
+.. examine transaction and file
+..
+.input "ATLASPARAMS"
+.assign T|xvatvorgang = M|tvorgang^id
+.input "ATLASSTATUS"
+..
+.assign M|tatlasgem = T|xbatgemeldet
+.assign M|tedi = T|xvatedi^id
+.formula M|tuebdatum = M|tedi^erfass  ? _F|empty(M|tedi)
+..
+.. status icon
+.formula M|tstatus  = ""
+.formula M|tstatusz = G|icook      ?  T|xbatgemeldet
+.formula M|tstatusz = "icon:ball_blue"       ?  T|xbatgemeldet   &  T|xvatedi^status = 2
+.formula M|tstatusz = G|icowarn     ?  T|xbatgemeldet   &  F|empty(T|xvatedi)
+.formula M|tstatusz = G|icowarn     ? _T|xbatgemeldet   & _F|empty(T|xvatedi)
+.formula M|tstatusz = G|icoerror        ?  T|xbathaserror
+.formula M|tstatusz = "icon:ball_orange"     ?  T|xbatdonotsend
+.formula M|tstatusz = "icon:ball_orange"     ?  M|tedi^status = -9
+..*****************************************************************************
+!END
+.continue

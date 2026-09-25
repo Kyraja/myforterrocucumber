@@ -13,7 +13,8 @@
 import type { Scenario, Step, StepKeyword } from '../../types/gherkin';
 import type { Translations } from '../../i18n/translations';
 import { useTranslation } from '../../i18n';
-import { ACTION_LABELS } from '../../lib/actionText';
+import { getActionLabel } from '../../lib/actionText';
+import type { Language } from '../../i18n';
 import styles from './FlowDiagram.module.css';
 
 interface FlowDiagramProps {
@@ -40,11 +41,11 @@ interface ActionDisplay { label: string; detail: string }
 
 type TFunc = (key: keyof Translations, params?: Record<string, string | number>) => string;
 
-function getActionDisplay(step: Step, t: TFunc): ActionDisplay {
+function getActionDisplay(step: Step, t: TFunc, lang: Language): ActionDisplay {
   const action = step.action;
   if (action.type === 'freetext') return { label: step.text || t('flow.freetext'), detail: '' };
 
-  const label = ACTION_LABELS[action.type];
+  const label = getActionLabel(action.type, lang);
   switch (action.type) {
     case 'editorOeffnen':
       return { label, detail: `${action.editorName || '\u2026'} [${action.command}]${action.record ? ` "${action.record}"` : ''}` };
@@ -62,9 +63,10 @@ function getActionDisplay(step: Step, t: TFunc): ActionDisplay {
       return { label, detail: `${action.fieldName || '\u2026'} ${action.modifiable ? t('flow.editable') : t('flow.notEditable')}${action.row ? ` (${t('flow.row')}${action.row})` : ''}` };
     case 'editorSpeichern':
     case 'editorSchliessen':
+    case 'subeditorSchliessen':
+    case 'subeditorSpeichern':
     case 'zeileAnlegen':
     case 'zeilenAnfuegen':
-      return { label, detail: '' };
     case 'editorWechseln':
       return { label, detail: action.editorName || '\u2026' };
     case 'buttonDruecken':
@@ -74,13 +76,17 @@ function getActionDisplay(step: Step, t: TFunc): ActionDisplay {
     case 'infosystemOeffnen':
       return { label, detail: action.infosystemName || '\u2026' };
     case 'tabelleZeilen':
-      return { label, detail: `${action.rowCount || '0'} Zeilen` };
+      return { label, detail: `${action.rowCount || '0'} ${lang === 'en' ? 'rows' : 'Zeilen'}` };
     case 'exceptionSpeichern':
       return { label, detail: `"${action.exceptionId || '\u2026'}"` };
     case 'exceptionFeld':
       return { label, detail: `${action.fieldName || '\u2026'} \u2192 "${action.exceptionId || '\u2026'}"` };
     case 'dialogBeantworten':
       return { label, detail: `"${action.answer || '\u2026'}" (${action.dialogId || '\u2026'})` };
+    case 'boxMeldung':
+      return { label, detail: `"${action.messageText || '\u2026'}"` };
+    case 'editorOeffnenTipp':
+      return { label, detail: `${action.editorName || '\u2026'} [${action.tipCommand || '\u2026'}]` };
   }
 }
 
@@ -100,14 +106,14 @@ function truncate(text: string, max: number): string {
 }
 
 function ScenarioDiagram({ scenario, onStepClick }: { scenario: Scenario; onStepClick?: (stepId: string) => void }) {
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
   const cx = PAD_X + BOX_W / 2;
 
   // Resolve phases + compute display info
   let phase: Phase = 'setup';
   const stepData = scenario.steps.map((step) => {
     phase = resolvePhase(step.keyword, phase);
-    const display = getActionDisplay(step, t);
+    const display = getActionDisplay(step, t, lang);
     const h = display.detail ? BOX_H_DETAIL : BOX_H;
     return { step, phase, display, h };
   });

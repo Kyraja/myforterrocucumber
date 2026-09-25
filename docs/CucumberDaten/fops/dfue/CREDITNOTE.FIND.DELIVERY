@@ -1,0 +1,74 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : CREDITNOTE.FIND.DELIVERY
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : Find delivery note item that matches the credit note item.
+...Includes       :
+..  include  dfue/CREDITNOTE.TAB.DELIVERY
+..*****************************************************************************
+..!meta M|=dfue/CREDITNOTE
+.set trans -
+..
+.continue END ?  F|empty(M|tgalitext)
+.. 
+.type text queryPackingSlipItem ? _F|defined(U|queryPackingSlipItem)
+.type text xt ? _F|defined(U|xt)
+..
+.. Remove leading zeroes, try to find packing slip again
+.formula U|xt = M|tgalitext
+!CUTZERO
+.assign M|tlieferschein = 'F|formatstr("$,,;@gruppe=1;ktyp=(PackingSlip);@ablageart=(Active);nummer={1}", U|xt)'
+.assign M|tlieferschein = 'F|formatstr("$,,;@gruppe=1;ktyp=(PackingSlip);@ablageart=(Filed);nummer={1}", U|xt)' ? _G|mehr
+.continue HEADOK  ? G|mehr
+.continue EHEAD ? _(U|xt/"0*")
+.formula U|xt = U|xt >> "0"
+.continue CUTZERO
+!EHEAD
+..
+.. esp's shipping number?
+.formula U|xt = M|tgalitext
+!EDLZERO
+.assign M|tlieferschein = 'F|formatstr("$,,;@gruppe=1;ktyp=(PackingSlip);@ablageart=(Active);edllsnr={1}", U|xt)'
+.assign M|tlieferschein = 'F|formatstr("$,,;@gruppe=1;ktyp=(PackingSlip);@ablageart=(Filed);edllsnr={1}", U|xt)' ? _G|mehr
+.continue HEADOK ? G|mehr
+.continue EEDL ? _(U|xt/"0*")
+.formula U|xt = U|xt >> "0"
+.continue EDLZERO
+!EEDL
+..
+.. Did not find packing slip
+.continue END ? F|empty(M|tlieferschein)
+..
+!HEADOK
+.add M|tlieferschein
+.copy M|tedl = D|edl
+.copy M|tedllsnr = D|edllsnr
+.copy M|tedllsdat = D|edllsdat
+.add
+.. 
+.. Find packing slip rows
+.continue END ?  F|empty(M|tlieferschein) ; F|empty(M|tartikel)
+.type integer xipos ? _F|defined(U|xipos)
+.copy U|xipos = 0
+.formula U|queryPackingSlipItem = "$,,;@gruppe=2;kotyp=(PackingSlip)"
+.formula U|queryPackingSlipItem = U|queryPackingSlipItem + ";@ablageart=(Active)" ? _M|tlieferschein^ablagef
+.formula U|queryPackingSlipItem = U|queryPackingSlipItem + ";@ablageart=(Filed)" ? M|tlieferschein^ablagef
+.formula U|queryPackingSlipItem = U|queryPackingSlipItem + ";kopf=" + M|tlieferschein^id
+.formula U|queryPackingSlipItem = U|queryPackingSlipItem + ";kunde=" + M|tlieferschein^kunde^id
+.formula U|queryPackingSlipItem = U|queryPackingSlipItem + ";artex=" + M|tartikel^id
+.formula U|queryPackingSlipItem = U|queryPackingSlipItem + ";charge=" + M|tcharge^id ? _F|empty(M|tcharge)
+.formula U|queryPackingSlipItem = U|queryPackingSlipItem + ";mge<>0"
+.select nolock sales 'U|queryPackingSlipItem'
+!ITEM
+.continue END ? _G|mehr
+.formula U|xipos = U|xipos + 1
+.input "CREDITNOTE.TAB.DELIVERY"
+.select nolock sales
+.continue ITEM
+..
+..*****************************************************************************
+!END
+.continue
+

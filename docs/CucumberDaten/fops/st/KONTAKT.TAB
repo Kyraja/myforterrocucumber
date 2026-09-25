@@ -1,0 +1,152 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KONTAKT.TAB
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Erzeugt eine Zeile in der Tabelle des Infosystems.
+.. Functionality  : Creates a row in the table of the infosystem.
+..*****************************************************************************
+.set trans -
+..
+.. Load reference into buffer 1
+.load 1 object 'M|verweisid'
+.continue ERROR1 ? _G|mehr
+..
+.. Do we have to find persons or banks?
+.continue PERSON ? M|kunde ; M|kundensach ; M|interessent ; M|intersach ; M|lieferant ; M|liefersach ; M|mitarbeiter
+!NEXT1
+.continue BANK ? M|bank
+!NEXT2
+.continue ADDRESS ? M|adresse
+.continue END
+..
+!PERSON: Check wether we have a person or not
+.type VID7 xperson ? _F|defined(U|xperson)
+.assign U|xperson = 1|id
+.continue NEXT1 ? _G|mehr
+.continue USEDBY ? 1|dnr = 0  & 1|gruppe = 1 & _M|kunde & M|kundensach
+.continue END    ? 1|dnr = 0  & 1|gruppe = 1 & _M|kunde
+.continue END    ? 1|dnr = 0  & 1|gruppe = 2 & _M|kundensach
+.continue USEDBY ? 1|dnr = 0  & 1|gruppe = 6 & _M|interessent & M|intersach
+.continue END    ? 1|dnr = 0  & 1|gruppe = 6 & _M|interessent
+.continue END    ? 1|dnr = 0  & 1|gruppe = 7 & _M|intersach
+.continue USEDBY ? 1|dnr = 1  & 1|gruppe = 1 & _M|lieferant & M|liefersach
+.continue END    ? 1|dnr = 1  & 1|gruppe = 1 & _M|lieferant
+.continue END    ? 1|dnr = 1  & 1|gruppe = 2 & _M|liefersach
+.continue END    ? 1|dnr = 11 & 1|gruppe = 1 & _M|mitarbeiter
+.continue UNREACH
+..
+!BANK: Do we have to find a bank or not
+.type ID96:1 xbank ? _F|defined(U|xbank)
+.assign U|xbank = 1|id
+.continue NEXT2 ? _G|mehr
+.continue UNREACH
+..
+!ADDRESS: Do we have to find an address or not
+.type ID113:1 xaddress ? _F|defined(U|xaddress)
+.assign U|xaddress = 1|id
+.continue END ? _G|mehr
+..
+!UNREACH: Do not show unreachable contacts
+.continue MOBILE  ? _F|defined(1|tele)
+.copy M|kteleda = _F|empty(1|tele)
+.copy M|kkontaktda = M|kteleda
+..
+!MOBILE
+.continue EMAIL ? _F|defined(1|mtele)
+.copy M|kmteleda = _F|empty(1|mtele)
+.copy M|kkontaktda = M|kkontaktda ; M|kmteleda
+..
+!EMAIL
+.continue WWWEB ? _F|defined(1|email)
+.copy M|kemailda = _F|empty(1|email)
+.copy M|kkontaktda = M|kkontaktda ; M|kemailda
+..
+!WWWEB
+.continue CONTACT ? _F|defined(1|urlt)
+.copy M|kurltda = _F|empty(1|urlt)
+.copy M|kkontaktda = M|kkontaktda ; M|kurltda
+..
+!CONTACT
+.continue USEDBY ? F|empty(M|stufe) & M|erreichbare & _M|kkontaktda
+.continue NEXT3  ? M|stufe = 1 & M|erreichbare & _M|kkontaktda
+..
+!NORECUR: Ignore double occurences
+.type text    xfldname   ? _F|defined(U|xfldname)
+.type text    xmustvalue ? _F|defined(U|xmustvalue)
+.type integer xlimitrow  ? _F|defined(U|xlimitrow)
+.assign U|xlimitrow = M|tzeilen
+.assign U|xfldname = "tkontakt"
+.assign U|xmustvalue = 1|id
+.input "is/MASKROW.EXISTS"
+.continue END ? F|empty(M|stufe) & U|xexists
+.continue NEXT3 ? M|stufe = 1 & U|xexists
+..
+.make screen line +O
+.copy M|tkontaktda = M|kkontaktda
+.copy M|tteleda = M|kteleda
+.copy M|tmteleda = M|kmteleda
+.copy M|temailda = M|kemailda
+.copy M|turltda = M|kurltda
+.assign M|tkontakt = 1|id
+.formula M|tbustart = M|restarticon ? M|kontext^id <> M|tkontakt^id
+.formula M|tvbed = F|vardescr(.M|varname, G|bsprache)
+.set trans +
+.formula M|tvbed = "Kontakt" ? M|stufe = 1
+.set trans -
+.formula M|tans = M|tkontakt^ans
+.formula M|tstr = M|tkontakt^str
+.formula M|tlakenn = M|tkontakt^lakenn
+.copy M|tstaat = M|tkontakt^staat
+.copy M|tregion = M|tkontakt^region
+.formula M|tplz = M|tkontakt^plz
+.formula M|tnort = M|tkontakt^nort
+.continue TMTELE ? _M|tteleda
+.formula M|ttele = 1|tele
+.copy M|tbutelefon = M|teleicon
+..
+!TMTELE
+.continue TEMAIL ? _M|tmteleda
+.formula M|tmtele = 1|mtele
+.formula M|tbumobil = M|mteleicon
+..
+!TEMAIL
+.continue TURLT ? _M|temailda
+.formula M|temail = 1|email ? F|defined(1|email)
+.formula M|tbuemail = M|emailicon ? _F|empty(M|temail)
+..
+!TURLT
+.continue USEDBY ? _M|turltda
+.formula M|turlt = 1|urlt ? F|defined(1|urlt)
+.formula M|tbuinternet = M|urlicon ? _F|empty(M|turlt)
+..
+!USEDBY: Extra hack for staffer of customers and suppliers
+.continue NEXT3 ? M|stufe = 1
+.continue STAFFER ? 1|dnr = 0  & 1|gruppe = 1 & M|kundensach
+.continue STAFFER ? 1|dnr = 0  & 1|gruppe = 6 & M|intersach
+.continue STAFFER ? 1|dnr = 1  & 1|gruppe = 1 & M|liefersach
+.continue END
+..
+!STAFFER: Query for staffer
+.formula M|stufe = 1
+.load 1 group '1|dnr' 'F|formatstr(M|staffselect, 1|id, (1|gruppe + 1))'
+!CHECK
+.continue RELEVEL ? _G|mehr
+.continue UNREACH
+..
+!NEXT3: Get next staffer
+.load 1 continue
+.continue CHECK
+..
+!RELEVEL: Downgrade level
+.formula M|stufe = 0
+.continue END
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1: Reference ? in item ? was not found!
+.error -message Die im Feld 'M|varnameid' hinterlegte Referenz 'M|verweisid' wurde nicht gefunden!
+.end 1

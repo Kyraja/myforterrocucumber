@@ -1,0 +1,187 @@
+..!interpreter english declaration noabbrev
+.. at 2016-06-24, 11:08
+.set TRANS -
+..========================================================================
+..==  Name              : FOP.PRJM.UP.LN.STORNO
+..==  Pfad              : allpstart
+..==  Funktion          : storniert die Buchungen zur Leistungsmeldung
+..==                      Die Ermiitlung der Buchung erfolgt ber die Transaktiom welche durch
+..==                      FOP.PRJM.UP.LN.BUCHEN in die Leistungsmeldung eingetragen wurde.
+..==
+..==  Erstellungsdatum  : 18.06.2009
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2016 alltrotec GmbH
+..==  Menuepunkte       :
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird ber EasyCase bearbeitet und mit easy2lg generiert!
+..==  Žnderungen auáerhalb von EasyCase werden nach der n„chsten Žnderung
+..==  im EasyCase wieder berschrieben und drfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input TRANS.KONFIG.INI ? _F|defined(U|xttransdat)
+..====================================================
+.type P147:1 xyplm              ? _F|defined(U|xyplm)
+.type text   xtsys              ? _F|defined(U|xtsys)
+.type text   xtupgsvorgangakt   ? _F|defined(U|xtupgsvorgangakt)
+.type text   xttransini         ? _F|defined(U|xttransini)
+.type text   xttransdat         ? _F|defined(U|xttransdat)
+.type text   xttransprot        ? _F|defined(U|xttransprot)
+.type text   xttransout         ? _F|defined(U|xttransout)
+.type text   xttransleer        ? _F|defined(U|xttransleer)
+.type text   xtbuchung          ? _F|defined(U|xtbuchung)
+.type text   xyprojekt          ? _F|defined(U|xyprojekt)
+.type text   xtpvorgang         ? _F|defined(U|xtpvorgang)
+.type text   xtaufgabe          ? _F|defined(U|xtaufgabe)
+.type bool   xblnstorno         ? _F|defined(U|xblnstorno)
+.type bool   xbistzeit          ? _F|defined(U|xbistzeit)
+.type bool   xbmehr             ? _F|defined(U|xbmehr)
+.type bool   xybstorno          ? _F|defined(U|xybstorno)
+.type bool   xybnomsg           ? _F|defined(U|xybnomsg)
+.type GD     xybudat            ? _F|defined(U|xybudat)
+.type integer   xprocsp ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.copy    U|xybudat   = 9|yadatum    ? _9|ytransaktion^ystorno
+.assign  U|xybudat   = ""           ?  9|ytransaktion^ystorno
+.formula U|xyprojekt = 9|yprojekt^id
+.formula U|xyprojekt = ""           ? F|empty(9|yprojekt)
+.assign U|xyplm = 9|id
+.copy   U|xybstorno = G|TRUE
+.input 'U|xtupstornorecht'          ? F|sysinfo(18)^allppro & _F|empty(9|ytransaktion)
+.load 9 add U|xyplm
+.continue EL001 ? _(U|xybstorno)
+.formula U|xttransini  = F|foppath("TRANSACTION.LNACHWEIS.INI")
+.formula U|xttransdat  = "rmtmp/X.PRJM.LN.STORNO." + G|sekundenz + "." + G|pid + ".DAT.TMP"
+.formula U|xttransprot = "rmtmp/X.PRJM.LN.STORNO." + G|sekundenz + "." + G|pid + ".PROT.TMP"
+.formula U|xttransleer = "rmtmp/X.PRJM.LN.STORNO." + G|sekundenz + "." + G|pid + ".LEER.TMP
+.select lock add 9|id
+.continue EL002 ? _(G|mehr)
+.set cancel --
+.continue EL003 ? _((_(U|xybnomsg)) & (_(G|edp)))
+.set trans +
+.box -BUTTON yes:no:cancel -TITLE Achtung
+?Soll die Kostenbuchung der Leistungsmeldung wirklich storniert werden'G|fragechar' ? _U|xblnstorno
+?Soll die Leistungsmeldung wirklich gel”scht werden'G|fragechar'                    ?  U|xblnstorno
+.set trans -
+!EL003
+.continue EL004 ? _((G|box = G|boxyes) ; (U|xybnomsg) ; (G|edp))
+.continue EL005 ? _(U|xybistkost)
+.continue EL006 ? _(_(F|empty(9|ytransaktion)))
+.load 8 add 9|ytransaktion
+.continue EL007 ? _(G|mehr)
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"
+.continue EL008 ? _(_(F|empty(5|ybatchuser)))
+.assign G|neuespassw = 5|ybatchuser
+.continue FI008
+!EL008
+.continue EL009 ? _(_(F|cmdpermitted(6, 17)))
+.set TRANS +
+.box Fehler
+Sie haben nicht die Berechtigung Buchungen zu stornieren.
+.set TRANS -
+.error
+.continue
+!EL009
+!FI008
+.load 8 line
+.output NEW 'U|xttransdat'
+.input DATEI.F
+#!ACTION=VIEW
+#!EDP_LANGCODE='G|bsprache'
+id;ybustorno;
+'8|id';;
+.output NEW WERF.WG
+.formula U|xtsys = "edpimport.sh -c EKS -p " + G|einmalpw + " " + U|xttransdat + " 2>" + U|xttransprot
+.system 'U|xtsys' BACKGROUND
+.continue EL010 ? _(_(G|mehr))
+.continue EL011 ? _(F|filenotempty(U|xttransprot))
+.out TERMINAL
+.input BILD.F
+.set TRANS +
+
+Fehler beim Stornieren der Buchung:
+
+.set TRANS -
+.input -TEXT 'U|xttransprot'
+.continue
+.continue FI011
+!EL011
+.set TRANS +
+.box Fehler
+Die Buchung konnte nicht storniert werden.
+.set TRANS -
+.error
+.continue
+!FI011
+!EL010
+.continue FI007
+!EL007
+.set TRANS +
+.box Fehler
+Die Transaktion '9|ytransaktion' konnte nicht ge”ffnet werden.
+.set TRANS -
+.error
+.continue
+!FI007
+!EL006
+.copy U|xbmehr = G|FALSE
+.load 8 add 9|ytransaktion
+.continue EL012 ? _(G|mehr)
+.continue EL013 ? _(8|ystorno)
+.copy U|xbmehr = G|TRUE
+.continue FI013
+!EL013
+.set TRANS +
+.box Fehler
+Die Buchung konnte nicht storniert werden.
+.set TRANS -
+.error
+.continue
+!FI013
+.continue FI012
+!EL012
+.copy U|xbmehr = G|TRUE
+!FI012
+.continue FI005
+!EL005
+.copy U|xbmehr = G|TRUE
+!FI005
+.continue EL014 ? _(U|xbmehr)
+.select lock add 9|id
+.continue EL015 ? _(G|mehr)
+.continue EL016 ? _(U|xblnstorno)
+.delete
+.continue EL017 ? _(_(F|empty(9|yaufgabe)))
+.formula U|xbistzeit  = G|TRUE
+.formula U|xtaufgabe  = ""
+.formula U|xtaufgabe  = 9|yaufgabe^id
+.formula U|xtpvorgang = ""
+.formula U|xtpvorgang = 9|ypvorgang^id         ? F|empty(9|ypvorgang)
+.input 'U|xtupgsvorgangakt'
+!EL017
+.continue FI016
+!EL016
+.formula H|ytransaktion = ""
+.rewrite
+!FI016
+.continue FI015
+!EL015
+.set TRANS +
+.box Fehler
+Die Leistungsmeldung kann nicht zur Bearbeitung geladen werden.
+.set TRANS -
+!FI015
+!EL014
+!EL004
+.continue FI002
+!EL002
+.set TRANS +
+.box Fehler
+Die Leistungsmeldung kann nicht zur Bearbeitung geladen werden.
+.set TRANS -
+.error
+.end 1
+!FI002
+!EL001
+.continue

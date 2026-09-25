@@ -1,0 +1,578 @@
+..!interpreter english translate
+..*****************************************************************************
+..
+..  Name      : BILKON.HOL
+..  Datum     : 02.10.96
+..  Vers.     : 7.2
+..  Autor     : Andrzej Klusek
+..
+..  Verantwortlich : hc
+..  Kontrolle      : mh
+..
+..
+..  Funktion  : BILKON.HOL wird aus BILANZ/KONACH aufgerufen
+..
+..  Ablauf    : alle Konten holen, Bilazsummen bilden und ausgeben
+..
+..*****************************************************************************
+..                           SUBROUTINE
+..                           ----------
+..
+.end .  ?  txname / "*BILKON.HOL"
+..*****************************************************************************
+.set trans -
+..  LGP_Var. initialisieren     Gesamtsumme      : xrgs
+..                              Gruppe 1/2       : xrg1
+..                              Gruppe 3/4       : xrg3
+..                              davon_Konten     : xrgd
+..                              Konto            : xrgk
+..                              Zwischensumme s  : xr1s
+..                              Zwischensumme ss : keine LGP_Var.
+.formula xii = 1
+..
+!VA1: Initialisieren
+.type real xrgs.xii xrg1.xii xrg3.xii xrgd.xii xrgs.xii xrgk.xii xr1s.xii
+..
+.formula xii = xii + 1
+.continue VA1  ?  xii <= ximax
+..
+..  Zwischenvar., Namenskonvention: xriazw
+..                                  ³ ³³ÀÄÄ Zwischenspeichern
+..                                  ³ ³ÀÄÄÄ Anfangswert
+..                                  ³ ÀÄÄÄÄ Inversdarstellung: aus 1 -> -1
+..                                  ÀÄÄÄÄÄÄ lokale Realvar.
+.type real xrazw xriazw xrezw xriezw xproz x4p
+.type text xt1fkt:14 xt2fkt:14 xth1:20 xt1aus:18 xt2aus:18 xt3aus:18 xt4aus:18 xt5aus:18
+.type text xt3fkt:14 xt1str:18 xt2str:18 xt3str:18 xt4str:18 xt5str:18 xi:1
+.formula xt1fkt = xarb + "BILKON.KONTO"
+.formula xt2fkt = xarb + "BILKON.WERT"
+.formula xt3fkt = xarb + "BILKON.RECH"
+..
+.. xsbil ist gleich true, wenn in der Zeile mit šberschrift
+.. Bereich "-b !" (alle bebuchbaren Bilanzkonten) vorhanden ist
+.type bool xsbil
+.formula xsbil = false
+..
+!VA5: 1. Zeile fr Bilanz oder GuV suchen
+.select from 'xtkotab' xkenn # xart # xber # xinf # xdv # xnam^
+.continue VE40  ? _mehr
+.continue VA5   ?  xkenn<> xl  & xkenn<> xlg
+..
+..  In der 4. Spalte (LGP_Var. xinf) der KOTAB beim šbergang
+..  von Bilanz auf GuV steht "p"
+.continue VB1       ?  xkenn<>"gv" ; xinf<>"p"
+..
+..  100% budget fr GuV ausrechnen, in xproz merken
+..  xinf = p -> 1. gv_Zeile in KOTAB
+.formula xb = xber
+.formula xk = xkenn
+.continue VA10      ?  xips = 2
+..
+..  Ist_Zahlen
+.budget 'xb'      ?  xdv = "b"  ;  xdv = ""
+.budget -v 'xb'   ?  xdv = "bv"
+.continue VA20
+..
+!VA10: Plan
+.budget -p 'xb'   ?  xdv = "b"  ;  xdv = ""
+.budget -pv 'xb'  ?  xdv = "bv"
+..
+!VA20
+.formula xproz = xproz - ssum  + hsum   ?  xart = "V"  &  xips = 1
+.formula xproz = xproz + ssum  - hsum   ?  xart = "E"  &  xips = 1
+.formula xproz = xproz - pssum + phsum  ?  xart = "V"  &  xips = 2
+.formula xproz = xproz + pssum - phsum  ?  xart = "E"  &  xips = 2
+.continue VA5
+..
+!VB1: 1. richtige Zeile aus KOTAB gelesen
+..    Initialisierung Stufe 1 / 2 und Zwischensummen
+.formula xii = 1
+..
+!VB5
+.formula xrg1.xii = 0.0
+.formula xrg1.xii = xrgs.xii  ?  xart = "ss"
+.formula xrg1.xii = xr1s.xii  ?  xart = "s"
+.formula xr1s.xii = 0.0       ?  xart = "s"
+.formula xii = xii + 1
+.continue VB5              ?  xii <= ximax
+..
+!VB20: Informationen aus KOTAB merken
+.formula xi = xinf
+.formula xa = xart
+.formula xb = xber
+.formula xk = xkenn
+..
+..  šberschrift, G„nsefáchen abschneiden
+.formula xn = xnam  << -1
+.formula xn = xn    >> -1
+..
+..  Initialisierung Stufe 3 / 4 / d
+.formula xii = 1
+..
+!VB25
+.formula xrg3.xii = 0.0
+.formula xrgd.xii = 0.0
+.formula xii = xii + 1
+.continue VB25             ?  xii <= ximax
+..
+?'xn                                                                    '  ?  xnachweis   &  xart <> "s" & xart<>"ss"
+?'xn                                                                    '  ?  _xnachweis  &  xart <> "s" & xart<>"ss"  &  xber = ""
+..
+..  n„chste Zeile lesen, wenn keine Konten im Bereich oder Zwischensummen (s/ss)
+.continue VB100  ?  xber = ""  ;  xart = "s"  ;  xart = "ss"
+..
+!VB30: budget_Rechnung fr einen Bereich (xber) aus KOTAB
+..     LABEL fr Folgezeile
+..
+..     KONACH: Konten ausgeben
+.formula xb = xber
+.input 'xt1fkt'            ?  xnachweis & _xsbil
+..
+.formula xii   = 1
+..
+!VB35: Zeitraum xii aktivieren
+..  xwastun = 4 -> Ist-Plan-Vergleich -> xips == 0 Std_Belegung
+..                 xips == 1 -> Ist-Zahlen, wenn 1.+3.+5. Lauf (xii==1/3/5)
+..                 xips == 2 -> Planzahlen, wenn 2.+4.    Lauf (xii==2/4)
+.formula xips  = 1  ?  xwastun = 4  &  (xii = 1  ;  xii = 3  ;  xii = 5)
+.formula xips  = 2  ?  xwastun = 4  &  (xii = 2  ;  xii = 4)
+..
+.formula xjahr = xjahr.xii
+.formula xam   = xam.xii
+.formula xem   = xem.xii
+.input VKZHOLJAHR
+.continue VB40      ?  xips = 2
+..
+..  Ist_Zahlen
+.budget 'xb'      ?  xb<> "-b !" & (xdv="b" ; xdv="")
+.budget -v 'xb'   ?  xb<> "-b !" &  xdv="bv"
+.budget -b !      ?  xb = "-b !"
+.continue VB50
+..
+!VB40: Plan
+.budget -p  'xb'  ?  xb<> "-b !" & (xdv="b" ; xdv="")
+.budget -pv 'xb'  ?  xb<> "-b !" &  xdv="bv"
+.budget -pb !     ?  xb = "-b !"
+..
+!VB50
+.input 'xt2fkt'
+..
+..  Summen bilden
+..  Gruppensumen -> xriezw
+.formula xrg1.xii = xrg1.xii + xriezw ?  xinf <> "d"
+.formula xrg3.xii = xrg3.xii + xriezw ?  xinf = "3"  ;  xinf = "4"
+.formula xrgd.xii = xrgd.xii + xriezw ?  xinf = "d"
+..
+..  Gesamtsumme  -> xrezw
+.formula xrezw    =-xrezw             ?   xart =  "E"
+.formula xrgs.xii = xrgs.xii + xrezw  ?   xinf <> "d"
+.formula xr1s.xii = xr1s.xii + xrezw  ?   xinf <> "d"
+..
+..  n„chster Zeitraum
+.formula xii   = xii + 1
+.continue VB35   ?  xii <= ximax
+.formula xips  = 0  ?  xwastun = 4
+..
+!VB100: 2.-n. Zeile aus KOTAB lesen
+.select from 'xtkotab' xkenn # xart # xber # xinf # xdv # xnam^
+.continue VE1    ? _mehr
+.continue VB100  ?  xber = ""   &  xnam = ""
+.continue VB100  ?  xkenn<> xl  &  xkenn<> xlg
+..
+.formula xsbil = ((xnam <> "" & xber = "-b !") ; (xnam = "" & xsbil))
+..  xnam == "" -> Folgezeile
+.continue VB30   ?  xnam = ""
+.continue VB130  ? (xi = "1"  ;  xi = "2")  &  _xnachweis
+.continue VB110  ?  xb = ""
+..
+..  KONACH:
+.continue VB137  ?  xnachweis &  xinf = "d"  & _xi = "d"
+.continue VB138  ?  xnachweis &  xi = "d"
+.continue VB130  ?  xnachweis
+..
+.formula xtskip = "VB110"
+.continue VB105  ?  xi = "d"
+..
+..  Ausgabe fr die Stufe 3 und 4
+.continue VF100  ?  xwastun = 1
+.continue VF200  ?  xwastun = 2
+.continue VF300  ?  xwastun = 3
+.continue VF400  ?  xwastun = 4
+..
+!VB105: davon_Konten
+.continue VF120  ?  xwastun = 1
+.continue VF220  ?  xwastun = 2
+.continue VF320  ?  xwastun = 3
+.continue VF420  ?  xwastun = 4
+..
+!VB110
+.continue VB20   ?  xinf <> "1"  &  xinf <> "2"
+..
+!VB130: Gruppe 1 / 2
+.continue VB140  ?  xb = ""  &  xa <> "s"  &  xa <> "ss"
+..
+..  Ausgabe nur BILANZ
+..  Beim KONACH Ausgabe im BILKON.KONTO
+.continue VB135  ?  xnachweis & _xa = "s"  & _xa = "ss"
+.continue VB135  ?  xi<> "1"  &  xi<> "2"
+..
+..  Ausgabe fr die Stufe 1 und 2 - Teil 1
+.formula xtskip = "VB135"
+.continue VF140  ?  xwastun = 1
+.continue VF240  ?  xwastun = 2
+.continue VF340  ?  xwastun = 3
+.continue VF440  ?  xwastun = 4
+..
+!VB135
+.continue VB140  ?  xinf = "d"
+..
+!VB137: Label fr KONACH wenn Zeile mit davon_Konten gelesen und vorherige
+..      Zeile keine mit davon_Konten war; Strich und Summe vor der Ausgabe
+..      der davon Konten ausgeben
+.formula xtskip = "VB140"
+.continue VF160  ?  xwastun = 1
+.continue VF260  ?  xwastun = 2
+.continue VF360  ?  xwastun = 3
+.continue VF460  ?  xwastun = 4
+..
+!VB138: Label fr KONACH: wenn Zeile mit davon_Konten gelesen und vorherige
+..      Zeile auch mit davon_Konten war
+.formula xtskip = "VB140"
+.continue VF130  ?  xwastun = 1
+.continue VF230  ?  xwastun = 2
+.continue VF330  ?  xwastun = 3
+.continue VF430  ?  xwastun = 4
+..
+!VB140
+.continue VB20   ?  xinf = "d"
+.continue VB1
+..
+!VE1: Table_EOF / letzte Zeile ausgeben
+..    Ausgabe fr die Stufe 3 und 4  oder  davon_Konten
+.continue VE25   ?  xnachweis &  xi = "d"
+.continue VE30   ?  xnachweis & _xi = "d"
+.formula xtskip = "VE10"
+.continue VF100  ?  xwastun = 1  & (xi = "3"  ;  xi = "4")
+.continue VF200  ?  xwastun = 2  & (xi = "3"  ;  xi = "4")
+.continue VF300  ?  xwastun = 3  & (xi = "3"  ;  xi = "4")
+.continue VF400  ?  xwastun = 4  & (xi = "3"  ;  xi = "4")
+..
+!VE10
+.formula xtskip = "VE20"
+.continue VF120  ?  xwastun = 1  &  xi = "d"
+.continue VF220  ?  xwastun = 2  &  xi = "d"
+.continue VF320  ?  xwastun = 3  &  xi = "d"
+.continue VF420  ?  xwastun = 4  &  xi = "d"
+..
+!VE20
+.formula xtskip = "VE30"
+.continue VF140  ?  xwastun = 1  & (xi = "1"  ;  xi = "2")
+.continue VF240  ?  xwastun = 2  & (xi = "1"  ;  xi = "2")
+.continue VF340  ?  xwastun = 3  & (xi = "1"  ;  xi = "2")
+.continue VF440  ?  xwastun = 4  & (xi = "1"  ;  xi = "2")
+.continue VE30
+..
+!VE25: KONACH und davon_Konten abschlieáen
+.formula xtskip = "VE40"
+.continue VF130  ?  xwastun = 1
+.continue VF230  ?  xwastun = 2
+.continue VF330  ?  xwastun = 3
+.continue VF430  ?  xwastun = 4
+..
+!VE30
+.formula xtskip = "VE40"
+.continue VF160  ?  xwastun = 1
+.continue VF260  ?  xwastun = 2
+.continue VF360  ?  xwastun = 3
+.continue VF460  ?  xwastun = 4
+..
+!VE40: Listen_Fuá
+.formula xtskip = "VE80"
+.continue VE50                   ?  xl = "gv"
+.set trans +
+.formula xth1   = "Summe AKTIVA"    ?  xl = "ba"
+.formula xth1   = "Summe PASSIVA"   ?  xl = "bp"
+.set trans -
+.continue VF180                  ?  xwastun = 1
+.continue VF280                  ?  xwastun = 2
+.continue VF380                  ?  xwastun = 3
+.continue VF480                  ?  xwastun = 4
+..
+!VE50: GuV
+.formula x4p = xrgs1 / xproz * 100  ?  xproz <> 0
+.formula x4p = 0                    ?  xproz =  0
+.formula x4p =-x4p                  ?  x4p   <  0
+..
+..  xwastun = 1: Wort "Gewin" / "Verlust" ausgeben
+..  Haben die Gesamtsummen das gleiche Vorzeichen, werden beide umgeswitcht
+.formula xth1 = ""
+.set trans +
+.formula xth1 = "Gewinn"     ?  xrgs1 >= 0  &  xwastun = 1
+.formula xth1 = "Verlust"    ?  xrgs1 <  0  &  xwastun = 1
+.set trans -
+.formula xrgs2 = xrgs2 * -1  ?  xrgs1 <  0  &  xwastun = 1
+.formula xrgs1 =-xrgs1       ?  xrgs1 <  0  &  xwastun = 1
+.continue VF180           ?  xwastun = 1
+.continue VF280           ?  xwastun = 2
+.continue VF380           ?  xwastun = 3
+.continue VF480           ?  xwastun = 4
+..
+!VE80
+.continue
+..
+..  AUSGABE
+..  ÄÄÄÄÄÄÄ
+..  xwastun = 1
+!VF100: Gruppe 3/4
+..K_____________o_______________n______________t___________o 123456789012345678 123456789012345678 100.00 123456789012345678
+'xn                                                        ' '           xrg31'                        '           xrg32'
+.continue 'xtskip'
+..
+!VF120: davon_Konten
+'xn                                                                                 '
+       '           xrgd1' 'x  '    ('           xrgd2' 'x ')
+.continue 'xtskip'
+..
+!VF130: davon_Konten Summe
+                                                             ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ                        ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+                                                             '           xrgd1'                        '           xrgd2'
+
+.continue 'xtskip'
+..
+!VF140: Gruppe 1/2 - Teil 1
+'xn                                                        ' '           xrg11'                        '           xrg12'
+.continue 'xtskip'
+..
+!VF160: Gruppe 1/2 - Teil 2
+..      Prozent Rechnung fr GuV
+.formula x4p = xrg11 / xproz * 100  ?  xl = "gv"  &  xproz <> 0
+.formula x4p = 0.0                  ?  xl = "gv"  &  xproz =  0
+.formula x4p =-x4p                  ?  xl = "gv"  &  x4p   <  0
+..
+?                                                             ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ '           xrg11'        '           xrg12'  ?  xl<> "gv"
+?                                                             ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ '           xrg11'' 0x4p' '           xrg12'  ?  xl = "gv"
+
+.formula xrg11 = 0.0
+.formula xrg12 = 0.0
+.continue 'xtskip'
+..
+!VF180: Endsumme
+?'              xth1'                                                            '           xrgs1'        '           xrgs2'  ?  xl<> "gv"
+?'              xth1'                                                            '           xrgs1'' 0x4p' '           xrgs2'  ?  xl = "gv"
+                                                                                ==================
+.continue 'xtskip'
+..
+..  xwastun = 2
+!VF200: Gruppe 3/4
+..K_o__________n______t________o 12345678901234 12345678901 12345678901  -1000 12345678901234 12345678901 12345678901  -1000
+.formula xr11 = xrg31
+.formula xr12 = xrg32
+.formula xr21 = xrg33
+.formula xr22 = xrg34
+.input 'xt3fkt'
+'xn                            ' '       xrg31' '  xrg32:0' '  xr1dz:0''  xx1' '       xrg33' '  xrg34:0' '  xr2dz:0''  xx2'
+.continue 'xtskip'
+..
+!VF220: davon_Konten
+.formula xr11 = xrgd1
+.formula xr12 = xrgd2
+.formula xr21 = xrgd3
+.formula xr22 = xrgd4
+.input 'xt3fkt'
+'xn                         ' '       xrgd1' '  xrgd2:0' '  xr1dz:0''  xx1' '       xrgd3' '  xrgd4:0' '  xr2dz:0''     xx2'
+.continue 'xtskip'
+..
+!VF230: davon_Konten Summe
+.formula xr11 = xrgd1
+.formula xr12 = xrgd2
+.formula xr21 = xrgd3
+.formula xr22 = xrgd4
+.input 'xt3fkt'
+                              ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄ  ÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄ  ÄÄÄÄÄ
+                              '       xrgd1' '  xrgd2:0' '  xr1dz:0''  xx1' '       xrgd3' '  xrgd4:0' '  xr2dz:0''  xx2'
+
+.continue 'xtskip'
+..
+!VF240: Gruppe 1/2 - Teil 1
+.formula xr11 = xrg11
+.formula xr12 = xrg12
+.formula xr21 = xrg13
+.formula xr22 = xrg14
+.input 'xt3fkt'
+
+'xn                            ' '       xrg11' '  xrg12:0' '  xr1dz:0''  xx1' '       xrg13' '  xrg14:0' '  xr2dz:0''  xx2'
+.continue 'xtskip'
+..
+!VF260: Gruppe 1/2 - Teil 2
+.formula xr11 = xrg11
+.formula xr12 = xrg12
+.formula xr21 = xrg13
+.formula xr22 = xrg14
+.input 'xt3fkt'
+                                 ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄ  ÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄ  ÄÄÄÄÄ
+                                 '       xrg11' '  xrg12:0' '  xr1dz:0''  xx1' '       xrg13' '  xrg14:0' '  xr2dz:0''  xx2'
+
+.formula xrg11 = 0.0
+.formula xrg12 = 0.0
+.formula xrg13 = 0.0
+.formula xrg14 = 0.0
+.continue 'xtskip'
+..
+!VF280: Endsumme
+.formula xr11 = xrgs1
+.formula xr12 = xrgs2
+.formula xr21 = xrgs3
+.formula xr22 = xrgs4
+.input 'xt3fkt'
+
+'              xth1'             '       xrgs1' '  xrgs2:0' '  xr1dz:0''  xx1' '       xrgs3' '  xrgs4:0' '  xr2dz:0''  xx2'
+                                 ============== =========== ===========  ===== ============== =========== ===========  =====
+.continue 'xtskip'
+..
+..  xwastun = 3
+!VF300: Gruppe 3/4
+.formula xt1aus = xrg31  ?  ximax >= 1
+.formula xt2aus = xrg32  ?  ximax >= 2
+.formula xt3aus = xrg33  ?  ximax >= 3
+.formula xt4aus = xrg34  ?  ximax >= 4
+.formula xt5aus = xrg35  ?  ximax >= 5
+..K_o__________n______t_________________________o 12345678901234 12345678901234 12345678901234 12345678901234 12345678901234
+'xn                                             ' '      xt1aus' '      xt2aus' '      xt3aus' '      xt4aus' '      xt5aus'
+.continue 'xtskip'
+..
+!VF320: davon_Konten
+.formula xt1aus = xrgd1  ?  ximax >= 1
+.formula xt2aus = xrgd2  ?  ximax >= 2
+.formula xt3aus = xrgd3  ?  ximax >= 3
+.formula xt4aus = xrgd4  ?  ximax >= 4
+.formula xt5aus = xrgd5  ?  ximax >= 5
+'xn                                          ' '      xt1aus' '      xt2aus' '      xt3aus' '      xt4aus' '      xt5aus'
+.continue 'xtskip'
+..
+!VF330: davon_Konten Summe
+.formula xt1aus = xrgd1  ?  ximax >= 1
+.formula xt2aus = xrgd2  ?  ximax >= 2
+.formula xt3aus = xrgd3  ?  ximax >= 3
+.formula xt4aus = xrgd4  ?  ximax >= 4
+.formula xt5aus = xrgd5  ?  ximax >= 5
+.formula xt1str = "ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ"  ?  ximax >= 1
+.formula xt2str = "ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ"  ?  ximax >= 2
+.formula xt3str = "ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ"  ?  ximax >= 3
+.formula xt4str = "ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ"  ?  ximax >= 4
+.formula xt5str = "ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ"  ?  ximax >= 5
+                                               '      xt1str' '      xt2str' '      xt3str' '      xt4str' '      xt5str'
+                                               '      xt1aus' '      xt2aus' '      xt3aus' '      xt4aus' '      xt5aus'
+
+.continue 'xtskip'
+..
+!VF340: Gruppe 1/2 - Teil 1
+.formula xt1aus = xrg11  ?  ximax >= 1
+.formula xt2aus = xrg12  ?  ximax >= 2
+.formula xt3aus = xrg13  ?  ximax >= 3
+.formula xt4aus = xrg14  ?  ximax >= 4
+.formula xt5aus = xrg15  ?  ximax >= 5
+'xn                                             ' '      xt1aus' '      xt2aus' '      xt3aus' '      xt4aus' '      xt5aus'
+.continue 'xtskip'
+..
+!VF360: Gruppe 1/2 - Teil 2
+.formula xt1aus = xrg11                 ?  ximax >= 1
+.formula xt2aus = xrg12                 ?  ximax >= 2
+.formula xt3aus = xrg13                 ?  ximax >= 3
+.formula xt4aus = xrg14                 ?  ximax >= 4
+.formula xt5aus = xrg15                 ?  ximax >= 5
+.formula xt1str = "ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ"  ?  ximax >= 1
+.formula xt2str = "ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ"  ?  ximax >= 2
+.formula xt3str = "ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ"  ?  ximax >= 3
+.formula xt4str = "ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ"  ?  ximax >= 4
+.formula xt5str = "ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ"  ?  ximax >= 5
+                                                  '      xt1str' '      xt2str' '      xt3str' '      xt4str' '      xt5str'
+                                                  '      xt1aus' '      xt2aus' '      xt3aus' '      xt4aus' '      xt5aus'
+
+.formula xrg11 = 0.0
+.formula xrg12 = 0.0
+.formula xrg13 = 0.0
+.formula xrg14 = 0.0
+.formula xrg15 = 0.0
+.continue 'xtskip'
+..
+!VF380: Endsumme
+.formula xt1aus = xrgs1                 ?  ximax >= 1
+.formula xt2aus = xrgs2                 ?  ximax >= 2
+.formula xt3aus = xrgs3                 ?  ximax >= 3
+.formula xt4aus = xrgs4                 ?  ximax >= 4
+.formula xt5aus = xrgs5                 ?  ximax >= 5
+.formula xt1str = "=================="  ?  ximax >= 1
+.formula xt2str = "=================="  ?  ximax >= 2
+.formula xt3str = "=================="  ?  ximax >= 3
+.formula xt4str = "=================="  ?  ximax >= 4
+.formula xt5str = "=================="  ?  ximax >= 5
+'              xth1'                              '      xt1aus' '      xt2aus' '      xt3aus' '      xt4aus' '      xt5aus'
+                                                  '      xt1str' '      xt2str' '      xt3str' '      xt4str' '      xt5str'
+.continue 'xtskip'
+..
+..  xwastun = 4
+!VF400: Gruppe 3/4
+..K______o__________n______t________o 12345678901234 12345678901234 -1000 12345678901234 12345678901234 -1000 12345678901234
+.formula xr11 = xrg31
+.formula xr12 = xrg32
+.formula xr21 = xrg33
+.formula xr22 = xrg34
+.input 'xt3fkt'
+'xn                                 ' '       xrg31' '       xrg32'' xx1' '       xrg33' '       xrg34'' xx2' '       xrg35'
+.continue 'xtskip'
+..
+!VF420: davon_Konten
+.formula xr11 = xrgd1
+.formula xr12 = xrgd2
+.formula xr21 = xrgd3
+.formula xr22 = xrgd4
+.input 'xt3fkt'
+'xn                              ' '       xrgd1' '       xrgd2'' xx1' '       xrgd3' '       xrgd4'' xx2' '       xrgd5'
+.continue 'xtskip'
+..
+!VF430: davon_Konten Summe
+.formula xr11 = xrgd1
+.formula xr12 = xrgd2
+.formula xr21 = xrgd3
+.formula xr22 = xrgd4
+.input 'xt3fkt'
+                                   ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+                                   '       xrgd1' '       xrgd2'' xx1' '       xrgd3' '       xrgd4'' xx2' '       xrgd5'
+
+.continue 'xtskip'
+..
+!VF440: Gruppe 1/2 - Teil 1
+.formula xr11 = xrg11
+.formula xr12 = xrg12
+.formula xr21 = xrg13
+.formula xr22 = xrg14
+.input 'xt3fkt'
+
+'xn                                 ' '       xrg11' '       xrg12'' xx1' '       xrg13' '       xrg14'' xx2' '       xrg15'
+.continue 'xtskip'
+..
+!VF460: Gruppe 1/2 - Teil 2
+.formula xr11 = xrg11
+.formula xr12 = xrg12
+.formula xr21 = xrg13
+.formula xr22 = xrg14
+.input 'xt3fkt'
+                                      ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ÄÄÄÄÄ ÄÄÄÄÄÄÄÄÄÄÄÄÄÄ
+                                      '       xrg11' '       xrg12'' xx1' '       xrg13' '       xrg14'' xx2' '       xrg15'
+
+.formula xrg11 = 0.0
+.formula xrg12 = 0.0
+.formula xrg13 = 0.0
+.formula xrg14 = 0.0
+.continue 'xtskip'
+..
+!VF480: Endsumme
+.formula xr11 = xrgs1
+.formula xr12 = xrgs2
+.formula xr21 = xrgs3
+.formula xr22 = xrgs4
+.input 'xt3fkt'
+
+'              xth1'                  '       xrgs1' '       xrgs2'' xx1' '       xrgs3' '       xrgs4'' xx2' '       xrgs5'
+                                      ============== ============== ===== ============== ============== ===== ==============
+.continue 'xtskip'

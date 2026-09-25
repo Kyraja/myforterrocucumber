@@ -1,0 +1,130 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ERFLIE.LABDATEI.FA
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Prfe Schreibweise der LAB-Datei
+..                  Die korrekte Schreibweise wird in die Maskenfelder
+..                  M|klabdatei (Abruf) und M|klabdateif (Flagfile)
+..                  geschrieben.
+.. Functionality  : Check spelling of forecast file (upper/lower case).
+..                  The correct spelling is set to mask fields M|labdatei
+..                  (forecast file) and M|klabdateif (flagfile).
+..*****************************************************************************
+.set trans -
+..
+.. Note on forecast file spelling: upper case or lower case
+..
+..  Spelling of the flagfile has to match the spelling of the
+..  forecast file.
+..  The spelling is defined when setting up the edi-software
+..  (i.e. converter software, not abas ERP).
+..
+..  Note that with the new forecast scheduling things are slightly different
+..  if there is no message and no processing active, there are no files!
+..  Additionally the file name is configureable ("default" is VKLAB)!
+..
+..      forecast        flagfile
+..     -----------     -----------
+..      vkauv       ->  vkauvok
+..      VKAUV       ->  VKAUVOK
+..      VKLAB       ->  VKLAB.flag
+..
+.type text xtvkauvGROSS
+.type text xtvkauvokGROSS
+.type text xtvkauvKLEIN
+.type text xtvkauvokKLEIN
+.type bool xbvkauvGROSS
+.type bool xbvkauvokGROSS
+.type bool xbvkauvKLEIN
+.type bool xbvkauvokKLEIN
+..
+.. processing forecasts with VKLAB for "new forecast scheduling"
+.type text xtvklab
+.type text xtvklabflag
+.type bool xbvklab
+.type bool xbvklabflag
+..
+.. Get name of export directory
+.input "dfue/DFUE.IMP.INI"
+..
+.. set expected file names
+.formula U|xtvkauvGROSS     = U|xEmpfangsVerz + "/VKAUV"
+.formula U|xtvkauvokGROSS   = U|xEmpfangsVerz + "/VKAUVOK"
+.formula U|xtvkauvKLEIN     = U|xEmpfangsVerz + "/vkauv"
+.formula U|xtvkauvokKLEIN   = U|xEmpfangsVerz + "/vkauvok"
+.formula U|xtvklab          = U|xEmpfangsVerz + "/" + 'M|kabm^datprefix'
+.formula U|xtvklabflag      = U|xtvklab + ".flag"
+..
+.. Check which files do exist
+.copy U|xbvkauvGROSS   = G|true    ?  F|fileexists(U|xtvkauvGROSS)
+.copy U|xbvkauvokGROSS = G|true    ?  F|fileexists(U|xtvkauvokGROSS)
+.copy U|xbvkauvKLEIN   = G|true    ?  F|fileexists(U|xtvkauvKLEIN)
+.copy U|xbvkauvokKLEIN = G|true    ?  F|fileexists(U|xtvkauvokKLEIN)
+.copy U|xbvklab        = G|true    ?  F|fileexists(U|xtvklab)
+.copy U|xbvklabflag    = G|true    ?  F|fileexists(U|xtvklabflag)
+..
+.. Mixed up import and processing models (i.e. no file name prefix)
+.continue NOPREFIX ?  _F|empty(M|kabm) & F|empty(M|kabm^datprefix)
+..
+.. No files were found
+.continue NOFILE  ?  _M|kbvklab  &  _(U|xbvkauvGROSS ; U|xbvkauvokGROSS ; U|xbvkauvKLEIN ; U|xbvkauvokKLEIN)
+..
+.. Check if upper/lower case files got confused
+.continue OK      ?  U|notcasesensitive
+.continue TWOFLAG ? _M|kbvklab  & (U|xbvkauvGROSS ; U|xbvkauvokGROSS) & (U|xbvkauvKLEIN ; U|xbvkauvokKLEIN)
+..
+!OK: Conclude which flagfile is supposed be use (default GROSS)
+.formula M|klabdatei  = U|xtvkauvKLEIN       ? _U|writeflagfileupper
+.formula M|klabdateif = U|xtvkauvokKLEIN     ? _U|writeflagfileupper
+.formula M|klabdatei  = U|xtvkauvGROSS       ? _U|writeflagfilelower
+.formula M|klabdateif = U|xtvkauvokGROSS     ? _U|writeflagfilelower
+.formula M|klabdatei  = U|xtvklab            ?  M|kbvklab
+.formula M|klabdateif = U|xtvklabflag        ?  M|kbvklab
+..
+..
+.. Old Scheduling: missing  flagfile means that message procesing is busy!
+.continue ERRCASE ?  _M|kbvklab  & _F|fileexists(M|klabdateif) & (U|xbvkauvokKLEIN;U|xbvkauvokGROSS)
+.continue NOFLAG  ?  _M|kbvklab  & _F|fileexists(M|klabdateif)
+.continue NOFLAG  ?  _M|kbvklab  & _F|filewriteable(M|klabdateif)
+..
+.. New Scheduling: having a flag means that message processing is busy!
+.continue NEWFLAG ?   M|kbvklab  &  U|xbvklabflag
+..
+..
+.. Return values:
+..  field  M|klabdatei   contains name of forecast file
+..  field  M|klabdateif  contains name of flagfile
+..*****************************************************************************
+!END
+.continue
+..
+..
+!TWOFLAG
+.error Sie haben zu viele Flagfiles!
+.end 1
+..
+!VKLAB2X
+.error Sie haben zu viele Abrufdateien!
+.end 1
+..
+!NOFLAG
+.error Die Datei 'M|klabdateif' ist momentan nicht vorhanden!
+.end 1
+..
+!NOFILE
+.error Es wurden keine Flagfiles und keine Importdateien gefunden!
+.end 1
+..
+!NEWFLAG
+.error Das Anlegen von neuen Abrufen ist gesperrt!
+.end 1
+..
+!NOPREFIX
+.error Das Abbildungsmodell enth„lt kein Dateinamenpr„fix!
+.end 1
+..
+!ERRCASE
+.error Das Flagfile 'M|klabdateif' ist mit der falschen Gross-/Kleinschreibung vorhanden.
+.end 1

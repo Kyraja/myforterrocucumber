@@ -1,0 +1,1142 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : CHANGECURRENCY.GRF
+.. Date           : 11.03.15
+.. Version        : 2015r2n04
+.. Author         : si/dr
+.. Copyright      : (c) 2015 SABA International
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xttext     ? _F|defined(U|xttext)
+.type text U|xtcmd      ? _F|defined(U|xtcmd)
+.type text U|xttmp      ? _F|defined(U|xttmp)
+.type text U|xtedp      ? _F|defined(U|xtedp)
+.type text U|xtout      ? _F|defined(U|xtout)
+.type text U|xterr      ? _F|defined(U|xterr)
+.type text U|xkto1      ? _F|defined(U|xkto1)
+.type text U|xkto2      ? _F|defined(U|xkto2)
+.type text U|xkto3      ? _F|defined(U|xkto3)
+.type text U|xkto4      ? _F|defined(U|xkto4)
+.type text U|xkto5      ? _F|defined(U|xkto5)
+.type text U|xkto6      ? _F|defined(U|xkto6)
+.type text U|xkto7      ? _F|defined(U|xkto7)
+.type text U|xkto8      ? _F|defined(U|xkto8)
+.type text U|xkto9      ? _F|defined(U|xkto9)
+.type text U|xxkto      ? _F|defined(U|xxkto)
+.type integer U|xiz     ? _F|defined(U|xiz)
+.type integer U|xia     ? _F|defined(U|xia)
+..
+.continue NOWARTG       ? _G|wartung
+..
+.file -TEMPNAME U|xtedp
+.file -TEMPNAME U|xtout
+.file -TEMPNAME U|xterr
+.formula U|xiz  = 0
+.make screen line --    ? M|tzeilen > 0
+..
+!FIBUOPEN
+.continue V1207
+.select company "$,gruppe=12;@gruppe=12"
+.continue V1207 ? _G|mehr
+.continue V1207 ? F|empty(H|erend)
+.set trans +
+.text U|xttext 'G|bspri' Fibu-Erîffnung schon abgeschlossen
+.set trans -
+.error 'U|xttext'!
+.continue END
+..
+!V1207: Standardkontierung
+.make screen line +o
+.assign M|ytvartab      = "V-12-07"
+.formula M|ytvarbez     = M|ytvartab^namebspr
+.formula M|ytvdn        = M|ytvartab^vdn
+.formula M|ytvgr        = M|ytvartab^vgr
+..
+.note -IMMEDIATELY Kontierung in der Standardkontierung austauschen
+..erst alle Konten kopieren
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten aus Standardkontierung duplizieren
+#!database=5
+#!group=1
+#!action=copy
+id;nummer;bem;eg;ausland;kopustzuord;
+.formula U|xtcmd        = "$,@datei=12:07;nummer=!"
+.load 0 nolock object 'U|xtcmd'
+.continue V0201         ? _G|mehr
+!ZSTD
+?'0|kasse^id';'0|kasse^nummer'a;KOWEG;(0,0,0);(0,0,0);nein;             ? _F|empty(0|kasse)
+?'0|verb^id';'0|verb^nummer'a;KOWEG;(0,0,0);(0,0,0);nein;               ? _F|empty(0|verb)
+?'0|aufw^id';'0|aufw^nummer'a;KOWEG;(0,0,0);(0,0,0);nein;               ? _F|empty(0|aufw)
+?'0|drund^id';'0|drund^nummer'a;KOWEG;(0,0,0);(0,0,0);nein;             ? _F|empty(0|drund)
+?'0|dkurs^id';'0|dkurs^nummer'a;KOWEG;(0,0,0);(0,0,0);nein;             ? _F|empty(0|dkurs)
+?'0|ford^id';'0|ford^nummer'a;KOWEG;(0,0,0);(0,0,0);nein;               ? _F|empty(0|ford)
+?'0|erlo^id';'0|erlo^nummer'a;KOWEG;(0,0,0);(0,0,0);nein;               ? _F|empty(0|erlo)
+?'0|hdkurs^id';'0|hdkurs^nummer'a;KOWEG;(0,0,0);(0,0,0);nein;           ? _F|empty(0|hdkurs)
+?'0|hdrund^id';'0|hdrund^nummer'a;KOWEG;(0,0,0);(0,0,0);nein;           ? _F|empty(0|hdrund)
+.load 0 nolock continue
+.continue ZSTD          ? G|mehr
+.output
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Duplizieren der Konten aus der Standardkontierung
+.set trans -
+.continue ERRSTD        ? F|filesize(U|xterr) > 0
+!IMPSTD
+..jetzt die duplizierten Konten in die Standardkontierung eintragen
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten in der Standardkontierung austauschen
+#!database=12
+#!group=07
+#!action=update
+id;kasse;verb;aufw;dkurs;drund;verdli;verdma;ford;erlo;hdkurs;hdrund;verdku;
+.formula U|xtcmd        = "$,@datei=12:07;nummer=!"
+.load 0 nolock object 'U|xtcmd'
+.continue V0201         ? _G|mehr
+!XSTD
+.formula U|xkto1        = ""
+.formula U|xkto2        = ""
+.formula U|xkto3        = ""
+.formula U|xkto4        = ""
+.formula U|xkto5        = ""
+.formula U|xkto6        = ""
+.formula U|xkto7        = ""
+.formula U|xkto8        = ""
+.formula U|xkto9        = ""
+.formula U|xkto1        = '0|kasse^nummer' + "a"        ? _F|empty(0|kasse)
+.formula U|xkto2        = '0|verb^nummer' + "a"         ? _F|empty(0|verb)
+.formula U|xkto3        = '0|aufw^nummer' + "a"         ? _F|empty(0|aufw)
+.formula U|xkto4        = '0|dkurs^nummer' + "a"        ? _F|empty(0|dkurs)
+.formula U|xkto5        = '0|drund^nummer' + "a"        ? _F|empty(0|drund)
+.formula U|xkto6        = '0|ford^nummer' + "a"         ? _F|empty(0|ford)
+.formula U|xkto7        = '0|erlo^nummer' + "a"         ? _F|empty(0|erlo)
+.formula U|xkto8        = '0|hdkurs^nummer' + "a"       ? _F|empty(0|hdkurs)
+.formula U|xkto9        = '0|hdrund^nummer' + "a"       ? _F|empty(0|hdrund)
+'0|id';'U|xkto1';'U|xkto2';'U|xkto3';'U|xkto4';'U|xkto5';'U|xkto2';'U|xkto2';'U|xkto6';'U|xkto7';'U|xkto8';'U|xkto9';'U|xkto6';
+.load 0 nolock continue
+.continue XSTD          ? G|mehr
+.output
+.formula M|ytimport     = U|xtedp
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Update der Konten in der Standardkontierung
+.set trans -
+.continue V0201         ? F|filesize(U|xterr) = 0
+!ERRSTD
+.formula M|yterror      = U|xterr
+.error 'U|xttext'
+.edi 'U|xterr'
+.continue END
+..
+!V0201: Konten aus Artikeln entfernen
+.formula U|xiz          = U|xiz + 1
+.continue V0001         ? U|xiz > 3
+.formula U|xia          = 0
+.note -IMMEDIATELY Kontierung aus Teilestamm entfernen
+....continue V0202 ? F|sysinfo(18)^bew
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten aus Warengruppen duplizieren
+#!database=2
+?#!group=1       ? U|xiz = 1
+?#!group=4       ? U|xiz = 2
+?#!group=5       ? U|xiz = 3
+#!action=update
+id;ekonto;vkonto;
+.formula U|xtcmd        = "$,@database=2;@group=1;nummer=!"       ? U|xiz = 1
+.formula U|xtcmd        = "$,@database=2;@group=4;nummer=!"       ? U|xiz = 2
+.formula U|xtcmd        = "$,@database=2;@group=5;nummer=!"       ? U|xiz = 3
+.load 0 nolock object 'U|xtcmd'
+.continue V0201         ? _G|mehr
+!Z0201
+?'0|id';(0,0,0);(0,0,0);                ? _F|empty(0|ekonto) ; _F|empty(0|vkonto)
+.formula U|xia          = U|xia + 1     ? _F|empty(0|ekonto) ; _F|empty(0|vkonto)
+.load 0 nolock continue
+.continue Z0201         ? G|mehr
+.output
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.continue V0201         ? U|xia = 0
+.continue V0201         ? F|filesize(U|xterr) = 0
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Lîschen der Konten aus dem Teilestamm
+.set trans -
+.error 'U|xttext'
+.edi 'U|xterr'
+.continue END
+..
+!V0001
+.note -IMMEDIATELY Kontierung aus Kunden entfernen
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten aus Kunden entfernen
+#!database=0
+#!group=1
+#!action=update
+id;verd;
+.formula U|xtcmd        = "$,@database=0;@group=1;nummer=!;verd<>`"
+.load 0 nolock object 'U|xtcmd'
+.continue V0101         ? _G|mehr
+!Z0001
+'0|id';(0,0,0);
+.load 0 nolock continue
+.continue Z0001         ? G|mehr
+.output
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.continue V0101         ? F|filesize(U|xterr) = 0
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Lîschen der Konten aus den Kunden
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!V0101
+.note -IMMEDIATELY Kontierung aus Lieferanten entfernen
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten aus Lieferanten entfernen
+#!database=1
+#!group=1
+#!action=update
+id;verd;
+.formula U|xtcmd        = "$,@database=1;@group=1;nummer=!;verd<>`"
+.load 0 nolock object 'U|xtcmd'
+.continue V1101         ? _G|mehr
+!Z0101
+'0|id';(0,0,0);
+.load 0 nolock continue
+.continue Z0101         ? G|mehr
+.output
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.continue V1101         ? F|filesize(U|xterr) = 0
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Lîschen der Konten aus den Lieferanten
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!V1101
+.note -IMMEDIATELY Kontierung aus Mitarbeitern entfernen
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten aus Mitarbeitern entfernen
+#!database=11
+#!group=1
+#!action=update
+id;verd;
+.formula U|xtcmd        = "$,@database=11;@group=1;nummer=!;verd<>`"
+.load 0 nolock object 'U|xtcmd'
+.continue WGR           ? _G|mehr
+!Z1101
+'0|id';(0,0,0);
+.load 0 nolock continue
+.continue Z1101         ? G|mehr
+.output
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.continue WGR           ? F|filesize(U|xterr) = 0
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Lîschen der Konten aus den Mitarbeitern
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!WGR: Warengruppen Ñndern
+.make screen line +o
+.assign M|ytvartab      = "V-12-28"
+.formula M|ytvarbez     = M|ytvartab^namebspr
+.formula M|ytvdn        = M|ytvartab^vdn
+.formula M|ytvgr        = M|ytvartab^vgr
+.formula M|ytimport     = U|xtedp
+..
+.note -IMMEDIATELY Kontierung in Warengruppen austauschen
+..erst alle Konten kopieren
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten aus Warengruppen duplizieren
+#!database=5
+#!group=1
+#!action=copy
+id;nummer;bem;eg;ausland;kopustzuord;
+.formula U|xtcmd        = "$,@datei=12:28;nummer=!"
+.load 0 nolock object 'U|xtcmd'
+.continue PGR           ? _G|mehr
+.formula U|xttmp        = ""
+.formula U|xia          = 0
+!ZWGR
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|bestand^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|bestand) & _U|xttmp/" + G|dblquote + "*" + '0|bestand^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|bestgelniber^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|bestgelniber) & _U|xttmp/" + G|dblquote + "*" + '0|bestgelniber^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|bewdiff^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|bewdiff) & _U|xttmp/" + G|dblquote + "*" + '0|bewdiff^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|bvkst^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|bvkst) & _U|xttmp/" + G|dblquote + "*" + '0|bvkst^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|bvktr^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|bvktr) & _U|xttmp/" + G|dblquote + "*" + '0|bvktr^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|korrmge^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|korrmge) & _U|xttmp/" + G|dblquote + "*" + '0|korrmge^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|lohnkst^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|lohnkst) & _U|xttmp/" + G|dblquote + "*" + '0|lohnkst^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|lohnktr^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|lohnktr) & _U|xttmp/" + G|dblquote + "*" + '0|lohnktr^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+..
+.load 0 nolock continue
+.continue ZWGR          ? G|mehr
+.continue IMPWGR        ? F|empty(U|xttmp)
+!TWGR
+.formula U|xxkto        = U|xttmp << ","
+.continue FWGR          ? F|empty(U|xxkto)
+.formula U|xttmp        = U|xttmp >> ","
+.continue TWGR          ? U|xxkto/"*a"
+.formula U|xtcmd        = "$,@datei=5:1;nummer=="+U|xxkto+"a"
+.select nolock account 'U|xtcmd'
+.continue TWGR          ? G|mehr
+'U|xxkto';'U|xxkto'a;KOWEG;(0,0,0);(0,0,0);'G|false';
+.formula U|xia          = U|xia + 1
+.continue TWGR
+!FWGR
+.output
+.continue PGR           ? U|xia = 0
+.formula M|ytimport     = U|xtedp
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Duplizieren der Konten aus Warengruppen
+.set trans -
+.continue ERRWGR        ? F|filesize(U|xterr) > 0
+!IMPWGR
+..jetzt die duplizierten Konten in die Warengruppen eintragen
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten in Warengruppen austauschen
+#!database=12
+#!group=28
+#!action=update
+id;bestand;bestgelniber;bewdiff;bvkst;bvktr;korrmge;lohnkst;lohnktr;
+.formula U|xtcmd        = "$,@datei=12:28;nummer=!"
+.load 0 nolock object 'U|xtcmd'
+.continue PGR           ? _G|mehr
+!XWGR
+.formula U|xkto1        = ""
+.formula U|xkto2        = ""
+.formula U|xkto3        = ""
+.formula U|xkto4        = ""
+.formula U|xkto5        = ""
+.formula U|xkto6        = ""
+.formula U|xkto7        = ""
+.formula U|xkto8        = ""
+.formula U|xkto1        = '0|bestand^nummer' + "a"      ? _F|empty(0|bestand)
+.formula U|xkto2        = '0|bestgelniber^nummer' + "a" ? _F|empty(0|bestgelniber)
+.formula U|xkto3        = '0|bewdiff^nummer' + "a"      ? _F|empty(0|bewdiff)
+.formula U|xkto4        = '0|bvkst^nummer' + "a"        ? _F|empty(0|bvkst)
+.formula U|xkto5        = '0|bvktr^nummer' + "a"        ? _F|empty(0|bvktr)
+.formula U|xkto6        = '0|korrmge^nummer' + "a"      ? _F|empty(0|korrmge)
+.formula U|xkto7        = '0|lohnkst^nummer' + "a"      ? _F|empty(0|lohnkst)
+.formula U|xkto8        = '0|lohnktr^nummer' + "a"      ? _F|empty(0|lohnktr)
+'0|id';'U|xkto1';'U|xkto2';'U|xkto3';'U|xkto4';'U|xkto5';'U|xkto6';'U|xkto7';'U|xkto8';
+.load 0 nolock continue
+.continue XWGR          ? G|mehr
+.output
+.formula M|ytimport     = U|xtedp
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Update der Konten in Warengruppen
+.set trans -
+.continue PGR           ? F|filesize(U|xterr) = 0
+!ERRWGR
+.formula M|yterror      = U|xterr
+.error 'U|xttext'
+.edi 'U|xterr'
+.continue END
+..
+!PGR: Produktgruppen Ñndern
+.make screen line +o
+.assign M|ytvartab      = "V-12-29"
+.formula M|ytvarbez     = M|ytvartab^namebspr
+.formula M|ytvdn        = M|ytvartab^vdn
+.formula M|ytvgr        = M|ytvartab^vgr
+.formula M|ytimport     = U|xtedp
+..
+.note -IMMEDIATELY Kontierung in Produktgruppen austauschen
+..erst alle Konten kopieren
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten aus Produktgruppen duplizieren
+#!database=5
+#!group=1
+#!action=copy
+id;nummer;bem;eg;ausland;kopustzuord;
+.formula U|xtcmd        = "$,@datei=12:29;nummer=!"
+.load 0 nolock object 'U|xtcmd'
+.continue KOREKONF      ? _G|mehr
+.formula U|xttmp        = ""
+.formula U|xia          = 0
+!ZPGR
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|uebest^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|uebest) & _U|xttmp/" + G|dblquote + "*" + '0|uebest^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|ueaend^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|ueaend) & _U|xttmp/" + G|dblquote + "*" + '0|ueaend^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|pgerlo^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|pgerlo) & _U|xttmp/" + G|dblquote + "*" + '0|pgerlo^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.load 0 nolock continue
+.continue ZPGR          ? G|mehr
+.continue IMPPGR        ? F|empty(U|xttmp)
+!TPGR
+.formula U|xxkto        = U|xttmp << ","
+.continue FPGR          ? F|empty(U|xxkto)
+.formula U|xttmp        = U|xttmp >> ","
+.continue TPGR          ? U|xxkto/"*a"
+.formula U|xtcmd        = "$,@datei=5:1;nummer=="+U|xxkto+"a"
+.select nolock account 'U|xtcmd'
+.continue TPGR          ? G|mehr
+'U|xxkto';'U|xxkto'a;KOWEG;(0,0,0);(0,0,0);'G|false';
+.formula U|xia          = U|xia + 1
+.continue TPGR
+!FPGR
+.output
+.continue IMPPGR        ? U|xia = 0
+.formula M|ytimport     = U|xtedp
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Duplizieren der Konten aus Produktgruppen
+.set trans -
+.continue ERRPGR        ? F|filesize(U|xterr) > 0
+!IMPPGR
+..jetzt die duplizierten Konten in die Produktgruppen eintragen
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten in Produktgruppen austauschen
+#!database=12
+#!group=29
+#!action=update
+id;uebest;ueaend;pgerlo;
+.formula U|xtcmd        = "$,@datei=12:29;nummer=!"
+.load 0 nolock object 'U|xtcmd'
+.continue KOREKONF      ? _G|mehr
+!XPGR
+.formula U|xkto1        = ""
+.formula U|xkto2        = ""
+.formula U|xkto3        = ""
+.formula U|xkto1        = '0|uebest^nummer' + "a"       ? _F|empty(0|uebest)
+.formula U|xkto2        = '0|ueaend^nummer' + "a"       ? _F|empty(0|ueaend)
+.formula U|xkto3        = '0|pgerlo^nummer' + "a"       ? _F|empty(0|pgerlo)
+'0|id';'U|xkto1';'U|xkto2';'U|xkto3';
+.load 0 nolock continue
+.continue XPGR          ? G|mehr
+.output
+.formula M|ytimport     = U|xtedp
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Update der Konten in Produktgruppen
+.set trans -
+.continue KOREKONF      ? F|filesize(U|xterr) = 0
+!ERRPGR
+.formula M|yterror      = U|xterr
+.error 'U|xttext'
+.edi 'U|xterr'
+.continue END
+..
+!KOREKONF: Kostenrechnungskonfiguration Ñndern
+.note -IMMEDIATELY Kontierung in der Kostenrechnungskonfiguration austauschen
+.make screen line +o
+.assign M|ytvartab      = "V-12-18"
+.formula M|ytvarbez     = M|ytvartab^namebspr
+.formula M|ytvdn        = M|ytvartab^vdn
+.formula M|ytvgr        = M|ytvartab^vgr
+.formula M|ybupdate     = G|true
+..
+.formula U|xtcmd        = "$,@datei=12:18;such=!"
+.load 0 nolock object 'U|xtcmd'
+.continue STS   ? _G|mehr
+.continue STS   ? _0|kost
+..Kostenrechnungskonfiguration Ñndern
+.formula U|xtcmd        = "$,@datei=60:5;such=!"
+.load 0 nolock object 'U|xtcmd'
+.continue STS   ? _G|mehr
+.continue STS   ? F|empty(0|ilvko)
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten aus Kostenrechnungskonfiguration duplizieren
+#!database=5
+#!group=1
+#!action=copy
+id;nummer;bem;eg;ausland;kopustzuord;
+'0|ilvko^id';'0|ilvko^nummer'a;KOWEG;(0,0,0);(0,0,0);nein;
+.output
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Duplizieren des Kontos aus der Kostenrechnungskonfiguration
+.set trans -
+.error 'U|xttext'       ? F|filesize(U|xterr) > 0
+.edi 'U|xttext'         ? F|filesize(U|xterr) > 0
+.continue END           ? F|filesize(U|xterr) > 0
+..jetzt das duplizierte Konto in die Kostenrechnungskonfiguration eintragen
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konto in Kostenrechnungskonfiguration austauschen
+#!database=60
+#!group=5
+#!action=update
+id;ilvko;
+'0|id';'0|ilvko'a;
+.output
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim éndern des Kontos in der Kostenrechnungskonfiguration
+.set trans -
+.error 'U|xttext'       ? F|filesize(U|xterr) > 0
+.edi 'U|xttext'         ? F|filesize(U|xterr) > 0
+.continue END           ? F|filesize(U|xterr) > 0
+..
+!STS: SteuerschÅssel
+.note -IMMEDIATELY Kontierung in SteuerschlÅsseln austauschen
+.make screen line +o
+.assign M|ytvartab      = "V-58-01"
+.formula M|ytvarbez     = M|ytvartab^namebspr
+.formula M|ytvdn        = M|ytvartab^vdn
+.formula M|ytvgr        = M|ytvartab^vgr
+..
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten aus Kostenrechnungskonfiguration duplizieren
+#!database=5
+#!group=1
+#!action=copy
+id;nummer;bem;eg;ausland;kopustzuord;
+.formula U|xtcmd        = "$,@datei=58:1;nummer=!"
+.load 0 nolock object 'U|xtcmd'
+.continue USTZUO        ? _G|mehr
+.formula U|xia          = 0
+.continue ZSTS
+!XSTS
+.load 0 nolock continue
+.continue NSTS          ? _G|mehr
+!ZSTS
+.load 0 nolock line
+.continue XSTS          ? _G|mehr
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|ekst^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|ekst) & _U|xttmp/" + G|dblquote + "*" + '0|ekst^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|vkst^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|vkst) & _U|xttmp/" + G|dblquote + "*" + '0|vkst^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|eksk^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|eksk) & _U|xttmp/" + G|dblquote + "*" + '0|eksk^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|vksk^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|vksk) & _U|xttmp/" + G|dblquote + "*" + '0|vksk^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.load 0 nolock continue
+.continue ZSTS          ? G|mehr
+.continue SSTS          ? F|empty(U|xttmp)
+!TSTS
+.formula U|xxkto        = U|xttmp << ","
+.continue NSTS          ? F|empty(U|xxkto)
+.formula U|xttmp        = U|xttmp >> ","
+.continue TSTS          ? U|xxkto/"*a"
+.formula U|xtcmd        = "$,@datei=5:1;nummer=="+U|xxkto+"a"
+.select nolock account 'U|xtcmd'
+.continue TSTS          ? G|mehr
+'U|xxkto';'U|xxkto'a;KOWEG;(0,0,0);(0,0,0);'G|false';
+.formula U|xia          = U|xia + 1
+.continue TSTS
+!NSTS
+.output
+.continue SSTS          ? U|xia = 0
+.formula M|ytimport     = U|xtedp
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Duplizieren der Konten aus SteuerschlÅsseln
+.set trans -
+.continue ERRSTS        ? F|filesize(U|xterr) > 0
+!SSTS
+..jetzt die neuen Konten in die SteuerschlÅssel eintragen
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten in SteuerschlÅsseln Ñndern
+#!database=58
+#!group=1
+#!action=update
+id;\
+zn;ekst;vkst;eksk;vksk;
+.formula U|xtcmd        = "$,@datei=58:1;nummer=!"
+.load 0 nolock object 'U|xtcmd'
+.continue USTZUO        ? _G|mehr
+.formula U|xia          = 0
+'0|id'\
+.continue LSTS
+!ASTS
+.load 0 nolock continue
+.continue OSTS          ? _G|mehr
+'0|id'\
+!LSTS
+.load 0 nolock line
+.continue ASTS          ? _G|mehr
+.formula U|xkto1        = ""
+.formula U|xkto2        = ""
+.formula U|xkto3        = ""
+.formula U|xkto4        = ""
+.formula U|xkto1        = '0|ekst^nummer' + "a"         ? _F|empty(0|ekst)
+.formula U|xkto2        = '0|vkst^nummer' + "a"         ? _F|empty(0|vkst)
+.formula U|xkto3        = '0|eksk^nummer' + "a"         ? _F|empty(0|eksk)
+.formula U|xkto4        = '0|vksk^nummer' + "a"         ? _F|empty(0|vksk)
+.....continue LSTS          ? '0|ekst'/"*a" ; '0|vkst'/"*a" ; '0|eksk'/"*a" ; '0|vksk'/"*a"  
+?'0|aktzeile';'U|xkto1';'U|xkto2';'U|xkto3';'U|xkto4';\ ? _0|aktzeile = 0|tzeilen
+?'0|aktzeile';'U|xkto1';'U|xkto2';'U|xkto3';'U|xkto4';  ?  0|aktzeile = 0|tzeilen
+.formula U|xia          = U|xia + 1
+.continue LSTS
+..
+!OSTS
+.output
+.continue USTZUO        ? U|xia = 0
+.formula M|ytimport     = U|xtedp
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Duplizieren der Konten aus SteuerschlÅsseln
+.set trans -
+.continue USTZUO        ? F|filesize(U|xterr) = 0
+!ERRSTS
+.formula M|yterror      = U|xterr
+.error 'U|xttext'
+.edi 'U|xterr'
+.continue END
+..
+!USTZUO: Umsatzsteuer-Zuordnungen lîschen
+.note -IMMEDIATELY Umsatzsteuerzuordnungen lîschen
+.make screen line +o
+.assign M|ytvartab      = "V-54-07"
+.formula M|ytvarbez     = M|ytvartab^namebspr
+.formula M|ytvdn        = M|ytvartab^vdn
+.formula M|ytvgr        = M|ytvartab^vgr
+.formula M|ybupdate     = G|true
+..
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Umsatzsteuerzuordnungen lîschen
+#!database=54
+#!group=7
+#!action=delete
+id;
+.formula U|xtcmd        = "$,@datei=54:7;nummer=!"
+.load 0 nolock object 'U|xtcmd'
+.continue MANZUO        ? _G|mehr
+!ZUSTZUO
+'0|id'
+.load 0 nolock continue
+.continue ZUSTZUO       ? G|mehr
+.output
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Lîschen der Umsatzsteuerzuordnungen
+.set trans -
+.error 'U|xttext'       ? F|filesize(U|xterr) > 0
+.edi 'U|xttext'         ? F|filesize(U|xterr) > 0
+.continue END           ? F|filesize(U|xterr) > 0
+..
+!MANZUO: Zuordnungsmerkmale Bankauszugimport
+.note -IMMEDIATELY Kontierung in Zuordnungsmerkmalen austauschen
+.make screen line +o
+.assign M|ytvartab      = "V-66-05"
+.formula M|ytvarbez     = M|ytvartab^namebspr
+.formula M|ytvdn        = M|ytvartab^vdn
+.formula M|ytvgr        = M|ytvartab^vgr
+.formula M|ybupdate     = G|true
+..
+..erst alle Konten kopieren
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten aus Zuordnungsmerkmalen duplizieren
+#!database=5
+#!group=1
+#!action=copy
+id;nummer;bem;eg;ausland;kopustzuord;
+.formula U|xtcmd        = "$,@datei=66:5;nummer=!;konto<>`"
+.load 0 nolock object 'U|xtcmd'
+.continue ZMANIMP       ? _G|mehr
+.formula U|xia          = 0
+.continue ZMANZ2
+!ZMANZ1
+.load 0 nolock continue
+!ZMANZ2
+.continue ZMANIMP       ? _G|mehr
+.formula U|xtcmd        = "$,@datei=5:1;nummer=="+'0|konto'+"a"
+.select nolock account 'U|xtcmd'
+.continue ZMANZ1        ? G|mehr
+'0|konto^id';'0|konto^nummer'a;KOWEG;(0,0,0);(0,0,0);nein;
+.formula U|xia          = U|xia + 1
+.continue ZMANZ1
+.output
+.continue ZMANIMP       ? U|xia = 0
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Duplizieren der Konten aus Zuordnungsmerkmalen
+.set trans -
+.continue ERRZUO        ? F|filesize(U|xterr) > 0
+!ZMANIMP
+..jetzt die duplizierten Konten in die Zuordnungsmerkmale eintragen
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten in Zuordnungsmerkmalen austauschen
+#!database=66
+#!group=5
+#!action=update
+id;konto;
+.formula U|xtcmd        = "$,@datei=66:5;nummer=!;konto<>`"
+.load 0 nolock object 'U|xtcmd'
+.continue FBDAUER       ? _G|mehr
+!XZUO
+'0|id';'0|konto^nummer'a;
+.load 0 nolock continue
+.continue XZUO          ? G|mehr
+.output
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Update der Konten in Zuordnungsmerkmalen
+.set trans -
+.continue FBDAUER       ? F|filesize(U|xterr) = 0
+!ERRZUO
+.error 'U|xttext'
+.edi 'U|xterr'
+.continue END
+..
+!FBDAUER: siehe separates Programm
+.continue ANBUKONF
+.note -IMMEDIATELY Kontierung in Dauerbuchungen austauschen
+..erst alle Konten kopieren
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten aus Dauerbuchungen duplizieren
+#!database=5
+#!group=1
+#!action=copy
+id;nummer;bem;eg;ausland;kopustzuord;
+.formula U|xtcmd        = "$,@datei=110:0;nummer=!"
+.load 0 nolock object 'U|xtcmd'
+.continue ANBUKONF      ? _G|mehr
+.formula U|xia          = 0
+.formula U|xttmp        = ""
+.continue ZFBDAU
+!XFBDAU
+.load 0 nolock continue
+.continue NFBDAU
+!ZFBDAU
+.load 0 nolock line
+.continue XFBDAU        ? _G|mehr
+.continue ZFBDAU        ? _0|konto^dnr = 5
+.continue ZFBDAU        ? '0|konto^kart(L="0")'="(83)"
+.formula U|xtcmd        = "continue ZFBDAU ? U|xttmp/" + G|dblquote + "*" + '0|konto' + "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "$,@datei=5:1;nummer=="+'0|konto'+"a"
+.select nolock account 'U|xtcmd'
+.continue ZFBDAU        ? G|mehr
+'0|konto^id';'0|konto^nummer'a;KOWEG;(0,0,0);(0,0,0);nein;
+.formula U|xttmp        = U|xttmp + '0|konto' + ","
+.formula U|xia          = U|xia + 1
+.continue ZFBDAU
+!NFBDAU
+.output
+.continue ZFBIMP        ? U|xia = 0
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Duplizieren der Konten aus Dauerbuchungen
+.set trans -
+.continue ERRDAU        ? F|filesize(U|xterr) > 0
+!ZFBIMP
+........geht nicht, da im Buchungskopf noch die BuchungswÑhrung EUR steht !!! --> siehe separate Button-Funktion
+.continue ANBUKONF
+..jetzt die duplizierten Konten in die Dauerbuchungen eintragen
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten in Dauerbuchungen austauschen
+#!database=110
+#!group=0
+#!action=update
+id;\
+zn;konto;
+.formula U|xtcmd        = "$,@datei=110:0;nummer=!"
+.load 0 nolock object 'U|xtcmd'
+.continue ANBUKONF      ? _G|mehr
+.formula U|xia          = 0
+'0|id'\
+.continue LFBDAU
+!SFBDAU
+.load 0 nolock continue
+.continue OFBDAU        ? _G|mehr
+'0|id'\
+!LFBDAU
+.load 0 nolock line
+.continue SFBDAU        ? _G|mehr
+.formula U|xxkto        = '0|konto^nummer'
+.formula U|xxkto        = "K " + U|xxkto        ? 0|konto^dnr = 0
+.formula U|xxkto        = "L " + U|xxkto        ? 0|konto^dnr = 1
+.formula U|xxkto        = U|xxkto + "a"         ? 0|konto^dnr = 5
+?'0|aktzeile';'U|xxkto';\       ? _0|aktzeile = 0|tzeilen
+?'0|aktzeile';'U|xxkto';        ?  0|aktzeile = 0|tzeilen
+.formula U|xia          = U|xia + 1
+.continue LFBDAU
+..
+!OFBDAU
+.output
+.continue ANBUKONF      ? U|xia = 0
+.edi 'U|xtedp'
+.input
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.....system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Update der Konten in Dauerbuchungen
+.set trans -
+.continue ANBUKONF      ? F|filesize(U|xterr) = 0
+!ERRDAU
+.error 'U|xttext'
+.edi 'U|xterr'
+.continue END
+..
+!ANBUKONF
+.note -IMMEDIATELY Kontierung in der Anlagenbuchhaltungskonfiguration entfernen
+.continue KOWEG         ? _F|sysinfo(18)^anl
+.make screen line +o
+.assign M|ytvartab      = "V-27-08"
+.formula M|ytvarbez     = M|ytvartab^namebspr
+.formula M|ytvdn        = M|ytvartab^vdn
+.formula M|ytvgr        = M|ytvartab^vgr
+.formula M|ybupdate     = G|true
+..
+.formula U|xtcmd        = "$,@datei=27:8;such=!"
+.select lock object 'U|xtcmd'
+.continue ANLKAT        ? _G|mehr
+.formula H|erabver      = ""
+.formula H|ebbver       = ""
+.formula H|erabgew      = ""
+.formula H|ebbgew       = ""
+.rewrite
+.select -
+..
+!ANLKAT
+.note -IMMEDIATELY Kontierung in Anlagenkategorien entfernen
+.make screen line +o
+.assign M|ytvartab      = "V-27-02"
+.formula M|ytvarbez     = M|ytvartab^namebspr
+.formula M|ytvdn        = M|ytvartab^vdn
+.formula M|ytvgr        = M|ytvartab^vgr
+.formula M|ybupdate     = G|true
+..
+.formula U|xtcmd        = "$,@datei=27:2;such=!"
+.continue AFAART        ? _G|mehr
+.select lock object 'U|xtcmd'
+.continue AFAART        ? _G|mehr
+!ZANLKAT
+.formula H|verd         = ""
+.formula H|wertbko      = ""
+.rewrite
+.select lock continue
+.continue ZANLKAT       ? G|mehr
+.select -
+..
+!AFAART
+.note -IMMEDIATELY Kontierung in Abschreibungsarten entfernen
+.make screen line +o
+.assign M|ytvartab      = "V-27-04"
+.formula M|ytvarbez     = M|ytvartab^namebspr
+.formula M|ytvdn        = M|ytvartab^vdn
+.formula M|ytvgr        = M|ytvartab^vgr
+.formula M|ybupdate     = G|true
+..
+.formula U|xtcmd        = "$,@datei=27:4;such=!"
+.continue ANLDAT        ? _G|mehr
+.select lock object 'U|xtcmd'
+.continue ANLDAT        ? _G|mehr
+!ZAFAART
+.formula H|afako        = ""
+.formula H|kafako       = ""
+.rewrite
+.select lock continue
+.continue ZAFAART       ? G|mehr
+.select -
+..
+!ANLDAT: siehe separates Programm
+.continue KOWEG
+.note -IMMEDIATELY Kontierung in Anlagen austauschen
+..erst alle Konten kopieren
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten aus steuerlichen Abschreibungsmodellen duplizieren
+#!database=5
+#!group=1
+#!action=copy
+id;nummer;bem;eg;ausland;kopustzuord;
+.formula U|xtcmd        = "$,@datei=27:10;id=;kpmodart=(Taxable)"
+.load 0 nolock object 'U|xtcmd'
+.continue KOWEG         ? _G|mehr
+.formula U|xttmp        = ""
+.formula U|xia          = 0
+!ZANLKTO
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|afako^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|afako) & _U|xttmp/" + G|dblquote + "*" + '0|afako^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|bilkto^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|bilkto) & _U|xttmp/" + G|dblquote + "*" + '0|bilkto^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|gewko^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|gewko) & _U|xttmp/" + G|dblquote + "*" + '0|gewko^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|verko^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|verko) & _U|xttmp/" + G|dblquote + "*" + '0|verko^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.formula U|xtcmd        = "formula U|xttmp = U|xttmp + '0|erlko^nummer' + "+ G|dblquote + "," + G|dblquote + " ? _F|empty(0|erlko) & _U|xttmp/" + G|dblquote + "*" + '0|erlko^nummer'+ "*" + G|dblquote
+.'U|xtcmd'
+.load 0 nolock continue
+.continue ZANLKTO       ? G|mehr
+.continue ANLIMP        ? F|empty(U|xttmp)
+!TANL
+.formula U|xxkto        = U|xttmp << ","
+.continue FANL          ? F|empty(U|xxkto)
+.formula U|xttmp        = U|xttmp >> ","
+.continue TANL          ? U|xxkto/"*a"
+.formula U|xtcmd        = "$,@datei=5:1;nummer=="+U|xxkto+"a"
+.select nolock account 'U|xtcmd'
+.continue TANL          ? G|mehr
+'U|xxkto';'U|xxkto'a;KOWEG;(0,0,0);(0,0,0);'G|false';
+.formula U|xia          = U|xia + 1
+.continue TANL
+!FANL
+.output
+.continue ANLIMP        ? U|xia = 0
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Duplizieren der Konten aus Anlagen
+.set trans -
+.continue ERRANL        ? F|filesize(U|xterr) > 0
+!ANLIMP
+.continue KOWEG
+..jetzt die duplizierten Konten in die Zuordnungsmerkmale eintragen
+.output NEW 'U|xterr'
+.output NEW 'U|xtout'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Konten in Abschreibungsmodellen austauschen
+#!database=27
+#!group=1
+#!action=update
+id;>bafamodell;afako;bilkto;gewko;verko;erlko;<
+.formula U|xtcmd        = "$,@datei=27:10;id=;kpmodart=(Taxable)"
+.load 0 nolock object 'U|xtcmd'
+.continue KOWEG         ? _G|mehr
+!XANLDAT
+.formula U|xkto1        = ""
+.formula U|xkto2        = ""
+.formula U|xkto3        = ""
+.formula U|xkto4        = ""
+.formula U|xkto5        = ""
+.formula U|xkto1        = '0|afako^nummer' + "a"
+.formula U|xkto2        = '0|bilkto^nummer' + "a"
+.formula U|xkto3        = '0|gew^nummer' + "a"          ? _F|empty(0|gewko)
+.formula U|xkto4        = '0|verko^nummer' + "a"        ? _F|empty(0|verko)
+.formula U|xkto5        = '0|erlko^nummer' + "a"        ? _F|empty(0|erlko)
+'0|ansn^id';;'U|xkto1';'U|xkto2';'U|xkto3';'U|xkto4';'U|xkto5';
+.load 0 nolock continue
+.continue XANLDAT       ? G|mehr
+.output
+.formula U|xtcmd        = "edpimport.sh -p abas123 -I " + U|xtedp + " -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0"
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' background
+..
+.set trans +
+.text U|xttext 'G|bspri' Fehler beim Update der Konten in Anlagen
+.set trans -
+.continue KOWEG         ? F|filesize(U|xterr) = 0
+!ERRANL
+.error 'U|xttext'
+.edi 'U|xterr'
+.continue END
+..
+..************************************************************************************
+!KOWEG: jetzt kînnen alle Konten - bis auf die statitischen Konten - gelîscht werden
+..************************************************************************************
+..folgende Objekte kînnen noch auf Konten verweisen:
+..V-89-06 - Gliederungsabbildung (im Demosystem nicht vorgesehen)
+..V-89-02 - Konsolidierungskonfiguration (hier nicht relevant, sonst nur fÅr einen echten Konsolidierungs-Mandant)
+..in Zusatztabellen !? (nur relevant, wenn dort Finanzkonten vorkommen - Statistische Konten bleiben erhalten, z.B. ProjectSuite)
+..
+..statistische Konten bleiben erhalten - ebenso die mit dieser Aktion erzeugten Konten mit Anhang "a"
+!HKO1: 
+.note -IMMEDIATELY Lîschen von bebuchbaren Inlandskonten!
+!KO4
+.select account lock
+.continue HKO5 ? _G|mehr
+.continue KO4  ? _F|empty(H|stat)
+.continue KO4  ?  H|nummer/"*(az)*"
+.continue KO4  ? _(H|laart = "I" & H|bu)
+.delete
+.note -IMMEDIATELY Lîschen von bebuchbaren Inlandskonten - Konto 'H|nummer'
+.continue KO4
+..
+!HKO5: 
+.note -IMMEDIATELY Lîschen von bebuchbaren Auslandskonten!
+!KO5
+.select account lock
+.continue HKO6 ? _G|mehr
+.continue KO5  ? _F|empty(H|stat)
+.continue KO5  ?  H|nummer/"*(az)*"
+.continue KO5  ? _(H|laart = "A" & H|bu)
+.delete
+.note -IMMEDIATELY Lîschen von bebuchbaren Auslandskonten - Konto 'H|nummer'
+.continue KO5
+..
+!HKO6
+.note -IMMEDIATELY Lîschen von bebuchbaren EG-Konten!
+!KO6
+.select account lock
+.continue HKO7 ? _G|mehr
+.continue KO6  ? _F|empty(H|stat)
+.continue KO6  ?  H|nummer/"*(az)*"
+.continue KO6  ? _(H|laart = "E" & H|bu)
+.delete
+.note -IMMEDIATELY Lîschen von bebuchbaren EG-Konten - Konto 'H|nummer'
+.continue KO6
+..
+!HKO7
+.note -IMMEDIATELY Lîschen von nicht bebuchbaren Inlandskonten!
+!KO10
+.select account lock
+.continue HKO11 ? _G|mehr
+.continue KO10  ? _(H|laart = "I" & _H|bu)
+.continue KO10  ?  H|nummer/"*(az)*"
+.delete
+.note -IMMEDIATELY Lîschen von nicht bebuchbaren Inlandskonten - Konto 'H|nummer'
+.continue KO10
+..
+!HKO11
+.note -IMMEDIATELY Lîschen von nicht bebuchbaren Auslandskonten!
+!KO11
+.select account lock
+.continue HKO12 ? _G|mehr
+.continue KO11  ? _(H|laart = "A" & _H|bu)
+.continue KO11  ?  H|nummer/"*(az)*"
+.delete
+.note -IMMEDIATELY Lîschen von nicht bebuchbaren Auslandskonten - Konto 'H|nummer'
+.continue KO11
+..
+!HKO12
+.note -IMMEDIATELY Lîschen von nicht bebuchbaren EG-Konten!
+!KO12
+.select account lock
+.continue END  ? _G|mehr
+.continue KO12 ? _(H|laart = "E" & _bu)
+.continue KO12  ?  H|nummer/"*(az)*"
+.delete
+.note -IMMEDIATELY Lîschen von nicht bebuchbaren EG-Konten - Konto 'H|nummer'
+.continue KO12
+..
+!NOWARTG
+.set trans +
+.text U|xttext 'G|bspri' Aktion ist nur im Wartungsmodus erlaubt
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!END
+.note -IMMEDIATELY
+.continue
+

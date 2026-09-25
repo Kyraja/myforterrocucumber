@@ -1,0 +1,115 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : BABEINZEL.TAB
+..  Version        : 1
+..  Autor          : male
+..  Verantwortlich : tiwe
+..  Kontrolle      : mh
+..  Funktion       : Tabellen-FOP des Infosystem ko/BABEINZEL
+..*****************************************************************************
+..
+.set trans -
+..
+.type integer   xibaumstufe   ? _F|defined(U|xibaumstufe)
+.type integer   xizeile       ? _F|defined(U|xizeile)
+.type bool  xbclosed      ? _F|defined(U|xbclosed)
+..*****************************************************************************
+..
+.continue END   ? H|tzeilen=0
+.continue BABZ  ? G|evtzeile = 0
+.continue ZEILE
+..
+..*****************************************************************************
+!BABZ: Zeilen des BAB-Formulars lesen
+..*****************************************************************************
+.load 2
+.select line
+..
+.continue END    ? _G|mehr
+.continue BABZ   ? +H|koart = 0
+..
+..*****************************************************************************
+!HKOART: Kostenart oder Rechenregel in Puffer 2 laden
+..*****************************************************************************
+.continue ZEILE ? G|evtzeile > 0
+.formula U|xbclosed = H|closed
+.load 2 cotype 'F|expr("$,@gruppe=7;id=" + H|koart^id)' ?  M|strukturauf & _U|xbclosed & H|koart^gruppe  = 2
+.load 2 add H|koart                                   ? _M|strukturauf ;  U|xbclosed ; H|koart^gruppe <> 2
+.continue INIT
+..
+..*****************************************************************************
+!ZEILE: Zeilenevent
+..*****************************************************************************
+.continue END ? 'M|tkoart' = ""
+.continue END ?  M|tkoart^gruppe <> 2
+.formula U|xibaumstufe = M|tbaumstufe + 1
+.formula U|xbclosed    = G|false
+.load 2 cotype 'M|tkoart^id'
+.continue INIT
+..
+..*****************************************************************************
+!INIT: Initialisiere Puffer 2 (Kostenart oder Rechenregel) mit Parametern
+..*****************************************************************************
+.formula   2|anjahr     = M|anfj
+.formula   2|endjahr    = M|endj
+.formula   2|anmon      = M|anfm
+.formula   2|endmon     = M|endm
+.copy 2|koobj      = M|kstktr
+.copy 2|waehr      = M|buwaehr
+.copy 2|selbukreis = M|bukreis
+..
+.. direkt Kopfdaten einfuegen, wenn gestartet wird
+.continue INSERT ? G|evtzeile = 0
+.. sonst die Daten der Tabelle einfuegen (aufklappen)
+..
+..*****************************************************************************
+!NKOART: Naechste Kostenart aus Zeile lesen (bei Tabellenevent oder Struktur)
+..*****************************************************************************
+.load 2 line
+.. naechste Zeile des BAB, falls durch Startbutton ausgeloest
+.continue BABZ   ? _G|mehr & G|evtzeile = 0
+.. Ende falls durch Tabellenbutton ausgeloest
+.continue END    ? _G|mehr
+.continue INSERT ? '2|koart' = ""
+.continue INSERT ?  2|koart^gruppe <> 2
+..
+..*****************************************************************************
+!INSERT: Daten einfuegen
+..*****************************************************************************
+.make screen line +O
+.formula U|xizeile    = 2|aktzeile ? 2|gruppe  = 2
+.formula U|xizeile    = 0          ? 2|gruppe <> 2
+.formula M|tbaumstufe = F|condexpr(U|xizeile > 0, 1 + 2|tbaumstufe, 1) ? G|evtzeile = 0
+.formula M|tbaumstufe = U|xibaumstufe                                  ? G|evtzeile > 0
+.assign M|tkoart   = F|condexpr(U|xizeile > 0, 2|koart^id, 2|id)
+.formula M|tleerzeile = 'M|tkoart^optyp(L=":")'="(BlankLine)"
+.formula M|tikum      = F|condexpr(U|xizeile > 0, 2|ikum, 2|kikum)
+.formula M|tpfixkum   = F|condexpr(U|xizeile > 0, 2|pfixkum, 2|kpfixkum)
+.formula M|tppropkum  = F|condexpr(U|xizeile > 0, 2|ppropkum, 2|kppropkum)
+.formula M|tskum      = F|condexpr(U|xizeile > 0, 2|skum, 2|kskum)
+.formula M|tsiakum    = F|condexpr(U|xizeile > 0, 2|siakum, 2|ksiakum)
+.formula M|tsirkum    = F|condexpr(U|xizeile > 0, 2|sirkum, 2|ksirkum)
+..
+.formula M|tikum      = F|fxamount(M|auswaehr, M|tikum, M|bis, 2|waehr)
+.formula M|tpfixkum   = F|fxamount(M|auswaehr, M|tpfixkum, M|bis, 2|waehr)
+.formula M|tppropkum  = F|fxamount(M|auswaehr, M|tppropkum, M|bis, 2|waehr)
+.formula M|tskum      = F|fxamount(M|auswaehr, M|tskum, M|bis, 2|waehr)
+.formula M|tsiakum    = F|fxamount(M|auswaehr, M|tsiakum, M|bis, 2|waehr)
+.formula M|tsirkum    = F|fxamount(M|auswaehr, M|tsirkum, M|bis, 2|waehr)
+..
+.formula   M|tgruppe   = M|tkoart^gruppe
+..
+.. -
+.assign M|tbaumstat = "(45)" ? M|tkoart^gruppe  = 2 &  G|evtzeile = 0 &  M|strukturauf & _U|xbclosed
+.. +
+.assign M|tbaumstat = "(43)" ? M|tkoart^gruppe  = 2 & (G|evtzeile > 0 ; _M|strukturauf ; U|xbclosed)
+.assign M|tbaumstat = "(0)"  ? M|tkoart^gruppe <> 2
+.assign M|tbaumstat = "(0)"  ? 'M|tkoart^optyp(L=":")'="(BlankLine)"
+..
+.continue BABZ     ?  2|pugruppe <> 7 & G|evtzeile = 0
+.continue NKOART   ?  2|pugruppe  = 7 ; G|evtzeile > 0
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

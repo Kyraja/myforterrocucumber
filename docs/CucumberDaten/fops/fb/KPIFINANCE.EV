@@ -1,0 +1,154 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : KPIFINANCE.EV
+.. Author         : tiwe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Function       : Ermittelt Finanzkennzahlen fÅr das Dashboard               
+..
+..*****************************************************************************
+.. Variablen
+..*****************************************************************************
+.type integer xinummer ? _F|defined(U|xinummer)
+.type GD2     xdadatum ? _F|defined(U|xdadatum)
+..*****************************************************************************
+.. Eventhandling
+..*****************************************************************************
+.continue START   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+.continue DATUM   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "auswertdatum" 
+.continue VORJAHR ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "vorjahr" 
+.continue MASKEIN ? G|evtartengl = "SCREEN_ENTER" 
+.continue ENDE
+..**************************************************************
+.. Maskeneintritt
+..**************************************************************
+!MASKEIN
+.formula M|vorjahr = G|false
+.assign M|auswertdatum = G|datum
+.select year 'G|gjahr'
+.formula M|amonat = G|amonat
+.formula U|xdadatum  = G|datum
+.select period 'U|xdadatum'
+.formula M|emonat = G|emonat
+.formula M|gjahr = G|ejahr 
+.select year 'M|gjahr' 'M|emonat' 'M|emonat'
+.formula U|xdadatum  = G|adatum - 1
+.select period 'U|xdadatum'
+.formula M|emonat = G|emonat
+.formula M|gjahr = G|ejahr 
+.. öberprÅfen ob das GeschÑftsjahr vollstÑndig abgedeckt ist
+.. Der Endmonat vom GeschÑftsjahr steht in G|emonat
+.. Der Endmonat fÅr das Auswertungsdatum steht in M|emonat
+.. Wenn beide gleich sind auch die Nachbuchungsmonate (13 - 15) zu berÅcksichtigen
+.select year 'M|gjahr'
+.select period 'G|edatum'
+.formula M|emonat = 15   ? F|equals(M|emonat, G|emonat) 
+.continue DATERR ? F|equals(G|emonat,0)
+.continue DATERR ? F|empty(G|ejahr)
+.continue ENDE
+..**************************************************************
+.. Feldaustritt: Auswertungsdatum
+..**************************************************************
+!DATUM
+.continue ENDE ? F|empty(M|auswertdatum)
+.select year 'G|gjahr'
+.formula M|amonat = G|amonat
+.formula U|xdadatum  = M|auswertdatum
+.select period 'U|xdadatum'
+.formula M|emonat = G|emonat
+.formula M|gjahr = G|ejahr 
+.select year 'M|gjahr' 'M|emonat' 'M|emonat'
+.formula U|xdadatum  = G|adatum - 1
+.select period 'U|xdadatum'
+.formula M|emonat = G|emonat
+.formula M|gjahr = G|ejahr 
+.. öberprÅfen ob das GeschÑftsjahr vollstÑndig abgedeckt ist
+.. Der Endmonat vom GeschÑftsjahr steht in G|emonat
+.. Der Endmonat fÅr das Auswertungsdatum steht in M|emonat
+.. Wenn beide gleich sind auch die Nachbuchungsmonate (13 - 15) zu berÅcksichtigen
+.select year 'M|gjahr'
+.select period 'G|edatum'
+.formula M|emonat = 15   ? F|equals(M|emonat, G|emonat)
+.continue DATERR ? F|equals(G|emonat,0)
+.continue DATERR ? F|empty(G|ejahr)
+.continue ENDE
+..**************************************************************
+.. Feldaustritt: Vorjahr
+..**************************************************************
+!VORJAHR
+.continue AKTUELL ? _M|vorjahr
+.continue VJAHR   ?  M|vorjahr
+!AKTUELL
+.formula M|auswertdatum = "."
+.. und wieder die Logik beim Feldaustritt Auswertungsdatum durchlaufen
+.continue DATUM
+!VJAHR
+.. Datum auf den 01.01. setzen, darÅber wird das Vorjahr erfasst
+.formula M|auswertdatum = "01.01."
+.continue DATUM
+..**************************************************************
+.. Start-Button
+..*************************************************************
+!START
+.input "is/TABLEEREN"
+.formula U|xinummer = 1
+.continue DATERR ? M|gjahr = ""
+.continue DATERR ? M|amonat < 1
+.continue DATERR ? M|emonat < 1
+.continue DATERR ? M|emonat > 15
+!KPILOOP
+.continue KPIERR ? F|empty(M|bezeichnung.xinummer)
+.continue KPIERR ? M|faktor.xinummer <= 0
+.continue KPIERR ? F|empty(M|koberzaehler.xinummer) 
+.continue KPIERR ? F|empty(M|koberzaehler.xinummer)
+.continue KPICALC
+!KPICALC: Hier kann die Kennzahl berechnet werden
+.select year 'M|gjahr' 'M|amonat' 'M|emonat'
+.select accrange 'M|koberzaehler.xinummer'
+.formula M|wertzaehler.xinummer = H|kbesaldo
+.select accrange 'M|kobernenner.xinummer'
+.formula M|wertnenner.xinummer = H|kbesaldo
+..
+.continue KPINEXT ? M|wertnenner.xinummer = 0
+.formula M|ergebnis.xinummer = (M|wertzaehler.xinummer / M|wertnenner.xinummer) * M|faktor.xinummer
+.continue KPINEXT
+!KPINEXT
+.formula U|xinummer = U|xinummer + 1
+.continue TAB ? U|xinummer > 5
+.continue KPILOOP
+!TAB: Tabelle schreiben
+.formula U|xinummer = 1
+.select screen header
+.select screen line
+!LINLOOP
+.continue NEXTLIN ? F|empty(M|bezeichnung.xinummer)
+.continue NEXTLIN ? M|faktor.xinummer <= 0
+.continue NEXTLIN ? F|empty(M|koberzaehler.xinummer) 
+.continue NEXTLIN ? F|empty(M|koberzaehler.xinummer)
+.continue LINE
+!LINE
+.make screen line +o
+.formula M|tbezeichnung = M|bezeichnung.xinummer
+.formula M|tergebnis    = M|ergebnis.xinummer
+.continue NEXTLIN
+!NEXTLIN
+.formula U|xinummer = U|xinummer + 1
+.continue ENDE ? U|xinummer > 5
+.continue LINLOOP
+..*****************************************************************************
+.. Programmende
+..*****************************************************************************
+!ENDE
+.continue
+..*****************************************************************************
+.. Fehlerhandling
+..*****************************************************************************
+!KPIERR: Kennzahl kann nicht gebildet werden
+.continue KPINEXT
+!DATERR
+.error FÅr diesen Zeitraum ist keine Auswertung mîglich!
+.formula M|amonat = ""
+.formula M|emonat = ""
+.formula M|gjahr = ""
+.cursor auswertdatum
+.end

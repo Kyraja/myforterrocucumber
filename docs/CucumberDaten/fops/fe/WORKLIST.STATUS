@@ -1,0 +1,146 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : WORKLIST.STATUS
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  : setzt die Icons auf den Buttons entsprechend zum Status im AS
+..*****************************************************************************
+.set trans -
+.type text xtsel          ? _F|defined(U|xtsel)
+.type bool xbbearbeitung  ? _F|defined(U|xbbearbeitung)
+.type bool xbruesten      ? _F|defined(U|xbruesten)
+.type text xtfertstatus   ? _F|defined(U|xtfertstatus)
+..
+.copy U|xbbearbeitung = G|FALSE
+.copy U|xbruesten     = G|FALSE
+..
+.. unabhÑngig vom Ereignis prÅfen, ob es offene Auftragszeiten gibt
+.formula U|xtsel = "$,,offen=true;asnr="+'M|taschein'+";ma="+'M|mitarb^id'+";fertstatus="
+.select pdc 'U|xtsel'
+.. das Icon ist auf dem Button, wenn der Mitarbeiter eine offene Auftragszeit hat
+.formula M|tabbruch = M|leg12  ?  G|mehr
+.formula M|tunterbrechen = M|leg10  ?  G|mehr
+.formula M|tabbruch = ""       ? _G|mehr
+.formula M|tunterbrechen = ""       ? _G|mehr
+.protection -reset ugrund 'M|aktzeile'
+.protection ugrund 'M|aktzeile'  ?  F|empty(M|tunterbrechen) & F|empty(M|tabbruch)
+.continue ENDAZ                ? _G|mehr
+..
+.copy U|xbbearbeitung = G|TRUE  ? F|equals(H|fertstatus, "(StartProcessing)")
+.copy U|xbruesten     = G|TRUE  ? F|equals(H|fertstatus, "(Setup)")
+..
+!ENDAZ: hier weiss man nun, ob der Mitarbeiter offene RÅst- oder Bearbeitungszeiten hat
+..        sobald er eine offene AZ hat, hat Abbruch das Lupensymbol
+..        Ereignisse fÅr einen Arbeitsschein
+.continue LEER   ? F|empty(M|taschein^fertstatus)
+.continue RUEST  ? F|equals(M|taschein^fertstatus, "(Setup)")
+.continue ARBEIT ? F|equals(M|taschein^fertstatus, "(StartProcessing)")
+.continue FERTIG ? F|equals(M|taschein^fertstatus, "(Completed)")
+.continue ENDE
+..
+!LEER: Status eines Arbeitsscheins
+.formula M|truesten       = M|leg7   ? _U|xbruesten & M|taschein^tr > 0
+.formula M|truesten       = M|leg8   ? _U|xbruesten & M|taschein^tr = 0
+.formula M|truesten       = M|leg5   ?  U|xbruesten 
+.formula M|tproduktion    = M|leg7   ? _U|xbbearbeitung
+.formula M|tproduktion    = M|leg5   ?  U|xbbearbeitung
+.formula M|trueckmeld     = ""       ?  M|tproduktion = M|leg7
+.formula M|tkomplettrueck = ""       ?  M|tproduktion = M|leg7
+.formula M|ttextstatus    = ""       ?  G|evtvar = "tabbruch"
+.formula M|truesten       = M|leg7   ?  G|evtvar = "tabbruch"
+.formula M|tkurzlauf      = M|leg7
+.formula M|tbeenden       = ""       ? _U|xbruesten
+.formula M|tbeenden       = ""       ? _U|xbbearbeitung
+.continue ENDE
+..
+!RUEST
+.formula M|truesten       = M|leg5   ?  U|xbruesten
+.formula M|truesten       = M|leg7   ? _U|xbruesten & M|taschein^tr > 0
+.formula M|truesten       = M|leg8   ? _U|xbruesten & M|taschein^tr = 0
+.formula M|tproduktion    = M|leg7   ? _U|xbbearbeitung
+.formula M|tproduktion    = M|leg5   ?  U|xbbearbeitung
+.formula M|tkurzlauf      = M|leg7
+.formula M|tbeenden       = M|leg7   ?  U|xbruesten
+.formula M|tbeenden       = ""       ?  _U|xbruesten
+.set trans +
+.formula M|ttextstatus    = "RÅsten"
+.set trans -
+.continue ENDE            ? _G|evtvar = "tabbruch"
+.. Arbeitsschein auf Status Leer umstellen bei Abbruch
+.formula U|xtsel = "$,,nummer="+'M|taschein'+";art=;mgr=;@ablageart=(Active);@gruppe=1"
+.select workorder nolock 'U|xtsel'
+.formula M|iev = 11
+.formula U|xtfertstatus = "(EmptyEntry)"
+.input "fe/WORKLIST.EDP"
+.select -
+.formula M|ttextstatus    = ""
+.continue ENDE
+..
+!ARBEIT
+.formula M|truesten       = M|leg11 ? _M|mehrruesten 
+.formula M|truesten       = ""      ? U|xbbearbeitung  &  M|mehrruesten  
+.formula M|truesten       = M|leg5  ? U|xbruesten      &  M|mehrruesten 
+.formula M|truesten       = M|leg7  ? _U|xbbearbeitung &  _U|xbruesten  &  M|mehrruesten
+.formula M|truesten       = M|leg8  ? _U|xbbearbeitung &  _U|xbruesten  &  M|mehrruesten & M|taschein^tr = 0     
+.formula M|tproduktion    = M|leg11  
+.formula M|tproduktion    = M|leg7   ? _U|xbbearbeitung
+.formula M|tproduktion    = M|leg5   ?  U|xbbearbeitung
+.formula M|trueckmeld     = ""
+.formula M|tkomplettrueck = ""
+.formula M|trueckmeld     = M|leg7   ?  U|xbbearbeitung
+.formula M|tkomplettrueck = M|leg7   ?  U|xbbearbeitung
+.formula M|tkomplettrueck = ""       ?  M|tofmge < 0
+.formula M|tkurzlauf      = M|leg7
+.formula M|tbeenden       = M|leg7   ?  U|xbbearbeitung 
+.formula M|tbeenden       = ""       ?  _U|xbbearbeitung
+.continue TXTSTAT ? U|xbbearbeitung  
+.. Sonderfall fÅr mehrfaches RÅsten - hier kann es vorkommen, dass
+.. ein anderer MA schon in der Bearbeitung ist und
+.. der angemeldete MA grade rÅstet
+.formula M|tbeenden       = M|leg7   ? U|xbruesten & M|mehrruesten
+.formula M|tbeenden       = ""   ? _U|xbruesten & M|mehrruesten
+!TXTSTAT
+.set trans +
+.formula M|ttextstatus    = "Bearbeitung"
+.set trans -
+.continue FERTIG          ?  M|tofmge = 0 & _M|ueberbuchen
+.continue ENDE            ? _G|evtvar = "tabbruch"
+.. Arbeitsschein auf Status Leer umstellen bei Abbruch
+.formula U|xtsel = "$,,nummer="+'M|taschein'+";art=;mgr=;@ablageart=(Active);@gruppe=1"
+.select workorder nolock 'U|xtsel'
+.formula M|iev = 11
+.formula U|xtfertstatus = "(EmptyEntry)"
+.input "fe/WORKLIST.EDP"
+.select -
+.formula M|ttextstatus    = ""
+.formula M|truesten       = M|leg7
+.continue ENDE
+..
+!FERTIG
+.continue ABGESCH ? M|tofmge <= 0
+.continue STATUS  ? M|tofmge > 0 
+!ABGESCH
+.formula M|truesten       = M|leg11
+.formula M|tproduktion    = M|leg11  
+.formula M|trueckmeld     = M|leg11 
+.formula M|tkomplettrueck = M|leg11 
+.formula M|tkurzlauf      = M|leg11
+.formula M|tbeenden       = M|leg11
+.set trans +
+.formula M|ttextstatus    = "abgeschlossen"
+.set trans -
+.continue ENDE
+!STATUS: Durch einen Storno kann sich der Fertigungstatus von abgeschlossen auf Bearbeitung Ñndern 
+.. Arbeitsschein auf Status Bearbeitung umstellen
+.formula U|xtsel = "$,,nummer="+'M|taschein'+";art=;mgr=;@ablageart=(Active);@gruppe=1"
+.select workorder nolock 'U|xtsel'
+.formula M|iev = "11"
+.formula U|xtfertstatus = "(StartProcessing)"
+.input "fe/WORKLIST.EDP"
+.select -
+.continue ARBEIT
+..
+..*****************************************************************************
+!ENDE
+.continue

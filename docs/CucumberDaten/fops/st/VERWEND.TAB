@@ -1,0 +1,114 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : VERWEND.TAB
+.. Autor          : ds
+.. Verantwortlich : cl 
+.. Kontrolle      : tiwe
+.. Funktion       : Erzeugt eine Tabellenzeile im Verwendungsnachweis.
+.. Ablauf         : Tabellen-EFOP
+.. Functionality  : Creates a row in the where-used list.
+.. Program flow   : Table efop
+..*****************************************************************************
+.type text U|xtsel ? _F|defined(xtsel)
+.type bool U|xbstdvers ? _F|defined(xbstdvers)
+.set trans -
+..
+..Filtern fÅr Selektion nach Basisartikel
+.. -> LINE: wenn nur der Basisartikel gefÅllt ist
+.. -> ansonsten ÅberprÅfen, ob elex aus der FL auch mit kvater Åbereinstimmt 
+.continue LINE ? F|empty(M|kelem) & _F|empty(M|kbasisartikel)
+.continue END ?  _F|empty(H|elex) & M|kvater^id <> H|elex^id
+!LINE
+.make screen line +O
+..
+.formula M|tbaumstufe = M|stufe + 1
+.formula M|tstufe = ("----------" << (M|tbaumstufe-1)) + 'M|tbaumstufe'
+.formula M|tbaumstat = ""
+..
+.. Is node?
+.continue DATA ? F|empty(H|artikel)
+.copy U|xbstdvers = G|false
+.copy U|xbstdvers = G|true ? _F|empty(H|artikel^basisartikel) & H|artikel^stdvers
+.formula M|select = "$,,"
+.formula M|select = M|select + "elem=" + 'H|artikel^id' 
+.formula M|select = M|select + ";flistestd=" + 'M|knurfliststd' ? M|knurfliststd
+.formula M|select = M|select + ";kompeig=`"  ? _M|mitkoppel
+.formula M|select = M|select + ";lgruppe=" + H|lgruppe^id       ? _F|empty(H|lgruppe)
+.formula M|select = M|select + ";@gruppe=1;@ablageart=(Active);@zeilen=" + 'G|TRUE'
+.load 8 group 'M|grliste' 'M|select'
+.continue SELSTD ? _G|mehr & U|xbstdvers 
+.formula M|tbaumstat = "+"
+.continue DATA
+!SELSTD: Standard-Version: kommt nur der Basisartikel in der FL vor
+.formula M|select = "$,,"
+.formula M|select = M|select + ";tbasisartikel=" + 'H|artikel^basisartikel^id'  
+.formula M|select = M|select + ";flistestd=" + 'M|knurfliststd' ? M|knurfliststd
+.formula M|select = M|select + ";kompeig=`"  ? _M|mitkoppel
+.formula M|select = M|select + ";lgruppe=" + H|lgruppe^id       ? _F|empty(H|lgruppe)
+.formula M|select = M|select + ";@gruppe=1;@ablageart=(Active);@zeilen=" + 'G|TRUE'
+.load 8 group 'M|grliste' 'M|select'
+.continue DATA ? _G|mehr
+.formula M|tbaumstat = "+"
+..
+!DATA
+.load 8
+.copy M|tfliststd = H|flistestd
+.copy M|tlgruppe = H|lgruppe
+.assign M|tfertlist = H|id
+.formula M|telem = H|artikel^id
+.assign M|tbasisartikel = M|telem^basisartikel
+.formula M|ticon = H|artikel^elementicon
+.formula M|tvorgaenger = M|iconvorgaenger ? U|xbvorgaenger
+.copy M|tbsart = H|artikel^bsart
+.copy M|tdispo = H|artikel^dispo
+.copy M|tdispoa = H|artikel^dispoa
+.copy M|tvaterelem = M|kvater
+.copy M|tvaterelem = H|elex    ? F|empty(M|tvaterelem)
+.continue FILLED ? _F|empty(M|tvaterelem)
+.continue FILLED ? F|empty(H|tbasisartikel)
+.continue STDVER ? F|empty(M|tvaterelem)
+!STDVER: Standard-Version ermitteln, wenn noch keine Komponente eingetragen werden konnte
+.formula U|xtsel = "$,,nummer=;such=;basisartikel="+'H|tbasisartikel^id'+";stdvers="+'G|TRUE'+";@gruppe=1;"
+.load 7 parts 'U|xtsel'
+.continue FILLED ? _G|mehr
+.assign M|tvaterelem = 7|id
+!FILLED
+.copy M|kompeig = H|kompeig
+.formula M|kompeigz = ""
+.formula M|kompeigz = M|koppelz ? F|equals(H|kompeig, "(Coproduct)")
+.formula M|kompeigz = M|umbauz  ? F|equals(H|kompeig, "(ConversionProduct)")
+.continue MOREDET ? _H|artikel^dnr = 2 & _H|gruppe = 1
+.load 8 warehousedata 'F|formatstr("$,,art={1};lgruppe={2};@gruppe=3;@ablageart=(Active)", M|telem^id, M|tlgruppe^id)'
+.continue MOREDET ? _G|mehr
+.copy M|tbsart = 8|bsart
+.load 8
+..
+!MOREDET: More details
+.formula M|tvpos = H|vpos
+.formula M|tlaenge = H|lge
+.copy M|tellme = H|ellme ? _F|empty(M|tlaenge)
+.formula M|tbreite = H|breite
+.copy M|telbme = H|elbme ? _F|empty(M|tbreite)
+.formula M|tanzahl = H|anzahl
+.copy M|telle = H|melle ? F|empty(M|tlaenge) & F|empty(M|tbreite)
+.copy M|tbu = H|bu
+.formula M|tbaumtext = H|artikel^nummer + " " + H|artikel^such + " " + M|tenamebspr
+.copy M|tersatzt = H|tersatzt
+.copy M|tverschlt = H|tverschlt
+.copy M|tnwpflicht = H|tnwpflicht
+.copy M|tserarchiv = H|tserarchiv
+..
+.set trans +
+.formula M|tbauminfo = "Standard-Fertigungsliste" + ": " + 'M|tfliststd'
+.formula M|tbauminfo = M|tbauminfo + " " + "LÑnge/tr" + ": " + 'M|tlaenge' + " " + M|tellme ? _F|empty(M|tlaenge)
+.formula M|tbauminfo = M|tbauminfo + " " + "Breite " + ": " + 'M|tbreite' + " " + M|telbme ? _F|empty(M|tbreite)
+.formula M|tbauminfo = M|tbauminfo + " " + "Anzahl" + ": " + 'M|tanzahl' ? _F|empty(M|tanzahl)
+.formula M|tbauminfo = M|tbauminfo + " " + M|telle ? F|empty(M|tlaenge) & F|empty(M|tbreite)
+.formula M|tbauminfo = M|tbauminfo + " " + M|tbsart
+.formula M|tbauminfo = M|tbauminfo + " " + M|tbu
+.formula M|tbaumicon = H|artikel^elementicon 
+.continue END
+..
+..*****************************************************************************
+!END
+.continue

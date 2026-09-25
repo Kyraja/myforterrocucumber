@@ -1,0 +1,89 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BATCHTRACE.EV
+.. Autor          : fwester
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Behandelt zentral Ereignisse mit einfacherer Funktionalitaet.
+.. Ablauf         : Zentrales Ereignis-FOP
+..
+.. Functionality  : Central handling of those events with a more simple character
+..                  in its functionality.
+.. Program flow   : Central event efop
+..*****************************************************************************
+.set trans -
+..------------------------------ Header:  -------------------------------------
+.continue CHARGE  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "charge"
+.continue EXTNUM  ? G|evtartengl = "FIELD_VALIDATION" & G|evtvar = "extnum"
+.continue CLRHEAD ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "anzstufen"
+.continue DIRECT  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "richtung"
+.continue CLRHEAD ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "mitbuchungen"
+.continue CLRHEAD ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "abbeldat"
+..=============================================================================
+.continue END
+..
+!CHARGE
+.continue CLRCHRG ? F|empty(M|charge)
+.copy M|extnum       = M|charge^exnum
+.copy M|chargartikel = M|charge^artikel
+.continue CLRHEAD
+..
+!EXTNUM: Does this number exist and is it unique?
+.continue CLRCHRG ? F|empty(M|extnum)
+.type text xselect
+.type ID59:0 xcharge
+.formula U|xselect = "$,,;exnum==" + M|extnum
+.select lots 'U|xselect'
+.continue SEL ? _G|mehr
+.formula U|xcharge = H|id
+.select lots
+.continue SEL ? G|mehr
+.copy M|extnum       = U|xcharge^exnum
+.assign M|charge       = U|xcharge
+.copy M|chargartikel = U|xcharge^artikel
+.continue CLRHEAD
+..
+!CLRCHRG
+.formula M|extnum = ""
+.formula M|charge = ""
+.formula M|chargartikel = ""
+.continue CLRHEAD
+..
+!SEL: Make a selection while external number is not unique
+.formula U|xselect = "%,,;exnum=" + M|extnum + ";nummer=;such=;artikel=;@bereich=" + 'G|FALSE' + ";@autostart=" + 'G|TRUE'
+.select lots 'U|xselect'
+.continue ERROR1 ? _G|mehr
+.copy M|extnum       = H|exnum
+.assign M|charge       = H|id
+.copy M|chargartikel = H|artikel
+.continue CLRHEAD
+..
+!DIRECT: set correct icons
+.copy M|vorwaerts = F|equals(M|richtung, "(Forwards)")
+.continue CLRHEAD
+..
+!CLRHEAD: clear details
+.formula M|vcharge     = ""
+.formula M|vexnum      = ""
+.formula M|ncharge     = ""
+.formula M|nexnum      = ""
+.formula M|buchung     = ""
+.formula M|budat       = ""
+.assign M|ursache   = ""
+.formula M|vom         = ""
+.formula M|lief        = ""
+.formula M|artikel     = ""
+.formula M|mge         = 0.0
+.assign M|kle       = ""
+.continue CLRTAB
+..
+!CLRTAB: Clear table
+.make screen line -- ? M|tzeilen > 0
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1
+.error -line 0 -field M|extnum -message 'M|extnum' wurde nicht gefunden.
+.end 1

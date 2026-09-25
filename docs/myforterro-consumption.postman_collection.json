@@ -1,0 +1,161 @@
+{
+  "info": {
+    "name": "MyForterro Consumption Report",
+    "description": "Testet den Admin-Consumption-Endpoint, um zu pruefen, ob der angemeldete User Token-Verbrauch seines Tenants abfragen darf.\n\n## Voraussetzungen\n\n1. Zuerst in der bestehenden Collection `MyForterro API Test (Client Credentials)` die Requests 1 und 2 ausfuehren, damit `access_token` und `tenant_id` in den Collection-Variablen gesetzt sind.\n2. Diese Collection teilt sich die Variablen NICHT automatisch — kopiere `access_token`, `tenant_id` und `api_host` vor dem Lauf rueber, oder setze sie manuell als Environment-Variablen.\n\n## Erwartete Reaktionen\n\n- **200 OK** — User darf den Endpoint aufrufen. Response enthaelt `moduleConsumptionReports[].chatCompletionConsumptionReportDto.totalConsumption.{promptTokens, completionTokens, totalTokens}` sowie `dailyConsumptions[]`. Wir koennen Option (1) im Projekt einbauen.\n- **401** — Token abgelaufen; Request 1 der Haupt-Collection erneut ausfuehren.\n- **403** — Kein Admin-Recht am Tenant. Option (1) faellt aus; nur Option (2) (Client-seitiges Tokenisieren) und Feature-Request an Forterro kommen in Frage.\n- **404** — Tenant-ID falsch oder Endpoint nicht verfuegbar in dieser Umgebung.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "api_host",
+      "value": "integration-myforterro-api.fcs-dev.eks.forterro.com",
+      "type": "string",
+      "description": "Integration: integration-myforterro-api.fcs-dev.eks.forterro.com | Produktion: myforterro-api.forterro.com"
+    },
+    {
+      "key": "tenant_id",
+      "value": "",
+      "type": "string",
+      "description": "Aus Haupt-Collection kopieren (Request 2 setzt sie dort automatisch)"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string",
+      "description": "Aus Haupt-Collection kopieren (Request 1 setzt sie dort automatisch)"
+    },
+    {
+      "key": "start_date",
+      "value": "2026-04-21T00:00:00Z",
+      "type": "string",
+      "description": "Beginn des Report-Zeitraums (ISO 8601). Standardmaessig heute 00:00 UTC — anpassen falls anderer Zeitraum gewuenscht."
+    },
+    {
+      "key": "end_date",
+      "value": "2026-04-22T00:00:00Z",
+      "type": "string",
+      "description": "Ende des Report-Zeitraums (ISO 8601). Standardmaessig morgen 00:00 UTC."
+    }
+  ],
+  "item": [
+    {
+      "name": "Get Tenant AI Configuration (daily limit)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "if (pm.response.code === 200) {",
+              "    const data = pm.response.json();",
+              "    console.log('⚙️  AI-Konfiguration des Tenants:');",
+              "    console.log(JSON.stringify(data, null, 2));",
+              "",
+              "    if (data.maxDailyTokens === null || data.maxDailyTokens === undefined) {",
+              "        console.log('ℹ️  Kein Tenant-Override → globales Standardlimit greift (nicht ueber API auslesbar).');",
+              "    } else if (data.maxDailyTokens === -1) {",
+              "        console.log('♾️  Tenant hat kein Limit (maxDailyTokens = -1).');",
+              "    } else {",
+              "        console.log('📏 Tages-Tokenlimit:', data.maxDailyTokens.toLocaleString('de-DE'));",
+              "    }",
+              "} else if (pm.response.code === 403) {",
+              "    console.error('❌ 403 — Endpoint erfordert andere Rechte als /consumption.');",
+              "} else {",
+              "    console.error('❌', pm.response.code, pm.response.text());",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{access_token}}" },
+          { "key": "MFT-Tenant-Id", "value": "{{tenant_id}}" },
+          { "key": "api-version", "value": "1.0" }
+        ],
+        "url": {
+          "raw": "https://{{api_host}}/v1/ai/configuration",
+          "protocol": "https",
+          "host": ["{{api_host}}"],
+          "path": ["v1", "ai", "configuration"]
+        },
+        "description": "GET /v1/ai/configuration\n\nLiefert die AI-Konfiguration des aktuell per MFT-Tenant-Id gewaehlten Tenants.\n\nResponse (AiTenantConfigurationDto):\n```\n{\n  tenantId: uuid,\n  maxDailyTokens: int | null   // -1 = unbegrenzt, null = globaler Default\n  openAIApiKey: string | null\n}\n```\n\nSobald bekannt, kann die UI 'Verbraucht: X / maxDailyTokens' anstelle des hardcodierten 2-Mio-Limits anzeigen."
+      }
+    },
+    {
+      "name": "Get Tenant Consumption Report",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Zugriff erlaubt (Status 200)', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "if (pm.response.code === 200) {",
+              "    const data = pm.response.json();",
+              "    console.log('✅ Consumption Report erhalten:');",
+              "    console.log(JSON.stringify(data, null, 2));",
+              "",
+              "    const aiReport = (data.moduleConsumptionReports || []).find(r => r.chatCompletionConsumptionReportDto);",
+              "    if (aiReport) {",
+              "        const total = aiReport.chatCompletionConsumptionReportDto.totalConsumption || {};",
+              "        console.log('📊 Gesamtverbrauch im Zeitraum:');",
+              "        console.log('   promptTokens:    ', total.promptTokens);",
+              "        console.log('   completionTokens:', total.completionTokens);",
+              "        console.log('   totalTokens:     ', total.totalTokens);",
+              "",
+              "        const daily = aiReport.chatCompletionConsumptionReportDto.dailyConsumptions || [];",
+              "        console.log('🗓  Tage im Report:', daily.length);",
+              "        daily.forEach(d => console.log('   ', d.date, '→', d.totalTokens, 'tokens'));",
+              "    } else {",
+              "        console.warn('⚠️  Kein AI-Modul im Report gefunden. Vermutlich noch keine AI-Nutzung im Zeitraum.');",
+              "    }",
+              "} else if (pm.response.code === 403) {",
+              "    console.error('❌ 403 Forbidden — kein Admin-Recht fuer diesen Tenant. Option (1) faellt aus.');",
+              "} else if (pm.response.code === 401) {",
+              "    console.error('❌ 401 Unauthorized — Token abgelaufen. Request 1 der Haupt-Collection erneut ausfuehren.');",
+              "} else {",
+              "    console.error('❌ Fehler', pm.response.code, pm.response.text());",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          },
+          {
+            "key": "MFT-Tenant-Id",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "api-version",
+            "value": "1.0"
+          }
+        ],
+        "url": {
+          "raw": "https://{{api_host}}/v1/admin/tenants/{{tenant_id}}/consumption?From={{start_date}}&Until={{end_date}}",
+          "protocol": "https",
+          "host": ["{{api_host}}"],
+          "path": ["v1", "admin", "tenants", "{{tenant_id}}", "consumption"],
+          "query": [
+            { "key": "From", "value": "{{start_date}}" },
+            { "key": "Until", "value": "{{end_date}}" }
+          ]
+        },
+        "description": "GET /v1/admin/tenants/{tenantId}/consumption\n\nLiefert den Verbrauchsreport des Tenants im angegebenen Zeitraum.\n\nResponse-Struktur (aus swagger.json):\n```\n{\n  tenantId: uuid,\n  filters: { startDate, endDate },\n  moduleConsumptionReports: [\n    {\n      chatCompletionConsumptionReportDto: {\n        totalConsumption: { promptTokens, completionTokens, totalTokens },\n        dailyConsumptions: [\n          { date, promptTokens, completionTokens, totalTokens }\n        ]\n      }\n    }\n  ]\n}\n```"
+      }
+    }
+  ]
+}

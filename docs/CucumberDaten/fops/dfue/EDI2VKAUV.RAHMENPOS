@@ -1,0 +1,68 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDI2VKAUV.RAHMENPOS
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Suche Rahmenposition zu einer Rahmennummer + Artikelnummer
+.. Functionality  : Find blanket order row to blanket order number + product number
+..*****************************************************************************
+.set trans -
+..
+..  args to find blanket order row
+..   text   xideksart       number of product
+..   text   xideksrah       number of banket order
+..
+..  result fields
+.type P3:1   xrahkopf        ? _F|defined(U|xrahkopf)
+.type P3:2   xrahpos         ? _F|defined(U|xrahpos)
+..
+..  internal use
+.type text   xtselRAH        ? _F|defined(U|xtselRAH)
+.type text   xtartex         ? _F|defined(U|xtartex)
+..
+..
+.. already fetched this blanket order row?
+.continue START  ?  F|empty(U|xrahpos) ; F|empty(U|xrahkopf) ; F|empty(U|xideksart) ; F|empty(U|xideksrah)
+.. get compareable product identifier
+.formula U|xtartex = ""
+.formula U|xtartex = U|xrahpos^artex^nummer  ?  F|isvalue('U|xideksart', "N2")
+.formula T|xtartex = U|xrahpos^artex^such    ?  F|isvalue('U|xideksart', "SW2")
+.. skipp to end if xrahkopf and xrahpos do match, blanket order number and product in xrahpos match data in edi message
+.continue END  ?  U|xrahkopf^id=U|xrahpos^kopf^id  &  U|xrahkopf^nummer=U|xideksrah  &  U|xtartex=U|xideksart
+..
+..
+!START: initialize return values
+.formula U|xrahkopf = ""
+.formula U|xrahpos = ""
+..
+..
+..  missing required parameters
+.continue END  ?  F|empty(U|xideksart) ; F|empty(U|xideksrah)
+..
+..
+..  query blanket order with its number
+..  query for row with blanket order + product number
+..  blanket order row must be active! "status=`" (empty)
+..
+.formula U|xtselRAH = "$,,;@gruppe=1;ktyp=(BlanketOrder);@ablage=(1);nummer==" + U|xideksrah
+.assign U|xrahkopf =  'U|xtselRAH'
+.continue END     ? _G|mehr
+..
+.formula U|xtselRAH = "$,,;@gruppe=2;kotyp=(BlanketOrder);@ablageart=(3)"
+.formula U|xtselRAH = U|xtselRAH + ";kopf="  + U|xrahkopf^id
+.formula U|xtselRAH = U|xtselRAH + ";artex=" + U|xideksart
+.formula U|xtselRAH = U|xtselRAH + ";kunde=" + U|xrahkopf^kunde^id
+.formula U|xtselRAH = U|xtselRAH + ";status=`"
+.assign U|xrahpos = 'U|xtselRAH'
+.continue END     ? _G|mehr
+..
+..
+..  return values
+..
+..   P3:1   xrahkopf        blanket order
+..   P3:2   xrahpos         blanket order row
+..
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,244 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : INTRASTATZENTRALE.BSTART.BV
+..  Datum          : 03.01.2010
+..  Version        : 2010
+..  Autor          : cl
+..  Verantwortlich : cl
+..  Kontrolle      : tiwe
+..  Funktion       :
+..  Ablauf         :
+..
+..  includes       :
+..*****************************************************************************
+.set trans -
+.type text   xselect   ? _F|defined(U|xselect)
+.type A5     xvktypa   ? _F|defined(U|xvktypa)
+.type A4     xektypa   ? _F|defined(U|xektypa)
+.type VPK10  xvorgang  ? _F|defined(U|xvorgang)
+.type text   xrgsnr    ? _F|defined(U|xrgsnr)
+.type realx  xkkurs    ? _F|defined(U|xkkurs)
+.type text   xdntst    ? _F|defined(U|xdntst) 
+.type text   xdntpr    ? _F|defined(U|xdntpr)
+.type text   xdntfe    ? _F|defined(U|xdntfe)
+.type text   xperiod   ? _F|defined(U|xperiod)
+.type text   xftext    ? _F|defined(U|xftext)
+..
+.file -tempname U|xftext
+.output new 'U|xftext'
+..
+.continue STORNO ? M|storniert
+..
+.formula M|textedi = ""
+.input "is/TABLEEREN"
+.. 12 = zeigen, 15 = w„hlen 
+.continue FEHLER   ? _F|cmdpermitted(53, 12, ,0) ; _F|cmdpermitted(53, 15, ,0)
+..
+.continue NRMELD ? M|bgemeldet
+.continue NRMELD ? G|evtvar = "exportieren
+.formula U|xperiod = 'F|year(M|datumvon)'+'F|month(M|datumvon)'        ? F|length(F|month(M|datumvon)) = 2
+.formula U|xperiod = 'F|year(M|datumvon)'+"0"+'F|month(M|datumvon)'    ? F|length(F|month(M|datumvon)) = 1
+.formula M|period = 'F|year(M|datumvon)'+"-"+'F|month(M|datumvon)'     ? F|length(F|month(M|datumvon)) = 2
+.formula M|period = 'F|year(M|datumvon)'+"-"+"0"+'F|month(M|datumvon)' ? F|length(F|month(M|datumvon)) = 1
+.formula M|envelopeid = F|formatstr("XGTEST-{1}-{2}-{3}", U|xperiod, 'G|datum:8', F|regreplace('G|zeit', ":", ""))
+.formula M|envelopeid = F|formatstr("{1}-{2}-{3}-{4}", M|matnum, U|xperiod, 'G|datum:8', F|regreplace('G|zeit', ":", ""))  ? _F|empty(M|matnum) & _M|testindikator
+.formula M|dntver = M|osintra + M|envelopeid + ".xml"
+.continue NRMELD
+..
+!NRMELD
+.input "sk/INTRASTATZENTRALE.NRMELD"
+..
+.continue FEHLER4 ? F|empty(M|datumvon) & F|empty(M|datumbis)
+.continue FEHLER1 ? _(+M|ssek > 0 & +M|ssvk > 0)
+..
+.. Dateinamen festlegen
+.formula M|dntzw  = M|tempver + "X.ZW." + 'M|meldnr' + ".TMP"
+.formula M|dntst  = M|tempver + "X." + G|pid + "." + 'M|meldnr' + ".TMP"
+.formula U|xdntpr = M|tempver + "XP." + G|pid + "." + 'M|meldnr' + ".TMP"
+.formula U|xdntfe = M|tempver + "XF." + G|pid + "." + 'M|meldnr' + ".TMP"
+.formula M|dntrg  = M|tempver + "XR." + G|pid + "." + 'M|meldnr' + ".TMP"
+..
+.formula U|xselect = "$,,ktyp=5"
+.formula U|xselect = U|xselect + ";budat=" + 'M|datumvon' + "!" + 'M|datumbis'
+.. alle mit Meldungsnummer 0 vorbelegt
+.formula U|xselect = U|xselect + ";intra=" + 'M|intra' + "!" + 'M|intra' + ";laart==(EUCountry)"  ? _M|bgemeldet
+.formula U|xselect = U|xselect + ";intra=" + 'M|intra' + "!" + 'M|intra' + ";laart==(EUCountry)"  ?  M|bgemeldet & M|intra <> 0
+.formula U|xselect = U|xselect + ";intra<>0;laart==(EUCountry)"                                   ?  M|bgemeldet & M|intra = 0
+..
+!VERK: sales / Verkauf
+.formula U|xektypa  = ""
+.formula M|select = U|xselect + ";@ordnung=ktyp,budat,intra;@ablageart=(Filed);@gruppe=1"
+.load 1 sales 'M|select'
+.continue EINK    ? _G|mehr
+.continue VNEXT   ? F|equals(1|vorganga, "(InvoiceReversal)") ; F|equals(1|vorganga, "(CanceledCreditNoteCommercial)") ; F|equals(1|vorganga, "(CanceledCreditNoteCommercial)") ; F|equals(1|vorganga, "(InvoiceCanceled)") 
+.continue KOPF1
+..
+!VNEXT
+.formula U|xektypa  = ""
+.load 1 sales
+.continue EINK    ? _G|mehr
+.continue VNEXT   ? F|equals(1|vorganga, "(InvoiceReversal)") ; F|equals(1|vorganga, "(CanceledCreditNoteCommercial)") ; F|equals(1|vorganga, "(CanceledCreditNoteCommercial)") ; F|equals(1|vorganga, "(InvoiceCanceled)") 
+.continue KOPF1
+..
+!KOPF1
+.assign U|xvorgang = 1|id
+.assign U|xvktypa = 1|typa
+..
+.. Kurs errechnen und merken
+.formula U|xkkurs = 1.00
+.formula U|xkkurs = 1|ewkurs ? 1|land <> M|inland
+..
+.continue ZEILE1
+..
+!ZEILE1
+.load 1 line
+.continue VNEXT    ? _G|mehr
+.. Gutschriften mit orig = leer und ohne Lagerbewegung nicht anzeigen
+.continue VNEXT   ? F|empty(1|orig) & _1|fakt & F|equals(1|treart, "(CreditNoteCommercial)")
+.. Gutschriften mit orig = Rechnung nicht anzeigen
+.continue VNEXT   ? 1|okotyp = 5 & F|equals(1|treart, "(CreditNoteCommercial)")
+.. 1 Treffer reicht um Kopfzeile auszugeben
+.continue TAB1     ?  1|intrarel ; M|bnointra
+.continue ZEILE1
+..
+!TAB1
+.input 'M|tab'
+.continue VNEXT
+..
+!EINK: purchasing / Einkauf
+.formula U|xvktypa = ""
+.formula M|select = U|xselect + ";@ordnung=ktyp,budat,intra;@ablageart=(Filed);@gruppe=1"
+.load 2 purchasing 'M|select'
+.continue EEND    ? _G|mehr
+.continue ENEXT   ? F|equals(2|vorganga, "(InvoiceReversal)") ; F|equals(2|vorganga, "(CanceledCreditNoteCommercial)") ; F|equals(2|vorganga, "(CanceledCreditNoteCommercial)") ; F|equals(2|vorganga, "(InvoiceCanceled)") 
+.continue KOPF2
+..
+!ENEXT
+.formula U|xvktypa = ""
+.load 2 purchasing
+.continue EEND    ? _G|mehr
+.continue ENEXT   ? F|equals(2|vorganga, "(InvoiceReversal)") ; F|equals(2|vorganga, "(CanceledCreditNoteCommercial)") ; F|equals(2|vorganga, "(CanceledCreditNoteCommercial)") ; F|equals(2|vorganga, "(InvoiceCanceled)") 
+.continue KOPF2
+..
+!KOPF2
+.assign U|xvorgang = 2|id
+.assign U|xektypa = 2|typa
+.continue ZEILE2
+..
+!ZEILE2
+.load 2 line
+.continue ENEXT    ? _G|mehr
+.. 1 Treffer reicht um Kopfzeile auszugeben
+.continue TAB2 ?  2|intrarel ; M|bnointra
+.continue ZEILE2
+..
+!TAB2
+.input 'M|tab'
+.continue ENEXT
+..
+!STORNO
+.input "is/TABLEEREN"
+.formula U|xselect = "$,,ktyp=5;stornopartnervorg<>`"
+.formula U|xselect = U|xselect + ";budat=" + 'M|datumvon' + "!" + 'M|datumbis'
+.. alle stornierten Vorg„nge mit Meldungsnummer 0 und stornopartnervorg^intra <> 0
+.formula U|xselect = U|xselect + ";intra=0;stornopartnervorg^intra<>0;laart==(EUCountry)"
+..
+!SVERK: sales / Verkauf
+.formula U|xektypa  = ""
+.formula M|select = U|xselect + ";@ordnung=ktyp,budat,intra;@ablageart=(Filed);@gruppe=1"
+.load 1 sales 'M|select'
+.continue SEINK    ? _G|mehr
+.continue SKOPF1   ? F|equals(1|vorganga, "(InvoiceCanceled)") ;  F|equals(1|vorganga, "(CanceledCreditNoteCommercial)")
+.continue SVNEXT
+..
+!SVNEXT
+.formula U|xektypa  = ""
+.load 1 sales
+.continue SEINK    ? _G|mehr
+.continue SKOPF1   ? F|equals(1|vorganga, "(InvoiceCanceled)") ;  F|equals(1|vorganga, "(CanceledCreditNoteCommercial)")
+.continue SVNEXT
+..
+!SKOPF1
+.assign U|xvorgang = 1|id
+.assign U|xvktypa = 1|typa
+..
+.. Kurs errechnen und merken
+.formula U|xkkurs = 1.00
+.formula U|xkkurs = 1|ewkurs ? 1|land <> M|inland
+..
+.continue SZEILE1
+..
+!SZEILE1
+.load 1 line
+.continue SVNEXT    ? _G|mehr
+.. 1 Treffer reicht um Kopfzeile auszugeben
+.continue STAB1     ?  1|intrarel ; M|bnointra
+.continue SZEILE1
+..
+!STAB1
+.input 'M|tab'
+.continue SVNEXT
+..
+!SEINK: purchasing / Einkauf
+.formula U|xvktypa = ""
+.formula M|select = U|xselect + ";@ordnung=ktyp,budat,intra;@ablageart=(Filed);@gruppe=1"
+.load 2 purchasing 'M|select'
+.continue EEND    ? _G|mehr
+.continue SKOPF2  ? F|equals(1|vorganga, "(InvoiceCanceled)") ;  F|equals(1|vorganga, "(CanceledCreditNoteCommercial)")
+.continue SENEXT
+..
+!SENEXT
+.formula U|xvktypa = ""
+.load 2 purchasing
+.continue EEND    ? _G|mehr
+.continue SKOPF2  ? F|equals(1|vorganga, "(InvoiceCanceled)") ;  F|equals(1|vorganga, "(CanceledCreditNoteCommercial)")
+.continue SENEXT
+..
+!SKOPF2
+.assign U|xvorgang = 2|id
+.assign U|xektypa = 2|typa
+..
+.continue SZEILE2
+..
+!SZEILE2
+.load 2 line
+.continue SENEXT    ? _G|mehr
+.. 1 Treffer reicht um Kopfzeile auszugeben
+.continue STAB2     ?  2|intrarel ; M|bnointra
+.continue SZEILE2
+..
+!STAB2
+.input 'M|tab'
+.continue SENEXT
+..
+..
+!EEND
+.continue FEHLER5 ?  M|tzeilen <= 0 &  M|storniert
+.continue FEHLER2 ?  M|tzeilen <= 0 & _M|bgemeldet   
+.continue FEHLER3 ?  M|tzeilen <= 0 &  M|bgemeldet
+.continue
+..
+!FEHLER
+.error Keine EDI-Rechte vorhanden! 
+.end 1
+..
+!FEHLER1
+.error Erstellung Intrastatistik nicht m”glich! Bitte Schlsselnamen fr Intrastat in Parameterdatei sk/INTRA.PAR definieren!
+.end 1
+..
+!FEHLER2
+.error Keine relevanten Vorg„nge fr INTRASTAT im Zeitraum vom 'M|datumvon' bis zum 'M|datumbis' vorhanden oder bereits alle Vorg„nge erfasst.
+.end 1
+..
+!FEHLER3
+.error Keine gemeldeten Vorg„nge fr INTRASTAT im Zeitraum vom 'M|datumvon' bis zum 'M|datumbis' vorhanden.
+.end 1
+..
+!FEHLER4
+.error Zeitraum fehlt.
+.end 1
+..
+!FEHLER5
+.error Keine stornierten Vorg„nge im Zeitraum vom 'M|datumvon' bis zum 'M|datumbis' fr eine Korrektur vorhanden.
+.end 1
+

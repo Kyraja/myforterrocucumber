@@ -1,0 +1,246 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : CONSWAREHOUSE.BA
+.. Author         : tiwe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Function       : Button nach / Button After
+.. Pufferbeschreibung
+..  H| -> alle Umlagerungen
+..  0| -> UmlagerungspÑrchen (Zugang + Abgang)
+..  1| -> Kunden  
+..
+..*****************************************************************************
+.. Variablen
+..*****************************************************************************
+.set trans -
+.type text xtsel           ? _F|defined(U|xtsel)
+.type text xtcmd           ? _F|defined(U|xtcmd)
+.type text xtaufrufid      ? _F|defined(U|xtaufrufid)
+.type GL1  xtfall          ? _F|defined(U|xtfall)
+.type bool xbzugextern     ? _F|defined(U|xbzugextern) 
+.type bool xbabgextern     ? _F|defined(U|xbabgextern)
+.type PS38 xplatzursprung  ? _F|defined(U|xplatzursprung)
+.type integer xipruefzeile    ? _F|defined(U|xipruefzeile) 
+.type GL1  xtprueffall     ? _F|defined(U|xtprueffall)  
+.type NT16 xtpruefustid    ? _F|defined(U|xtpruefustid)
+..
+..*****************************************************************************
+.. Eventhandling
+..*****************************************************************************
+.continue BSTART   ? G|evtvar = "bstart"
+.continue OBJEKT   ? G|evtvar = "tvorgang"
+.continue OBJEKT   ? G|evtvar = "tlj"
+.continue PRUEF    ? G|evtvar = "zeilenpruefen" 
+.continue LOESCH   ? G|evtvar = "zeilenloeschen" 
+.continue ENDE
+..
+..*****************************************************************************
+.. Start-Knopf
+..*****************************************************************************
+!BSTART
+..*******************************
+.. Sichtbarkeiten
+.formula P|maskkontextfop = "MELDUNG"  ? M|meldung
+.formula P|maskkontextfop = "ANALYSE"  ? _M|meldung
+..UmlagerungsvorgÑnge selektieren
+.select screen header
+.select screen line
+.make screen line --
+.formula U|xtsel = "$,,nummer=;such=;platz=;budat="+'M|datvon'+"!"+'M|datbis'+";detursache<>`;buarta=;ekumlag=true;zuord=;@ordnung=zuord;"
+.select journal 'U|xtsel'
+.continue ENDE ? _G|mehr
+!LPJOURN
+..*******************************
+.. Kriterien fÅr öberspringen des Journaleintrags
+.continue NEXT ? H|buart <> 1 & H|buart <> 2
+.continue NEXT ? H|platz^lgruppe^intlager
+.continue NEXT ? _H|platz^lgruppe^konsilager
+.continue NEXT ? F|empty(H|platz^lgruppe^geschaeftspartner)
+.. EinkaufsvorgÑnge sollen nicht berÅcksichtigt werden
+.continue NEXT ? F|equals(H|detursache, "(PickingQtyPackingSlipP)") 
+.continue NEXT ? F|equals(H|detursache, "(RelocationPackingSlipPurchasing)")
+.. stornierte VorgÑnge nicht auflisten
+.continue NEXT ? H|storniert
+.continue NEXT ? _F|empty(H|stornolj)
+...******************************
+.. hier hat man eine Umlagerung im Zugriff, bei der eine externe Lagergruppe bebucht wird
+.. Au·erdem ist der Haken Konsignation und Geschaeftspartner in der Lagergruppe gesetzt
+.. nun pruefen um welchen Fall es sich handelt, dafuer muss das Umlagerungspaar gelesen werden
+.formula U|xbabgextern = G|false
+.formula U|xbzugextern = G|false
+.formula U|xtfall      = ""
+.formula U|xtsel = "$,,nummer=;such=;artikel="+'H|artikel^id'+";budat="+'H|budat'+";ekumlag=true;zuord="+'H|zuord'+";"
+.load 1 journal 'U|xtsel'
+.continue NEXT ? _G|mehr
+.continue LJ2  ? 1|lgruppe^intlager
+.continue ZUG1 ? 1|buart = 1
+.continue ABG1 ? 1|buart = 2
+.continue LJ2
+!ZUG1: Zugang auf externer Lagergruppe
+.formula U|xbzugextern = G|true
+.continue LJ2
+!ABG1: Abgang auf externer Lagergruppe
+.formula U|xbabgextern    = G|true
+.assign  U|xplatzursprung = 1|platz^id
+.continue LJ2
+!LJ2: 2 Lagerjournaleintrag
+.load 1 journal
+.continue NEXT ? _G|mehr
+.continue PAARGEL ? 1|lgruppe^intlager
+.continue ZUG2    ?  1|buart = 1
+.continue ABG2    ?  1|buart = 2
+.continue PAARGEL
+!ZUG2: Zugang auf externer Lagergruppe
+.formula U|xbzugextern = G|true
+.continue PAARGEL
+!ABG2: Abgang auf externer Lagergruppe
+.formula U|xbabgextern = G|true
+.assign  U|xplatzursprung = 1|platz^id
+.continue PAARGEL
+!PAARGEL: Journal-Paar gelesen. Nun Zuordnen was es ist.
+.formula U|xtfall = "1"     ?  U|xbzugextern & _U|xbabgextern
+.formula U|xtfall = "2"     ? _U|xbzugextern &  U|xbabgextern
+.formula U|xtfall = "3"     ?  U|xbzugextern &  U|xbabgextern   
+.continue ZEILE
+..*****************************
+!ZEILE: Tabellenzeile schreiben
+.. Zeile schreiben, es wurde schon ermittelt, um welchen Tatbestand es sich handelt
+..bei Tatbestand 3 nur die Zugangszeile in die Tabelle schreiben
+.continue NEXT ? U|xtfall = "3" & H|buart = 2
+.make screen line +o
+.formula M|tljid          = H|id
+.formula M|tmge           = H|mge
+.formula M|tlj            = M|iconvorgang
+.formula M|tvorgangid     = H|vorgang^id
+.formula M|tvorgang       = M|iconvorgang            ? _F|empty(M|tvorgangid) 
+.formula M|tartikel       = H|artikel
+.formula M|tbuarta        = H|buarta
+.formula M|tdetursache    = H|detursache
+.formula M|tplatz         = H|platz
+.formula M|tkunde       = M|tplatz^lgruppe^geschaeftspartner^id 
+.formula M|tlaart       = M|tkunde^laart
+.formula M|tlandkuerzel = M|tkunde^staat^iso2
+.formula M|tustid       = M|tkunde^ustid   
+.continue FALL3
+!FALL3: Tatbestand 3 prÅfen
+.continue TATB3 ? U|xtfall = "3"
+.continue NOTATB3
+!TATB3: usprÅnglicher Erwerber
+.formula M|tplatzursprung = U|xplatzursprung
+.continue NOPARTNER ? _M|tplatzursprung^lgruppe^konsilager 
+.continue NOPARTNER ? F|empty(M|tplatzursprung^lgruppe^geschaeftspartner)
+.formula M|tkundeursprung = M|tplatzursprung^lgruppe^geschaeftspartner^id
+.formula M|tlaartursprung        =  M|tkundeursprung^laart
+.formula M|tlandkuerzelurspru    =  M|tkundeursprung^staat^iso2
+.formula M|tustidursprung        =  M|tkundeursprung^ustid 
+!NOTATB3  
+.continue TATBEST
+!NOPARTNER
+.. der Abgang hat bei Tatbestand 3 keinen Konsi-Haken und keinen Geschaeftspartner
+.make screen line -o
+.continue NODEL
+..****************************
+!TATBEST: Tatbestand zuordnen
+.. die Landart muss EU-Staat sein, sonst diese Zeilen loeschen
+.continue NEXT ? _F|equals(M|tlaart, "(EUCountry)")
+..auch bei Tatbestand 3 darf der Abgang nicht im Ausland sein
+.continue NEXT ? _F|equals(M|tlaartursprung, "(EUCountry)") & U|xtfall = "3"
+.formula M|ttatbestand  = U|xtfall
+.continue NEXT
+..****************************
+!NEXT: nÑchster Journaleintrag lesen
+.continue NODEL ? M|aktzeile = 0
+.continue NODEL ? F|empty(M|tlaart)
+.make screen line -o ? _F|equals(M|tlaart, "(EUCountry)")
+.continue NODEL ? M|aktzeile = 0
+.make screen line -o ? _F|equals(M|tlaartursprung, "(EUCountry)") & _F|empty(M|tlaartursprung) 
+!NODEL
+.select journal
+.continue LPJOURN ? G|mehr
+.continue PRUEF ? M|meldung
+.continue ENDE
+..****************************************************************************
+.. Zeilen prÅfen
+..****************************************************************************
+!PRUEF
+.select screen header
+.select screen line
+.continue ENDE ? _G|mehr
+..******************************* 
+.. als erstes die Zeilen filtern
+!FILLOOP 
+.continue DELETE  ? F|empty(M|ttatbestand) 
+.continue DELETE  ? F|empty(M|tustid)
+.continue DELETE  ? F|empty(M|tlaart)
+.continue OK
+!DELETE
+.make screen line -o 
+.continue FILLOOP ? G|mehr
+.continue ENDE
+!OK
+.select screen line
+.continue FILLOOP ? G|mehr 
+..******************************
+!DUBLETT
+.. nun die Dubletten entfernen
+.. Die Tabelle wird von oben nach unten durchlaufen, fÅr jede Zeile wird die Ust-ID und die Fall-Nr gemerkt
+.. wenn eine andere Zeile identisch ist wird tmarkieren auf true gesetzt
+.. ein gepruefte Zeile hat tdubletten = true 
+.select screen header
+.select screen line
+.continue ENDE ? _G|mehr
+!DUBLOOP
+.continue NXTLINE ? M|tdubletten
+.formula U|xipruefzeile = M|aktzeile
+.formula U|xtpruefustid = M|tustid
+.formula U|xtprueffall  = M|ttatbestand
+.select screen line
+..Abbruch fÅr letzte Zeile
+.continue DUBFERT ? _G|mehr
+!UNLOOP
+.continue UEBERSP ? M|tmarkieren
+.formula M|tmarkieren = G|true   ?  M|ttatbestand = U|xtprueffall   & M|tustid = U|xtpruefustid
+.formula M|tmarkieren = G|false  ?  M|ttatbestand <> U|xtprueffall  ; M|tustid <> U|xtpruefustid
+!UEBERSP
+.select screen line
+.continue UNLOOP ? G|mehr
+.select screen line 'U|xipruefzeile'
+..diese Zeile wurde auf Dubletten geprueft
+.formula M|tdubletten = true
+.continue DUBLETT 
+!NXTLINE
+.select screen line
+.continue DUBLOOP ? G|mehr 
+!DUBFERT
+.continue ENDE ? U|xipruefzeile = 0
+.select screen line 'U|xipruefzeile'
+.formula M|tdubletten = true
+.continue LOESCH ? M|meldung
+.continue ENDE
+..****************************************************************************
+.. markierte Zeilen lîschen
+..****************************************************************************
+!LOESCH
+.select screen header
+.select screen line
+.continue ENDE ? _G|mehr
+!LOELOOP
+.make screen line -o ? M|tmarkieren = G|true
+.select screen line  ? M|tmarkieren = G|false
+.continue LOELOOP ? G|mehr
+.continue ENDE
+..*****************************************************************************
+.. Objekt zeigen: LJ oder EK-/VK-Vorgang
+..*****************************************************************************
+!OBJEKT:
+.formula U|xtaufrufid = M|tljid^id       ? G|evtvar = "tlj"
+.formula U|xtaufrufid = M|tvorgangid^id  ? G|evtvar = "tvorgang"
+.formula U|xtcmd = "<(Object)>" + U|xtaufrufid + "<(View)>"
+.command -parallel 'U|xtcmd'
+.continue ENDE
+..*****************************************************************************
+.. Programmende
+..*****************************************************************************
+!ENDE
+.continue

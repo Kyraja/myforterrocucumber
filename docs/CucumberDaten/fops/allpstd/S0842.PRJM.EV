@@ -1,0 +1,138 @@
+..!interpreter english declaration noabbrev
+.. at 2016-09-16, 10:17
+.set trans -
+..========================================================================
+..==  Name              : S0842.PRJM.EV
+..==  Pfad              : allpstd
+..==  Funktion          : Ereignisse an Servicereservierung
+..==  Erstellungsdatum  : 15.09.2016
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2016 alltrotec GmbH
+..==  Anbindung         : Maske Servicereservierung
+..==
+..==
+..========================================================================
+..====================================================
+.type text     xtsel xtpvorgang xt1
+.type P86:1    xpprojekt
+.type P149:2   xppvorgang
+.type GD       xdstart xdende
+.type integer   xprocsp      ? _F|defined(xprocsp)
+..====================================================
+.set demand -
+.continue EPROCDEF
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskpruef")
+.continue EL001 ? _(_(G|evtkommd = G|kaktname12))
+.select screen header
+.select screen line
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL002 ? _(_(F|empty(M|id)))
+.load 0 group "149:2" 'F|expr("$,,yrefid==" + M|id + ";@filingmode=(Active)")'
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.select lock nowait add 0|id
+.continue EL003 ? _(G|mehr)
+.continue EL004 ? _(_(G|gesperrt))
+.set trans +
+.box Fehler
+Der Projektvorgang 'H|nummer' wird bearbeitet.
+Aktualisierung der Termine ist fehlgeschlagen.
+
+'G|sperrtext                                                                   '
+
+Das Speichern wird abgebrochen.
+.set trans -
+.error
+.end 1
+!EL004
+.continue FI003
+!EL003
+.set trans +
+.box Fehler
+Der Projektvorgang 'M|yprjmpvorgang' konnte nicht ge”ffnet werden.
+Aktualisierung der Termine ist fehlgeschlagen.
+
+Das Speichern wird abgebrochen.
+.set trans -
+.error
+.end 1
+!FI003
+.load 0 continue
+.continue LOOP002
+!ELOP002: ==============================
+!EL002
+.select screen line
+.continue LOOP001
+!ELOP001: ==============================
+!EL001
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "maskaus")
+.continue EL005 ? _(_(G|evtkommd = G|kaktname12))
+.select screen header
+.select screen line
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.load 0 group "149:2" 'F|expr("$,,yrefid==" + M|id + ";@filingmode=(Active)")'
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.continue EL006 ? _(_(F|empty(M|status)))
+.select lock add 0|id
+.continue EL007 ? _(G|mehr)
+.formula H|yrefid   = ""
+.rewrite
+.continue FI007
+!EL007
+.set trans +
+.box Fehler
+Der Projektvorgang konnte nicht ge”ffnet werden.
+Der Fertigungsvorschlag konnte nicht aus dem Vorgang entfernt werden.
+
+Bitte prfen Sie den Projektvorgang 'M|yprjmpvorgang^nummer'/'M|yprjmpvorgang^such'.
+.set trans -
+.error
+.end 1
+!FI007
+.continue FI006
+!EL006
+.formula U|xdstart = M|termin
+.formula U|xdende  = M|termin
+.continue EL008 ? _((_(0|yiststart = U|xdstart)) ; (_(0|yistend   = U|xdende)))
+.select lock add 0|id
+.continue EL009 ? _(G|mehr)
+.copy    H|yiststart      = U|xdstart
+.copy    H|yistend        = U|xdende
+.formula H|yabwterminplan = F|numworkdays("", "", H|yistend, H|yedatum) * (-1)  ? H|yedatum >= H|yistend & _F|empty(H|yistend)
+.formula H|yabwterminplan = F|numworkdays("", "", H|yedatum, H|yistend)         ? H|yedatum  < H|yistend & _F|empty(H|yistend)
+.assign  H|yreftypk = "07"
+.rewrite
+.continue FI009
+!EL009
+.set trans +
+.formula U|xt1 = F|formatstr("Bitte prfen Sie den Projektvorgang {1} / {2}.", 0|nummer, 0|such)
+.box Fehler
+Der Projektvorgang konnte nicht ge”ffnet werden.
+Aktualisierung der Termine ist fehlgeschlagen.
+
+'U|xt1'
+.set trans -
+.error
+.end 1
+!FI009
+!EL008
+.formula U|xtpvorgang = 0|id
+.input "allpstart/FOP.PRJM.UP.SVORGANG.AKT"
+!FI006
+.load 0 continue
+.continue LOOP004
+!ELOP004: ==============================
+.select screen line
+.continue LOOP003
+!ELOP003: ==============================
+!EL005
+.continue ESAC001
+!BRK002
+!ESAC001: =====   ENDCASE   =====
+.continue

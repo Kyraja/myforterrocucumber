@@ -1,0 +1,90 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICE.VIEWER.FO
+.. Author         : mh
+.. Verantwortlich : teaminfosysteme
+.. Kontrolle      :   
+.. Functionality  : Open the HTML-Viewer for an E-Invoice, 
+..                  Assuming the xml is inside the ftext of its EDI message
+..
+..                  For more information regarding the Mustang Viewer
+..                  see:  https://www.mustangproject.org/kommandozeile
+..*****************************************************************************
+.set trans -
+..           
+.. PARAMTERS  
+..   1) edi message containing the xml data
+..   2) target url field
+..
+.type P53:0 xedi ? _F|defined(U|xedi)
+.type text urlfield ? _F|defined(U|urlfield)
+..
+.. MUSTANG VIEWER: JAR file
+..   To use a different, e.g. more recent Mustang Viewer, than included in 
+..   in your abas Version, place the new Viewer's JAR file to MANDANTDIR/java/lib
+..   and change U|mustangJAR to the new viewer's jar file
+..   To reach the JAR file in MANDANDIR/java/lib set something like
+..     .formula U|mustangJAR = "java/lib/NEWSTUFF.jar"           
+..   i.e. just drop the E|HOMEDIR ;)
+..
+.type text mustangJAR ? _F|defined(U|mustangJAR)
+.formula U|mustangJAR = 'E|HOMEDIR' + "/java/lib/Mustang-CLI.jar"
+.. 
+..*****************************************************************************
+..
+.. Missing parameters   
+.continue END ?  F|empty(U|xedi)
+.continue END ?  F|empty(U|urlfield)
+..
+.. Wrong message type
+.continue END ? _F|equals(U|xedi^edinachraz, "(ZUGFeRDInvoice)")
+..                          
+.. Edi message does not contain the xml data
+.continue END ?  F|empty(U|xedi^nachrftext)
+..
+.. Mustang Viewer Jar is missing
+.continue END ? _F|fileexists(U|mustangJAR)
+..
+..*****************************************************************************
+..
+.. Create tempory file containing the xml data
+.type text xmlfile ? _F|defined(U|xmlfile)
+.file -tempname U|xmlfile
+.type text origftext ? _F|defined(U|origftext)
+.type text copyftext ? _F|defined(U|copyftext)
+.assign U|origftext = "U|xedi^nachrftext"
+.assign U|copyftext = "U|xmlfile"
+.input "is/COPY.FREETEXT"
+..
+.. Language for labels in viewer: en, fr, de
+.type text U|language ? _F|defined(U|language)
+.formula U|language = "en" 
+.formula U|language = "fr" ? 'G|bsprache' = "F"
+.formula U|language = "de" ? 'G|bsprache' = "D"
+..
+.. Define file name for viewer htlm file   
+.. G|clwindir = Win-Verzeichnis aus Sicht des Clients (nur unter GUI gesetzt)
+.type text viewerfilename       ? _F|defined(U|viewerfilename)
+.type text viewerfilenameserver ? _F|defined(U|viewerfilenameserver)
+.type text viewerfilenameclient ? _F|defined(U|viewerfilenameclient)
+.formula U|viewerfilename = F|formatstr("VIEWER-E-INVOICE.{1}.{2}.html", U|xedi^nummer, U|language)
+.formula U|viewerfilenameserver = F|formatstr("win/tmp/{1}", U|viewerfilename)
+.formula U|viewerfilenameclient = F|formatstr("file:{1}/tmp/{2}", G|clwindir, U|viewerfilename)
+..
+..
+.. Call mustang viewer with JAR to convert xml to html viewer page
+.type text xtsystem ? _F|defined(U|xtsystem)
+.formula U|xtsystem = F|formatstr("java -Xmx1G -Dfile.encoding=UTF-8 -jar {1} --source {2} --out {3} --language {4} --action visualize", U|mustangJAR, U|xmlfile, U|viewerfilenameserver, U|language)
+.system 'U|xtsystem' background
+.continue END ? _G|mehr
+..
+..
+!RETURN
+.. Return viewer htlm file name only if programm did not abort 
+.. Use dynmiac formula command from COPY.FREETEXT ;)      
+.'F|formatstr("{1} {2} = {3}{4}{3}", U|formula, U|urlfield, G|dblquote, U|viewerfilenameclient)'
+..
+..*****************************************************************************
+!END
+.continue
+

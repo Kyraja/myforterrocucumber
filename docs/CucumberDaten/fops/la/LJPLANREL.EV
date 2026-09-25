@@ -1,0 +1,136 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : LJPLANREL.EV
+.. Autor/Author   : foe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       :
+..
+.. Program flow   :
+..*****************************************************************************
+.set trans -
+.type bool xbmark        ? _F|defined(U|xbmark)
+.type text xtdat         ? _F|defined(U|xtdat)
+.type text xtout         ? _F|defined(U|xtout)
+.type text xterr         ? _F|defined(U|xterr)
+.type text xtsystem      ? _F|defined(U|xtsystem)
+.type bool xbplanrel     ? _F|defined(U|xbplanrel)
+..
+.formula U|xtdat = "rmtmp/XPLANRELAEND"  + G|pid + G|aufrufernr + ".TMP"
+.formula U|xtout = U|xtdat + ".OUT"
+.formula U|xterr = U|xtdat + ".ERR"
+..
+.copy U|xbmark   = G|FALSE
+..
+.continue MARK       ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bmarkieren"
+.continue DEMARK     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bdemarkieren"
+.continue CHANGE     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "baendern"
+.continue START      ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+.continue CLRTAB     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "product"
+.continue CLRTAB     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kplanrel"
+.continue CLRTAB     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "knotplanrel"
+.continue CLRTAB     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "quantity"
+.continue CLRTAB     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "ursache"
+.continue CLRTAB     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "vbuart"
+.continue CLRTAB     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bbuart"
+.continue AENDPLREL  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "changeplanrel"
+.continue AENDERN1   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bchangeplanrel"
+.continue END
+..
+!START
+.input "is/TABLEEREN"
+.input 'M|tab'  ? _F|empty(M|tab)
+.continue END
+..
+!MARK
+.copy U|xbmark = G|TRUE
+.continue TABMARK
+..
+!DEMARK
+.copy U|xbmark = G|FALSE
+.continue TABMARK
+..
+!TABMARK: Setting switch in all table lines
+.continue END ? F|empty(M|tzeilen)
+.select screen line 'F|formatstr("$,,changeplanrel<>{1}", U|xbmark)'
+..
+!CHECK
+.continue END ? _G|mehr
+.formula M|changeplanrel = U|xbmark ? F|modifiable(M|changeplanrel)
+..
+!NEXTROW
+.select screen line
+.continue CHECK
+..
+!CHANGE: Planungsrelevanz fr alle markierten Zeilen „ndern
+..
+.continue FEHLER1 ?  M|tzeilen = 0
+.copy U|xbmark = G|TRUE
+.. hole nur Zeilen mit changeplanrel = TRUE
+.select screen line 'F|formatstr("$,,changeplanrel={1}", U|xbmark)'
+..
+!CHECKAEND
+.continue END ? _G|mehr
+.continue EDPAEND
+!NEXTAEND
+.select screen line
+.continue CHECKAEND
+..
+!AENDPLREF
+.protection bchangeplanrel 'M|aktzeile'        ? _M|changeplanrel
+.protection -reset bchangeplanrel 'M|aktzeile' ?  M|changeplanrel
+.continue END
+..
+!AENDERN1
+.continue END ? _M|changeplanrel
+.copy U|xbmark = G|FALSE
+.output new 'U|xtout'
+.output new 'U|xterr'
+.output terminal
+..
+!EDPAEND: Planungsrelevanz mit edpimport.sh fr eine Lagerbuchung „ndern
+.formula U|xbplanrel = _M|planrel
+..
+.output new 'U|xtdat'
+.input "DATEI.F"
+#!database=10:1
+#!flddelimiter=;
+id;planrel
+'M|tid';'U|xbplanrel'
+.output terminal
+..
+.formula U|xtsystem = "edpimport.sh -u -p " + 'G|einmalpw' + " -c EKS " + " -Z id:planrel" + " -I " + 'U|xtdat' + " >> " + 'U|xtout' + " 2>> " + 'U|xterr'
+.system 'U|xtsystem'  background
+.continue FEHLER2 ? _G|mehr
+..
+.. Kein Fehler -> ge„nderte Planungsreleavnz anzeigen
+.formula M|planrel       =  U|xbplanrel
+.copy M|changeplanrel =  G|FALSE
+..
+.continue NEXTAEND ? U|xbmark
+.continue END
+..
+!CLRTAB
+.input "is/TABLEEREN"
+.continue END
+..
+!FEHLER1
+.error Keine markierten Zeilen gefunden.
+.continue END
+..
+!FEHLER2
+.set trans +
+.output terminal
+Eingabedatei: 'U|xtdat'
+.input 'U|xtdat'
+Infodatei: 'U|xtout'
+.input 'U|xtout'
+Fehlerdatei: 'U|xterr'
+.set trans -
+.input 'U|xterr'
+.error Das Žndern der Planungsrelevanz hat nicht funktioniert!
+.end 1
+..
+..*****************************************************************************
+!END
+.continue

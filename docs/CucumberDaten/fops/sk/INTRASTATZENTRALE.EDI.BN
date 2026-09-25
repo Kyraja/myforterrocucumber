@@ -1,0 +1,58 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : INTRASTATZENTRALE.EDI.BN
+.. Autor          : dsch
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : EDI-Nachricht erstellen
+.. Functionality  :
+..*****************************************************************************
+.type text  xinfosysout  ? _F|defined(U|xinfosysout)
+.type text  xinfosyserr  ? _F|defined(U|xinfosyserr)
+.type text  xtsys        ? _F|defined(U|xtsys)
+..
+.set trans -
+.file -tempname U|xinfosysout
+.file -tempname U|xinfosyserr
+..
+.continue END ? _F|empty(M|edinachricht) & _M|edinachricht^ablagef
+.continue END ?  M|tintra <> 0
+..
+.type text   xtsel      ? _F|defined(U|xtsel)
+..
+.. JEdi-Export Åber das Infosystem INTRASTATNACHRICHT durchfÅhren
+.. Danach wird geprÅft, ob eine EDI-Nachricht vorhanden ist.
+..
+.. Die Variable "M|bshowerror" steuert die Anzeige der Fehlermeldung wÑhrend eine
+.. EDI-Nachricht erstellt wird. Wird das Erstellen von EDI-Nachrichten Åber
+.. den MenÅ-Button "VorgÑnge als EDI-Nachricht erstellen" (Feld melden)
+.. im Kopf gesteuert, so erscheint keine Meldung fÅr jeden Vorgang der bearbeitet
+.. wird. Wird aber das Erstellen einer EDI-Nachricht in der Tabellenzeile
+.. ausgefÅhrt, so erscheint fÅr den Benutzer die JEDI-Fehlermeldung falls
+.. der Export in die EDI-Datenbank auf Fehler geht.
+..
+.copy M|bshowerror = G|TRUE
+.copy M|bshowerror = G|FALSE ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "melden"
+..
+.. Aufrufen des Infosystems INTRASTATNACHRICHT 10362 und Button "Speichern und EDI-Nachricht erstellen" drÅcken
+.formula U|xtsys = F|expr("edpinfosys.sh -P -s 'kvorgang=" + M|vorgang^id + "#datumbis=" + 'M|datumbis' + "#edinachricht=" + M|edinachricht^id + "#bshowerror=" + 'M|bshowerror' + "#bstart=1#buttonedi=1' -N 10362 -o nummode=raw -t '#' > " + xinfosysout + " 2> " + xinfosyserr)
+.system 'U|xtsys' password background
+..
+.input 'U|xinfosyserr'                                      ? _G|mehr & M|bshowerror
+.error EDI-Nachricht erzeugen Åber edpinfosys gescheitert!  ? _G|mehr & M|bshowerror
+..
+!EDI: Edi-Nachricht suchen
+.formula U|xtsel = "$,,bezobj=" + M|vorgang^id
+.formula U|xtsel = U|xtsel + ";vorart=90;imex=EX"
+.formula U|xtsel = U|xtsel + ";datenart=VK" ? M|vorgang^dnr = 3
+.formula U|xtsel = U|xtsel + ";datenart=EK" ? M|vorgang^dnr = 4
+.load 3 edifact 'U|xtsel'
+.formula M|edinachricht = 3|id          ?  G|mehr
+.formula M|datummeld    = 3|erfass      ?  G|mehr
+.formula M|statusz = "icon:ball_yellow" ?  G|mehr
+.formula M|statusz = "icon:ball_red"    ? _G|mehr
+.load 3
+..
+..*****************************************************************************
+!END
+.continue

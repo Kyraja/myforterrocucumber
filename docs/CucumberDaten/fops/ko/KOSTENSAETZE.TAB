@@ -1,0 +1,113 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KOSTENSAETZE.TAB
+.. Autor          : male
+.. Verantwortlich : tiwe
+.. Kontrolle      : mh
+.. Funktion       : Tabellen-FOP
+.. Functionality  : Table FOP
+..*****************************************************************************
+..
+.set trans -
+..
+.continue END ? _F|empty(M|bereich) & 'M|bereich(L="0")' <> 'H|bereich(L="0")'
+.continue END ?  H|hilfsks & _M|hilfskst
+.continue END ? _H|hilfsks & _M|hauptkst
+..
+.formula   2|anjahr     = M|anfj
+.formula   2|endjahr    = M|endj
+.formula   2|anmon      = M|anfm
+.formula   2|endmon     = M|endm
+.copy 2|selbukreis = M|bukreis
+.copy 2|waehr      = M|buwaehr
+.assign 2|koobj      = H|id
+.continue END ? F|empty(2|bez)
+..
+.make screen line +O
+.formula   M|tkst     = H|id
+.copy M|tbez     = 2|bez
+.copy M|teinheit = M|tbez^einheit
+.formula   M|teinheitabk  = M|teinheit^einheit
+.copy M|tist   = F|condexpr(U|xbcurconvert, F|fxamount(M|auswaehr, 2|kikum, G|datum, 2|waehr), 2|kikum)
+.copy M|tpfix  = F|condexpr(U|xbcurconvert, F|fxamount(M|auswaehr, 2|kpfixkum, G|datum, 2|waehr), 2|kpfixkum)
+.copy M|tpprop = F|condexpr(U|xbcurconvert, F|fxamount(M|auswaehr, 2|kppropkum, G|datum, 2|waehr), 2|kppropkum)
+.formula   M|tplan  = M|tpfix + M|tpprop
+.load 3
+.load 4
+..
+.. Calculate output
+..
+.continue END ? F|empty(M|tbez)
+..
+.type integer  xiimon ? _F|defined(U|xiimon)
+.type integer  xipmon ? _F|defined(U|xipmon)
+.type integer  xigmon ? _F|defined(U|xigmon)
+.formula U|xigmon = 0
+.formula U|xiimon = 0
+.formula U|xipmon = 0
+.load 9 line 'U|xistartrow'
+..*****************************************************************************
+!YLOOP: Loop over periods
+..*****************************************************************************
+.. 66 = actual
+.. 69 = planned
+..
+.type bool xbi ? _F|defined(U|xbi)
+.type bool xbp ? _F|defined(U|xbp)
+.load 3 'G|hdatname61' 'F|expr("$,@gruppe=3;gruppe=3;dart=(66);bzsn=" + F|tostring(M|tbez^id) + ";gjahr=" + F|tostring(9|gjahr))'
+.formula U|xbi = G|mehr
+.load 4 'G|hdatname61' 'F|expr("$,@gruppe=3;gruppe=3;dart=(69);bzsn=" + F|tostring(M|tbez^id) + ";gjahr=" + F|tostring(9|gjahr))'
+.formula U|xbp = G|mehr
+.type integer xiymon ? _F|defined(U|xiymon)
+.formula U|xiymon = F|condexpr(9|anzgmon<=12, 9|anzgmon, 12) ? 9|gjahr <> M|anfj & 9|gjahr <> M|endj
+.formula U|xiymon = M|endm - M|anfm + 1 ? 9|gjahr  = M|endj & 9|gjahr = M|anfj
+.formula U|xiymon = M|endm              ? 9|gjahr <> M|anfj & 9|gjahr = M|endj
+.formula U|xiymon = F|condexpr(9|anzgmon<=12, 9|anzgmon, 12) - M|anfm + 1 ? 9|gjahr = M|anfj & 9|gjahr <> M|endj
+.formula U|xigmon = U|xigmon + U|xiymon
+.continue NEXTY ? _U|xbi & _U|xbp
+.type integer  ximon  ? _F|defined(U|ximon)
+.formula U|ximon  = F|condexpr(9|gjahr = M|anfj, M|anfm, 1)
+!LOOP
+.continue L2 ? _U|xbi
+.formula M|tileistung = M|tileistung + 3|s.U|ximon
+.formula U|xiimon = U|xiimon + 1 ? _F|empty(3|s.U|ximon)
+!L2: No actual
+.continue L3 ? _U|xbp
+.formula M|tpleistung = M|tpleistung + 4|s.U|ximon
+.formula U|xipmon = U|xipmon + 1 ? _F|empty(4|s.U|ximon)
+!L3: No planned
+.formula U|ximon  = U|ximon + 1
+.continue NEXTY ? U|ximon > F|condexpr(9|gjahr = M|endj, M|endm, F|condexpr(9|anzgmon<=12, 9|anzgmon, 12))
+.continue LOOP
+
+..*****************************************************************************
+!NEXTY: next year
+..*****************************************************************************
+.continue CUR ? M|anfj = M|endj
+.load 9 line
+.continue CUR ? _G|mehr
+.continue CUR ?  9|aktzeile > U|xiendrow
+.continue YLOOP
+..
+..*****************************************************************************
+!CUR: Calculate cost unit rates
+..*****************************************************************************
+.formula M|tgesmonate  = U|xigmon
+.formula M|timonate    = F|condexpr(M|mitbeznull, U|xigmon, U|xiimon)
+.formula M|tpmonate    = F|condexpr(M|mitbeznull, U|xigmon, U|xipmon)
+.formula M|tdileistung = M|tileistung / M|timonate ? M|timonate <> 0
+.formula M|tdpleistung = M|tpleistung / M|tpmonate ? M|tpmonate <> 0
+.formula M|tdist       = M|tist / M|timonate       ? M|timonate <> 0
+.formula M|tdplan      = M|tplan / M|tpmonate      ? M|tpmonate <> 0
+.formula M|tiksatz     = M|tdist / M|tdileistung   ? _F|empty(M|tdileistung)
+.formula M|tpksatz     = M|tdplan / M|tdpleistung  ? _F|empty(M|tdpleistung)
+.formula M|tpiabsabw   = M|tiksatz - M|tpksatz
+.formula M|tpirelabw   = (M|tiksatz / M|tpksatz * 100) - 100 ? _F|empty(M|tpksatz)
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.load 3
+.load 4
+.continue

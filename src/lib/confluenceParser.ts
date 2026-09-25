@@ -19,7 +19,7 @@
  * Entry point: {@link parseConfluenceDoc}
  */
 
-import type { FeatureInput, Scenario, Step, ParsedFeaturePackage, SkippedChapter, TocEntry } from '../types/gherkin';
+import type { FeatureInput, ParsedFeaturePackage, SkippedChapter, TocEntry } from '../types/gherkin';
 import { validateFeature } from './featureValidation';
 
 // ── Public API ───────────────────────────────────────────────
@@ -82,14 +82,16 @@ export function parseConfluenceHtml(html: string): ConfluenceImportResult {
       }
 
       if (fieldGroups.length > 0) {
-        const scenarios = buildTableScenarios(parsed, fieldGroups);
+        // Scenarios stay empty — tests are generated exclusively from the AI response
+        // later in the pipeline. The table data is forwarded via `sourceText` so the
+        // agent has everything it needs.
         const feature: FeatureInput = {
           name: `${parsed.name} (${parsed.dbRef})`,
           description: `Stammdaten-Testdefinition aus Confluence.\nDatenbank: ${parsed.dbRef}, Maske: ${parsed.maskRef}`,
           tags: [],
           database: null,
           testUser: 'sy',
-          scenarios,
+          scenarios: [],
         };
 
         features.push({
@@ -382,50 +384,6 @@ function extractFieldGroups(tables: HTMLTableElement[]): FieldGroup[] {
   return groups;
 }
 
-// ── Scenario builders ────────────────────────────────────────
-
-function buildTableScenarios(parsed: ParsedHeading, fieldGroups: FieldGroup[]): Scenario[] {
-  return fieldGroups.map((group, idx) => {
-    const steps: Step[] = [];
-    const scenarioName = fieldGroups.length === 1
-      ? `${parsed.name} anlegen`
-      : `${parsed.name} Variante ${idx + 1} anlegen`;
-
-    steps.push(makeStep('Given', `Editor oeffnen: ${parsed.maskRef}, NEW`));
-
-    for (const { field, value } of group.headFields) {
-      steps.push(makeStep(
-        steps.length === 1 ? 'When' : 'And',
-        `Feld setzen: ${field} = "${value}"`,
-      ));
-    }
-
-    steps.push(makeStep('And', 'Editor speichern'));
-
-    const checkFields = group.headFields.filter(f =>
-      ['such', 'nummer', 'namebspr', 'name'].includes(f.field.toLowerCase())
-    );
-    for (const { field, value } of checkFields) {
-      steps.push(makeStep(
-        steps.find(s => s.keyword === 'Then') ? 'And' : 'Then',
-        `Feld pruefen: ${field} = "${value}"`,
-      ));
-    }
-
-    if (group.tableFields.length > 0) {
-      for (const { field, value } of group.tableFields) {
-        steps.push(makeStep('And', `Feld pruefen: ${field} = "${value}"`));
-      }
-    }
-
-    if (!steps.find(s => s.keyword === 'Then')) {
-      steps.push(makeStep('Then', 'Editor ist gespeichert'));
-    }
-
-    return { id: crypto.randomUUID(), name: scenarioName, steps };
-  });
-}
-
 // ── Helpers ──────────────────────────────────────────────────
 
 function extractAllHeadings(doc: Document): { text: string; level: number }[] {
@@ -436,15 +394,6 @@ function extractAllHeadings(doc: Document): { text: string; level: number }[] {
     if (text) headings.push({ text, level });
   }
   return headings;
-}
-
-function makeStep(keyword: 'Given' | 'When' | 'Then' | 'And' | 'But', text: string): Step {
-  return {
-    id: crypto.randomUUID(),
-    keyword,
-    text,
-    action: { type: 'freetext' },
-  };
 }
 
 function buildTableSourceText(section: ContentSection, parsed: ParsedHeading): string {

@@ -1,0 +1,78 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : APLANHIERARCHIE.TAB
+.. Autor          : foe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Infosystem Absatzplanungshierarchie: ZEIG-EFOP
+.. Functionality  :
+..
+.. Ablauf         : Zeile aus Hauptpuffer in Maskenpuffer laden, wenn der
+..                  Zeileninhalt passt.
+..                  Folgende Maskenfelder sind geeignet besetzt:
+..                  - M|stufe zeigt auf Stufe des Vaterknotens
+..                  - M|bstartbut zeigt an, ob Gesamtbaum aufgeklappt wird
+..
+..*****************************************************************************
+..
+.set trans -
+.type bool    xaufzu  ? _F|defined(U|xaufzu)
+.type PS126:1 xpplan  ? _F|defined(U|xpplan)
+.type ID126   xid     ? _F|defined(U|xid)
+.type text    xtsel   ? _F|defined(U|xtsel)
+..
+.. Zeile ist ok:
+.make screen line +O
+.formula M|tbaumstufe    = M|stufe + 1
+.formula M|eltstufe      = "----------"<<(M|tbaumstufe-1) + 'M|tbaumstufe'
+.assign U|xpplan = H|id     ? H|gruppe = 1
+.assign U|xpplan = H|heplan ? H|gruppe = 2
+.make screen line -O         ? F|empty(U|xpplan)
+.continue ERROR1                ? F|empty(U|xpplan)
+.. Felder aus Hauptpufferzeile in Tabellenzeile kopieren
+.copy M|tplaneinheit = U|xpplan
+.assign U|xid = M|tplaneinheit
+..
+!RANGE: Planungseinheit
+.assign M|tartber         = U|xpplan^artber
+.assign M|tbaumtext       = U|xpplan^nummer + " " + U|xpplan^such + " " + U|xpplan^sucherw
+.assign M|tlgruppe        = U|xpplan^lgruppe
+.assign M|tkunde          = U|xpplan^kunde
+.assign M|tpkober         = U|xpplan^pkober
+.assign M|tuebplan        = U|xpplan^uebplan
+.copy M|taktiv          = U|xpplan^aktiv
+.copy M|tauto           = U|xpplan^auto
+.copy M|tmanuellplanbar = U|xpplan^manuellplanbar
+.assign M|tplanung        = U|xpplan^planung
+.assign M|tspezplan       = U|xpplan^spezplan
+.assign M|tgesamt         = U|xpplan^gesamt
+..
+.. Pruefen, ob Planungseinheit weiter aufklappbar ist:
+.load 1 add M|tplaneinheit
+.copy U|xaufzu = G|FALSE
+.formula U|xtsel "$,,uebplan=" + 'U|xid' + ";@ordnung=uebplan,lfdnr;@gruppe=1;@ablageart=(Both)" ? _M|bspez
+.formula U|xtsel "$,,gesamt=" + 'U|xid' + ";spezplan=TRUE;@ordnung=gesamt,speznr;@gruppe=1;@ablageart=(Both)"  ?  M|bspez
+.load 1 'G|hdatname.M|datnr' 'U|xtsel'
+.continue TESTABEREICH ? _G|mehr
+..
+!ZEILLES
+.formula U|xaufzu = G|true
+.continue TESTABEREICH ? U|xaufzu
+.load 1 'G|hdatname.M|datnr'
+.continue TESTABEREICH ? _G|mehr
+.continue ZEILLES
+..
+!TESTABEREICH
+.formula M|tbaumstat = ""  ? _U|xaufzu
+.formula M|tbaumstat = "+"  ?  U|xaufzu
+.formula M|tbaumstat = "-"  ?  U|xaufzu & M|bstartbut & M|tbaumstufe < M|anzstufen
+.load 1
+.continue END
+..
+..*****************************************************************************
+!ERROR1
+.error Gew„hlte Absatzplanung besitzt keine Hauptplanungseinheit!
+.end 1
+..
+!END
+.continue

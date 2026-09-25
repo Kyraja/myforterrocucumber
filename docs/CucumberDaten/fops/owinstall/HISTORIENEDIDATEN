@@ -1,0 +1,107 @@
+..!interpreter german translate
+..*****************************************************************************
+.. Name           : owinstall/HISTORIENEDIDATEN
+.. Date           : 27.10.15
+.. Version        :
+.. Author         : Ozan Kesim/abas
+.. Copyright      :
+.. Functionality  :
+..                  Vorlage-Programm owinstall/HISTORIENDATEN
+..                  Read the csv file owinstall/SALESEDIIMP and creates for every automotive blanket order
+..                  and for every calendar week for 3 years a new record in the additional database for the
+..                  sales orders (datei40, V-80-00)
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+.art text xtdat xt2dat xtalt xtzeile xt2zeile xtedp xrahmen
+.art text xvorline
+.art text xterrdat ? _defined(xterrdat)
+.art bool xb
+.art datum xdat1 xdat2
+.art real x4 xmge xmgev xsum
+.art int xi xmge1 xmge2 x9
+.art text xkwjv xkwj
+.fo xtdat = "owinstall/SALESEDIIMP"
+.fo xt2dat = "tmp/XAUFTRAG."+'G|versionneu'
+.fo U|xterrdat = 'U|xt2dat' + ".ERR"
+..
+.aus auf 'U|xt2dat'
+.ein DATEI.F
+# Dies ist ein Kommentar
+#!database=80
+#!group=0
+#!action=new
+#!EDP_LANG=D
+#!dontchange=~
+y40betreff;y40kundenum;y40woche;y40kw;y40rahmen;yedi\
+;y40tartikelnr;y40tmenge;y40tdatum;y40abdattyp;y40abruftyp
+!HOLE
+.. x1: Rahmenauftrag-KW-Jahr
+.. x2: Kunde
+.. x3: Artikel
+.. x4: Menge
+.. x5: KW/Jahr
+.. x6: KW
+.. x7: Jahr, 4-stellig
+.. x8: Jahr, 2-stellig
+.. x9: Zeilennummer
+..set debug +
+.hole von 'U|xtdat' x1 ; x2 ; x3 ; x4 ; x5 ; x6 ; x7 ; x8 ; x9 ;   
+.weiter ENDE    ? _G|mehr
+.fo xrahmen = (x1<<"-")>>":"
+.fo xi = xi+1
+.weiter HOLE    ? F|empty(U|x4)
+.weiter NIX  ? _U|xb
+....'xi'
+!NIX
+.fo xb = true
+.weiter ZEILE   ? U|x1 = U|xtalt & _F|empty(U|xtalt)
+.....
+!KOPF
+?~;~;~;~;~;~ ? xi>1
+'U|x1';'U|x2';'U|x6';'U|x6'/'U|x7';'U|xrahmen';'G|true'\
+!ZEILE
+.fo U|xart  = U|x3
+.fo U|xmge  = U|x4
+.fo U|xkwj  = U|x5
+.....
+.fo xmge1 = x4/2 
+.fo xmge2 = x4/2
+.fo xdat1 = x5
+.fo xdat1 = xdat1 - 1 
+.fo xdat2 = x5
+.fo xdat2 = xdat2 + 1 
+..
+?+;'U|xart';'U|xmge1';'U|xdat1';(DeliveryScheduleDate);(FDS)\ ? x9=1 ; x9=2
+?+;'U|xart';'U|xmge2';'U|xdat2';(DeliveryScheduleDate);(FDS)\ ? x9=1 ; x9=2
+?+;'U|xart';'U|xmge' ;'U|xkwj' ;(RequirementForWeek)  ;(FDS)\ ? x9>2 & x9<7 
+..set debug +
+.fo xsum = xsum + xmge  ? x9>6 & 'F|month(xkwj)'='F|month(xkwjv)'
+?+;'U|xart';'U|xsum' ;1.'F|month(xkwj)'.'F|year(xkwj)' ;(RequirementForMonth) ;(FDS)\ ? x9>6 & 'F|month(xkwj)'<>'F|month(xkwjv)'
+.fo xsum = xmge         ? x9>6 & 'F|month(xkwj)'<>'F|month(xkwjv)'
+..
+.fo U|xmgev =  U|xmge
+.fo U|xkwjv =  U|xkwj
+.fo U|xtalt = 'U|x1'
+.weiter HOLE
+!ENDE
+~;~;~;~;~;~
+.ausgabe
+..      .edi 'U|xt2dat'
+.fo U|xtedp = "edpimport.sh -p "+ 'G|einmalpw'+" -I "+'U|xt2dat'  + " > " + 'U|xterrdat' + " 2>&1 "
+.system 'U|xtedp' hinter
+..
+.. clean up when we don't have errors
+.formel U|xtedp = "rm -f " + 'U|xt2dat' + " " + 'U|xterrdat'            ?  (F|filesize(U|xterrdat) = 0)
+.system 'U|xtedp' hinter                                                ?  (F|filesize(U|xterrdat) = 0)
+..
+.weiter

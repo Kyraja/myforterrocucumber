@@ -1,0 +1,179 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : CSVEXPORT
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Export einer CSV-Datei (bspw. fuer E-Bilanz-Schnittstellen)
+..                  Parameter:
+..                             U|xausgabedatei (text) = Ausgabedatei
+..                             U|xbclient (boolean)   = Ob die Ausgabedatei auf den Client kopiert werden soll
+.. Functionality  :
+..*****************************************************************************
+..
+.set trans -
+..
+.type text xsubst
+.type text xtmp1
+.type text xtmpdatei
+.type text xtmpdatei2
+.type text xerrout
+.type text xtziel
+.type text xerrmsg
+..
+.formula U|xsubst = "+LX," + G|dblquote + "," + G|dblquote + G|dblquote + ", ," + G|trennerchar + ", ,"
+.file -tempname U|xtmpdatei
+.file -tempname U|xtmpdatei2
+.file -tempname U|xerrout
+..
+.input "DATEI.F"
+.set languagesettings "P"
+.output new 'U|xtmpdatei'
+.select screen header
+.. "Konto";"Kontoname";"Saldo";"Soll-/Habenkennzeichen"
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+.select screen line
+.continue COPY ? _G|mehr
+.println -lfsuppress 'F|expr(M|tkonto*U|xsubst)';
+.println -lfsuppress "'F|expr(M|tkonto^nameaspr*U|xsubst)'";
+.formula U|xtmp1 = 'F|abs(M|tesaldo)'*U|xsubst
+.println -lfsuppress "'U|xtmp1'";
+.println -lfsuppress "'F|condexpr(M|tesaldo >= 0, "S", "H")'"
+.println
+.continue LOOP
+..
+..*****************************************************************************
+!COPY
+..*****************************************************************************
+.output terminal
+.type text xausgabedatei ? _F|defined(U|xausgabedatei)
+.type bool xbclient      ? _F|defined(U|xbclient)
+.type bool xbopen        ? _F|defined(U|xbopen)
+.type A184 xencoding     ? _F|defined(U|xencoding)
+.assign U|xencoding = "(65)" ? F|empty(U|xencoding)
+.. mkdir/touch
+.output new 'U|xtmpdatei2'
+
+.output terminal
+.continue UTF8      ? 'U|xencoding(L="0")' = "(65)"
+.continue UTF16     ? 'U|xencoding(L="0")' = "(66)"
+.continue I88591    ? 'U|xencoding(L="0")' = "(67)"
+.continue I88592    ? 'U|xencoding(L="0")' = "(68)"
+.continue I88595    ? 'U|xencoding(L="0")' = "(69)"
+.continue I88599    ? 'U|xencoding(L="0")' = "(70)"
+.continue I885915   ? 'U|xencoding(L="0")' = "(71)"
+.continue CP1252    ? 'U|xencoding(L="0")' = "(50)"
+.continue S3        ? 'U|xencoding(L="0")' = "(49)"
+!UTF8
+.system 'F|formatstr("s3_conv 50 < {1} > {2}", U|xtmpdatei, U|xtmpdatei2)' background
+.continue ERR04 ? _G|mehr
+.continue COPY2
+!UTF16
+.system 'F|formatstr("s3_conv 52 < {1} > {2}", U|xtmpdatei, U|xtmpdatei2)' background
+.continue ERR04 ? _G|mehr
+.continue COPY2
+!I88591
+.system 'F|formatstr("s3_conv 11 < {1} > {2}", U|xtmpdatei, U|xtmpdatei2)' background
+.continue ERR04 ? _G|mehr
+.continue COPY2
+!I88592
+.system 'F|formatstr("s3_conv 13 < {1} > {2}", U|xtmpdatei, U|xtmpdatei2)' background
+.continue ERR04 ? _G|mehr
+.continue COPY2
+!I88595
+.system 'F|formatstr("s3_conv 15 < {1} > {2}", U|xtmpdatei, U|xtmpdatei2)' background
+.continue ERR04 ? _G|mehr
+.continue COPY2
+!I88599
+.system 'F|formatstr("s3_conv 19 < {1} > {2}", U|xtmpdatei, U|xtmpdatei2)' background
+.continue ERR04 ? _G|mehr
+.continue COPY2
+!I885915
+.. Umweg ueber s3_conv nach UTF-8 und dann mittels iconv konvertieren
+.system 'F|formatstr("cat {1} | s3_conv 50 | iconv -f UTF8 -t ISO-8859-15 > {2}", U|xtmpdatei, U|xtmpdatei2)' background
+.continue ERR04 ? _G|mehr
+.continue COPY2
+!CP1252
+.. Umweg ueber s3_conv nach UTF-8 und dann mittels iconv konvertieren
+.system 'F|formatstr("cat {1} | s3_conv 50 | iconv -f UTF8 -t WINDOWS-1252 > {2}", U|xtmpdatei, U|xtmpdatei2)' background
+.continue ERR04 ? _G|mehr
+.continue COPY2
+!S3
+.system 'F|formatstr("cp -f {1} {2} 2> {3} 1>&2", U|xtmpdatei, U|xtmpdatei2, U|xerrout)' background
+.continue ERR04 ? _G|mehr
+.continue COPY2
+!COPY2
+.system 'F|formatstr("rm -f {1}", U|xtmpdatei)' background
+.continue COPY3 ? _F|empty(U|xausgabedatei)
+.formula   U|xausgabedatei = M|arb + "_" + M|such + "_" + 'G|zeitpunkt:14' + ".csv"
+.formula   U|xausgabedatei = "rmtmp/" + U|xausgabedatei     ? _U|xbclient
+.formula   U|xausgabedatei = "win/tmp/" + U|xausgabedatei ?  U|xbclient & G|batchmode
+.continue COPY3
+!COPY3
+.continue SERVER ? (_U|xbclient & _U|xbopen) ; G|batchmode
+.formula U|xtziel = G|dblquote + F|condexpr(F|regmatch(U|xausgabedatei, "^(([A-Za-z]:\\)|\\|/).*"), U|xausgabedatei, G|cltempdir + "/" + U|xausgabedatei) + G|dblquote
+.pc.copy -PC -BIN 'U|xtmpdatei2' 'U|xtziel'
+.continue ERR02 ? _G|mehr
+.system 'F|formatstr("rm -f {1}", U|xtmpdatei2)' background ? U|xbclient
+.note -immediately 'U|xtziel'
+.continue OPEN
+!SERVER
+.system 'F|formatstr("cp -f {1} {2} 2> {3} 1>&2", U|xtmpdatei2, U|xausgabedatei, U|xerrout)' background
+.continue ERR01 ? _G|mehr
+.note -immediately 'U|xausgabedatei' ? G|mehr & _U|xbopen
+.system 'F|formatstr("rm -f {1}", U|xtmpdatei2)' background
+.continue END ? _U|xbopen
+.. absolute path?
+.formula U|xtziel = G|dblquote + F|condexpr(F|regmatch(U|xausgabedatei, "^(([A-Za-z]:\\)|\\|/).*"), U|xausgabedatei, G|cltempdir + "/" + U|xausgabedatei) + G|dblquote
+.pc.copy -PC -BIN 'U|xausgabedatei' 'U|xtziel'
+.continue ERR03 ? _G|mehr
+.note -immediately 'U|xtziel'
+!OPEN
+.continue END ? _U|xbopen
+.pc.open 'U|xtziel'
+.continue END
+..
+..*****************************************************************************
+!ERR01
+..*****************************************************************************
+.set trans +
+.formula U|xerrmsg = "Fehler beim Kopieren der Datei {1} nach {2}."
+.set trans -
+.input -text 'U|xerrout'
+.error 'F|formatstr(U|xerrmsg, U|xtmpdatei2, U|xausgabedatei)'
+.end 1
+..
+..*****************************************************************************
+!ERR02
+..*****************************************************************************
+.set trans +
+.formula U|xerrmsg = "Fehler beim Kopieren der Datei {1} auf den Client ({2})."
+.set trans -
+.error 'F|formatstr(U|xerrmsg, U|xtmpdatei2, U|xtziel)'
+.end 1
+..
+..*****************************************************************************
+!ERR03
+..*****************************************************************************
+.set trans +
+.formula U|xerrmsg = "Fehler beim Kopieren der Datei {1} auf den Client ({2})."
+.set trans -
+.error 'F|formatstr(U|xerrmsg, U|xausgabedatei, U|xtziel)'
+.end 1
+..
+..*****************************************************************************
+!ERR04
+..*****************************************************************************
+.set trans +
+.formula U|xerrmsg = "Fehler bei der Zeichensatzkonvertierung der Datei {1} von S3 nach {2}."
+.set trans -
+.error 'F|formatstr(U|xerrmsg, U|xtmpdatei, U|xencoding)'
+.end 1
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue
+

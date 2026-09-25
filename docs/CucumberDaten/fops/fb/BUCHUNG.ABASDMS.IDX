@@ -1,0 +1,138 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BUCHUNG.ABASDMS.IDX
+.. Autor          : kop
+.. Verantwortlich : teamreport
+.. Kontrolle      : lei
+.. Funktion       : Erzeugt Indexdatei fÅr abas-DMS
+.. Functionality  : Creates index file for abas-DMS
+..*****************************************************************************
+.. includes BUCHUNG.ABASDMS.IDX.KOPF
+..*****************************************************************************
+.set trans -
+..
+.type text    xt           ? _F|defined(U|xt)
+.type text    xselstring   ? _F|defined(U|xselstring)
+.type P88:11 xdmsbelegart  ? _F|defined(U|xdmsbelegart)
+.type VID99 xid            ? _F|defined(U|xid)
+.type ARTR52000 xnetto     ? _F|defined(U|xnetto)
+.type ARTR52000 xbrutto    ? _F|defined(U|xbrutto)
+.type bool xhaspos         ? _F|defined(U|xhaspos)
+.type VP5  xkuli            ? _F|defined(U|xkuli)
+.type text xbetreff         ? _F|defined(U|xbetreff)
+..
+.input "dms/FIND.CONTEXT"
+..
+.file -tempname U|xt
+.select screen header
+..
+.output new 'U|xt' -encoding "UTF-8"
+.input "DATEI.F"
+..
+..Allgemeine- und Kopfvariablen
+.input "STD.ABASDMS.IDX"
+..
+FBelNr='U|xid^ebeleg'
+IBelNr='U|xid^beleg'
+Info='U|xid^beleg'
+..
+.. find customer or supplier in head
+..
+.continue KLPOS                ? F|empty(U|xid^konto)
+.assign U|xkuli=U|xid^konto    ? U|xid^konto^dnr = 0 ; U|xid^konto^dnr = 1
+.continue KULI                 ? _F|empty(U|xkuli)
+..
+!KLPOS
+.. find customer or supplier in lines
+.. rules in journal entries allow only one customer or supplier per entry
+..
+.load 0 entry 'U|xid'
+.continue NOACCOUNT            ? _G|mehr
+.load 0 line "$,,1:konto^dnr < 2"
+.continue NOACCOUNT            ? _G|mehr
+.assign U|xkuli=0|konto        ? _ F|empty(0|konto) & 0|konto^dnr < 2
+..
+!KULI
+.input "st/KULI.ABASDMS.IDX"
+..
+!NOACCOUNT
+Waehrung='U|xid^ewbu'
+.load 1 entry 'U|xid'
+.continue NOAMOUNTS   ? _G|mehr
+.load 1 line "$,,1:konto^dnr = 5"
+.continue NOCALC      ? _G|mehr
+!STARTLOOP
+.continue NOCALC ? F|equals(1|kart, "(BankAccount)")
+.assign U|xbrutto = U|xbrutto + 1|ewbetr                 ? _1|soll
+.assign U|xbrutto = U|xbrutto - 1|ewbetr                 ? 1|soll
+.assign U|xnetto = U|xnetto + 1|ewbetr                   ? 1|kart <> "S" & _1|soll
+.assign U|xnetto = U|xnetto - 1|ewbetr                   ? 1|kart <> "S" & 1|soll
+!NOCALC
+.load 1 line
+.continue STARTLOOP ? G|mehr
+BruBet='F|abs(U|xbrutto)'
+NetBet='F|abs(U|xnetto)'
+!NOAMOUNTS
+BelDat='U|xid^beldat(L="0")'
+.assign U|xbetreff = M|dndbetreff    ? F|defined(M|dndbetreff)
+.assign U|xbetreff = U|xid^text      ? F|empty(U|xbetreff)
+?Betreff='U|xbetreff'     ? _F|empty(U|xbetreff)
+.continue HEADEND                    ? _F|defined(U|xid^ursacheref)
+.continue HEADEND                    ? F|empty(U|xid^ursacheref)
+.. exclude recurring entry selections because of locks
+.continue HEADEND                    ? G|evtmaske = 807
+.continue HEADEND                    ? U|xid^ursacheref^dnr <> 3 & U|xid^ursacheref^dnr <> 4
+..
+.continue PURCHASE                   ? U|xid^ursacheref^dnr = 4
+?VKAngNr='U|xid^ursacheref^nummer'   ? U|xid^ursacheref^ktyp = G|anko
+?AbasVAID='U|xid^ursacheref^id'      ? U|xid^ursacheref^ktyp = G|anko
+..
+?VKAufNr='U|xid^ursacheref^nummer'   ? U|xid^ursacheref^ktyp = G|abko
+?AbasVBID='U|xid^ursacheref^id'      ? U|xid^ursacheref^ktyp = G|abko
+..
+?VKLiefNr='U|xid^ursacheref^nummer'  ? U|xid^ursacheref^ktyp = G|liko
+?AbasVLID='U|xid^ursacheref^id'      ? U|xid^ursacheref^ktyp = G|liko
+..
+?VKRechNr='U|xid^ursacheref^nummer'  ? U|xid^ursacheref^ktyp = G|reko
+?AbasVRID='U|xid^ursacheref^id'      ? U|xid^ursacheref^ktyp = G|reko
+.continue HEADEND
+..
+!PURCHASE
+?EKAnfNr='U|xid^ursacheref^nummer'   ? U|xid^ursacheref^ktyp = G|anko
+?AbasEAID='U|xid^ursacheref^id'      ? U|xid^ursacheref^ktyp = G|anko
+..
+?EKBestNr='U|xid^ursacheref^nummer'  ? U|xid^ursacheref^ktyp = G|abko
+?AbasEBID='U|xid^ursacheref^id'      ? U|xid^ursacheref^ktyp = G|abko
+..
+?EKLiefNr='U|xid^ursacheref^nummer'  ? U|xid^ursacheref^ktyp = G|liko
+?AbasELID='U|xid^ursacheref^id'      ? U|xid^ursacheref^ktyp = G|liko
+..
+?EKRechNr='U|xid^ursacheref^nummer'  ? U|xid^ursacheref^ktyp = G|reko
+?AbasERID='U|xid^ursacheref^id'      ? U|xid^ursacheref^ktyp = G|reko
+..
+!HEADEND
+.input "BUCHUNG.ABASDMS.IDX.KOPF"
+..
+.select entry  'U|xid'
+.continue END ? _G|mehr
+!LOOP
+.select line
+.continue END ? _G|mehr
+POS-ANF
+abasaid='H|id'
+?KtoNr='H|Konto'                     ? H|konto^dnr = 5
+?KtoBez='H|Konto^name'               ? H|konto^dnr = 5
+KStKTr='H|kstelle^nummer'
+KSTBez='H|kstelle^name'
+PosBet='H|ewbetr'
+?AbasPRID='H|projekt^id'             ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+?ProjNr='H|projekt^nummer'           ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+?ProjSuch='H|projekt^such'           ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+?ProjBez='H|projekt^name'            ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+POS-END
+.continue LOOP
+..
+!END
+.system 'F|expr("crlf+ < " + U|xt + " >" + U|xxmldata)' background
+.continue
+

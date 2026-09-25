@@ -1,0 +1,82 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDI.EDI2LAKOUP1
+.. Autor          : dsch
+.. Verantwortlich : dsch
+.. Kontrolle      : mh
+.. Funktion       : Verarbeitung von EDI Ladungstraegerkontoauszug, UP1
+.. Functionality  : Carrier account processing, sub routine (process status 3 messages)
+..                  Called from Infosystem EDIIMPVER -> FOP EDIIMPVER.VERARBEITEN -> EDI.EDI2LAKO
+..
+..*****************************************************************************
+.set trans -
+..
+.set demand -
+..
+.. Query edi messages
+.type text xtselediidentifiziert ? _F|defined(U|xtselediidentifiziert)
+.type text xtseledivorgaenger    ? _F|defined(U|xtseledivorgaenger)
+.type text xtselediautoinaktiv   ? _F|defined(U|xtselediautoinaktiv)
+..
+.. Edi messages
+.type P53  xvedivorgaenger   ? _F|defined(U|xvedivorgaenger)
+.type P53  xvedineu          ? _F|defined(U|xvedineu)
+..
+.. Query edi messages with status 3
+.formula U|xtselediidentifiziert = "$,,;@gruppe=0;edinachr==2114;vorart<>0;abmodell<>`;imex=IM;fcode=0;status=3;@ordnung=nummer"
+..
+!NEXTEDI
+.select edifact 'U|xtselediidentifiziert'
+.continue END ? _G|mehr
+.continue PROCESS
+..
+!SKIPP
+.select edifact
+.continue END ? _G|mehr
+..
+!PROCESS
+.continue SKIPP ?  H|id = U|xvedineu^id
+.assign U|xvedineu = H|id
+..
+.. Remember edi message in buffer 8
+.load 8 nolock edifact 'H|id'
+..
+.. Missing required data in edi message
+.continue FNOCUST ? F|empty(H|idkundeab)
+..
+.. Read ediinfo data from customer of edi message
+.input "EDI.GET.CUSTOMERCONFIG"
+.. No mapping model -> old forecast, do nothing here
+.continue SKIPP ? F|empty(U|xediabm)
+..
+.. Release possible locks on edi message
+.select -
+..
+.output terminal
+.set trans +
+Verarbeite Ladungstr„gerkontoauszug <'8|nummer'>.
+.set trans -
+..
+.input de.abas.edi.JEdi.java -id 'U|xediabm^nummer' -edidbid '8|nummer'
+.continue F99 ? G|status <> 0
+.continue NEXTEDI
+..
+.. C-core reported error
+!F99
+.select lock edifact '8|id'
+.formula H|status = 4
+.formula H|fcode  = 99
+.rewrite
+.continue NEXTEDI
+..
+.. No customer was found
+!FNOCUST
+.select lock edifact '8|id'
+.formula H|status = 4
+.formula H|fcode  = 5
+.rewrite
+.continue NEXTEDI
+..
+..*****************************************************************************
+!END
+.continue

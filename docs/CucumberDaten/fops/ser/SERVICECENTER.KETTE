@@ -1,0 +1,262 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SERVICECENTER.KETTE
+.. Autor          : cl
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       :
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type bool    xberst      ? _F|defined(xberst)
+.type bool    xbzweit     ? _F|defined(xbzweit)
+.type bool    xbtreffer   ? _F|defined(xbtreffer)
+.type integer xi          ? _F|defined(xi)
+.type text    xtanfstatus ? _F|defined(U|xtanfstatus)
+.type text    xtdat       ? _F|defined(U|xtdat)
+.type text    xmerk       ? _F|defined(U|xmerk)
+.type bool    xweiter     ? _F|defined(U|xweiter)
+..
+.copy U|xberst    = G|FALSE
+.copy U|xbzweit   = G|FALSE
+.copy U|xbtreffer = G|FALSE
+.formula M|grliste = ""
+.formula xi = 1
+..
+.continue SELVERKAUF
+..
+!EINKAUF
+.copy U|xberst = G|TRUE
+.formula U|xtdat = "ServiceRequest"
+.formula M|select = "$,,;nummer="
+.formula M|select = M|select+";id=" + M|vorgang^id                        ? _F|empty(M|vorgang) & _M|vorgang^dnr = 4
+.formula M|select = M|select+";frzeich/" + M|frzeich                      ? _F|empty(M|frzeich)
+.formula M|select = M|select+";betreuer=" + M|betreuer^id                 ? _F|empty(M|betreuer)
+.formula M|select = M|select+";@ablageart=(Active)"                       ?  M|lebendig
+.formula M|select = M|select+";@ablageart=(Both)"                         ?  M|beides
+.formula M|select = M|select+";kunde=" + M|kunde^id
+.formula M|select = M|select+";serprod=" + M|service^id                   ? _F|empty(M|service)
+.formula M|select = M|select+";anferfd=" + 'M|datef' + "!" + 'M|datet'
+
+.formula M|select = M|select+";@zeilen=ja;@bereich=ja;bextdl<>`"
+.formula M|grliste = "122:1"                                              ?  F|empty(M|service)
+..
+.load 8 group 'M|grliste' 'M|select'
+.continue END ? _G|mehr
+.load 8 line '8|selzeile'
+.continue END ? _G|mehr
+.copy U|xbtreffer = G|TRUE ?  G|mehr
+.continue TREFFER
+..
+!LTREFFER
+.continue END ? _G|mehr
+.load 8 line '8|selzeile'
+.continue END ? _G|mehr
+..
+!TREFFER
+.atext -language 'G|lsprache' U|xtdat 661 Einkauf  ? _F|empty(M|service)
+.formula M|grliste = ""
+.formula M|select  = "$,,"
+.formula M|select  = M|select+";id=" + 8|bextdl^id
+.formula M|select  = M|select+";vom=" + 'M|datef' + "!" + 'M|datet'
+.formula M|grliste = "4:1"    ? F|empty(M|service)
+..
+.select purchasing '8|bextdl^id'
+.continue DATNAME  ? _H|ablagef
+.continue DATNAME  ?  H|ablagef & M|beides
+.load 8 continue
+.continue LTREFFER
+..
+!SELVERKAUF
+.copy U|xberst    = G|TRUE
+.copy U|xbtreffer = G|FALSE
+.atext -language 'G|lsprache' U|xtdat 660 Verkauf    ? _F|empty(M|service)
+.formula M|grliste = ""
+.formula M|select  = "$,,"
+.formula M|select  = M|select+";@ablageart=(Active)"       ?  M|lebendig
+.formula M|select  = M|select+";@ablageart=(Both)"         ?  M|beides
+.formula M|select  = M|select+";kunde=" + M|kunde^id       ? _F|empty(M|kunde)
+.formula M|select  = M|select+";frzeich/" + M|frzeich      ? _F|empty(M|frzeich)
+.formula M|select  = M|select+";betreuer=" + M|betreuer^id ? _F|empty(M|betreuer)
+.formula M|select  = M|select+";@gruppe=2"                 ? _F|empty(M|service)
+.formula M|select  = M|select+";@ordnung=kopf"             ? _F|empty(M|service)
+.formula M|grliste = "3:1"                                 ?  F|empty(M|service)
+..
+.continue V3VERKAUF   ? U|xi = 1
+.continue V2VERKAUF   ? U|xi = 2
+.continue V1VERKAUF   ? U|xi = 3
+..
+!V1VERKAUF: Serviceangebot
+.copy U|xbzweit = G|TRUE   ? F|empty(M|vorgang)
+.copy U|xberst  = G|FALSE  ? F|empty(M|vorgang)
+.formula U|xmerk  = ""
+.formula M|select = M|select+";vom=" + 'M|datef' + "!" + 'M|datet'      ?  F|empty(M|service)
+.formula M|select = M|select+";ktyp=33"                                 ?  F|empty(M|service)
+.formula M|select = M|select+";serprod=" + M|service^id                 ? _F|empty(M|service)
+.formula M|select = M|select+";kopf^vom=" + 'M|datef' + "!" + 'M|datet' ? _F|empty(M|service)
+.formula M|select = M|select+";kotypa=Serviceangebot"                   ? _F|empty(M|service)
+.continue GRUPPE
+..
+!V2VERKAUF: Serviceauftrag
+.formula U|xmerk  = ""
+.formula M|select = M|select+";vom=" + 'M|datef' + "!" + 'M|datet'      ?  F|empty(M|service)
+.formula M|select = M|select+";ktyp=34"                                 ?  F|empty(M|service)
+.formula M|select = M|select+";serprod=" + M|service^id                 ? _F|empty(M|service)
+.formula M|select = M|select+";kopf^vom=" + 'M|datef' + "!" + 'M|datet' ? _F|empty(M|service)
+.formula M|select = M|select+";kotypa=Serviceauftrag"                   ? _F|empty(M|service)
+.continue GRUPPE
+..
+!V3VERKAUF: Reparaturauftrag
+.formula U|xmerk  = ""
+.formula M|select = M|select+";ktyp=35"                                 ?  F|empty(M|service)
+.formula M|select = M|select+";vom=" + 'M|datef' + "!" + 'M|datet'      ?  F|empty(M|service)
+.formula M|select = M|select+";serprod=" + M|service^id                 ? _F|empty(M|service)
+.formula M|select = M|select+";kotypa=Reparaturauftrag"                 ? _F|empty(M|service)
+.formula M|select = M|select+";kopf^vom=" + 'M|datef' + "!" + 'M|datet' ? _F|empty(M|service)
+.continue GRUPPE
+..
+!SERVICE
+.copy U|xbzweit = G|FALSE
+.formula U|xmerk = ""
+.formula M|select = "$,,;nummer="
+.formula M|select = M|select+";@ablageart=(Active)"                    ?  M|lebendig
+.formula M|select = M|select+";@ablageart=(Both)"                      ?  M|beides
+.formula M|select = M|select+";kunde=" + M|kunde^id                    ? _F|empty(M|kunde)
+.formula M|select = M|select+";anferfd=" + 'M|datef' + "!" + 'M|datet'
+.formula M|select = M|select+";serprod=" + M|service^id                ? _F|empty(M|service)
+.formula M|grliste = "122:1"
+.continue GRUPPE
+..
+!GRUPPE: Sales, Purchasing, ServiceRequest
+.select group  'M|grliste' 'M|select'  ?  F|empty(M|service) ; (_F|empty(M|service) & M|grliste = "122:1")
+.continue DATNAME                      ?  F|empty(M|service) ; (_F|empty(M|service) & M|grliste = "122:1")
+..
+!SELSERP
+.select 'U|xtdat' 'M|select' 
+..
+!LSELSERP
+.continue END                          ? _G|mehr
+.continue WEITER                       ? _F|empty(U|xmerk) & 'U|xmerk' = 'H|kopf^id'
+.reserve
+.formula U|xmerk = 'H|kopf^id'
+.select 'U|xtdat' 'H|kopf^id'
+.continue END                          ? _G|mehr
+..
+!DATNAME
+.continue END     ? _G|mehr
+.continue SERAUF  ?  H|typ = 34
+.continue REPAUF  ?  H|typ = 35
+.continue SERAN   ?  H|typ = 33
+.continue BKOPF   ? _F|defined(H|anferl)
+..
+!NOSERVICE
+.. Serviceanfragen nicht beachten, wenn Kunde und Betreuer gesetzt sind
+.continue WEITER  ? _F|empty(M|kunde) & (_F|empty(M|betreuer) ; _F|empty(M|frzeich))
+.. Serviceanfrage nicht beachten, wenn Erledigt-Datum vor "Datum von" aus Kopf
+.continue WEITER  ? _F|empty(H|anferl) & ('H|anferl:8' < 'M|datef:8') & _F|empty(M|datef)
+.formula U|xtanfstatus = F|value(H|anfstatus, "AS191")
+.continue WEITER  ?  M|lebendig & (U|xtanfstatus="(Completed)" ; U|xtanfstatus="(ReleasedForInvoicing)" ; U|xtanfstatus="(Confirmed)")
+.continue BKOPF
+..
+!SERAN
+.continue BKOPF   ?  F|empty(H|seranf)  ; (_F|empty(H|seranf) & (_F|empty(M|betreuer) ; _F|empty(M|frzeich)))
+.copy U|xweiter = G|FALSE
+.copy U|xweiter = G|TRUE  ? _F|empty(H|seranf)  &  F|empty(M|datef)
+.select -                 ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.select                   ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.continue WEITER          ?  U|xweiter
+.continue BKOPF           ?  F|empty(M|datef)   &  F|empty(M|datet)
+.copy U|xweiter = G|FALSE
+.copy U|xweiter = G|TRUE  ? _F|empty(H|vom)   & _F|empty(M|datef) & ('H|vom:8' < 'M|datef:8')
+.select -                 ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.select                   ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.continue WEITER          ?  U|xweiter
+.copy U|xweiter = G|FALSE
+.copy U|xweiter = G|TRUE  ? _F|empty(H|vom)   & _F|empty(M|datet) & ('H|vom:8' > 'M|datet:8')
+.select -                 ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.select                   ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.continue WEITER          ?  U|xweiter
+.copy U|xweiter = G|FALSE
+.copy U|xweiter = G|TRUE  ? _F|empty(H|seranf)
+.select -                 ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.select                   ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.continue WEITER          ? U|xweiter
+.continue BKOPF
+..
+!REPAUF
+.continue BKOPF           ?  F|empty(H|seranf)  ; (_F|empty(H|seranf) & (_F|empty(M|betreuer) ; _F|empty(M|frzeich)))
+.copy U|xweiter = G|FALSE
+.copy U|xweiter = G|TRUE  ? _F|empty(H|seranf)  &  F|empty(M|datef)
+.select -                 ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.select                   ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.continue WEITER          ?  U|xweiter
+.continue BKOPF           ?  F|empty(M|datef)  &  F|empty(M|datet)
+.continue BKOPF           ? _F|empty(H|seranf) & _F|empty(M|datef) & ('H|seranf^anferfd:8' < 'M|datef:8')
+.copy U|xweiter = G|FALSE
+.copy U|xweiter = G|TRUE  ?  _F|empty(H|vom)    & _F|empty(M|datef) & ('H|vom:8' < 'M|datef:8')
+.select -                 ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.select                   ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.continue WEITER          ?  U|xweiter
+.copy U|xweiter = G|FALSE
+.copy U|xweiter = G|TRUE  ? _F|empty(H|vom)    & _F|empty(M|datet) & ('H|vom:8' > 'M|datet:8')
+.select -                 ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.select                   ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.continue WEITER          ?  U|xweiter
+.copy U|xweiter = G|FALSE
+.copy U|xweiter = G|TRUE  ? _F|empty(H|seranf)
+.select -                 ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.select                   ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.continue WEITER          ?  U|xweiter
+.continue BKOPF
+..
+!SERAUF
+.continue ZSERAUF ?  F|empty(H|seranf) ; (_F|empty(H|seranf) & (_F|empty(M|betreuer) ; _F|empty(M|frzeich)))
+.copy U|xweiter = G|FALSE
+.copy U|xweiter = G|TRUE  ? _F|empty(H|seranf) &  F|empty(M|datef)
+.select -                 ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.select                   ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.continue WEITER          ?  U|xweiter
+.continue ZSERAUF         ?  F|empty(M|datef)  &  F|empty(M|datet)
+.copy U|xweiter = G|FALSE
+.copy U|xweiter = G|TRUE  ? _F|empty(H|vom)    & _F|empty(M|datef) & ('H|vom:8' < 'M|datef:8')
+.select -                 ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.select                   ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.continue WEITER          ?  U|xweiter
+.copy U|xweiter = G|FALSE
+.copy U|xweiter = G|TRUE  ? _F|empty(H|vom)    & _F|empty(M|datet) & ('H|vom:8' > 'M|datet:8')
+.select -                 ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.select                   ? _F|empty(M|service) & _M|grliste = "122:1" & U|xweiter
+.continue WEITER          ?  U|xweiter
+.continue ZSERAUF
+..
+!ZSERAUF
+.select line
+.continue KOPFSERAUF ? _G|mehr
+.continue ZSERAUF    ?  F|empty(H|orig)
+.continue ABGESCHL   ?  M|beides
+.continue ZSERAUF    ?  H|orig^ablagef
+.continue ZSERAUF    ? _F|empty(M|datet) & ('H|okopf^vom:8' < 'M|datet:8')
+!ABGESCHL
+.continue WEITER     ? _F|empty(H|orig)
+..
+!KOPFSERAUF
+.select header
+.continue BKOPF
+..
+!BKOPF
+.input 'M|bkopf'
+.load 8 continue   ? U|xbtreffer
+.continue LTREFFER ? U|xbtreffer
+..
+!WEITER
+.select continue
+.continue LSELSERP ? _F|empty(M|service) & _M|grliste = "122:1"
+.continue DATNAME
+..
+!END
+.formula U|xi = U|xi + 1
+.continue SELVERKAUF ? U|xberst
+.continue SERVICE    ? U|xbzweit
+.continue            ? M|tzeilen = 0
+.continue
+..

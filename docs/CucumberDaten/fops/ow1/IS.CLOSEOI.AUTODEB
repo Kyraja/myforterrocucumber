@@ -1,0 +1,81 @@
+..!interpreter german translate noabbrev
+..*****************************************************************************
+.. Name           : ow1/IS.CLOSEOI.AUTODEB
+.. Date           : 23.01.14
+.. Version        : 2012r4n05
+.. Author         : chbo/abas AG
+.. Copyright      : (c) 2014 abas AG
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   : Create an EDP import file of a debit for the selected
+..                  outstanding item and import in the background via .system
+...Includes       : None
+..*****************************************************************************
+..
+.art text  xtfile                 ? F|defined( U|xtfile )      = G|False
+.art text  xtcommand              ? F|defined( U|xtcommand )   = G|False
+.art text  xtdelete               ? F|defined( U|xtdelete )    = G|False
+.art datum xdbudat                ? F|defined( U|xdbudat )     = G|False
+..
+.weiter NODATA ? F|empty(M|opid) = G|True
+..
+.formel U|xtfile = "ow1/DEBOI.EDP"
+.formel U|xtcommand = "edpimport.sh -p " + 'G|einmalpw' + " -I " + 'U|xtfile'
+.formel U|xtdelete = "rm " + 'U|xtfile'
+.formel U|xdbudat = M|budat + 20
+.. .formel U|xdbudat = G|datum
+..
+.. Create EDP file
+.eingabe DATEI.F
+.ausgabe auf 'U|xtfile'
+..
+.. Set header information
+#!EDP_LANG=D
+#!database=4:3
+#!action=PAYMENT
+#!recordidfld=id
+#!menuchoice=offene Posten ausbuchen
+#!charset=eks
+#!FIRSTTABFLD=tabnr
+#!dontchange=-
+id;beleg;beldat;budat;gkonto;tabnr;tophist;sksatz;skbetr;0:kladen;bubetr
+..
+.. Set import lines
+;DSIMPORT;'M|vom';'U|xdbudat';18100;+1;'M|opid';0;0;;'M|rebetr'
+..
+.. Close file
+.ausgabe auf WERF.WEG
+.eingabe BILD.F
+.ausgabe BILDSCHIRM
+..
+.. Execute edpimport.sh with the created file
+.system 'U|xtcommand' HINTER
+.weiter ERRORCMD ? G|mehr = G|False
+.. .system 'U|xtdelete' HINTER
+.weiter ERRORFILE ? G|mehr = G|False
+.. Success message
+.hinweis -sofort Open item 'M|opid^num100' was sucessfully debited.
+.weiter
+..
+!ERRORCMD
+.. Message if EDP command does not complete successfully
+.hinweis -sofort Error executing EDP command for open item 'M|opid^num100'.
+.. .system 'U|xtdelete' HINTER
+.weiter ERRORFILE ? G|mehr = G|False
+.weiter
+..
+!ERRORFILE
+.. Message if temporary EDP file is not delete successfully
+.hinweis -sofort Error deleting temporary EDP file 'U|xtfile'.
+.weiter
+..
+!NODATA
+.. Message if there is no data in the selected line
+.hinweis -sofort Line contains no data!

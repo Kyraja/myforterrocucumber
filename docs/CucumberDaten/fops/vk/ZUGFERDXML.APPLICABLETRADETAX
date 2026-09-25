@@ -1,0 +1,59 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : ZUGFERDXML.APPLICABLETRADETAX
+..  Autor          : saac
+..  Verantwortlich : teamreport
+..  Kontrolle      : cl
+..  Funktion       : XML-Datengenerator des Infosystems ev/EVVORGANG zur Erzeugung
+..                   der Rechnungsdaten im ZUGFeRD-Format
+..  Functionality  : XML data generator for the Infosystem ev/EVVORGANG to build
+..                   invoice date for ZUGFeRD
+..*****************************************************************************
+..
+.type text xcurrencyID                ? _F|defined(U|xcurrencyID)
+.type R13.2 xTotalPrepaidAmount       ? _F|defined(U|xTotalPrepaidAmount)
+.type R13.2 xCalculatedAmount         ? _F|defined(U|xCalculatedAmount)
+.type text xTypeCode                  ? _F|defined(U|xTypeCode)
+.type text xExemptionReason           ? _F|defined(U|xExemptionReason)
+.type R13.2 xBasisAmount              ? _F|defined(U|xBasisAmount)
+.type text xCategoryCode              ? _F|defined(U|xCategoryCode)
+.type R13.2 xApplicablePercent        ? _F|defined(U|xApplicablePercent)
+..
+.set trans -
+..
+.select screen header
+..*****************************************************************************
+!NEXTROW
+..*****************************************************************************
+.select screen line
+.continue END ? _G|mehr
+..
+.continue NEXTROW ? _F|equals(M|vktypa, "(VATInputTaxItem)") & _F|equals(M|vktypa, "(VATInputTaxItemInclusive)")
+.copy U|xCalculatedAmount = M|gpreis
+.copy U|xTypeCode = "VAT"
+.copy U|xExemptionReason = ""
+.assign U|xExemptionReason = M|prtsthinwname ? M|proz = 0.0 & _F|empty(M|prtsthinwname)
+.copy U|xBasisAmount = M|epreis
+.formula U|xBasisAmount = U|xBasisAmount - U|xCalculatedAmount ? F|equals(M|vktypa, "(VATInputTaxItemInclusive)")
+.copy U|xCategoryCode = "S"
+.copy U|xCategoryCode = "E"  ? M|proz = 0.0 & _F|equals(M|vorgang^stlaart, "(EUCountry)")
+.copy U|xCategoryCode = "IC" ? M|proz = 0.0 &  F|equals(M|vorgang^stlaart, "(EUCountry)")
+.copy U|xCategoryCode = "AE" ? F|equals(M|position^tustart, "(TaxFreeWithTaxLines)")
+.copy U|xApplicablePercent = M|proz
+..
+..*****************************************************************************
+!OUTPUT
+..*****************************************************************************
+            <ram:ApplicableTradeTax>
+                <ram:CalculatedAmount currencyID="'U|xcurrencyID'">'U|xCalculatedAmount'</ram:CalculatedAmount>
+                <ram:TypeCode>'U|xTypeCode'</ram:TypeCode>
+?               <ram:ExemptionReason>'U|xExemptionReason'</ram:ExemptionReason> ? _F|empty(U|xExemptionReason)
+                <ram:BasisAmount currencyID="'U|xcurrencyID'">'U|xBasisAmount'</ram:BasisAmount>
+                <ram:CategoryCode>'U|xCategoryCode'</ram:CategoryCode>
+                <ram:ApplicablePercent>'U|xApplicablePercent'</ram:ApplicablePercent>
+            </ram:ApplicableTradeTax>
+..
+.continue NEXTROW
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,110 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : AUSZUG.TAB
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : Tabellenzeig-FOP des Infosystems fb/AUSZUG
+..  Functionality  : Table FOP of the Infosystem fb/AUSZUG.
+..*****************************************************************************
+..
+.set trans -
+..
+.make screen line +O
+.assign M|tbuzeile = H|id
+.copy M|tstrgl = H|strgl ? H|gruppe = 0
+.copy M|tbuchung = H|buchung
+.copy M|tkonto   = H|konto
+.copy M|tkst     = H|kstelle
+.copy M|tprojekt = H|projekt
+.copy M|tkvert   = H|kvert
+.formula M|tbubetr  = H|betrag
+
+.continue FIBU ? H|gruppe = 1
+.formula M|tbubetr2 = H|w2betr   ?  H|kow2^id = M|waehr2^id
+!FIBU
+.formula M|thaben   = M|tbubetr  ? _H|soll
+.formula M|tsoll    = M|tbubetr  ?  H|soll
+.formula M|thaben2  = M|tbubetr2 ? _H|soll
+.formula M|tsoll2   = M|tbubetr2 ?  H|soll
+..
+.formula U|xrsumsoll   = U|xrsumsoll   + M|tsoll
+.formula U|xrsumhaben  = U|xrsumhaben  + M|thaben
+.formula U|xrsumsoll2  = U|xrsumsoll2  + M|tsoll2
+.formula U|xrsumhaben2 = U|xrsumhaben2 + M|thaben2
+..
+.formula U|xifactor   = F|condexpr(H|soll, 1, -1)
+..
+.continue COSTDIST ? (M|ktokvertaufl ; M|konto^dnr = 60)
+..
+.formula U|xrbubetr   = M|tbubetr  * U|xifactor 
+.formula U|xrbubetr2  = M|tbubetr2 * U|xifactor
+..
+!COSTDIST
+.formula U|xrbubetr   = M|tbubetr  * U|xifactor ? (F|empty(M|tkvert))
+.formula U|xrbubetr   = M|tbubetr  * U|xifactor ? (_F|empty(M|tkvert) & _F|empty(M|tkst))
+.formula U|xrbubetr   = M|tbubetr  * U|xifactor ? (F|empty(M|tkvert))
+.formula U|xrbubetr   = M|tbubetr  * U|xifactor ? (_F|empty(M|tkvert) & _F|empty(M|tkst))
+..
+.. reset balance because year changed?
+.copy U|xbbalreset = U|xbgv & H|gjahr <> U|xlyear
+.continue CONT  ? _U|xbbalreset
+.continue BACKW ?  U|xbbackward
+.formula U|xrkosaldo  = 0
+.formula U|xrkosaldo2 = 0
+.continue CONT
+!BACKW
+.set currency 'M|waehr'
+.set outcurr 'M|waehr'
+.select year 'H|gjahr' 1 'H|monat' 'F|lastfm(H|gjahr)'
+.load 5 add M|konto
+.formula U|xrkosaldo  = 5|esaldo
+.continue CONT ? F|empty(M|waehr2)
+.set currency 'M|waehr2'
+.set outcurr 'M|waehr2'
+.select year 'H|gjahr' 1 'H|monat' 'F|lastfm(H|gjahr)'
+.load 5 add M|konto
+.formula U|xrkosaldo  = 5|esaldo
+.continue CONT
+..
+!CONT
+.formula U|xrkosaldo  = U|xrkosaldo  + U|xrbubetr  ? _U|xbbackward
+.formula U|xrkosaldo  = U|xrkosaldo  - U|xrbubetr  ?  U|xbbackward
+.formula U|xrkosaldo2 = U|xrkosaldo2 + U|xrbubetr2 ? _U|xbbackward
+.formula U|xrkosaldo2 = U|xrkosaldo2 - U|xrbubetr2 ?  U|xbbackward
+..
+.make screen line -O ? M|bukeine ; (_M|buverd & U|xbconsol)
+.continue END           ? M|bukeine ; (_M|buverd & U|xbconsol)
+.formula M|tsaldo  = U|xrkosaldo
+.formula M|tsaldo2 = U|xrkosaldo2
+..
+.formula   M|tbumonat = H|monat
+.copy M|tbudat   = H|budat
+.copy M|tbeldat  = H|beldat
+.copy M|tkenn    = H|kenn
+.copy M|tbeleg   = H|beleg
+.formula   M|tbush    = F|condexpr(H|soll, "(83)", "(72)")
+.formula   M|tbutext  = F|condexpr(F|empty(H|ptext), H|text, H|ptext)
+.formula   M|tgegen   = H|gegen
+.copy M|tkvnum   = H|kvnum    ?  H|gruppe = 0
+.continue COLOR ? H|gruppe <> 0
+.copy M|tsts     = H|steuer ?  H|gruppe = 0
+.copy M|tustva   = H|ustva
+.copy M|tebeleg  = H|ebeleg
+.continue COLOR
+..
+..*****************************************************************************
+!COLOR
+..*****************************************************************************
+.continue END ? _G|grafik
+.. define color for row
+.formula U|ximod = U|ximod + 1 ? M|tbumonat <> U|xilmon
+.colour -background 'F|condexpr(F|expr(U|ximod // 2) = 0, U|xabasgroupdark, U|xabasgrouplight)' 'M|aktzeile'
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.formula   U|xilmon  = H|monat
+.copy U|xlyear  = H|gjahr
+.continue

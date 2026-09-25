@@ -1,0 +1,140 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EKZENTRALE.TAB
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Validiert Eingaben und formuliert die Datenbankanfrage.
+.. Functionality  : Validates inputs and defines database query.
+..*****************************************************************************
+.set trans -
+.type bool xbleer  ? _F|defined(U|xbleer)
+..
+.formula M|tot2 = 0
+.formula M|tot3 = 0
+.formula M|tot4 = 0
+.formula M|tot5 = 0
+..
+.copy U|xbleer = G|FALSE
+.continue ERROR01 ? F|empty(M|ektyp)
+..
+.. Build query
+.formula M|select = "$,,;"
+.formula M|select = M|select + "@ordnung=vom"    ?  F|equals(M|ektyp, "(PurchaseOrder)")
+.formula M|select = M|select + "@ordnung=nummer" ? _F|equals(M|ektyp, "(PurchaseOrder)")
+.. Type of document
+.formula M|select = M|select + ";ktyp=" + F|value(M|ektyp, "AS162")
+.formula M|select = M|select + ";uebertr=TRUE"     ? F|equals(M|ektyp, "(PackingSlip)") & M|kuebertr & _M|knuebertr
+.formula M|select = M|select + ";uebertr=FALSE"    ? F|equals(M|ektyp, "(PackingSlip)") & M|knuebertr & _M|kuebertr
+.copy U|xbleer = G|TRUE                       ? (M|kuebertr & M|knuebertr) ; (_M|kuebertr & _M|knuebertr)
+.copy M|kuebertr = G|TRUE                     ? U|xbleer
+.copy M|knuebertr = G|TRUE                    ? U|xbleer
+.copy U|xbleer = G|FALSE
+.formula M|select = M|select + ";vorgartaz=" + M|ivorgart
+.. die alte vorgart kann dann raus
+.continue CUSTOM ? F|empty(M|vorgart)
+.formula M|select = M|select + ";vorgart=" + M|vorgart^id
+..
+!CUSTOM: Contact customer
+.continue INVOICE ? F|empty(M|kuli)
+.formula M|select = M|select + ";kl=" + M|kuli^id
+..
+!INVOICE: Customer which gets the invoice
+.continue EXTNUM ? F|empty(M|reku)
+.formula M|select = M|select + ";resteller=" + M|reku^id
+..
+!EXTNUM: Own document number
+.continue STAFFER ? F|empty(M|kebeleg)
+.formula M|select = M|select + ";ebeleg==" + M|kebeleg
+..
+!STAFFER: Staff personnel
+.continue SYMBOL ? F|empty(M|betreuer)
+.formula M|select = M|select + ";betreuer=" + M|betreuer^id
+..
+!SYMBOL: Symbol of staffer
+.continue YOURREF ? F|empty(M|kzeich)
+.formula M|select = M|select + ";zeich==" + M|kzeich
+..
+!YOURREF: Your reference
+.continue NUMBER ? F|empty(M|ref)
+.formula M|select = M|select + ";frzeich/" + M|ref
+..
+!NUMBER: Number or searchword
+.continue DOCDATE ? F|empty(M|docf) & F|empty(M|doct)
+.formula M|select = M|select + ";@numsuch="  + M|docf + "!" + M|doct
+..
+!DOCDATE: Date of document
+.continue PROMODE ? F|empty(M|datef) & F|empty(datet)
+.formula M|select = M|select + ";vom==" + 'M|datef:8'                     ? 'M|datef:8' = 'M|datet:8'
+.formula M|select = M|select + ";vom=" + 'M|datef:8' + "!" + 'M|datet:8'  ? 'M|datef:8' <> 'M|datet:8'
+..
+!PROMODE: Procurement mode
+.formula M|select = M|select+";bsart=" + "(Relocation)"      ? M|relocation
+.formula M|select = M|select+";bsart=" + "(Subcontracting)"  ? M|subcontract
+..
+!KPROJEKT: Project
+.continue PACKING ? F|empty(M|kprojekt) & F|equals(M|ektyp, "(PackingSlip)")
+.continue FILING  ? F|empty(M|kprojekt)
+.formula M|select = M|select + ";kprojekt=" + 'M|kprojekt^id'
+.continue FILING  ? _F|equals(M|ektyp, "(PackingSlip)")
+..
+!PACKING
+.formula M|select = M|select + ";lsart=" + F|value(M|lsart, "AS327") 
+..
+!FILING
+.formula M|select = M|select + ";@ablageart=" + F|value(M|ablageart, "AS193")
+..
+.type bool xcritdoc ? _F|defined(U|xcritdoc)
+.copy U|xcritdoc = G|FALSE
+..
+!CRITDOC: Has document critical type?
+.continue CRITCAL ? F|equals(M|ektyp, "(PurchaseOrder)")
+.continue QUERY
+..
+!CRITCAL
+.copy U|xcritdoc = G|TRUE
+..
+!QUERY
+.formula M|grliste = "4:1"
+.select group  'M|grliste' 'M|select'
+..
+!CHECK
+.continue END ? _G|mehr
+.copy M|aktkritisch = G|FALSE
+.assign M|akttterm = ""
+.continue EXCLCRT ?  M|kkritisch
+.continue TABLE   ? _U|xcritdoc
+.continue TABLE   ? _F|empty(H|ablagen)
+.continue CHCRIT
+..
+!EXCLCRT: Critical documents only
+.continue NEXTDOC ? _U|xcritdoc
+.continue NEXTDOC ? _F|empty(H|ablagen)
+..
+!CHCRIT: Look for critical documents, but filed documents are never critical
+.type ID4:1 xdocument ? _F|defined(U|xdocument)
+.type GD    xduedate  ? _F|defined(U|xduedate)
+..
+.assign U|xdocument = H|id
+.copy U|xduedate = M|ktterm
+..
+.input 'M|kritischefop' ? _F|empty(M|kritischefop)
+.continue NEXTDOC ? _F|defined(U|xcritical)
+.continue NEXTDOC ? M|kkritisch & _U|xcritical
+.copy M|aktkritisch = U|xcritical
+.copy M|akttterm = U|xshipdate ? F|defined(U|xshipdate)
+..
+!TABLE: Create table
+.input 'M|bkopf'
+..
+!NEXTDOC: Load next document
+.select continue
+.continue CHECK
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR01: Missing type of document!
+.error -field M|ektyp -message Bitte mindestens eine Vorgangsart ausw„hlen!
+.end 1

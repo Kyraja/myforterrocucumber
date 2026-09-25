@@ -1,0 +1,98 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SQRELOCATION.BEHAELTER
+.. Author         : tiwe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Function       : Durchlaufen der Maske BehÑlterlagermengen
+..                 
+.. Puffers        : 1| -> Lagermenge
+..                  H| -> BehÑlterlagermengen
+..*****************************************************************************
+..
+.. Variablen
+.type PS2:1 U|xvartikel ? _F|defined(xvartikel)
+.set trans -
+..
+.. BehÑlterlagermengen im Hintergrund fÅllen
+.make container group12
+.assign H|charge    = M|charge^id      ? _F|empty(M|charge)
+.assign H|behaelter = M|container^id   ? _F|empty(M|container)
+.assign H|kverw     = M|verw           ? _F|empty(M|verw)
+.assign H|projekt   = M|projekt        ? _F|empty(M|projekt)
+.assign H|artikel   = 1|artikel^id 
+.assign H|platz     = 1|platz^id    
+..
+.select header
+..
+!LINLOOP
+.select line 
+.continue ENDLINE     ? _G|mehr
+.make screen line +O 
+.assign M|tartikel     = H|tartikel
+.copy M|tlplatz       =  H|tplatz^id
+.assign M|tlager      = M|tlplatz^lager
+.assign M|tlgruppe    =  M|tlplatz^lgruppe
+.copy M|internlgruppe = M|tlgruppe^intlager 
+.copy M|tle     = H|tartikel^le
+..BehÑlter: Schreibschutz und Vorbelegung fÅr die verschiedenen Workflows
+.assign M|tbehabgang = H|tbehaelter^id ? _F|empty(tbehaelter) 
+.assign M|tbehzugang = M|tbehabgang ? _F|empty(M|tbehabgang) 
+.continue BEHFILL ? _F|empty(M|tbehabgang)
+.continue NOBEH   ? F|empty(M|tbehabgang)
+!BEHFILL: Zeile mit BehÑlter
+.protection -field tbehzugang 'M|aktzeile'  ? F|equals(M|workflow,"(ContainerReLocation)")
+.protection -field tmge 'M|aktzeile'        ? F|equals(M|workflow,"(ContainerReLocation)")
+.protection -field tlplatzzu 'M|aktzeile'   ? F|equals(M|workflow,"(StockRepackage)")
+.formula M|tbehzugang = ""                 ? F|equals(M|workflow,"(StockRepackage)")
+.protection -field tbehzugang 'M|aktzeile'  ? F|equals(M|workflow,"(ContainerClear)")
+.formula M|tbehzugang = ""                 ? F|equals(M|workflow,"(ContainerClear)")
+.protection -line 'M|aktzeile'             ? F|equals(M|workflow,"(StockReLocation)")
+.protection -line 'M|aktzeile'             ? F|equals(M|workflow,"(EmptyEntry)")
+..prÅfen ob es ein gemischter BehÑlter ist
+.formula U|xtsel = "$,,kopf="+'M|tbehabgang^nummer'+";artikel=;"
+.load 3 container 'U|xtsel'
+.continue BEHENDE ? _G|mehr
+.assign U|xvartikel = 3|artikel
+!BEHLOOP
+.continue NXTLINE ? F|equals(U|xvartikel,3|artikel)
+..unterschiedliche Artikel im BehÑlter
+.copy M|tgembehaelter = G|true
+..einen gemischten BehÑlter umlagern ist nur erlaubt, wenn direkt nach dem BehÑlter selektiert wurde
+.continue BEHENDE ? _F|equals(M|workflow,"(ContainerReLocation)") 
+.continue BEHENDE ? _F|empty(container) 
+.protection -line 'M|aktzeile'  
+.continue BEHENDE
+!NXTLINE
+.load 3 container
+.continue BEHLOOP ? G|mehr
+!BEHENDE
+.continue COMMON
+!NOBEH: Zeile ohne BehÑlter
+.protection -line 'M|aktzeile'             ? F|equals(M|workflow,"(ContainerReLocation)")
+.protection -line 'M|aktzeile'             ? F|equals(M|workflow,"(ContainerClear)")
+.protection -field tbehzugang 'M|aktzeile'  ? F|equals(M|workflow,"(StockReLocation)")
+.protection -field tlplatzzu 'M|aktzeile'   ? F|equals(M|workflow,"(StockRepackage)")
+.protection -line 'M|aktzeile'             ? F|equals(M|workflow,"(EmptyEntry)")
+.continue COMMON
+!COMMON: weitere gemeinsame Felder
+.assign M|gebmge   = H|mge
+.assign M|tmge     = H|mge
+.formula M|tfaktor      = H|gebf
+.copy M|tcharge       = H|ztcharge
+.formula M|gebmge    = H|mge
+.formula M|tverw      = H|verw
+.assign M|tprojekt    = H|tprojekt
+.copy M|tfertig       = H|lffert
+..Schreibschutz auf die Zeilen
+.protection -line 'M|aktzeile' ? M|gebmge <= 0
+.formula M|thinweis = ""
+.formula M|thinweis = M|hinweis        ? M|gebmge > 0 & F|empty(M|tlplatzzu)
+.formula M|thinweis = M|hinweis        ? M|gebmge > 0 & F|empty(M|tbehzugang)     & _F|empty(M|tbehabgang)
+.formula M|thinweis = ""               ? F|equals(M|workflow,"(EmptyEntry)")      & _F|empty(M|tbehabgang) 
+.formula M|thinweis = ""               ? F|equals(M|workflow,"(StockReLocation)") & _F|empty(M|tbehabgang)
+.formula M|thinweis = ""               ? M|tgembehaelter & F|equals(M|workflow,"(ContainerReLocation)") 
+.continue LINLOOP
+..
+!ENDLINE
+.continue

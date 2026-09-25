@@ -1,0 +1,144 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PDMCENTER.TAB
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  : 2-Puffer: Artikel
+..                  3-Puffer: Artikelkopf StÅckliste
+..                  4-Puffer: ArtikelprÅfung im abas Mandant
+..                  5-Puffer: Artikel aus StÅckliste
+..*****************************************************************************
+.set trans -
+.type text    xtsel       ? _F|defined(U|xtsel)
+.type text    xtsel2      ? _F|defined(U|xtsel2)
+.type bool    bdel        ? _F|defined(U|bdel)
+.type text    xtempfile   ? _F|defined(U|xtempfile)
+.type P2:1    xpart       ? _F|defined(U|xpart)
+.type text    xpart1      ? _F|defined(U|xpart1)
+.type bool    xtreffer    ? _F|defined(U|xtreffer)
+.type bool    xmehr       ? _F|defined(U|xmehr)
+.type text    xtfreigeben ? _F|defined(U|xtfreigeben)
+.type integer xzn         ? _F|defined(U|xzn)
+.type text    xtartikelnr ? _F|defined(U|xtartikelnr)
+.type text    xtanummer   ? _F|defined(U|xtanummer)
+.type text    xtnamebspr  ? _F|defined(U|xtnamebspr)
+..
+.copy U|xtreffer  = G|FALSE
+.copy U|bdel      = G|FALSE
+.copy U|xmehr     = G|FALSE
+.continue END  ? F|empty(H|nachrtyp)
+.continue MAKE ? M|export &  H|nachrtyp = "aepdmpart"
+.continue BOM  ? M|bbom
+..
+!ITEM: Artikelselektion
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + "id=" + H|id
+.formula U|xtsel = U|xtsel + ";text1=PART
+.load 2 edifact 'U|xtsel'
+.continue END ? _G|mehr
+.load 2 line '2|selzeile'
+.continue END ? _G|mehr
+.continue MAKE
+..
+!BOM: StÅcklisten-Selektion / BOM-selection
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + "id=" + H|id
+.formula U|xtsel = U|xtsel + ";text1=PARENT"
+.load 3 edifact 'U|xtsel'
+.continue END  ? _G|mehr
+..
+!LOAD3
+.load 3 line '3|selzeile'
+.continue END  ? _G|mehr
+..
+!MAKE
+.continue EMAKE ?  M|export
+.formula U|xtartikelnr = ""
+.formula U|xtartikelnr = 2|text3 ? _M|bbom
+.formula U|xtanummer   = 2|text2 ? _M|bbom
+.formula U|xtnamebspr  = ""
+.formula U|xtnamebspr  = 2|text5 ? _M|bbom
+.formula U|xtanummer   = 3|text2 ?  M|bbom
+..
+!EMAKE
+.make screen line +O
+.continue BOOL                       ? M|export
+.formula M|artikel   = ""
+.formula M|artikel   = U|xtartikelnr ? _M|bbom
+.formula M|anummer   = U|xtanummer   ? _M|bbom
+.assign  M|artikelnr = U|xtanummer   ? _M|bbom
+.formula M|namebspr  = ""
+.formula M|namebspr  = U|xtnamebspr  ? _M|bbom
+.assign  M|artikelnr = U|xtanummer   ?  M|bbom
+.formula M|artikel   = U|xtanummer   ?  M|bbom
+.formula M|anummer   = U|xtanummer   ?  M|bbom
+.assign M|basisartikel = M|artikelnr^basisartikel
+..
+!BOOL
+.assign M|artikelnr = H|ideksart ?  M|export
+.. true, wenn EDI-Datensatz vom Typ Item-Import
+.copy M|bartikel     = G|TRUE ?  H|nachrtyp = "aipdmpart" & M|import
+.. true, wenn EDI-Datensatz vom Typ Item-Export
+.copy M|bartikel     = G|TRUE ?  H|nachrtyp = "aepdmpart" & M|export
+.. true, wenn EDI-Datensatz vom Typ BOM-Import
+.copy M|bfl          = G|TRUE ?  H|nachrtyp = "aipdmbom"
+.copy U|bdel = G|TRUE ? _M|bartikel & _M|bfl
+.make screen line -O  ? U|bdel
+.continue END         ? U|bdel
+.load 4 parts 'M|artikelnr^id'
+.continue PARTS ? G|mehr
+.copy M|bneu         = G|TRUE ? M|bfl ; M|bartikel
+.continue NOPARTS
+..
+!PARTS
+.copy M|bneu         = G|TRUE ? M|bfl & F|empty(4|flistestd)
+.. wenn Artikel bzw. FL vorhanden
+.copy M|bupdate      = G|TRUE ? M|bartikel
+.copy M|bupdate      = G|TRUE ? M|bfl & _F|empty(4|flistestd)
+.formula M|namebspr  = 4|namebspr
+.formula M|artikel   = 4|such2
+..
+!NOPARTS
+.assign M|pdm        = H|id
+.formula M|vom       = H|erfass
+.. Status des PDM-Datensatzes
+.formula M|istatus   = H|status
+.set trans +
+.. Bedeutung aus Bearbeitungsstatus (0,2,4,5)
+.formula M|edistatus = "Alles verarbeitet"       ? H|status = 0
+.formula M|edistatus = "Bereit zur Verarbeitung" ? H|status = 2
+.formula M|edistatus = "Fehlerhaft"              ? H|status = 4 ; H|status = 5
+.set trans -
+.copy M|fehler       = G|TRUE             ? H|fcode <> 0
+.formula M|nachrtyp  = H|nachrtyp
+.formula M|fbesch   = ""
+.continue NOFTEXT      ? F|empty(H|ftext)
+.file -tempname U|xtempfile
+.output new 'U|xtempfile'
+.input "DATEI.F"
+.input -text 'H|ftext'
+.output
+.formula M|ftext = U|xtempfile
+..
+!NOFTEXT
+.formula U|xzn = 0
+.input "pdm/PDMCENTER.CHECK" ? M|bfl
+..
+.select screen line 'U|xzn'  ? U|xzn > 0
+..
+.formula M|pdmfbesch  = ""
+.assign M|abmodell    = H|abmodell
+.formula M|tfreigeben = "icon:ok"     ?  H|status = 2
+.formula M|tfreigeben = "icon:stop"   ?  M|bfl & M|bneu & F|empty(M|artikelnr)
+.formula M|tfreigeben = U|xtfreigeben ? _F|empty(U|xtfreigeben)
+.protection tmark 'M|aktzeile'        ?  M|tfreigeben = "icon:stop" ; M|tfreigeben = "icon:clock"
+.formula M|tabweisen  = "icon:ok"     ?  H|status = 2
+.formula U|xtfreigeben = ""
+.continue END
+..
+..*****************************************************************************
+!END: individuelles FOP
+.copy U|bdel = G|FALSE
+.input "pdm/PDMENDE"
+.continue

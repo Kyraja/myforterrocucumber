@@ -1,0 +1,263 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : QUEUE.EV
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text    xtsel      ? _F|defined(U|xtsel)
+.type text    xtsel1     ? _F|defined(U|xtsel1)
+.type text    xtsys      ? _F|defined(U|xtsys)
+.type text    xtepi      ? _F|defined(U|xtepi)
+.type text    xtepiout   ? _F|defined(U|xtepiout)
+.type text    xttmpdat   ? _F|defined(U|xttmpdat)
+.type text    xws        ? _F|defined(U|xws)    
+.type integer xi         ? _F|defined(U|xi)
+.type GD      xbasedate  ? _F|defined(U|xbasedate)
+.type integer xdiffmonth ? _F|defined(U|xdiffmonth)
+.type text    xbearbtyp  ? _F|defined(U|xbearbtyp)
+.type integer xwsanzahl  ? _F|defined(U|xwsanzahl)
+.type bool    xbmark     ? _F|defined(U|xbmark)
+..
+.file -tempname U|xtepiout
+.file -tempname U|xttmpdat
+..
+.. header
+.continue WS          ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "ws"
+.input "is/TABLEEREN" ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "vorgang"
+.input "is/TABLEEREN" ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "lj"
+.input "is/TABLEEREN" ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "beleg"
+.input "is/TABLEEREN" ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "artikel"
+.input "is/TABLEEREN" ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "budatvon"
+.input "is/TABLEEREN" ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "budatbis"
+.continue SICHT       ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "blj"
+.continue SICHT       ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bws"
+.input "is/TABLEEREN" ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "trefferausgeben"
+.input "is/TABLEEREN" ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bentfernt"
+.continue BSTART      ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "bstart"
+.continue PROCESS     ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "avorgentfern"
+.continue PROCESS     ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "avorguebern"
+.continue REVALUE     ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "burevalue"
+.input "is/TABLEEREN" ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "ursache"
+.continue TREFFER     ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "treffer"
+.continue MARK        ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "ballemark"
+.continue DEMARK      ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bnotallmark"
+.continue END
+..
+!MARK
+.continue END      ? M|tzeilen = 0
+.copy U|xbmark = G|TRUE
+.assign M|mark = "(SelectAll)"
+.continue MARKIEREN
+..
+!DEMARK
+.continue END      ? M|tzeilen = 0
+.copy U|xbmark = G|FALSE
+.assign M|mark = "(DeselectAll)"
+.continue MARKIEREN
+..
+!MARKIEREN:  Setting switch in all table lines
+.select screen line 'F|formatstr("$,,bvorgentfern<>{1}", U|xbmark)'   ? M|bws
+.select screen line 'F|formatstr("$,,bvorguebern<>{1}", U|xbmark)'    ? M|blj
+..
+!CHECK
+.continue END ? _G|mehr
+.formula M|bvorgentfern = U|xbmark ? F|modifiable(M|bvorgentfern) & M|bws
+.formula M|bvorguebern  = U|xbmark ? F|modifiable(M|bvorguebern)  & M|blj
+..
+!NEXTROW
+.select screen line
+.continue CHECK
+..
+!TREFFER: Anzahl der Objekte bestimmen
+.formula U|xbearbtyp = 'G|dblquote' + "120 1" + 'G|dblquote'
+.assign U|xtepi = "edpexport.sh -p " + 'G|einmalpw' + " -l 64:2 -f id -k bearbtyp==" + 'U|xbearbtyp' + " >> " + U|xtepiout
+.system 'U|xtepi' background
+.continue ERROR5 ? _G|mehr
+.formula U|xtsys = " wc -l " + U|xtepiout + " >" + U|xttmpdat
+.system 'U|xtsys' background
+.continue ERROR5 ? _G|mehr
+.select from 'U|xttmpdat' U|xwsanzahl
+.continue ERROR5 ? _G|mehr
+.formula M|gtreffer = U|xwsanzahl
+.continue NOWBSTART ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "bstart"
+.continue END
+..
+!SICHT
+.copy M|blj = G|FALSE ?  M|blj & G|evtvar = "bws"
+.copy M|bws = G|FALSE ?  M|bws & G|evtvar = "blj"
+.copy M|blj = G|TRUE  ? _M|blj & _M|bws
+.continue BLJ         ?  M|blj
+..
+!BWS
+.assign P|maskkontextfop = "bws" ?  M|bws
+.assign P|maskkontextfop = "blj" ? _M|bws
+.formula M|budatvon = ""
+.formula M|budatbis = ""
+.continue TABLEEREN  
+..
+!BLJ
+.assign P|maskkontextfop = "blj" ?  M|blj
+.assign P|maskkontextfop = "bws" ? _M|blj
+..
+.. Set start date to 1st day one month ago and end to today.
+.copy M|bis = F|date('G|datum:8')
+.copy U|xbasedate = M|bis 
+.copy U|xdiffmonth = -1
+..
+.input "is/MONTH.PERIOD.DATE"
+.assign M|budatvon =  U|xpdate - (F|day(U|xpdate) - 1)
+.continue TABLEEREN
+..
+!REVALUE
+.command -parallel "(Revalue)"
+.formula M|gtreffer = ""
+.continue TABLEEREN
+..
+!PROCESS: Process rows
+.continue ERROR3 ? F|empty(M|tzeilen)
+.type DVM2 xxtmpfile
+.type bool xxhashit
+.input "DATEI.F"
+.file -tempname U|xxtmpfile
+.copy U|xxhashit = G|false
+..
+.. Print header to file
+.output new 'U|xxtmpfile'
+.println -text #!action=UPDATE
+.println -text #!database=120:1
+.println -text #!flddelimiter=#
+.println -text #!charset=EKS
+.println -text #!edp_lockbehavior=nowait
+.continue APPLY  ? G|evtvar = "avorguebern"
+.continue REMOVE ? G|evtvar = "avorgentfern"
+.error -number 1111
+.end 1
+..
+!APPLY
+.println -text nummer#vorgang#vorguebern
+.select screen line "$,,;bvorguebern=1"
+!CHECK1
+.continue EXECUTE ? _G|mehr
+.copy U|xxhashit = G|true
+1#'M|tvorgang^id'#1
+.select screen line continue
+.continue CHECK1
+..
+!REMOVE
+.println -text nummer#vorgang#vorgentfern
+.select screen line "$,,;bvorgentfern=1"
+!CHECK2
+.continue EXECUTE ? _G|mehr
+.copy U|xxhashit = G|true
+1#'M|tvorgang^id'#1
+.select screen line continue
+.continue CHECK2
+..
+!EXECUTE: Execute edp import script
+.continue TABLEEREN ? _U|xxhashit
+.type DVM2 xxstderr
+.type text xcommand
+.file -tempname U|xxstderr
+.formula U|xcommand = F|formatstr("edpimport.sh -p '{1}' -c EKS -I {2} >&2 2>{3}", G|einmalpw, U|xxtmpfile, U|xxstderr)
+.system 'U|xcommand' background
+.continue ERROR8 ? _G|mehr
+.continue TABLEEREN
+..
+!WS
+.continue ERROR2 ? 'M|ws^nummer' <> "1"
+.continue TABLEEREN
+..
+!BSTART: erst mal Trefferanzahl ermitteln
+.continue TREFFER
+..
+!NOWBSTART
+.continue ERROR7 ? _M|trefferausgeben & M|bws
+.formula U|xtsel1 = "$,,"
+.continue WSBSTART ? M|bws
+.continue LJBSTART ? M|blj
+..
+!LJBSTART: Lagerjournal
+.formula U|xtsel = U|xtsel1 + ";buart<=3"
+.formula U|xtsel = U|xtsel + ";art=" + M|artikel                           ? _F|empty(M|artikel)
+.formula U|xtsel = U|xtsel + ";such==" + "L" + M|beleg                     ? _F|empty(M|beleg)
+.formula U|xtsel = U|xtsel + ";ursache=" + 'F|value(M|kursache, "AS27")'   ? _F|empty(M|kursache)
+.formula U|xtsel = U|xtsel + ";budat=" + 'M|budatvon' + "!" + 'M|budatbis' ? _F|empty(M|budatvon) ; _F|empty(M|budatbis)
+.formula U|xtsel = U|xtsel + ";id=" + M|bewertvorg                         ? _F|empty(M|bewertvorg)
+.formula U|xtsel = U|xtsel + ";@gruppe=1"
+.formula U|xtsel = U|xtsel + ";@ablageart=(Active)"
+.load 1 journal 'U|xtsel'
+.continue HINW6 ? _G|mehr
+.continue TABELLE
+..
+!WSBSTART: Dynamische Warteschlange / dynamic queue
+.formula U|xtsel = U|xtsel1 + ";bearbtyp="+ M|ws^id  
+.formula U|xtsel = U|xtsel + ";vorgang^budat=" + 'M|budatvon' + "!" + 'M|budatbis' ? _F|empty(M|budatvon) ; _F|empty(M|budatbis)
+.formula U|xtsel = U|xtsel + ";vorgang=" + M|vorgang^id                 ? _F|empty(M|vorgang)
+.formula U|xtsel = U|xtsel + ";vorgang^art=" + M|artikel                ? _F|empty(M|artikel)
+.formula U|xtsel = U|xtsel + ";vorgang^such=" + "L" + M|beleg           ? _F|empty(M|beleg)
+.formula U|xtsel = U|xtsel + ";vorgang^buart<=3"
+.formula U|xtsel = U|xtsel + ";vorgang=" + M|bewertvorg                 ? _F|empty(M|bewertvorg)
+.formula U|xtsel = U|xtsel + ";@noschltest=ja"
+.formula U|xtsel = U|xtsel + ";@gruppe=2"
+.formula U|xtsel = U|xtsel + ";@ablageart=(Active)"
+..
+.formula M|grliste = "64:2"
+.load 1 group 'M|grliste' 'U|xtsel'
+.continue HINW1 ? _G|mehr
+..
+!TABELLE
+.input 'M|tab' ? M|trefferausgeben ; M|blj
+.continue END  ? _M|trefferausgeben & M|bws
+.continue SEL
+..
+!SEL
+.load 1 continue
+.continue END    ? _G|mehr
+.continue TABELLE
+..
+!TABLEEREN
+.input "is/TABLEEREN" 
+.continue END
+..*****************************************************************************
+!END
+.continue
+..
+!HINW1
+.note Keine Warteschlangeneintr„ge gefunden.
+.end 1
+..
+!ERROR2
+.error Aktuell wird nur Nachbewerten untersttzt.
+.formula M|ws = ""
+.end 1
+..
+!ERROR3
+.error Keine Tabellenzeilen vorhanden!
+.end 1
+..
+!ERROR4
+.error Bitte Journaleintrag mit Buchungsart = 1 selektieren.
+.end 1
+..
+!ERROR5
+.error Ermitteln der Trefferzahl gescheitert!
+.end 1
+..
+!HINW6
+.note Keine Lagerjournaleintr„ge gefunden!
+.end 1
+..
+!ERROR7
+.error Fr eine Tabellenausgabe bitte erst "Treffer in Tabelle ausgeben" markieren!
+.end 1
+..
+!ERROR8: System call failed
+.error -message Der edpimport ist gescheitert!
+.continue BREAK ? _F|filenotempty('U|xxstderr')
+.output terminal
+.input -text 'U|xxstderr'
+!BREAK
+.end 1

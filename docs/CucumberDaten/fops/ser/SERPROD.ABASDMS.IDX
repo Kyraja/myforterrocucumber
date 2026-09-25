@@ -1,0 +1,93 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SERPROD.ABASDMS.IDX
+.. Autor          : saac
+.. Verantwortlich : teamreport
+.. Kontrolle      : cl
+.. Funktion       : Erzeugt Indexdatei fÅr abas-DMS bei Drag und Drop mit Serviceprodukt
+.. Functionality  : Creates index file for abas-DMS for drag and drop with 
+..                  service product
+..*****************************************************************************
+.set trans -
+.type text xt               ? _F|defined(U|xt)
+.type VID99 xid             ? _F|defined(U|xid)
+.type GD2  xtoday           ? _F|defined(U|xtoday)
+.type VP5  xkuli            ? _F|defined(U|xkuli)
+.type P59  xcharge          ? _F|defined(U|xcharge)
+.type text xbetreff         ? _F|defined(U|xbetreff)
+..
+.input "dms/FIND.CONTEXT"
+..
+.formula U|xtoday = "."
+.file -tempname U|xt
+..
+.output new 'U|xt' -encoding "UTF-8"
+.input "DATEI.F"
+..
+.input "STD.ABASDMS.IDX"
+..
+.assign U|xbetreff = M|dndbetreff    ? F|defined(M|dndbetreff)
+.assign U|xbetreff = M|betreff       ? F|defined(M|betreff) & F|empty(U|xbetreff)
+?Betreff='U|xbetreff'     ? _F|empty(U|xbetreff)
+..
+.continue SETDATE         ? _ F|defined(M|beldat)
+?BelDat='M|beldat(L="0")' ? _F|empty(M|beldat)
+.continue POSSTART        ? _F|empty(M|beldat)
+..
+!SETDATE
+BelDat='U|xtoday(L="0")'
+..
+.continue POSSTART                        ? F|empty(U|xid^aukunde)
+.assign U|xkuli = 'U|xid^aukunde^id'
+.input "st/KULI.ABASDMS.IDX"
+..
+!POSSTART
+POS-ANF
+AbasSAId='U|xid^id'
+SPrNr='U|xid^nummer'
+SPrSuch='U|xid^such'
+SPrBez='U|xid^name'
+?ESerNr='U|xid^tcharge' ? _F|empty(U|xid^tcharge)
+abasaid='U|xid^artikel^id'
+ArtNr='U|xid^artikel^nummer'
+ArtSuch='U|xid^artikel^such'
+ArtBez='U|xid^artikel^name'
+.continue PROJEND ? F|sysinfo(18)^projekt = G|FALSE
+.continue PROJEND ? _F|defined(U|xid^projekt)
+.continue PROJEND ? F|empty(U|xid^projekt)
+AbasPRID='U|xid^projekt^id'
+ProjNr='U|xid^projekt^nummer'
+ProjSuch='U|xid^projekt^such'
+ProjBez='U|xid^projekt^name'
+!PROJEND
+..
+.continue ENDLOT   ? F|empty(U|xid^charge)
+.copy U|xcharge=U|xid^charge
+CharNr='U|xcharge^nummer'
+CharID='U|xcharge^id'
+CharEx='U|xcharge^exnum'
+CharBez='U|xcharge^name'
+!ENDLOT
+..
+.continue POSEND ? F|empty(U|xid^auftrag)
+.. Auftragsnummer
+?VKAufNr='U|xid^auftrag^nummer'               ? U|xid^auftrag^ktyp = G|abko
+?AbasVBID='U|xid^auftrag^id'                  ? U|xid^auftrag^ktyp = G|abko
+?VKAufNr='U|xid^vkpos^okopf^nummer'           ? U|xid^auftrag^ktyp = G|liko
+?AbasVBID='U|xid^vkpos^okopf^id'              ? U|xid^auftrag^ktyp = G|liko
+?VKAufNr='U|xid^vkpos^orig^okopf^nummer'      ? U|xid^auftrag^ktyp = G|reko
+?AbasVBID='U|xid^vkpos^orig^okopf^id'         ? U|xid^auftrag^ktyp = G|reko
+.. Lieferscheinnummer
+?VKLiefNr='U|xid^auftrag^nummer'              ? U|xid^auftrag^ktyp = G|liko
+?AbasVLID='U|xid^auftrag^id'                  ? U|xid^auftrag^ktyp = G|liko
+?VKLiefNr='U|xid^vkpos^okopf^nummer'          ? U|xid^auftrag^ktyp = G|reko
+?AbasVLID='U|xid^vkpos^okopf^id'              ? U|xid^auftrag^ktyp = G|reko
+.. Rechnungsnummer
+?VKRechNr='U|xid^auftrag^nummer'              ? U|xid^auftrag^ktyp = G|reko
+?AbasVRID='U|xid^auftrag^id'                  ? U|xid^auftrag^ktyp = G|reko
+.continue POSEND
+!POSEND
+POS-END
+..
+!ENDE
+.system 'F|expr("crlf+ < " + U|xt + " >" + U|xxmldata)' background

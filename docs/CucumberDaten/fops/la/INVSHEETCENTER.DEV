@@ -1,0 +1,135 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : INVSHEETCENTER.DEV
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  : Inventur - Abwertung  / Devaluation
+..
+.. Es werden alle die Artikel abgewertet, deren gezÑhlter Bestand grî·er
+.. als der doppelte Verbrauch der letzten vier Quartale (ab Stichtag) ist.
+..
+..*****************************************************************************
+.set trans -
+..
+.type text    xartnr   ? _F|defined(U|xartnr)
+.type text    xcom     ? _F|defined(U|xcom)
+.type integer xijahr   ? _F|defined(U|xijahr)
+.type realx   xnbest   ? _F|defined(U|xnbest)
+.type integer xperiode ? _F|defined(U|xperiode)
+.type real    xSumAbg  ? _F|defined(U|xSumAbg)
+.type text    xtxt     ? _F|defined(U|xtxt)
+.type text    xtabw    ? _F|defined(U|xtabw)
+..
+!SELSTOCKT: ZÑhlliste mit sperre holen
+.select stocktaking lock 'M|tzaehlliste^id'
+.continue ERROR1 ? _G|mehr
+.continue ERROR2 ?  M|tzaehlliste^ablagef
+.select -
+..
+.. alle Inv-Objekte dieser ZÑhlliste holen und evtl. abwerten
+.formula U|xcom = "$,,"
+.formula U|xcom = U|xcom + ";end=n;zlsnr="  + 'M|tzaehlliste^id'      ? _M|tzaehlliste^end
+.formula U|xcom = U|xcom + ";end<>n;zlsnr=+" + 'M|tzaehlliste^id'     ?  M|tzaehlliste^end
+.formula U|xcom = U|xcom + ";@ordnung=posnr;@gruppe=1;@ablageart=(Both)"
+.select stocktaking lock 'U|xcom'
+..
+!LOOP001
+.continue END     ? _G|mehr
+.. Dummy-Zeilen werden ausgelassen
+.continue EL004   ? H|istdummy
+.reserve
+.select add H|artikel
+..
+.continue ERROR3  ? _G|mehr
+.formula U|xartnr = H|nummer
+..
+.. Verbrauch der letzten vier Quartale ermitteln
+.. Zeitpunkt = "Stichtag" (das muss nicht das Datum der Inventur sein)
+.formula U|xtxt     = 'M|stichtag:8' << 4
+.formula U|xijahr   = U|xtxt
+.formula U|xtxt     = ('M|stichtag:8' >> 4) << 2
+.formula U|xperiode = U|xtxt
+.formula U|xperiode = (U|xperiode - (U|xperiode // 4)) / 4 + 1
+..
+.. Verkehrszahlen aus dem jahr
+.add vkz actual 'U|xijahr'
+.formula U|xSumAbg = D|pam
+.formula U|xSumAbg = U|xSumAbg + D|pam2 ? U|xperiode > 1
+.formula U|xSumAbg = U|xSumAbg + D|pam3 ? U|xperiode > 2
+.formula U|xSumAbg = U|xSumAbg + D|pam4 ? U|xperiode > 3
+.add
+..
+.continue FI005 ? _U|xperiode < 4
+.. auch noch AbgÑnge des Jahres davor dazunehmen
+.formula U|xijahr = U|xijahr - 1
+..
+.add vkz actual 'U|xijahr'
+.formula U|xSumAbg = U|xSumAbg + D|pam4
+.formula U|xSumAbg = U|xSumAbg + D|pam3 ? U|xperiode < 3
+.formula U|xSumAbg = U|xSumAbg + D|pam2 ? U|xperiode < 2
+.add
+..
+!FI005: gezÑhlten Bestand dieses Artikels in dieser ZÑhlliste ermitteln
+.add
+.select
+.reserve
+.formula U|xnbest = 0.0
+..
+.formula U|xcom = "$,,"
+.formula U|xcom = U|xcom + ";end=n;zlsnr="  + 'M|tzaehlliste^id'     ? _M|tzaehlliste^end
+.formula U|xcom = U|xcom + ";end<>n;zlsnr=+" + 'M|tzaehlliste^id'    ?  M|tzaehlliste^end
+.formula U|xcom = U|xcom + ";@ordnung=posnr;@gruppe=1;@ablageart=(Both)"
+.formula U|xcom = U|xcom + ";artikel=" + U|xartnr
+.select stocktaking 'U|xcom'
+..
+!LOOP002
+.continue ELOP002 ? _G|mehr
+.formula U|xnbest = U|xnbest + H|nbest * H|gebf
+..
+.select stocktaking
+.continue LOOP002
+..
+!ELOP002
+.select
+.continue EL004 ? _((2 * U|xSumAbg) < U|xnbest)
+..
+.. Wenn der Bestand grî·er als der doppelte Jahresverbrauch ist, wird abgewertet!
+.. Es darf aber nur die Menge Åber dem doppelten Jahresverbrauch abgewertet werden!!!
+.. xSumAbg = Summe Verbrauch der letzten 4 Quartale
+.. xnbest = insgesamt gezÑhlter Bestand
+.. bpr = Bewertungspreis pro LE
+.. nbpr = neuer Bewertungspreis pro LE
+..
+.. Bsp. bpr = 10 _, xAbw = -30 %, doppelter Jahresverbrauch = 100 --> nbpr = 9,97 EUR
+.. Bei einem Bestand von 100 Teilen --> 100 * 10 EUR = 1000 EUR (keine Abwertung!)
+.. Bei einem Bestand von 101 Teilen --> 101 * 9,97 EUR = 1006,97 EUR (Abwertung!)
+..
+.. xtabw: tatsÑchlicher neuer Abwertungssatz fÅr den gesamten Bestand
+.formula H|abw = M|abw
+.formula U|xtabw  = (U|xnbest - (2 * U|xSumAbg)) / U|xnbest * H|abw ? U|xnbest <> 0
+.formula H|abw = U|xtabw
+.formula H|nbpr = H|bpr * ((100.0 + H|abw) / 100.0)
+.rewrite
+..
+!EL004
+.select stocktaking lock
+.continue LOOP001
+..
+!END
+.set trans +
+.formula M|thinweis = F|formatstr("Abwertung von {1} % beendet.", 'M|abw')
+.set trans -
+.continue
+..
+!ERROR1
+.error Kann ZÑhlliste nicht exklusiv holen.
+.end 1
+..
+!ERROR2
+.error ZÑhlliste ist bereits abgeschlossen.
+.end 1
+..
+!ERROR3: Fehler
+.error Kann nicht auf Artikel 'H|artikel' zugreifen!
+.end 1

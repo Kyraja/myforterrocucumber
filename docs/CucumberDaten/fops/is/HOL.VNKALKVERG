@@ -1,0 +1,259 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..
+..  FOP-Name       : HOL.VNKALKVERG
+..  Datum          : 03.12.2006
+..  Version        : 2007
+..  Autor          : cl
+..  Verantwortlich : cl
+..  Kontrolle      : bheim
+..
+..  Funktion       : M|select fÅllen
+..
+.. include vo/VNKALKVERG.CHART.PIE
+..         vo/VNKALKVERG.CHART.BAR
+..*****************************************************************************
+.input "ARB"
+..
+.set trans -
+.type text xsel       ? _F|defined(U|xsel)
+.type text xsel1      ? _F|defined(U|xsel1)
+.type text xsel2      ? _F|defined(U|xsel2)
+.type text xtselect   ? _F|defined(U|xtselect)
+.type bool xbba       ? _F|defined(U|xbba)
+.type bool xblebendig ? _F|defined(U|xblebendig)
+.type text xtitel     ? _F|defined(U|xtitel)
+.type bool xmehr      ? _F|defined(U|xmehr)
+..
+.formula M|select = M|kart^id     ? _F|empty(M|kart)
+.formula M|select = M|kba         ? _F|empty(M|kba)
+.copy U|xbba   = G|TRUE      ? _M|select / "*,2,*"
+..
+.continue BA  ? U|xbba
+..
+!SELOK: FertigungsvorschlÑge, dynamische Selektion
+.continue FVSEL ? _F|empty(M|fvsel)
+.formula U|xsel = "%,,num4=;art="+'M|select'+";.gruppe=5;lgruppe=;tsterm="+'M|aterm'+"!"+'M|eterm'+";mateinplan=1;einplan=1;@ordnung=sterm;@gruppe=5;@ablageart=(Both);@autostart=ja"
+.load 6 purchasing 'U|xsel'
+.end 1 ? _G|mehr
+..
+.assign M|fvsel  = 6|id
+.formula U|xtselect = 6|id
+.continue AUSGABE
+..
+!FVSEL: Fertigugsvorschlag bereits da
+.formula U|xtselect = M|fvsel^id
+.continue AUSGABE
+..
+!BA: Betriebsauftrag
+.continue ERROR2     ? M|select / "*!*"
+.load 1 workorder 'M|kba'
+.continue ABLAGE     ? _G|mehr
+.formula M|kba        = 1|nummer
+.assign M|kart     = 1|art^id
+.protection kart
+.copy U|xblebendig = G|TRUE
+.continue AG
+..
+!ABLAGE: abgelegter Betriebsauftrag
+.continue ERROR3   ?  _M|select/"(09)*"
+.formula U|xsel = "%,,num4="+'M|select'+";artikel="+'M|kart^id'+";vom=;@gruppe=5;@ablageart=(Filed);@autostart=ja"
+.load 6 purchasing 'U|xsel'
+..
+.error Kein Betriebsauftrag 'M|select' vorhanden  ? _G|mehr
+.formula M|kba = ""                                 ? _G|mehr
+.end 1                                            ? _G|mehr
+..
+!AG
+.copy M|abgelegt = G|FALSE
+.copy M|abgelegt = G|TRUE  ? _U|xblebendig
+.continue SELECT               ? _U|xblebendig
+.continue ERROR1               ? _F|empty(1|ag)
+.load 2 add 1|lres
+..
+.error Kein Fertigungsvorschlag zu 'M|select' vorhanden ? _G|mehr
+.end 1                                                  ? _G|mehr
+..
+.formula U|xtselect = 2|id
+.assign M|fvsel  = 2|id
+.assign M|kart   = 2|art^id
+.protection kart
+.continue AUSGABE                     ? U|xblebendig
+..
+!SELECT
+.assign M|kart   = 6|art^id
+.protection kart
+.formula U|xtselect = 6|id
+.assign M|fvsel  = 6|id
+..
+!AUSGABE: load product cost sheet
+.atext -language 'G|bsprache' U|xtitel 1971 Vorkalkulation
+.formula U|xsel1 = "$,,herkunft="+'U|xtselect'
+.formula U|xsel1 = U|xsel1 + ";herkunft^num4="+'M|kba'   ? _F|empty(M|kba)
+.formula U|xsel1 = U|xsel1 + ";art="+'M|kart^id'+";.typ=(FinalCosting);@gruppe=1;@ablageart=(Active)"
+.formula U|xsel2 = "%,,herkunft="+'U|xtselect' 
+.formula U|xsel2 = U|xsel2 + ";herkunft^num4="+'M|kba'   ? _F|empty(M|kba)
+.formula U|xsel2 = U|xsel2 + ";art="+'M|kart^id'+";typ<>(FinalCosting);@gruppe=1;@title="+xtitel+";@autostart=ja;@ablageart=(Active)"
+..
+!NACHKALK: Nachkalkulation
+.load 0 costsheet 'U|xsel1'
+.copy U|xmehr = G|FALSE ? _G|mehr
+.copy U|xmehr = G|TRUE  ? G|mehr
+..
+!VORKALK: Vorkalkulation
+.load 7 costsheet 'U|xsel2'
+.error Keine Vor- und Nachkalkulationsergebnisse vorhanden. Bitte kalkulieren Sie Åber den Button Fertigungsvorschlag  ? _G|mehr & _U|xmehr
+.end 1                                                         ? _G|mehr & _U|xmehr
+.error Keine Vorkalkulationsergebnisse vorhanden. Bitte kalkulieren Sie Åber den Button Fertigungsvorschlag  ? _G|mehr &  U|xmehr
+.end 1                                                         ? _G|mehr &  U|xmehr
+.error Keine Nachkalkulationsergebnisse vorhanden. Bitte kalkulieren Sie Åber den Button Fertigungsvorschlag ?  G|mehr & _U|xmehr
+.end 1                                                         ?  G|mehr & _U|xmehr
+.error Bitte zum Vergleich ein Vorkalkulationstyp selektieren. ? F|equals(7|typ, "(FinalCosting)") & U|xmehr
+.end 1                                                         ? F|equals(7|typ, "(FinalCosting)") & U|xmehr
+..
+!TAB: Kopffelder laden der Nach- und Vorkalkulation
+..
+.assign M|nkblatt    = 0|id
+.formula M|fehler    = 0|fehler
+.assign M|ittyp1     = 0|typ
+.assign M|herkunft   = M|nkblatt^herkunft
+.formula M|kmge      = M|nkblatt^basis
+.formula M|artle     = M|nkblatt^le
+.formula M|kmatek    = 0|matek
+.formula M|kmatek    = 0|matekovk    ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.formula M|kmatgk    = 0|matgk
+.formula M|kmatgk    = 0|matgkovk    ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.formula M|kmatk     = 0|matk
+.formula M|kmatk     = 0|matkovk     ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.colour -background 'M|farbe4' kmatk
+.formula M|kfremdek  = 0|fremdek
+.formula M|kfremdek  = 0|fremdekovk  ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.formula M|kfremdk   = 0|fremdk
+.formula M|kfremdk   = 0|fremdkovk   ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.formula M|kfremdgk  = 0|fremdgk
+.formula M|kfremdgk  = 0|fremdgkovk  ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.colour -background 'M|farbe5'  kfremdk
+.formula M|kfixfek   = 0|fixfek
+.formula M|kfixfek   = 0|fixfekovk   ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.formula M|kfixfgk   = 0|fixfgk
+.formula M|kfixfgk   = 0|fixfgkovk   ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.formula M|kfixfk    = 0|fixfk
+.formula M|kfixfk    = 0|fixfkovk    ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.colour -background 'M|farbe7'  kfixfk
+.formula M|kvarfek   = 0|varfek
+.formula M|kvarfek   = 0|varfekovk   ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.formula M|kvarfgk   = 0|varfgk
+.formula M|kvarfgk   = 0|varfgkovk   ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.formula M|kvarfk    = 0|varfk
+.formula M|kvarfk    = 0|varfkovk    ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.colour -background 'M|farbe3'  kvarfk
+.formula M|khek      = 0|hek
+.formula M|khek      = 0|hekovk      ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.formula M|khgk      = 0|hgk
+.formula M|khgk      = 0|hgkovk      ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.formula M|khk       = 0|hk
+.formula M|khk       = 0|hkovk       ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.formula M|basis     = 0|basis
+.formula M|brgewicht = 0|brgewicht
+.formula M|kbfrist   = 0|kbfrist
+.formula M|lagereinheit = 0|le
+.formula M|deckbei1  = 0|deckbei1
+.formula M|deckbei2  = 0|deckbei2
+.formula M|nhk3      = 0|hk3
+.formula M|nhk3      = 0|hkovk3      ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.formula M|nvvgmk    = 0|vvgmk
+.formula M|nvvgmk    = 0|vvgmkovk    ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+.formula M|nhk2      = 0|hk2
+.formula M|nhk2      = 0|hkovk2      ? _M|nkalkinklvkalk & F|equals(0|typ, "(FinalCosting)")
+..
+.assign M|vkblatt    = 7|id
+.formula M|vkmge     = M|vkblatt^basis
+.formula M|vartle    = M|vkblatt^le
+.assign M|ittyp2     = 7|typ
+.formula M|vkmatek   = 7|matek
+.formula M|vkmatek   = 7|matekovk      ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.formula M|vkmatgk   = 7|matgk
+.formula M|vkmatgk   = 7|matgkovk      ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.formula M|vkmatk    = 7|matk
+.formula M|vkmatk    = 7|matkovk       ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.colour -background 'M|farbe4'  vkmatk
+.formula M|vkfremdek = 7|fremdek
+.formula M|vkfremdek = 7|fremdekovk    ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.formula M|vkfremdk  = 7|fremdk
+.formula M|vkfremdk  = 7|fremdkovk     ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.formula M|vkfremdgk = 7|fremdgk
+.formula M|vkfremdgk = 7|fremdgkovk    ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.colour -background 'M|farbe5'  vkfremdk
+.formula M|vkfixfek  = 7|fixfek
+.formula M|vkfixfek  = 7|fixfekovk     ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.formula M|vkfixfgk  = 7|fixfgk
+.formula M|vkfixfgk  = 7|fixfgkovk     ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.formula M|vkfixfk   = 7|fixfk
+.formula M|vkfixfk   = 7|fixfkovk      ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.colour -background 'M|farbe7'  vkfixfk
+.formula M|vkvarfek  = 7|varfek
+.formula M|vkvarfek  = 7|varfekovk     ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.formula M|vkvarfgk  = 7|varfgk
+.formula M|vkvarfgk  = 7|varfgkovk     ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.formula M|vkvarfk   = 7|varfk
+.formula M|vkvarfk   = 7|varfkovk      ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.colour -background 'M|farbe3'  vkvarfk
+.formula M|vkhek     = 7|hek
+.formula M|vkhek     = 7|hekovk        ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.formula M|vkhgk     = 7|hgk
+.formula M|vkhgk     = 7|hgkovk        ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.formula M|vkhk      = 7|hk
+.formula M|vkhk      = 7|hkovk         ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.formula M|basis     = 7|basis
+.formula M|brgewicht = 7|brgewicht
+.formula M|kbfrist   = 7|kbfrist
+.formula M|lagereinheit = 7|le
+.formula M|vdeckbei1 = 7|deckbei1
+.formula M|vdeckbei2 = 7|deckbei2
+.formula M|vhk3      = 7|hk3
+.formula M|vhk3      = 7|hkovk3        ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.formula M|vvvgmk    = 7|vvgmk
+.formula M|vvvgmk    = 7|vvgmkovk      ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+.formula M|vhk2      = 7|hk2
+.formula M|vhk2      = 7|hkovk2        ? _M|nkalkinklvkalk & F|equals(7|typ, "(FinalCosting)")
+..
+!Differenzen: Nachkalkulation - Vorkalkulation
+.formula M|dkmatek   = M|kmatek - M|vkmatek
+.formula M|dkmatgk   = M|kmatgk - M|vkmatgk
+.formula M|dkmatk    = M|kmatk - M|vkmatk
+.formula M|dkfremdek = M|kfremdek - M|vkfremdek
+.formula M|dkfremdk  = M|kfremdk - M|vkfremdk
+.formula M|dkfixfek  = M|kfixfek - M|vkfixfek
+.formula M|dkfixfgk  = M|kfixfgk - M|vkfixfgk
+.formula M|dkfixfk   = M|kfixfk - M|vkfixfk
+.formula M|dkvarfek  = M|kvarfek - M|vkvarfek
+.formula M|dkvarfgk  = M|kvarfgk - M|vkvarfgk
+.formula M|dkvarfk   = M|kvarfk - M|vkvarfk
+.formula M|dkhek     = M|khek - M|vkhek
+.formula M|dkhgk     = M|khgk - M|vkhgk
+.formula M|dkhk      = M|khk - M|vkhk
+.formula M|ddeckbei1 = M|deckbei1 - M|vdeckbei1
+.formula M|ddeckbei2 = M|deckbei2 - M|vdeckbei2
+..
+.input "vo/VNKALKVERG.CHART.PIE"
+.input "vo/VNKALKVERG.CHART.BAR"
+.continue
+..
+!ERROR1
+.error Bitte einen Betriebsauftrag auswÑhlen.
+.continue FEHL
+
+!ERROR2
+.error Keine Bereichsangabe erlaubt.
+.continue FEHL
+
+!ERROR3
+.error 'M|select' ist kein Betriebsauftrag.
+.continue FEHL
+
+!FEHL
+.protection -reset kart
+.formula M|kba      = ""
+.formula M|kart     = ""
+.cursor kba
+.end 1

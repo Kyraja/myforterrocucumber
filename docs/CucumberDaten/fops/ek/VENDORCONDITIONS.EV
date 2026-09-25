@@ -1,0 +1,365 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : VENDORCONDITIONS.EV
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  :
+..
+.. Program flow   :
+...Includes       :
+.. include ek/VENDORCONDITIONS.PREIS2
+.. include ek/VENDORCONDITIONS.SEL
+.. include ek/VENDORCONDITIONS.AUF
+..*****************************************************************************
+.set trans -
+.type text      xtcmd        ? _F|defined(U|xtcmd)
+.type integer   xstart       ? _F|defined(U|xstart)
+.type text      xtext        ? _F|defined(U|xtext)
+.type text      xtext1       ? _F|defined(U|xtext1)
+.type integer   xi           ? _F|defined(U|xi)
+.type VP99      xherkunft    ? _F|defined(U|xherkunft)
+.type VP99      xherkunft1   ? _F|defined(U|xherkunft1)
+.type text      xtext        ? _F|defined(U|xtext)
+.type text      xtext2       ? _F|defined(U|xtext2)
+.type bool      xbtrue       ? _F|defined(U|xbtrue)
+.type text      xtsel        ? _F|defined(U|xtsel)
+.type DVM2      xtmpfile     ? _F|defined(U|xtmpfile)
+.type text      xtout        ? _F|defined(U|xtout)
+.type text      xterr        ? _F|defined(U|xterr)
+.type integer   xmerkzn      ? _F|defined(U|xmerkzn)
+.type bool      xgeaendert   ? _F|defined(U|xgeaendert)
+.type ARTR51200 xverfuegbar  ? _F|defined(U|xverfuegbar)
+..
+.copy U|xgeaendert = G|FALSE
+.continue ARTIKEL     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kart"
+.continue BSID        ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kbsid"
+.continue BESCHAFF    ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "bubeschaff"
+.continue MENGE       ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "mge"
+.continue PREIS       ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "preisauskunft"
+.continue HERKUNFT    ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "buherkunft"
+.continue TABLEEREN   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "waehrung"
+.continue RAHMEN      ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bnorahmen"
+.continue PURCHASE    ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bubestellung"
+.continue AUFZU       ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "allesauf"
+.continue PROZ        ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "preisopt"
+.continue BSTARTV     ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bstart"
+.continue BSTARTN     ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "bstart"
+.continue OPT         ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "tpreisopt"
+.continue LE          ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "artle"
+.continue RUECK       ? G|evtartengl = "SCREEN_EXIT"   & F|defined(A|artikel)
+.continue KONDDAT     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "konddat"
+.continue BRUECK      ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "brueck"
+.continue ERROR5      ? G|evtartengl = "SCREEN_CANCEL" & F|defined(A|artikel)
+.continue END                   
+..
+!KONDDAT
+.formula M|konddat = G|datum ? F|empty(M|konddat) ; M|konddat < G|datum
+.continue TABLEEREN
+..
+!BRUECK
+.continue REMOVE ? _M|brueck
+.continue PRUEF  ?  M|brueck
+.continue END
+..
+!REMOVE
+.assign M|merklief = ""
+.continue END
+..
+!PRUEF: only one bool set
+.continue ONLYPRUEF ? _F|defined(A|lief)
+.continue ERROR9    ? _F|modifiable(A|lief)
+..
+!ONLYPRUEF
+.formula M|merklief = M|tlief
+.formula U|xmerkzn = M|zn
+.formula M|merkmge = M|mge     ?  F|empty(M|buherkunft)
+.formula M|merkmge = M|mgrenze ? _F|empty(M|buherkunft)
+.copy M|brueck = G|FALSE       ? _F|defined(A|id)
+.continue NOTE                 ? _F|defined(A|id) ; U|xgeaendert
+.copy U|xgeaendert = G|TRUE    ?  M|kart^id <> A|artikel^id
+.select screen header
+..
+!ROW
+.select screen line
+.continue NOTE   ? _G|mehr
+.continue ROW    ? M|zn = U|xmerkzn
+.copy M|brueck = G|FALSE ? M|zn <> U|xmerkzn
+.continue ROW
+..
+!NOTE
+.note Um Lieferant und Bestellmenge zu Åbertragen, drÅcken sie den "Weiter-Button"   ? F|defined(A|id)
+.note ZurÅckschreiben funktioniert nur, wenn das Infosystem Åber einen Bestell- oder Lohnfertigungsvorschlag im éndern-Modus gestartet wurde! ? _F|defined(A|id)
+.continue END
+..
+!RUECK
+.continue END    ? G|avtkommd = G|kaktname12
+.continue ERROR7 ? F|empty(M|merklief)
+.continue ERROR8 ? A|artikel^id <> M|kart^id 
+.assign A|lief = M|merklief
+.formula A|mge = M|merkmge
+.formula A|wtsterm = M|konddat
+.continue END
+..
+!LE
+.continue END    ? M|kart^ehe = M|kart^le
+.continue ERROR4 ? M|artle <> M|kart^ehe & M|artle <> M|kart^le
+.continue TABLEEREN
+..
+!OPT
+.continue END ? F|empty(M|tpreisopt)  ; M|preisauskunft= M|iconnopreisz
+.input "ek/VENDORCONDITIONS.PREIS2"
+.continue END
+..
+!RAHMEN
+.copy U|xbtrue = G|FALSE
+.copy U|xbtrue = G|TRUE   ? M|tzeilen > 0
+.input "is/TABLEEREN"
+.continue BSTARTN ? U|xbtrue
+.continue END
+..
+!PROZ
+.formula M|kpreisoptz = ""
+.copy M|first = G|FALSE
+.copy M|hintergrund = G|FALSE
+.formula M|mgeopt = M|preisopt/100 * M|mge + M|mge
+.continue TABLEEREN
+..
+!AUFZU
+.input "ek/VENDORCONDITIONS.AUF" ? M|allesauf & M|tzeilen > 0
+.continue ERROR3                 ? M|allesauf & M|tzeilen = 0
+.input "is/TABLEEREN" ? _M|allesauf
+.continue END
+..
+!PURCHASE
+.continue LEERZ  ?   F|empty(M|tlief)
+.formula U|xtcmd = "<(Purchasing)> <(New)>, (PurchaseOrder) ? [insert]=1 " ? _F|empty(M|vorgangid)
+.formula U|xtcmd = U|xtcmd + "|0:beleg=" + 'M|vorgangid^id'
+.formula U|xtcmd = U|xtcmd + "|1:mge="+'M|mge'
+.formula U|xtcmd = U|xtcmd + "|1:preis=" + 'M|tpreis'   ?   F|equals(M|vorgangid^typ, "(Request)")
+.end 0 'U|xtcmd'                            ? _F|empty(M|vorgangid)
+.continue SELBST ? _F|defined(A|artikel)
+.continue BV
+..
+!LEERZ
+.error 
+.end 1
+..
+!SELBST: IS selbst#aufgerufen
+.continue AUFRUF  ?  F|empty(M|typ)
+.continue AUFRUF2 ?  M|binpreisopt
+.continue ERROR2
+..
+!BV
+.copy U|xgeaendert = G|TRUE    ?  M|kart^id <> A|artikel^id
+.continue NOTE2  ?  _U|xgeaendert
+.continue AUFRUF
+..
+!AUFRUF
+.formula U|xtcmd = "<(Purchasing)> <(New)>, (PurchaseOrder) ? [insert]=1 |lief="+'M|tlief^id'+" |vom="+'M|konddat'+" |1:artikel="+'M|kart^id'+" |1:mge="+'M|mge'
+.end 0 'U|xtcmd'
+..
+!AUFRUF2
+.formula U|xtcmd = "<(Purchasing)> <(New)>, (PurchaseOrder) ? [insert]=1 |lief="+'M|tlief^id'+" |vom="+'M|konddat'+" |1:artikel="+'M|kart^id'+" |1:mge="+'M|mgrenze' 
+.end 0 'U|xtcmd'
+..
+!HERKUNFT
+.continue PRODUCT      ? F|equals(M|typ, "(ProductPrice)")
+.continue BLANKETORDER ? F|equals(M|typ, "(BlanketOrder)")
+.continue SCALE        ? F|equals(M|typ, "(ScaledDiscount)") ; F|equals(M|typ, "(ScalePrice)")
+.continue FLATRATE     ? F|equals(M|typ, "(FlatRate)")
+.continue MATERIAL     ? F|equals(M|typ, "(MaterialSurcharge)")
+.continue END
+..
+!FLATRATE: Pauschalpreis
+.formula U|xtcmd = "<(Pricing)>" + 'M|herkunft^id' + " <(View)>,(Pricing) ?"
+.continue CEND
+..
+!MATERIAL: Materialzuschlag
+.formula U|xtcmd = "<(Pricing)>"  + 'M|herkunft^id' + " <(View)>, (MaterialSurcharge) ?"
+.formula U|xtcmd = U|xtcmd + "[pos]=1:"
+.continue CEND
+..
+!SCALE: Staffelrabatt / Staffelpreis
+.formula U|xtcmd = "<(Pricing)>" + 'M|herkunft^id' + " <(View)>,(Pricing) ?" ? F|equals(M|typ, "(ScaledDiscount)")
+.formula U|xtcmd = "<(Pricing)>" + 'M|herkunft^id' + " <(View)>,(Pricing) ?" ? F|equals(M|typ, "(ScalePrice)")
+.formula U|xtcmd = U|xtcmd + "[pos]=1:"
+.continue CEND
+..
+!PRODUCT: Artikelpreis
+.formula U|xtcmd = "<(Part)>" + 'M|herkunft^id' + " <(View)> ?"
+.formula U|xtcmd = U|xtcmd + "[pos]=0:ebezbspr"
+.continue CEND
+..
+!BLANKETORDER: Rahmenauftrag
+.formula U|xtcmd = "<(Purchasing)>" + 'M|herkunft^id' + " <(View)>,(BlanketOrder)"
+.continue CEND
+..
+!PREIS
+.continue END ? F|empty(M|preisauskunft) ; M|tpreisopt = M|iconoptz 
+.input "ek/VENDORCONDITIONS.PREIS2"
+.continue END
+..
+!BSTARTV
+.formula M|kpreisoptz = ""
+.assign M|lgruppe = F|sysinfo(10)^intlgruppe ? F|empty(M|lgruppe)
+.continue ERROR10 ?  M|anfragevon > M|anfragebis & 'M|anfragebis' <> ""
+.input "ek/VENDORCONDITIONS.SEL"
+.continue END
+..
+!BSTARTN
+.input "is/HOL.LISTE"
+.continue END
+..
+!MENGE
+.copy M|hintergrund = G|FALSE
+.copy M|first = G|FALSE
+.formula M|kpreisoptz = ""
+.formula M|mge = 1                      ?  F|empty(M|mge)
+.assign M|ebetreuer = M|kart^ebetreuer  ? _F|empty(M|kart)
+.formula M|artle = M|kart^ehe           ? _F|empty(M|kart)
+.formula M|mgeopt = M|preisopt/100 * M|mge + M|mge
+.continue TABLEEREN
+..
+!ARTIKEL
+.formula M|kbsid = ""
+.formula M|kpreisoptz = ""
+.copy M|first = G|FALSE
+.copy M|kmerkopt = G|FALSE
+.continue EMPTY               ?  F|empty(M|kart)
+.protection bnorahmen         ?  F|equals(M|kart^bsart, "(Subcontracting)")
+.protection -reset bnorahmen  ? _F|equals(M|kart^bsart, "(Subcontracting)")
+.assign M|ebetreuer = M|kart^ebetreuer
+.formula M|artle = M|kart^ehe
+.formula M|le = M|kart^le
+.protection artle          ? M|kart^ehe = M|kart^le
+.protection -reset artle   ? M|kart^ehe <> M|kart^le
+.formula M|losgr = M|kart^losgr
+.formula M|minbsmge = M|kart^minbsmge
+.formula M|maxbsmge = M|kart^maxbsmge
+.formula M|mge = M|kart^losgr
+.formula M|mge = 1                    ?  F|empty(M|mge)
+.assign P|maskkontextfop = "notkbsid" ?  F|empty(M|kbsid) 
+.formula M|mgeopt = M|preisopt/100 * M|mge + M|mge
+.continue TABLEEREN
+..
+!EMPTY
+.formula M|dispoa = ""
+.formula M|hinweis = ""
+.formula M|kbsid = ""
+.formula M|mge = "" 
+.formula M|lgruppe = ""
+.formula M|ebetreuer = ""
+.protection -reset bnorahmen 
+.assign P|maskkontextfop = "notkbsid" ?  F|empty(M|kbsid)
+..
+!TABLEEREN
+.input "is/TABLEEREN"
+.continue END
+..
+!BSID
+.assign M|kart = M|kbsid^artikel
+.protection artle          ? M|kbsid^artikel^ehe = M|kbsid^artikel^le
+.protection -reset artle   ? M|kbsid^artikel^ehe <> M|kbsid^artikel^le
+.formula M|le = M|kart^le
+.copy M|dispoa = M|kart^dispoa
+.formula M|bsart = M|kbsid^bsart
+.assign M|ebetreuer = M|kart^ebetreuer
+.formula M|artle = M|kbsid^he
+.formula M|mge = M|kbsid^mge
+.formula M|minbsmge = M|kart^minbsmge
+.formula M|maxbsmge = M|kart^maxbsmge
+.formula M|losgr = M|kart^losgr
+.formula M|lgruppe = M|kbsid^lgruppe
+.formula M|mgeopt = M|preisopt/100 * M|mge + M|mge
+.formula M|hinweis = ""
+.set trans +
+.formula U|xtext2 = "Bestellvorschlag"        ? F|equals(M|bsart, "(ExternalProcurement)") & F|empty(M|kbsid^kopf)
+.formula U|xtext2 = "Lohnfertigungsvorschlag" ? F|equals(M|bsart, "(Subcontracting)")
+.formula U|xtext2 = "Anfrage"                 ? F|equals(M|bsart, "(ExternalProcurement)") & _F|empty(M|kbsid^kopf)
+.formula U|xtext = F|formatstr("Der Artikel wird {1} disponiert. Eine Erhîhung der Menge Åber die geplante Menge von {2} {3} fÅr diesen Artikel kann zu Åberdeckenden Lagermengen mit Verwendung oder Projekt fÅhren. Legen Sie fÅr die zusÑtzliche Menge einen separaten {4} an.", 'M|dispoa', 'M|kbsid^mge', 'M|artle', 'U|xtext2') ?  F|empty(M|kbsid^kopf)
+.formula U|xtext = F|formatstr("Der Artikel wird {1} disponiert. Eine Erhîhung der Menge Åber die geplante Menge von {2} {3} fÅr diesen Artikel kann zu Åberdeckenden Lagermengen mit Verwendung oder Projekt fÅhren. Legen Sie fÅr die zusÑtzliche Menge eine separate {4} an.", 'M|dispoa', 'M|kbsid^mge', 'M|artle', 'U|xtext2') ? _F|empty(M|kbsid^kopf)
+.formula M|hinweis = 'U|xtext' ? F|equals(M|dispoa, "(VariantRelated)") ; F|equals(M|dispoa, "(SalesOrderRelated)") ; F|equals(M|dispoa, "(ProjectRelated)")
+.set trans -
+.assign P|maskkontextfop = "notkbsid" ? F|empty(M|hinweis)
+.continue END
+..
+!BESCHAFF: Bestellvorschlag / Lohnfertigungsvorschlag / Anfrage
+.continue END ? F|empty(M|kbsid)
+.command -parallel 'F|formatstr("<(Purchasing)>{1}<(View)>" , M|kbsid^id)'
+.continue END
+..
+..*****************************************************************************
+!END: erst mal Farben refreshen
+.select screen header
+..
+!SELLINE
+.select screen line
+.continue FINISH ? _G|mehr
+.formula U|xverfuegbar = M|maxabrufmge - M|fzahlabgerufen
+.colour -background -1 -1 -1 zgltvon 'M|aktzeile'         
+.colour -background -1 -1 -1 zgltbis 'M|aktzeile'
+.colour -background -1 -1 -1 maxabrufmge 'M|aktzeile'
+.colour -background 'M|rot' maxabrufmge 'M|aktzeile' ? M|mge > U|xverfuegbar & U|xverfuegbar <> 0
+.colour -background 'M|rot' zgltvon 'M|aktzeile'     ? (_F|empty(M|zgltvon) & 'M|konddat:8' < 'M|zgltvon:8') ; (_F|empty(M|zgltbis) &  'M|konddat:8' > 'M|zgltbis:8')
+.colour -background 'M|rot' zgltbis 'M|aktzeile'     ? (_F|empty(M|zgltvon) & 'M|konddat:8' < 'M|zgltvon:8') ; (_F|empty(M|zgltbis) &  'M|konddat:8' > 'M|zgltbis:8')
+.continue SELLINE
+..
+!FINISH
+.continue
+..
+!NOTE2 
+.note Infosystem wurde aus einem Vorschlag aufgerufen. Bestellung erzeugen nicht mîglich.
+.end 1
+..
+!ERROR2
+.assign P|maskkontextfop = "Auskunft"
+.assign P|maskkontextfop = P|maskkontextfop + " " + "kbsid"     ? _F|empty(M|kbsid)
+.assign P|maskkontextfop = P|maskkontextfop + " " + "notkbsid"  ?  F|empty(M|kbsid)
+.error FÅr aufgeklappte Zeilen nicht erlaubt.
+.end 1
+..
+!ERROR3
+.error Tabelle ist noch leer!
+.copy M|allesauf = G|FALSE
+.end 1
+..
+!ERROR4
+.error Diese Einheit darf nicht verwendet werden!
+.formula M|artle = M|kart^ehe 
+.cursor artle 0
+.end 1
+..
+!ERROR5
+.end 1  ? F|empty(M|merklief)
+.error Abbruch: Daten werden nicht in den Bestellvorschlag Åbernommen.        ? _F|equals(A|artikel^bsart, "(Subcontracting)")
+.error Abbruch: Daten werden nicht in den Lohnfertigungsvorschlag Åbernommen. ?  F|equals(A|artikel^bsart, "(Subcontracting)")
+.end 1
+..
+!ERROR6
+.output terminal
+Fehlerdatei:
+.input 'U|xterr'
+.error edpimport gescheitert!
+.end 1
+..
+!ERROR7
+.error Keine Zeile zur öbernahme markiert.
+.end 1
+..
+!ERROR8
+.error Der Artikel wurde mittlerweile geÑndert. Es wird nichts zurÅckgeschrieben.
+.end 1
+..
+!ERROR9
+.error Ein RÅckschreiben ist nicht mîglich, da der Bestellvorschlag, aus dem dieses Infosystem gestartet wurde, gesperrt ist. ? _F|equals(A|artikel^bsart, "(Subcontracting)")
+.error Ein RÅckschreiben ist nicht mîglich, da der Lohnfertigungsvorschlag, aus dem dieses Infosystem gestartet wurde, gesperrt ist. ?  F|equals(A|artikel^bsart, "(Subcontracting)")
+.copy M|brueck = G|FALSE
+.end 1
+..
+!ERROR10
+.error -field M|anfragevon -message Zeitraum ist ungÅltig. Bitte Ñndern.
+.end 1
+..
+!CEND
+.command -parallel 'U|xtcmd'

@@ -1,0 +1,398 @@
+..!interpreter english declaration noabbrev
+.. at 2017-03-14, 09:46
+.set TRANS -
+..========================================================================
+..==  Name              : FOP.40.PRJM.EV
+..==  Pfad              : allpstart
+..==  Funktion          : Ereignisse im Fertigungsvorschlag
+..==  Erstellungsdatum  : 24.03.2009
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==  Anbindung         : Maske Fertigungsvorschlag
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+..====================================================
+.type text     xtsel xysel xtid xtverw xtkstelle xtpvorgang xt1
+.type P86:1    xpprojekt
+.type P149:2   xppvorgang
+.type AZK28054 xyazkverw
+.type bool     xbmehr
+.type GD       xdleer xdatum xdstart xdende
+.type integer   xprocsp      ? _defined(xprocsp)
+..====================================================
+.formula xprocsp = 0
+.set demand -
+.continue EPROCDEF
+!PROC001: ----- PV_loechen -----
+.continue EL001 ? _(M|yprjmpvorgang^yrefid = M|id)
+.select lock add M|yprjmpvorgang
+.continue EL002 ? _(G|mehr)
+.assign H|yrefid   = ""
+.rewrite
+.continue FI002
+!EL002
+.set TRANS +
+.box Fehler
+Der Projektvorgang konnte nicht geîffnet werden.
+Der Fertigungsvorschlag konnte nicht aus dem Vorgang entfernt werden.
+
+Bitte prÅfen Sie den Projektvorgang 'M|yprjmpvorgang^nummer'/'M|yprjmpvorgang^such'.
+.set TRANS -
+.error
+.end 1
+!FI002
+!EL001
+.continue 'xprocst.xprocsp'
+!PROC002: ----- PV_neu_aendern -----
+.formula U|xdstart = M|tsterm
+.formula U|xdende  = M|fterm
+.formula U|xdende  = M|tterm    ? 'U|xdende' = "" ; M|tterm > M|fterm
+.continue EL003 ? _((_(M|yprjmpvorgang^yiststart = U|xdstart)) ; (_(M|yprjmpvorgang^yistend   = U|xdende)))
+.select lock add M|yprjmpvorgang
+.continue EL004 ? _(G|mehr)
+.copy    H|yiststart      = U|xdstart
+.copy    H|yistend        = U|xdende
+.formula H|yabwterminplan = F|numworkdays("", "", H|yistend, H|yedatum) * (-1)  ? H|yedatum >= H|yistend & _F|empty(H|yistend)
+.formula H|yabwterminplan = F|numworkdays("", "", H|yedatum, H|yistend)         ? H|yedatum  < H|yistend & _F|empty(H|yistend)
+.rewrite
+.continue FI004
+!EL004
+.set TRANS +
+.box Fehler
+
+Der Projektvorgang konnte nicht geîffnet werden.
+Aktualisierung der Termine ist fehlgeschlagen.
+
+Bitte prÅfen Sie den Projektvorgang 'M|yprjmpvorgang^nummer'/'M|yprjmpvorgang^such'.
+.set TRANS -
+.error
+.end 1
+!FI004
+!EL003
+.continue EL005 ? _(_(M|yprjmpvorgang^yrefid = M|id))
+.select lock add M|yprjmpvorgang
+.continue EL006 ? _(G|mehr)
+.assign H|yrefid   = M|id
+.assign H|yreftypk = "02"
+.rewrite
+.continue FI006
+!EL006
+.set TRANS +
+.box Fehler
+Der Projektvorgang konnte nicht geîffnet werden.
+Aktualisierung der Arbeitsaufgabe ist fehlgeschlagen.
+
+Bitte prÅfen Sie den Projektvorgang 'M|yprjmpvorgang^nummer'/'M|yprjmpvorgang^such'.
+.set TRANS -
+.error
+.end 1
+!FI006
+!EL005
+.formula U|xtpvorgang = M|yprjmpvorgang^id
+.input "allpstart/FOP.PRJM.UP.SVORGANG.AKT"
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Vorbelegungen -----
+.continue EL007 ? _((_(F|empty(M|yprjmpvorgang))) & (_(F|empty(M|artex))))
+.formula U|xtverw    = ""
+.formula U|xtkstelle = ""
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"   ? _F|defined(5|ykoobjfvzuw)
+.continue EL008 ? _(((G|evtkommd = G|kaktname13) & (_(F|empty(5|yverwfvzuwk)))) ; ((G|evtkommd = G|kaktname14) & (_(F|empty(5|yverwfvneuk)))))
+.copy U|xyazkverw = 5|yverwfvzuwk   ? G|evtkommd = G|kaktname13
+.copy U|xyazkverw = 5|yverwfvneuk   ? G|evtkommd = G|kaktname14
+.copy U|xpprojekt  = M|projekt
+.copy U|xppvorgang = M|yprjmpvorgang
+.input "allpstart/FOP.PRJM.UP.VERW"
+!EL008
+.continue EL009 ? _(((G|evtkommd = G|kaktname13) & (5|ykoobjfvzuw)) ; ((G|evtkommd = G|kaktname14) & (5|ykoobjfvneu)))
+.formula U|xtkstelle = M|yprjmpvorgang^yprojekt^yktr^id     ? _F|empty(M|yprjmpvorgang^yprojekt^yktr)
+!EL009
+.assign  M|kstelle = U|xtkstelle    ?  F|modifiable(M|kstelle) & _F|empty(U|xtkstelle)
+.formula M|verw    = U|xtverw       ?  F|modifiable(M|verw)    & _F|empty(U|xtverw)
+!EL007
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue         ? _U|xybfertigung
+.continue BRK001 ? _(G|evtmaske = 40)
+.continue BRK002 ? _(G|evtart = "maskpruef")
+.continue EL010 ? _(_(G|evtkommd = G|kaktname12))
+.select screen header
+.select screen line
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL011 ? _(_(F|empty(M|yprjmpvorgang)))
+.copy M|projekt  = M|yprjmpvorgang^yprojekt     ? F|modifiable(M|projekt)
+.select lock nowait add M|yprjmpvorgang
+.continue EL012 ? _(G|mehr)
+.continue EL013 ? _(_(G|gesperrt))
+.set TRANS +
+.box Fehler
+Der Projektvorgang 'H|nummer' wird bearbeitet.
+Aktualisierung der Termine ist fehlgeschlagen.
+
+'G|sperrtext                                                                   '
+
+Das Speichern wird abgebrochen.
+.set TRANS -
+.error
+.end 1
+!EL013
+.continue FI012
+!EL012
+.set TRANS +
+.box Fehler
+Der Projektvorgang 'M|yprjmpvorgang' konnte nicht geîffnet werden.
+Aktualisierung der Termine ist fehlgeschlagen.
+
+Das Speichern wird abgebrochen.
+.set TRANS -
+.error
+.end 1
+!FI012
+!EL011
+.select screen line
+.continue LOOP001
+!ELOP001: ==============================
+!EL010
+.continue ESAC002
+!BRK002
+.continue BRK003 ? _(G|evtart = "maskaus")
+.continue EL014 ? _(_(G|evtkommd = G|kaktname12))
+.select screen header
+.select screen line
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.continue EL015 ? _(F|empty(M|yprjmpvorgang))
+.formula xtsel = "$,,yrefid==" + M|id + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrpvorgang' 'U|xtsel'
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.formula M|yprjmpvorgang = 0|id
+.continue EL016 ? _(M|mge = 0)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.continue FI016
+!EL016
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC002
+!RET002
+.formula xprocsp = xprocsp - 1
+!FI016
+.load 0 continue
+.continue LOOP003
+!ELOP003: ==============================
+.continue FI015
+!EL015
+.continue EL017 ? _(M|mge = 0)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+.continue FI017
+!EL017
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC002
+!RET004
+.formula xprocsp = xprocsp - 1
+!FI017
+!FI015
+.select screen line
+.continue LOOP002
+!ELOP002: ==============================
+!EL014
+.continue ESAC002
+!BRK003
+.continue BRK004 ? _(G|evtart = "feldfuell")
+.continue BRK005 ? _(G|evtvar = "yprjmpvorgang")
+.formula U|xysel = ";yreftypk="
+.input "allpstart/FOP.PRJM.UP.SELCHECK.FF"
+.continue EL018 ? _(_(F|empty(M|projekt)))
+.continue EL019 ? _((_(F|empty(G|evtfeldneu))) & (_(G|evtfeldneu = M|yprjmpvorgang^id)))
+.select group 'U|xydbgrpvorgang' 'G|evtfeldneu'
+.continue EL020 ? _(G|mehr)
+.formula U|xtsel = H|yprojekt^id
+.input "allpstart/FOP.PRJM.UP.CHECK.PROJECT"    ? _H|yprojekt^id = M|projekt^id
+!EL020
+!EL019
+!EL018
+.continue ESAC003
+!BRK005
+.continue BRK006 ? _(G|evtvar = "projekt")
+.input "allpstart/FOP.PRJM.UP.CHECK.PROJECT"
+.continue ESAC003
+!BRK006
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC002
+!BRK004
+.continue BRK007 ? _(G|evtart = "feldaus")
+.continue BRK008 ? _(G|evtvarori = "yprjmpvorgang")
+.continue EL021 ? _(F|empty(M|yprjmpvorgang))
+.continue EL022 ? _(_(F|empty(M|id)))
+.load 0 group 'U|xydbgrpvorgang' 'F|expr("$,,yrefid==" + M|id + ";@filingmode=(Active)")'
+.continue EL023 ? _(G|mehr)
+.select lock add 0|id
+.continue EL024 ? _(G|mehr)
+.formula H|yrefid  = ""
+.assign  H|yreftyp = ""
+.rewrite
+.continue FI024
+!EL024
+.set TRANS +
+.box Fehler
+Der Projektvorgang 'M|yprjmpvorgang' kann nicht bearbeitet werden.
+Entfernen der Referenz ist nicht mîglich.
+.set TRANS -
+.assign M|yprjmpvorgang = 0|id
+.copy   M|projekt       = 0|yprojekt    ? F|modifiable(M|projekt)
+.error
+.end 1
+!FI024
+!EL023
+!EL022
+.continue FI021
+!EL021
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC003
+!RET005
+.formula xprocsp = xprocsp - 1
+.continue EL025 ? _(_(F|empty(M|yprjmpvorgang^yrefid)))
+.continue EL026 ? _(((M|yprjmpvorgang^yrefid <> M|id) & (_(F|empty(M|id)))) ; (F|empty(M|id)))
+.set TRANS +
+.box Fehler
+Im Projektvorgang 'M|yprjmpvorgang' ist bereits eine Referenz eingetragen.
+.set TRANS -
+.assign M|yprjmpvorgang = ""
+.assign M|projekt       = ""    ? F|modifiable(M|projekt)
+.error
+.end 1
+!EL026
+.continue FI025
+!EL025
+.continue EL027 ? _(_(F|empty(M|id)))
+.load 0 group 'U|xydbgrpvorgang' 'F|expr("$,,id<>" + M|yprjmpvorgang^id + ";yrefid==" + M|id + ";@filingmode=(Active)")'
+.continue EL028 ? _(G|mehr)
+.set TRANS +
+.box Fehler
+Es existiert bereits ein Projektvorgang '0|nummer' mit Verweis auf diesen Fertigungsvorschlag.
+Eintragen der Referenz ist nicht mîglich.
+.set TRANS -
+.assign M|yprjmpvorgang = ""
+.assign M|projekt       = ""    ? F|modifiable(M|projekt)
+.error
+.end 1
+.continue FI028
+!EL028
+.select lock add M|yprjmpvorgang
+.continue EL029 ? _(G|mehr)
+.formula H|yrefid   = M|id
+.assign  H|yreftypk = "02"
+.rewrite
+.continue FI029
+!EL029
+.set TRANS +
+.box Fehler
+Der Projektvorgang 'M|yprjmpvorgang' kann nicht bearbeitet werden.
+Eintragen der Referenz ist nicht mîglich.
+.set TRANS -
+.assign M|yprjmpvorgang = ""
+.assign M|projekt       = ""    ? F|modifiable(M|projekt)
+.error
+.end 1
+!FI029
+!FI028
+!EL027
+!FI025
+!FI021
+.copy M|projekt  = M|yprjmpvorgang^yprojekt     ? F|modifiable(M|projekt)
+.continue ESAC004
+!BRK008
+.continue BRK009 ? _(G|evtvarori = "projekt")
+.continue ESAC004
+!BRK009
+.continue BRK010 ? _(G|evtvarori = "art")
+.copy M|projekt  = M|yprjmpvorgang^yprojekt     ? F|modifiable(M|projekt)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC003
+!RET006
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK010
+.continue BRK011 ? _(G|evtvarori = "artikel")
+.copy M|projekt  = M|yprjmpvorgang^yprojekt     ? F|modifiable(M|projekt)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC003
+!RET007
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK011
+.continue BRK012 ? _(G|evtvarori = "artex")
+.copy M|projekt  = M|yprjmpvorgang^yprojekt     ? F|modifiable(M|projekt)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC003
+!RET008
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK012
+!ESAC004: =====   ENDCASE   =====
+.continue ESAC002
+!BRK007
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK001
+.formula  U|xtsel = "$,@gruppe=5;@filingmode=(Active)"
+.load 1 purchasing 'U|xtsel'
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.formula U|xtsel = "$,,yrefid==" + 1|id + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrpvorgang' 'U|xtsel'
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.formula U|xdstart = 1|tsterm
+.formula U|xdende  = 1|fterm
+.formula U|xdende  = 1|tterm   ? 'U|xdende' = ""
+.continue EL030 ? _((_(0|yiststart = U|xdstart)) ; (_(0|yistend   = U|xdende)))
+.select lock add 0|id
+.continue EL031 ? _(G|mehr)
+.assign H|yiststart = U|xdstart
+.assign H|yistend   = U|xdende
+.rewrite
+.continue FI031
+!EL031
+.set TRANS +
+.box Fehler
+Der Projektvorgang konnte nicht geîffnet werden.
+Aktualisierung der Termine ist fehlgeschlagen.
+
+Bitte prÅfen Sie den Projektvorgang '0|nummer'/'0|such'.
+.set TRANS -
+.error
+.end 1
+!FI031
+!EL030
+.load 0 continue
+.continue LOOP005
+!ELOP005: ==============================
+.load 1 purchasing
+.continue LOOP004
+!ELOP004: ==============================
+.select -
+.load 1
+!ESAC001: =====   ENDCASE   =====
+.continue

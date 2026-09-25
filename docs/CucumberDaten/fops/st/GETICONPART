@@ -1,0 +1,98 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : GETICONPART
+.. Author         : tiwe
+.. Verantwortlich : cl
+.. Kontrolle      :
+.. Functionality  : get Icon based on article ID or warehouse group ID
+..
+..*****************************************************************************
+.set trans -
+..
+.type VPKS1  xtartid ? _F|defined(xtartid)
+.type ID39:2 xtlgid  ? _F|defined(xtlgid)
+.type text  xticon   ? _F|defined(xticon)
+.type text xtselect  ? _F|defined(xtselect)
+..
+!INIT
+.continue ERROR1 ? F|empty(U|xtartid)
+.continue ERROR2 ? F|empty(U|xtlgid)
+..
+.. only for products
+.continue INTERN ? U|xtartid^gruppe <> 1
+..
+.. internal oder external warehouse group
+.continue INTERN ?  U|xtlgid^intlager
+.continue EXTERN ? _U|xtlgid^intlager
+..
+!INTERN: internal warehouse group
+.. Get Icon from the product header
+.formula U|xticon = U|xtartid^elementicon
+.continue END
+..
+!EXTERN: external warehouse group
+.. select warehouse group properties
+.formula U|xtselect = "$,,artikel="+'U|xtartid^id'+";lgruppe="+'U|xtlgid'+";bsart=;@autostart=ja;@gruppe=3;@ablageart=(Active)"
+.load 9 modificationlock nowait warehousedata 'U|xtselect'
+.continue INTERN ? _G|mehr
+..
+.. Beschaffungsarten unterteilen
+.continue EIGEN ? F|equals(9|bsart, "(InhouseProduction)")
+.continue FREMD ? F|equals(9|bsart, "(ExternalProcurement)")
+.continue UMLAG ? F|equals(9|bsart, "(Relocation)") 
+.continue LOHNF ? F|equals(9|bsart, "(Subcontracting)")
+..
+!EIGEN: Eigenfertigung
+.formula U|xtselect = "$,,nummer=;such=;artikel="+'U|xtartid^id'+";lgruppe="+'U|xtlgid'+";flistestd=ja;"
+.load 9 productionlist 'U|xtselect'
+.continue EXTFL   ?  G|mehr
+..
+!INTFL1
+..interne Lagergruppe ermitteln
+.formula U|xtlgid = F|sysinfo(10)^intlgruppe
+.formula U|xtselect = "$,,nummer=;such=;artikel="+'U|xtartid^id'+";lgruppe="+'U|xtlgid'+";flistestd=ja;"
+.load 9 productionlist 'U|xtselect'
+.continue NOICON1   ? _G|mehr
+..
+!INTFL2
+.formula U|xticon = 9|elementicon 
+.continue END
+..
+!NOICON1
+.formula U|xticon = ""
+.continue END
+..
+!EXTFL
+.formula U|xticon = 9|elementicon 
+.continue END
+..
+!FREMD: Fremdbeschaffung
+.formula U|xtselect = "$,,nummer=;such=;artikel="+'U|xtartid^id'+";lgruppe="+'U|xtlgid'+";flistestd=ja;"
+.load 9 productionlist 'U|xtselect'
+.continue EINK  ? _G|mehr
+..
+!LIEFB
+.formula U|xticon = 9|elementicon 
+.continue END
+..
+!EINK
+.formula U|xticon = "icon:shoppingcart"
+.continue END
+..
+!UMLAG: Umlagern
+.. neue Lagergruppe ermitteln
+.formula U|xtlgid = 9|umllg
+.continue INIT
+..
+!LOHNF: Lohnfertigung
+.formula U|xticon = "icon:pliers_arrow_out_black"
+.continue END
+..
+!ERROR1: keine ArtikelÅbergabe / no product
+.continue END
+..
+!ERROR2: keine Lagergruppe / no warehouse group
+.continue END
+..
+!END
+.continue

@@ -69,6 +69,12 @@ interface FeatureFormProps {
   ratingLoading?: boolean;
   /** Error message from the last failed rating request. */
   ratingError?: string | null;
+  /** Called when the user wants to transform the current feature via AI. */
+  onApplyAiEdit?: (request: string) => Promise<void>;
+  /** True while AI applies a requested change to the current feature. */
+  aiEditLoading?: boolean;
+  /** Error message from the last failed AI edit request. */
+  aiEditError?: string | null;
   /**
    * When set, the form jumps to the matching scenario tab.
    * Format: `"<scenarioId>::<timestamp>"` — the timestamp suffix forces
@@ -99,11 +105,15 @@ export function FeatureForm({
   onRequestRating,
   ratingLoading = false,
   ratingError = null,
+  onApplyAiEdit,
+  aiEditLoading = false,
+  aiEditError = null,
   focusScenarioId = null,
 }: FeatureFormProps) {
   const { t, lang } = useTranslation();
   const elapsed = useElapsed(generating);
   const [activeScenarioIdx, setActiveScenarioIdx] = useState(0);
+  const [aiEditRequest, setAiEditRequest] = useState('');
   // Clamp active index when scenarios change (e.g. AI replaces all scenarios)
   useEffect(() => {
     if (feature.scenarios.length === 0) {
@@ -214,7 +224,7 @@ export function FeatureForm({
                 onChange(replaceFeatureGuid({ ...feature, name: newName }, oldGuid, newGuid));
               } else if (!oldGuid && newName.trim()) {
                 // No GUID tag yet — add one
-                onChange({ ...feature, name: newName, tags: [`@${newGuid}`, ...feature.tags] });
+                onChange({ ...feature, name: newName, tags: [`@guid-${newGuid}`, ...feature.tags] });
               } else {
                 onChange({ ...feature, name: newName });
               }
@@ -409,6 +419,47 @@ export function FeatureForm({
                 <span className={styles.generateError}>{ratingError}</span>
               )}
             </div>
+            {onApplyAiEdit && (
+              <div className={styles.aiEditBox}>
+                <label className={styles.aiEditLabel} htmlFor="feature-ai-edit-request">
+                  {t('form.aiEditLabel')}
+                </label>
+                <textarea
+                  id="feature-ai-edit-request"
+                  className={styles.aiEditTextarea}
+                  value={aiEditRequest}
+                  onChange={(e) => setAiEditRequest(e.target.value)}
+                  placeholder={t('form.aiEditPlaceholder')}
+                  rows={3}
+                />
+                <div className={styles.aiEditActions}>
+                  <button
+                    className={styles.aiEditBtn}
+                    onClick={async () => {
+                      const request = aiEditRequest.trim();
+                      if (!request) return;
+                      await onApplyAiEdit(request);
+                      setAiEditRequest('');
+                    }}
+                    disabled={aiEditLoading || !aiEditRequest.trim() || generating}
+                    type="button"
+                  >
+                    {aiEditLoading ? (
+                      <>
+                        <span className={styles.spinner} />
+                        {t('form.aiEditApplying')}
+                      </>
+                    ) : (
+                      t('form.aiEditApply')
+                    )}
+                  </button>
+                  <span className={styles.aiEditHint}>{t('form.aiEditHint')}</span>
+                </div>
+                {aiEditError && (
+                  <span className={styles.generateError}>{aiEditError}</span>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>

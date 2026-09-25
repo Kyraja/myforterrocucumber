@@ -1,0 +1,173 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDISEARCH.KBUSUCHEN.BN
+.. Datum          : 16.10.2007
+.. Version        : 2007r4n03
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Suchen-Buttons, lîsen jeweils eine Objektauswahl aus,
+..                  das Ergebnis der Objektauswahl wird in ein Feld im
+..                  Infosystem Åbernommen
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+.. Ablauf         : Button-FOP
+..
+.. Functionality  : "Search" buttons, each triggers an object selection dialog,
+..                  the selected object is updated into a field in the
+..                  infosystem
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+.. Program flow   : button efop
+...Includes       :
+..*****************************************************************************
+.. Translate search key words
+.type text xGLN
+.type text xGTIN
+.type text xKundenArtikel
+.type text xArtikelKunde
+.type text xArtikelLieferant
+.type P0 xcustomer
+.type P1 xsupplier
+.formula U|xGLN = "GLN"
+.formula U|xGTIN = "GTIN"
+.formula U|xKundenArtikel = "Kundenartikelnummer"
+.formula U|xArtikelKunde = "Artikel-Kunde"
+.formula U|xArtikelLieferant = "Artikel-Lieferant"
+.set trans -
+..
+.type text xtsel
+..
+.. event evaluation
+.. ----------- ----- Kopfteil Button -------------------------------------------
+.continue KUNDE   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "kunde"
+.continue WEMPF   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "wempf"
+.continue REMPF   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "rempf"
+.continue ART     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "artikel"
+.continue RAHMEN  ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "rahmen"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+..
+!KUNDE
+.. NOTE: when setting fields that only exist in one @group (e.g. frbez), then the 
+..       query is automatically adjusted by the system to only search in @groups 
+..       that contain these fields; 
+..       i.e. if frbez is set, customer contacts will NOT be searched
+.continue ERRBOOL  ? _M|bku  & _M|bli
+.formula U|xtsel = "%,,;@gruppe=1.2;@autostart=(1);nummer=;such=;name="
+.formula U|xtsel = U|xtsel + ";frbez=" + M|kdfrbez                           ? _F|empty(M|kdfrbez)
+.formula U|xtsel = U|xtsel + ";gln=" + M|kdgln                                                      
+.select customer 'U|xtsel'  ?  M|bku
+.select supplier 'U|xtsel'  ?  M|bli
+.continue END  ? _G|mehr
+.formula M|kdnum = H|nummer
+.formula M|kdgln = H|gln
+.continue END
+..
+!WEMPF
+.continue ERRBOOL  ? _M|bku  & _M|bli
+.formula U|xtsel = "%,,;@gruppe=1.2;@autostart=(1);nummer=;such=;name="
+.formula U|xtsel = U|xtsel + ";frbez="     + M|wfrbez                        ? _F|empty(M|wfrbez)  &  F|empty(M|wwerk)  &  F|empty(M|wablstelle)
+.formula U|xtsel = U|xtsel + ";gln="       + M|wgln                                           
+.formula U|xtsel = U|xtsel + ";werk="      + M|wwerk                         ? _F|empty(M|wwerk)
+.formula U|xtsel = U|xtsel + ";ablstelle=" + M|wablstelle                    ? _F|empty(M|wablstelle)
+.select customer 'U|xtsel'  ?  M|bku
+.select supplier 'U|xtsel'  ?  M|bli
+.continue END  ? _G|mehr
+.formula M|wnum = H|nummer
+.formula M|wfrbez = H|frbez  ? H|gruppe=1
+.formula M|wgln = H|gln
+.formula M|wwerk = H|werk            ?  H|gruppe=2
+.formula M|wablstelle = H|ablstelle  ?  H|gruppe=2
+.continue END
+..
+!REMPF
+.continue ERRBOOL  ? _M|bku  & _M|bli
+.formula U|xtsel = "%,,;@gruppe=1.2;@autostart=(1);nummer=;such=;name="
+.formula U|xtsel = U|xtsel + ";frbez=" + M|rfrbez     ? _F|empty(M|rfrbez)
+.formula U|xtsel = U|xtsel + ";gln="   + M|rgln
+.select customer 'U|xtsel'  ?  M|bku
+.select supplier 'U|xtsel'  ?  M|bli
+.continue END  ? _G|mehr
+.formula M|rnum = H|nummer
+.formula M|rgln = H|gln
+.continue END
+..
+!ART
+.continue ARTRAH  ?  M|bzkuartnr
+.continue ARTKUN  ?  M|bkuartbez1
+.continue ARTSAB  ?  M|bkuartbez2
+.continue ARTGTIN ?  M|bartgtin
+.continue END
+!ARTGTIN
+.formula U|xtsel = "%,,;@autostart=(1);nummer=;such=;sucherw=;gtin=" + M|artgtin
+.select parts 'U|xtsel'
+.continue END  ? _G|mehr
+.formula M|artnum = H|nummer
+.formula M|artgtin = H|gtin
+.continue END
+!ARTSAB: Abladestelle
+.formula U|xtsel = "%,,;@autostart=(1);art^nummer=;art^sucherw=;kuartnr=" + M|artkuart + ";art^gtin=" + 'M|artgtin'+ ";kl=" + 'M|wnum' + ";@gruppe=6"
+.select parts 'U|xtsel'
+.continue END  ? _G|mehr
+.formula M|artnum = H|art^nummer
+.formula M|artgtin = H|art^gtin
+.continue END
+!ARTKUN: Hauptkunde
+.formula U|xtsel = "%,,;@autostart=(1);art^nummer=;art^sucherw=;kuartnr=" + M|artkuart + ";art^gtin=" + 'M|artgtin'+ ";kl=" + 'M|kdnum' + ";@gruppe=6"
+.select parts 'U|xtsel'
+.continue END  ? _G|mehr
+.formula M|artnum = H|art^nummer
+.formula M|artgtin = H|art^gtin
+.continue END
+!ARTRAH: zkuartnr in Rahmen
+.formula U|xtsel = "%,,;@autostart=(1);artex^nummer=;artex^such=;artex^sucherw=;zkuartnr==" + M|artkuart + ";artex^gtin=" + M|artgtin + ";kopf^nummer=;kopf^kunde=" + M|wnum + ";kopf^verwschl=" + M|raverwschl
+.formula U|xtsel = U|xtsel + ";.kotyp==(BlanketOrder);status=`"
+.select sales 'U|xtsel'
+.continue END  ? _G|mehr
+.formula M|artnum = H|artex^nummer
+.formula M|artgtin = H|artex^gtin
+.formula M|artkuart = H|zkuartnr
+.continue END
+..
+!RAHMEN
+.assign U|xcustomer = M|wnum
+.assign U|xsupplier = M|wnum
+.continue ERRVKEK         ? _M|bvk  & _M|bek
+.formula U|xtsel = "%,,;@autostart=(1);kopf="
+.formula U|xtsel = U|xtsel + ";kopf^kunde=" + U|xcustomer  ?  M|bvk
+.formula U|xtsel = U|xtsel + ";kopf^lief="  + U|xsupplier  ?  M|bek
+.formula U|xtsel = U|xtsel + ";kopf^werk="  + M|wwerk  + ";kopf^ablstelle=" + M|wablstelle
+.formula U|xtsel = U|xtsel + ";artex="      + M|artnum
+.formula U|xtsel = U|xtsel + ";zkuartnr=="  + M|artkuart  ?  M|bvk
+.formula U|xtsel = U|xtsel + ";kopf^verwschl=" + M|raverwschl
+.formula U|xtsel = U|xtsel + ";kopf^abschlnr=" + M|raabbenr                           ?  M|kbrahmenmita
+.formula U|xtsel = U|xtsel + ";.kotyp==(BlanketOrder);status=`"
+.formula U|xtsel = U|xtsel + ";ablagef=no"
+.select sales 'U|xtsel'     ?  M|bvk
+.select purchasing 'U|xtsel'     ?  M|bek
+.continue END  ? _G|mehr
+.formula M|ranum = H|kopf^nummer
+.formula M|raverwschl = H|kopf^verwschl
+.formula M|raabbenr = H|kopf^abschlnr
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERRBOOL
+.error Markieren Sie ein Ankreuzfeld: Kunde oder Lieferant.
+.cursor bku 0
+.end 1
+..
+!ERRVKEK
+.error Markieren Sie ein Ankreuzfeld: Verkauf oder Einkauf.
+.cursor bvk 0
+.end 1

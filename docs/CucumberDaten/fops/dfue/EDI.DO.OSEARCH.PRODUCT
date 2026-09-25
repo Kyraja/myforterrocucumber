@@ -1,0 +1,77 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDI.DO.OSEARCH.PRODUCT
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : carue
+.. Functionality  : Finds product for edi messages in abas, updates edi
+..                  message with number of product.
+..*****************************************************************************
+.set trans -
+..
+.. Required: edi message in H buffer
+.continue NOEDI ? _F|defined(H|edinachr)
+.continue NOTYPE ? F|empty(H|edinachr)
+..
+.. This forecast should have failed format validation because of missing required fields!
+.continue NODATA ? F|empty(H|gtin) & F|empty(H|kuartnr)
+..
+.. Lock Edi message!
+.select lock edifact 'H|id'
+.continue NOLOCK ? _G|mehr ; _G|gesperrt
+..
+..
+.. Read products with GTIN
+.continue NOGTIN ? F|empty(H|gtin)
+.load 1 parts 'F|formatstr("$,,;@gruppe=1;gtin={1}",H|gtin)'
+.continue KUARTNR ? _G|mehr
+.formula H|ideksart = 1|nummer
+.continue RETURN
+!NOGTIN
+..
+..
+.. Read blanket order items with customer product number and customer
+!KUARTNR
+.continue NOKUART ? F|empty(H|kuartnr)
+.load 1 sales  'F|formatstr("$,,;@gruppe=2;kotyp=(BlanketOrder);kunde={1};status=`;zkuartnr=={2}", H|idkundesab, H|kuartnr)'
+.continue NOKUART ? _G|mehr
+.formula H|ideksart = 1|artikel^nummer
+.continue RETURN
+!NOKUART
+.. 
+..
+.. "Kein Rahmenauftrag mit dieser Kunden-Artikelnummer vorhanden"
+.formula H|fcode = 52  ? _F|empty(H|kuartnr)
+.. 
+.. "Kein Artikel mit dieser GTIN"
+.formula H|fcode = 53  ? _F|empty(H|gtin)
+..
+.. 
+!RETURN
+.formula H|status = 4 ? _F|empty(H|fcode)
+.rewrite
+..
+..
+.. release buffers
+.load 1 ? F|defined(1|id)
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!NOLOCK
+.error Das Sperren des EDI-Datensatzes 'H|nummer' ist gescheitert.
+.end 1
+..
+!NOEDI
+.error Fehler bei Start der Objektsuche: Kein EDI-Datensatz angegeben.
+.end 1
+..
+!NOTYPE
+.error Fehler bei Start der Objektsuche: EDI-Datensatz 'H|nummer' hat keinen Nachrichten-Eintrag.
+.end 1
+..
+!NODATA
+.error Die EDI-Nachricht 'H|nummer' enth„lt keine Angaben zur Identifikation eines Artikels!
+.end 1

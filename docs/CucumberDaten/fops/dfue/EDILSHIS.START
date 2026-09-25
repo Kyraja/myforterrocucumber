@@ -1,0 +1,66 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDILSHIS.START
+.. Autor          : ok
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Infosystem Lieferschein-Historie, Startbutton
+.. Functionality  : Infosystem Delivery Note History, Start button
+..*****************************************************************************
+.set trans -
+..
+.. Check required fields
+.continue ERRRAH  ?  F|empty(M|rahmen)
+.continue ERRART  ?  F|empty(M|kart)  &  _M|kballe
+..
+.. Start empty
+.make screen line -- ? M|tzeilen > 0
+.formula M|gesmge = 0
+..
+.. Query delivery note
+..   not on sorting: must not sort by fzahl because of returned shipments
+..   note on sorting by versionn: items are saved in reverse order
+.formula M|select = "$,,;kopf^fakt=(Yes);@gruppe=2;kotypn=4!5;@ordnung=artikel,kopf^vom.(Backwards),kopf^versionn.(Backwards),versionn"
+.formula M|select = M|select + ";kopf^vom="    + 'M|kvom' + "!" + 'M|kbis'     ? _F|empty(M|kvom) ; _F|empty(M|kbis)
+.formula M|select = M|select + ";kopf^kunde2=" + 'M|kkunde^id'                 ? 'M|rahmen^dnr'="3"
+.formula M|select = M|select + ";kopf^lief2="  + 'M|kkunde^id'                 ? 'M|rahmen^dnr'="4"
+..
+.. Which product?
+.formula M|select = M|select + ";artikel=" + M|kart^id                          ?  _M|kballe
+.formula M|select = M|select + ";artikel^gruppe==1;artikel^packmit=(No)"
+..
+.. Only rows that match the given blanket order
+.formula M|select = M|select + ";zrahmen=" + 'M|rahmen^id'
+..
+.. Include filed delivery notes?
+.formula M|select = M|select + ";@ablageart=(Active)"  ? _M|archiv
+.formula M|select = M|select + ";@ablageart=(Both)"   ?  M|archiv
+..
+.select sales 'M|select'  ?  'M|rahmen^dnr'="3"
+.select purchasing 'M|select'  ?  'M|rahmen^dnr'="4"
+.continue END  ? _G|mehr
+..
+!SHOW
+.continue NEXT  ?  H|mge = 0 & H|fzahl = 0
+.input 'M|tab'  ? _F|empty(M|tab)
+..
+!NEXT
+.select sales  ?  'M|rahmen^dnr'="3"
+.select purchasing  ?  'M|rahmen^dnr'="4"
+.continue END  ? _G|mehr
+.continue SHOW
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERRRAH: missing required field blanket order
+.error Geben Sie bitte einen Rahmenauftrag ein!
+.cursor rahmen 0
+.end 1
+..
+!ERRART: missing required field product / item
+.error Geben Sie bitte einen Artikel ein!
+.cursor kart 0
+.end 1

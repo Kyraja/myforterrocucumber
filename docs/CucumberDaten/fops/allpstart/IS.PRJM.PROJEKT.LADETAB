@@ -1,0 +1,902 @@
+..!interpreter english declaration noabbrev
+.. at 2016-12-22, 15:58
+.set TRANS -
+..========================================================================
+..==  Name              : IS.PRJM.PROJEKT.LADETAB
+..==  Pfad              : allpstart
+..==  Funktion          : l„dt die Projektstruktur in die Infosysteme
+..==  Erstellungsdatum  : 26.01.2010
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2013 alltrotec GmbH
+..==
+..========================================================================
+..====================================================
+.type text    xttemp            ? _F|defined(U|xttemp)
+.type text    xtprojekt         ? _F|defined(U|xtprojekt)
+.type real    xrposoll xrpoplan xrtasksoll xrtaskplan
+.type real    xrposoffen xrpopoffen
+.type real    xrpoist   xriststd xrpozus xrzusstd xrabgerstd  xrpoabger xrabgerber
+.type real    xrpofakt  xrfaktstd
+.type real    xrprsollges xrprsollber xrprplanges xrprplanber
+.type real    xrpvsollges xrpvsollber xrpvplanges xrpvplanber
+.type real    xraasollges xraasollber xraaplanges xraaplanber
+.type real    xristges xristber xrfaktges xrfaktber xrzusges
+.type text    xtystatus
+.type integer xiphzeile xipbzeile xiaazeile
+.type integer xizeile           ? _F|defined(U|xizeile)
+.type integer ximerkzeile       ? _F|defined(U|ximerkzeile)
+.type integer xiaktzeile        ? _F|defined(U|xiaktzeile)
+.type integer xistufe           ? _F|defined(U|xistufe)
+.type integer xi1               ? _F|defined(U|xi1)
+.type bool    xbprojekt         ? _F|defined(U|xbprojekt)
+.type bool    xbpvorgang        ? _F|defined(U|xbpvorgang)
+.type bool    xbaufgabe         ? _F|defined(U|xbaufgabe)
+.type bool    xbblatt           ? _F|defined(U|xbblatt)
+.type bool    xbabschluss       ? _F|defined(U|xbabschluss)
+.type bool    xbmehr            ? _F|defined(U|xbmehr)
+.type bool    xbok              ? _F|defined(U|xbok)
+.type bool    xbdnoetail        ? _F|defined(U|xbdnoetail)
+.type bool    xbselhist         ? _F|defined(U|xbselhist)
+.type bool    xbnocl            ? _F|defined(U|xbnocl)
+.type TAZ7    xeinh xstunden
+.type integer   xprocsp ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Submeldungen -----
+.formula U|xriststd   = 0
+.formula U|xrfaktstd  = 0
+.formula U|xrabgerstd = 0
+.formula U|xrzusstd   = 0
+.formula U|xiaazeile  = M|aktzeile
+.copy U|xbmehr = G|FALSE
+.load 2 group 'U|xydbgrsubmeldung' 'U|xtsel'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.load 2 line '2|selzeile'
+.copy U|xbok = G|mehr
+.continue EL001 ? _((U|xbok) & (F|defined(M|ystdvondatum)))
+.copy U|xbok = G|FALSE  ? 2|ytdatum < M|ystdvondatum & _F|empty(M|ystdvondatum)
+.copy U|xbok = G|FALSE  ? 2|ytdatum > M|ystdbisdatum & _F|empty(M|ystdbisdatum)
+!EL001
+.continue EL002 ? _((U|xbselhist) & (F|defined(M|ystichtag)))
+.copy U|xbok = G|FALSE  ? 2|ytdatum > M|ystichtag    & _F|empty(M|ystichtag)
+!EL002
+.continue EL003 ? _((U|xbok) & (((M|ybmitar) & (_(G|evtvar = "ybuaufzu")) & (_(G|evtvar = "ybualleazu"))) ; (G|evtvar = "ybualleauf") ; ((U|xbpvorgang & _F|empty(2|ytpvorgang)) ; (U|xbprojekt  &  F|empty(2|ytpvorgang)))))
+.make screen line +O
+.formula M|yfarbe   = U|xyfarbelnachweis
+.formula M|yebene   = 2|grbez
+.formula M|yobjekt  = 2|id
+.formula M|ynummer  = M|yobjekt^nummer ? F|defined(M|ynummer)
+.formula M|ysuch    = M|yobjekt^such   ? F|defined(M|ysuch)
+.formula M|ystatus  = U|xttxtre        ? F|empty(M|ystatus) & _F|empty(2|ytsmrenum)
+.formula M|ystatus  = U|xttxtls        ? F|empty(M|ystatus) & _F|empty(2|ytsmlsnum)
+.formula M|ystatus  = U|xttxtabrechn   ? F|empty(M|ystatus) & _F|empty(2|ytsmabrechnung)
+.formula M|yname    = 2|namebspr
+.formula M|yadatum  = 2|ytdatum
+.formula M|yedatum  = 2|ytdatum
+.continue EL004 ? _((F|defined(M|yistar)) ; (F|defined(M|yfaktar)) ; (F|defined(M|ystdabger)))
+.assign U|xeinh = '2|yeinh(L="0")'
+.continue EL005 ? _(G|mehr)
+.continue EL006 ? _(_(F|empty(U|xeinh)))
+.formula M|yistar    = 2|ymge * F|unitconvfactor(U|xstunden,U|xeinh)     ? F|defined(M|yistar)
+.formula M|yfaktar   = 2|ymge * F|unitconvfactor(U|xstunden,U|xeinh)     ? F|defined(M|yfaktar)
+.formula M|ystdabger = 2|ymge * F|unitconvfactor(U|xstunden,U|xeinh)     ? F|defined(M|ystdabger) & (_F|empty(2|ytsmlsnum) ; _F|empty(2|ytsmrenum))
+!EL006
+!EL005
+!EL004
+.assign M|yabrechnung = 2|ytsmabrechnung        ? F|defined(M|yabrechnung)
+.assign M|yls         = 2|ytsmlsposid           ? F|defined(M|yls)
+.assign M|ylsnum      = 2|ytsmlsnum             ? F|defined(M|ylsnum)
+.assign M|yre         = 2|ytsmreposid           ? F|defined(M|yre)
+.assign M|yrenum      = 2|ytsmrenum             ? F|defined(M|yrenum)
+.assign M|yvkartikel  = 2|yteil^id              ? F|defined(M|yvkartikel)
+.assign M|yprojsuch   = 2|yprojekt^such         ? F|defined(M|yprojsuch) & F|defined(2|yprojekt)
+.formula M|yiststart    = 2|ytdatum                     ? F|defined(M|yiststart)
+.formula M|yistend      = 2|ytdatum                     ? F|defined(M|yistend)
+.formula M|ytprojleit   = 2|yprojekt^yprojleit^id       ? F|defined(M|ytprojleit)
+.continue EL007 ? _(_(F|empty(2|ytbeschreib)))
+.output NEW 'U|xttemp'
+'2|ytbeschreib                                                                                                                     '
+.output NEW WERF.WEG
+.formula M|yftext = U|xttemp
+!EL007
+.formula M|ytb1 = G|TRUE
+.formula M|tbaumstufe = U|xistufe + 1
+!EL003
+.continue EL008 ? _(U|xbok)
+.assign U|xeinh = '2|yeinh(L="0")'
+.continue EL009 ? _(G|mehr)
+.continue EL010 ? _(_(F|empty(U|xeinh)))
+.formula U|xriststd   = U|xriststd   + (2|ymge * F|unitconvfactor(U|xstunden,U|xeinh))
+.formula U|xrfaktstd  = U|xrfaktstd  + (2|ymge * F|unitconvfactor(U|xstunden,U|xeinh))
+.formula U|xrabgerstd = U|xrabgerstd + (2|ymge * F|unitconvfactor(U|xstunden,U|xeinh))  ? _F|empty(2|ytsmlsnum) ; _F|empty(2|ytsmrenum)
+!EL010
+!EL009
+.copy    U|xbmehr     = G|TRUE
+!EL008
+.load 2 continue
+.continue LOOP001
+!ELOP001: ==============================
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Lade_LM_und_RM_zu_Referenz -----
+.formula U|xbmehr = G|FALSE
+.continue EL011 ? _((1|dnr    = U|xydbaufgabe) & (1|gruppe = U|xygraufgabe))
+.formula U|xriststd   = 0
+.formula U|xrfaktstd  = 0
+.formula U|xrabgerstd = 0
+.formula U|xrzusstd   = 0
+.formula U|xrtasksoll = U|xrtasksoll + 1|ysollstd
+.formula U|xrtaskplan = U|xrtaskplan + 1|yplanstd
+.formula U|xiaazeile  = M|aktzeile
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yaufgabe=" + 1|id
+.continue EL012 ? _(F|defined(M|ystdvondatum))
+.formula U|xtsel = U|xtsel + ";yadatum>=" +'M|ystdvondatum:8'   ? _F|empty(M|ystdvondatum)
+.formula U|xtsel = U|xtsel + ";yadatum<=" +'M|ystdbisdatum:8'   ? _F|empty(M|ystdbisdatum)
+!EL012
+.continue EL013 ? _((U|xbselhist) & (F|defined(M|ystichtag)))
+.formula U|xtsel = U|xtsel + ";yadatum<=" +'M|ystichtag:8'      ? _F|empty(M|ystichtag)
+!EL013
+.formula U|xtsel = U|xtsel + ";@ablageart=(1)"
+.load 2 group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.continue EL014 ? _(((M|ybmitar) & (_(G|evtvar = "ybuaufzu")) & (_(G|evtvar = "ybualleazu"))) ; (G|evtvar = "ybualleauf") ; (U|xbaufgabe))
+.make screen line +O
+.formula M|yfarbe      = U|xyfarbelnachweis
+.formula M|yebene      = 2|grbez
+.formula M|yobjekt     = 2|id
+.formula M|ynummer     = M|yobjekt^nummer   ? F|defined(M|ynummer)
+.formula M|ysuch       = M|yobjekt^such     ? F|defined(M|ysuch)
+.formula M|ystatus     = U|xttxtre          ? F|empty(M|ystatus) & _F|empty(2|yrenum)
+.formula M|ystatus     = U|xttxtls          ? F|empty(M|ystatus) & _F|empty(2|ylsnum)
+.formula M|ystatus     = U|xttxtabrechn     ? F|empty(M|ystatus) & _F|empty(2|yabrechnung)
+.formula M|ystatus     = U|xttxterledigt    ? F|empty(M|ystatus) & 2|yarchiv
+.formula M|yname       = 2|namebspr
+.copy    M|ytkunde     = 2|ykunde
+.formula M|ytkuname    = 2|ykunde^namebspr
+.formula M|yadatum     = 2|yadatum
+.formula M|yedatum     = 2|yedatum
+.formula M|yistar      = 2|yarbzeit         ? F|defined(M|yistar)
+.formula M|yfaktar     = 2|yfaktzeit        ? F|defined(M|yfaktar)
+.formula M|yberist     = 2|yarbzeit         ? F|defined(M|yberist)
+.formula M|yberfakt    = 2|yfaktzeit        ? F|defined(M|yberfakt)
+.formula M|ystdabger   = 2|yfaktzeit        ? F|defined(M|ystdabger) & (_F|empty(2|ylsnum) ; _F|empty(2|yrenum))
+.formula M|yzusatzalle = 2|yarbzeit         ? F|defined(M|yzusatzalle) & 2|ynachtrag
+.copy    M|ybz         = 2|ypersonal
+.assign M|yabrechnung  = 2|yabrechnung      ? F|defined(M|yabrechnung)
+.assign M|yls          = 2|ylsposid         ? F|defined(M|yls)
+.assign M|ylsnum       = 2|ylsnum           ? F|defined(M|ylsnum)
+.assign M|yre          = 2|yreposid         ? F|defined(M|yre)
+.assign M|yrenum       = 2|yrenum           ? F|defined(M|yrenum)
+.copy    M|ykstelle    = 2|ykstelle         ? F|defined(M|ykstelle)
+.copy    M|ytaetschl   = 2|ytaetschl        ? F|defined(M|ytaetschl)
+.copy    M|yarchiv     = 2|yarchiv          ? F|defined(M|yarchiv)
+.copy    M|yvkartikel  = 2|yvkartikel       ? F|defined(M|yvkartikel)
+.copy    M|ymaschvkart = 2|ymaschvkart      ? F|defined(M|ymaschvkart)
+.formula M|ymaschzeit  = 2|ymaschzeit       ? F|defined(M|ymaschzeit)
+.copy    M|ynachtrag   = 2|ynachtrag        ? F|defined(M|ynachtrag)
+.formula M|yprojsuch   = 2|yprojekt^such    ? F|defined(M|yprojsuch) & F|defined(2|yprojekt)
+.formula M|yiststart   = 2|yadatum              ? F|defined(M|yiststart)
+.formula M|yistend     = 2|yedatum              ? F|defined(M|yistend)
+.copy    M|ytprojleit  = 2|yprojekt^yprojleit   ? F|defined(M|ytprojleit)
+.copy    M|yverantw    = 2|yverantw             ? F|defined(M|yverantw)
+.continue EL015 ? _(_(F|empty(2|ybeschint)))
+.select from '2|ybeschint'
+.formula M|ybeschint = 2|ybeschint
+!EL015
+.continue EL016 ? _(_(F|empty(2|ybeschext)))
+.select from '2|ybeschext'
+.formula M|ybeschext = 2|ybeschext
+.formula M|yftext    = 2|ybeschext
+!EL016
+.formula M|ytb1 = G|TRUE
+.formula M|tbaumstufe = U|xistufe + 1
+!EL014
+.copy    U|xbmehr     = G|TRUE
+.formula U|xriststd   = U|xriststd   + 2|yarbzeit
+.formula U|xrfaktstd  = U|xrfaktstd  + 2|yfaktzeit
+.formula U|xrabgerstd = U|xrabgerstd + 2|yfaktzeit      ? _F|empty(2|ylsnum) ; _F|empty(2|yrenum)
+.formula U|xrzusstd   = U|xrzusstd   + 2|yarbzeit       ? 2|ynachtrag
+.load 2 continue
+.continue LOOP002
+!ELOP002: ==============================
+.formula U|xiaktzeile = M|aktzeile
+.select screen line 'U|xiaazeile'
+.formula M|tbaumstat = "+"      ? U|xbmehr &  _M|tbaumstat = "-"
+.continue EL017 ? _(((U|xbmehr) & (F|defined(M|ybuebersicht))) ; (F|defined(M|ybstrpruef)))
+.formula M|yberist       = U|xriststd
+.formula M|yberfakt      = U|xrfaktstd
+.formula M|ystdabger     = U|xrabgerstd     ? F|defined(M|ystdabger)
+.formula M|yzusatzalle   = U|xrzusstd       ? F|defined(M|yzusatzalle)
+.formula M|ybersolloffen = M|ysolltask - M|yberfakt
+.formula M|yberplanoffen = M|yplantask - M|yberist
+!EL017
+.continue EL018 ? _(((M|ybmitar) & (_(G|evtvar = "ybualleazu"))) ; (U|xbaufgabe) ; (G|evtvar = "ybualleauf"))
+.formula U|xistufe    = U|xistufe - 1
+!EL018
+.select screen line 'U|xiaktzeile'
+.formula U|xrpoist   = U|xrpoist   + U|xriststd
+.formula U|xrpofakt  = U|xrpofakt  + U|xrfaktstd
+.formula U|xrpozus   = U|xrpozus   + U|xrzusstd
+.formula U|xrpoabger = U|xrpoabger + U|xrabgerstd
+!EL011
+.continue EL019 ? _((1|dnr    = 4) & (1|gruppe = 5))
+.continue EL020 ? _(_(F|empty(1|ba)))
+.formula U|xtsel = "$,,nummer=" + 1|ba^nummer + "000!" + 1|ba^nummer + "999;@gruppe=2;@ablageart=(1)"
+.load 2 workorder 'U|xtsel'
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.continue EL021 ? _(((M|ybmitar) & (_(G|evtvar = "ybuaufzu")) & (_(G|evtvar = "ybualleazu"))) ; (G|evtvar = "ybualleauf") ; (U|xbaufgabe))
+.make screen line +O
+.formula M|yfarbe     = U|xyfarbelnachweis
+.formula M|yebene     = 2|grbez
+.formula M|yobjekt    = 2|id
+.formula M|ynummer    = M|yobjekt^nummer        ? F|defined(M|ynummer)
+.formula M|ysuch      = M|yobjekt^such          ? F|defined(M|ysuch)
+.formula M|yname      = 2|bem
+.formula M|yadatum    = 2|vom
+.formula M|yistar     = 2|bzeit                 ? F|defined(M|yistar)
+.formula M|ytb1 = TRUE
+.formula U|xistufe    = U|xistufe + 1
+.formula M|tbaumstufe = U|xistufe
+.formula U|xistufe    = U|xistufe - 1
+!EL021
+.assign U|xbmehr = G|TRUE       ? G|mehr
+.load 2 workorder
+.continue LOOP003
+!ELOP003: ==============================
+.formula U|xtsel = "$,,nummer==" + 1|ba^nummer + ";@gruppe=2;@ablageart=(1)"
+.load 2 workorder 'U|xtsel'
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.continue EL022 ? _(((M|ybmitar) & (_(G|evtvar = "ybuaufzu")) & (_(G|evtvar = "ybualleazu"))) ; (G|evtvar = "ybualleauf") ; (U|xbaufgabe))
+.make screen line +O
+.formula M|yfarbe     = U|xyfarbelnachweis
+.formula M|yebene     = 2|grbez
+.formula M|yobjekt    = 2|id
+.formula M|ynummer    = M|yobjekt^nummer        ? F|defined(M|ynummer)
+.formula M|ysuch      = M|yobjekt^such          ? F|defined(M|ysuch)
+.formula M|yname      = 2|bem
+.formula M|yadatum    = 2|vom
+.formula M|yistar     = 2|bzeit                 ? F|defined(M|yistar)
+.formula M|ytb1 = G|TRUE
+.formula U|xistufe    = U|xistufe + 1
+.formula M|tbaumstufe = U|xistufe
+.formula U|xistufe    = U|xistufe - 1
+!EL022
+.assign U|xbmehr = G|TRUE       ? G|mehr
+.load 2 workorder
+.continue LOOP004
+!ELOP004: ==============================
+.formula M|tbaumstat = "+"      ? U|xbmehr &  _M|tbaumstat = "-"
+!EL020
+!EL019
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Lade_untergeordnete_Projektvorgaenge -----
+.continue EL023 ? _(U|xizeile <= M|tzeilen)
+.select screen line 'U|xizeile'
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.formula U|xipbzeile = M|aktzeile
+.continue EL024 ? _(M|ytb1)
+.select screen line
+.formula U|xizeile = M|aktzeile
+.continue FI024
+!EL024
+.continue EL025 ? _(M|yistblatt)
+.continue EL026 ? _(_(F|defined(M|ybverwaltung)))
+.formula U|xistufe = M|tbaumstufe
+.formula U|xrpoist    = 0
+.formula U|xrpofakt   = 0
+.formula U|xrpoabger  = 0
+.formula U|xrpozus    = 0
+.formula U|xrtasksoll = 0
+.formula U|xrtaskplan = 0
+.formula U|xtystatus  = ""
+.load 9 add M|yobjekt
+.continue EL027 ? _(_(F|empty(9|yrefid)))
+.load 1 object '9|yrefid'
+.continue EL028 ? _(G|mehr)
+.formula M|tbaumstat = "+"               ? _G|evtvar = "tbaumaufzu"
+.continue EL029 ? _(((M|ybmitauf) & (_(G|evtvar = "ybuaufzu")) & (_(G|evtvar = "ybualleazu"))) ; ((U|xbpvorgang) & (U|xbblatt)) ; (G|evtvar = "ybualleauf"))
+.make screen line +O
+.formula M|yfarbe     = U|xyfarbeaufgabe
+.formula M|yebene     = 1|grbez
+.formula M|yobjekt    = 1|id
+.formula M|ynummer    = M|yobjekt^nummer ? F|defined(M|ynummer)
+.formula M|ysuch      = M|yobjekt^such   ? F|defined(M|ysuch)
+.continue EL030 ? _((1|dnr    = U|xydbaufgabe) & (1|gruppe = U|xygraufgabe))
+.formula M|ystatus    = 1|ystatus           ? F|defined(1|ystatus)
+.formula U|xtystatus  = M|ystatus
+.formula M|yname      = 1|namebspr
+.copy    M|ytkunde    = 1|ykunde            ? F|defined(1|ykunde)
+.formula M|ytkuname   = 1|ykunde^namebspr   ? F|defined(1|ykunde)
+.formula M|yadatum    = 1|yadatum           ? 1|dnr = U|xydbaufgabe & 1|gruppe = U|xygraufgabe
+.formula M|yedatum    = 1|yedatum
+.copy    M|ybz        = 1|ypersonal
+.formula M|ysollalle  = 1|ysollstd              ? F|defined(M|ysollalle)
+.formula M|yplanalle  = 1|yplanstd              ? F|defined(M|yplanalle)
+.formula M|ysolltask  = 1|ysollstd              ? F|defined(M|ysolltask)
+.formula M|yplantask  = 1|yplanstd              ? F|defined(M|yplantask)
+.formula M|yistar     = 1|yiststd               ? F|defined(M|yistar)
+.formula M|yfaktar    = 1|yfaktstd              ? F|defined(M|yfaktar)
+.formula M|ysolloffen = M|ysolltask - M|yfaktar ? F|defined(M|ysolloffen)
+.formula M|yplanoffen = M|yplantask - M|yistar  ? F|defined(M|yplanoffen)
+.formula M|yforecaststd = 1|yforecaststd        ? F|defined(M|yforecaststd)
+.formula M|ybucheckliste = 0|yclclvorhanden     ? F|defined(M|ybucheckliste)
+.copy    M|ytaetschl     = 1|ytaetschl          ? F|defined(M|ytaetschl)
+.copy    M|yprojteam     = 1|yprojteam          ? F|defined(M|yprojteam)
+.copy    M|ykstelle      = 1|ykstelle           ? F|defined(M|ykstelle)
+.copy    M|yvkartikel    = 1|yvkartikel         ? F|defined(M|yvkartikel)
+.copy    M|ymaschvkart   = 1|ymaschvkart        ? F|defined(M|ymaschvkart)
+.formula M|yprojsuch     = 1|yprojekt^such      ? F|defined(M|yprojsuch)
+.formula M|yiststart   = 1|ytatsterm            ? F|defined(M|yiststart)
+.formula M|ydauer      = 1|ydauer               ? F|defined(M|ydauer)
+.copy    M|ytprojleit  = 1|yprojekt^yprojleit   ? F|defined(M|ytprojleit)
+.copy    M|yverantw    = 1|yverantw             ? F|defined(M|yverantw)
+.continue EL031 ? _(_(F|empty(1|yftext)))
+.select from '1|yftext'
+.formula M|yftext = 1|yftext
+!EL031
+!EL030
+.continue EL032 ? _((1|dnr    = 4) & (1|gruppe = 5))
+.formula M|yadatum = 1|tsterm
+.formula M|yedatum = 1|tterm
+.formula M|yedatum = 1|fterm         ? 1|tterm < 1|fterm
+!EL032
+.formula M|ytb1 = G|TRUE
+.formula U|xistufe    = U|xistufe + 1
+.formula M|tbaumstufe = U|xistufe
+!EL029
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC002
+!RET001
+.formula xprocsp = xprocsp - 1
+!EL028
+!EL027
+.continue EL033 ? _(F|sysinfo(18)^allpstd)
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt=="   + H|id
+.formula U|xtsel = U|xtsel + ";ytpvorgang==" + 9|id             ? _U|xbselhist
+.formula U|xtsel = U|xtsel + ";ytpvorgang==" + 9|ypvorgang^id   ?  U|xbselhist
+.formula U|xtsel = U|xtsel + ";@ablageart=(1);@zeilen=(1)"
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+.formula U|xiaktzeile = M|aktzeile
+.select screen line 'U|xiaazeile'
+.formula M|tbaumstat = "+"      ? U|xbmehr &  _M|tbaumstat = "-" & _U|xistufe = 0
+.continue EL034 ? _(((U|xbmehr) & (F|defined(M|ybuebersicht))) ; (F|defined(M|ybstrpruef)))
+.formula M|yberist       = M|yberist       + U|xriststd
+.formula M|yberfakt      = M|yberfakt      + U|xrfaktstd
+.formula M|ystdabger     = M|ystdabger     + U|xrabgerstd       ? F|defined(M|ystdabger)
+.formula M|yzusatzalle   = M|yzusatzalle   + U|xrzusstd         ? F|defined(M|yzusatzalle)
+.formula M|ybersolloffen = M|ysolltask - M|yberfakt
+.formula M|yberplanoffen = M|yplantask - M|yberist
+!EL034
+.continue EL035 ? _(((M|ybmitar) & (_(G|evtvar = "ybualleazu"))) ; (U|xbpvorgang) ; (G|evtvar = "ybualleauf"))
+.formula U|xistufe    = U|xistufe - 1
+!EL035
+.select screen line 'U|xiaktzeile'
+.formula U|xrpoist   = U|xrpoist   + U|xriststd
+.formula U|xrpofakt  = U|xrpofakt  + U|xrfaktstd
+.formula U|xrpoabger = U|xrpoabger + U|xrabgerstd
+.formula U|xrpozus   = U|xrpozus   + U|xrzusstd
+!EL033
+.formula U|xiaktzeile = M|aktzeile
+!EL026
+.select screen line 'U|xipbzeile'
+.formula M|ytb1 = G|TRUE
+.formula M|yzusatzalle= U|xrpozus              ? F|defined(M|yzusatzalle)
+.formula U|xrzusges = U|xrzusges + U|xrpozus
+.continue EL036 ? _((F|defined(M|ybuebersicht)) ; (F|defined(M|ybstrpruef)))
+.formula M|yberist      = U|xrpoist
+.formula M|yberfakt     = U|xrpofakt
+.formula M|ybersolltask = U|xrtasksoll
+.formula M|yberplantask = U|xrtaskplan
+.formula M|ystdabger    = U|xrabgerstd     ? F|defined(M|ystdabger)
+.formula M|ybersolloffen = M|ysollpo - M|yfaktar
+.formula M|yberplanoffen = M|yplanpo - M|yistar
+.formula U|xrprsollber = U|xrprsollber + M|ysollpo
+.formula U|xrprplanber = U|xrprplanber + M|yplanpo
+.formula U|xrpvsollber = U|xrpvsollber + M|ysollpo
+.formula U|xrpvplanber = U|xrpvplanber + M|yplanpo
+.formula U|xraasollber = U|xraasollber + U|xrtasksoll
+.formula U|xraaplanber = U|xraaplanber + U|xrtaskplan
+.formula U|xristber    = U|xristber    + U|xrpoist
+.formula U|xrfaktber   = U|xrfaktber   + U|xrpofakt
+.formula U|xrabgerber  = U|xrabgerber  + U|xrpoabger
+.continue EL037 ? _((M|yknoten <> 0) & (M|yistblatt))
+.formula U|xrposoll   = M|ysollpo
+.formula U|xrpoplan   = M|yplanpo
+.formula U|xrposoffen = M|ysolloffen
+.formula U|xrpopoffen = M|yplanoffen
+.formula U|xrtasksoll = M|ybersolltask
+.formula U|xrtaskplan = M|yberplantask
+.formula U|xrpoist    = M|yberist
+.formula U|xrpofakt   = M|yberfakt
+.formula U|xrpoabger  = M|ystdabger     ? F|defined(M|ystdabger)
+.formula U|xiaktzeile = M|aktzeile
+!LOOP006: ==============================
+.continue ELOP006 ? _(M|yknoten <> 0)
+.select screen line 'M|yknoten'
+.continue EL038 ? _(M|aktzeile > G|evtzeile)
+.formula M|ybersollpo    = M|ybersollpo    + U|xrposoll
+.formula M|yberplanpo    = M|yberplanpo    + U|xrpoplan
+.formula M|ybersolloffen = M|ybersolloffen + U|xrposoffen
+.formula M|yberplanoffen = M|yberplanoffen + U|xrpopoffen
+.formula M|ybersolltask  = M|ybersolltask  + U|xrtasksoll
+.formula M|yberplantask  = M|yberplantask  + U|xrtaskplan
+.formula M|yberist       = M|yberist       + U|xrpoist
+.formula M|yberfakt      = M|yberfakt      + U|xrpofakt
+.formula M|ystdabger     = M|ystdabger     + U|xrpoabger    ? F|defined(M|ystdabger)
+!EL038
+.continue LOOP006
+!ELOP006: ==============================
+.select screen line 'U|xiaktzeile'
+!EL037
+!EL036
+.copy U|xbmehr = G|TRUE
+.continue FI025
+!EL025
+.continue EL039 ? _((G|evtzeile = M|aktzeile) ; ((_(U|xbdnoetail)) & (_(G|evtvar = "ybuaufzu"))) ; (G|evtvar = "ybualleauf"))
+.formula U|xistufe = M|tbaumstufe + 1
+.formula U|xi1     = M|tbaumstufe
+.type integer U|xikzeile.xi1         ? _F|defined(U|xikzeile.xi1)
+.formula U|xikzeile.xi1 = M|aktzeile
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ybezugsdatum==" + 'M|ystichtag:8'            ?  F|defined(M|ystichtag) & U|xbselhist
+.formula U|xtsel = U|xtsel + ";ygehoertzu="    +  M|yobjekt^id              ? _U|xbselhist
+.formula U|xtsel = U|xtsel + ";ygehoertzu="    +  M|yobjekt^ypvorgang^id    ?  U|xbselhist
+.formula U|xtsel = U|xtsel + ";ybprojektversion=(No)"                       ?  U|xbselhist
+.formula U|xtsel = U|xtsel + ";@ablageart=(1);@ordnung=ysort,nummer"
+.load 0 group 'U|xydbgrpvorgang' 'U|xtsel'  ? _U|xbselhist
+.load 0 group 'U|xydbgrpvstat' 'U|xtsel'    ?  U|xbselhist
+!LOOP007: ==============================
+.continue ELOP007 ? _(G|mehr)
+.make screen line +O
+.formula M|yfarbe     = U|xyfarbepvorgang        ?  0|yistblatt
+.formula M|yfarbe     = U|xyfarbepknoten         ? _0|yistblatt
+.formula M|yebene     = 0|grbez
+.formula M|yobjekt    = 0|id
+.formula M|ynummer    = M|yobjekt^nummer        ?  F|defined(M|ynummer)
+.formula M|ysuch      = M|yobjekt^such          ?  F|defined(M|ysuch)
+.formula M|ystatus    = 0|ystatus
+.formula M|yname      = 0|namebspr
+.formula M|ybz        = 0|ypersonal^id
+.formula M|yadatum    = 0|yadatum
+.formula M|yedatum    = 0|yedatum
+.formula M|yfortschritt = 0|yfortschritt        ? F|defined(M|yfortschritt)
+.formula M|ytechfort    = 0|ytechfort           ? F|defined(M|ytechfort)
+.formula M|ysollalle  = 0|ypvsollstd            ? F|defined(M|ysollalle)
+.formula M|yplanalle  = 0|ypvplanstd            ? F|defined(M|yplanalle)
+.formula M|ysollpo    = 0|ypvsollstd            ? F|defined(M|ysollpo)
+.formula M|yplanpo    = 0|ypvplanstd            ? F|defined(M|yplanpo)
+.formula M|yistar     = 0|ypviststd             ? F|defined(M|yistar)
+.formula M|yfaktar    = 0|ypvfaktstd            ? F|defined(M|yfaktar)
+.formula M|ysolloffen = M|ysollpo - M|yfaktar   ? F|defined(M|ysolloffen)
+.formula M|yplanoffen = M|yplanpo - M|yistar    ? F|defined(M|yplanoffen)
+.formula M|ybucheckliste    = 0|yclclvorhanden      ? F|defined(M|ybucheckliste)
+.copy    M|yarbpaket        = 0|yarbpaket           ? F|defined(M|yarbpaket)
+.formula M|yiststart    = 0|yiststart           ? F|defined(M|yiststart)
+.formula M|yistend      = 0|yistend             ? F|defined(M|yistend)
+.formula M|ydauer       = 0|ydauer              ? F|defined(M|ydauer)
+.assign  M|yreferenz    = 0|yrefid              ? F|defined(M|yreferenz)
+.assign  M|yreftyp      = 0|yreftyp             ? F|defined(M|yreftyp)
+.copy    M|yverantw     = 0|yverantw            ? F|defined(M|yverantw)
+.assign  M|yprojsuch    = 0|yprojekt^such       ? F|defined(M|yprojsuch) & F|defined(0|yprojekt)
+.formula M|tbaumstufe = U|xistufe
+.continue EL040 ? _(_(F|empty(0|yftext)))
+.select from '0|yftext'
+.formula M|yftext = 0|yftext
+!EL040
+.copy M|yistblatt= 0|yistblatt
+.formula U|xi1 = M|tbaumstufe
+.continue EL041 ? _(0|yistblatt)
+.formula U|xi1 = M|tbaumstufe - 1
+.formula M|yknoten = U|xikzeile.xi1
+.continue FI041
+!EL041
+.type integer U|xikzeile.xi1   ? _F|defined(U|xikzeile.xi1)
+.continue EL042 ? _(M|tbaumstufe = 1)
+.formula U|xikzeile.xi1 = M|aktzeile
+.continue FI042
+!EL042
+.formula U|xi1 = M|tbaumstufe - 1
+.formula M|yknoten = U|xikzeile.xi1
+.formula U|xi1 = M|tbaumstufe
+.formula U|xikzeile.xi1 = M|aktzeile
+!FI042
+!FI041
+.load 0 continue
+.continue LOOP007
+!ELOP007: ==============================
+.select screen line 'U|xizeile'
+.copy M|ytb1 = G|TRUE
+.continue FI039
+!EL039
+.formula M|tbaumstat = "+"
+.select screen line
+.formula U|xizeile = M|aktzeile
+!FI039
+!FI025
+!FI024
+.continue LOOP005
+!ELOP005: ==============================
+!EL023
+.continue 'xprocst.xprocsp'
+!PROC004: ----- Projektvorgang -----
+!LOOP008: ==============================
+.continue ELOP008 ? _(G|mehr)
+.make screen line +O
+.formula M|yfarbe     = U|xyfarbepvorgang       ?  0|yistblatt
+.formula M|yfarbe     = U|xyfarbepknoten        ? _0|yistblatt
+.formula M|yebene     = 0|grbez
+.formula M|yobjekt    = 0|id
+.formula M|ynummer    = M|yobjekt^nummer        ?  F|defined(M|ynummer)
+.formula M|ysuch      = M|yobjekt^such          ?  F|defined(M|ysuch)
+.formula M|ystatus    = 0|ystatus
+.copy    M|yreftyp    = 0|yreftyp               ?  F|defined(M|yreftyp)
+.formula M|yname      = 0|namebspr
+.formula M|ybz        = 0|ypersonal^id
+.formula M|yadatum    = 0|yadatum
+.formula M|yedatum    = 0|yedatum
+.formula M|yfortschritt = 0|yfortschritt            ? F|defined(M|yfortschritt)
+.formula M|ytechfort    = 0|ytechfort               ? F|defined(M|ytechfort)
+.formula M|ysollalle    = 0|ypvsollstd              ? F|defined(M|ysollalle)
+.formula M|yplanalle    = 0|ypvplanstd              ? F|defined(M|yplanalle)
+.formula M|ysollpo      = 0|ypvsollstd              ? F|defined(M|ysollpo)
+.formula M|yplanpo      = 0|ypvplanstd              ? F|defined(M|yplanpo)
+.formula M|yistar       = 0|ypviststd               ? F|defined(M|yistar)
+.formula M|yfaktar      = 0|ypvfaktstd              ? F|defined(M|yfaktar)
+.formula M|ysolloffen   = M|ysollpo - M|yfaktar     ? F|defined(M|ysolloffen)
+.formula M|yplanoffen   = M|yplanpo - M|yistar      ? F|defined(M|yplanoffen)
+.formula M|yforecaststd = 0|ypvforecaststd          ? F|defined(M|yforecaststd)
+.assign  M|ykalkposid       = 0|ykalkposid          ? F|defined(M|ykalkposid)
+.copy    M|yprojteam        = 0|yprojteam           ? F|defined(M|yprojteam)
+.copy    M|ykstelle         = 0|ykstelle            ? F|defined(M|ykstelle)
+.copy    M|yvkartikel       = 0|yvkartikel          ? F|defined(M|yvkartikel)
+.copy    M|ymaschvkart      = 0|ymaschvkart         ? F|defined(M|ymaschvkart)
+.copy    M|yklassifizierung = 0|yklassifizierung    ? F|defined(M|yklassifizierung)
+.assign  M|yprojsuch        = 0|yprojekt^such       ? F|defined(M|yprojsuch) & F|defined(0|yprojekt)
+.formula M|ybucheckliste    = 0|yclclvorhanden      ? F|defined(M|ybucheckliste)
+.copy    M|yarbpaket        = 0|yarbpaket           ? F|defined(M|yarbpaket)
+.formula M|yiststart    = 0|yiststart               ? F|defined(M|yiststart)
+.formula M|yistend      = 0|yistend                 ? F|defined(M|yistend)
+.formula M|ydauer       = 0|ydauer                  ? F|defined(M|ydauer)
+.assign  M|yreferenz    = 0|yrefid                  ? F|defined(M|yreferenz)
+.assign  M|yreftyp      = 0|yreftyp                 ? F|defined(M|yreftyp)
+.copy    M|yverantw     = 0|yverantw                ? F|defined(M|yverantw)
+.formula M|tbaumstufe = 1
+.continue EL043 ? _(_(F|empty(0|yftext)))
+.select from '0|yftext'
+.formula M|yftext = 0|yftext
+!EL043
+.formula U|xrprsollges = U|xrprsollges + 0|ypvsollstd
+.formula U|xrprplanges = U|xrprplanges + 0|ypvplanstd
+.formula U|xrpvsollges = U|xrpvsollges + 0|ypvsollstd
+.formula U|xrpvplanges = U|xrpvplanges + 0|ypvplanstd
+.formula U|xristges    = U|xristges    + 0|ypviststd
+.formula U|xrfaktges   = U|xrfaktges   + 0|ypvfaktstd
+.formula U|xrzusges    = U|xrzusges    + U|xrpozus
+.copy M|yistblatt = 0|yistblatt
+.load 0 continue
+.continue LOOP008
+!ELOP008: ==============================
+.formula U|xizeile = U|xizeile + 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC003
+!RET003
+.formula xprocsp = xprocsp - 1
+.continue 'xprocst.xprocsp'
+!PROC005: ----- Lade_Projekt -----
+.continue EL044 ? _(U|xypmrepruefktr)
+.formula U|xykoobjekt = M|yprojekt^yktr^id
+.input 'U|xypmrepruefktrprog'
+!EL044
+.continue EL045 ? _(U|xypmrepruefind)
+.input 'U|xypmrepruefindprog'
+!EL045
+.continue EL046 ? _((U|xyberlaubt) ; ((_(U|xypmrepruefktr)) & (_(U|xypmrepruefind))))
+.select screen line 'M|tzeilen' ? _G|evtvar = "ybuaufzu"
+.make screen line +O            ? _G|evtvar = "ybuaufzu"
+.formula U|xtprojekt = H|id
+.formula M|yfortschritt   = H|yfortschritt     ? F|defined(M|yfortschritt)
+.formula M|yfortistbudget = H|yfortistbudget   ? F|defined(M|yfortistbudget)
+.formula M|ytechfort      = H|ytechfort        ? F|defined(M|ytechfort)
+.formula M|yfarbe     = U|xyfarbeprojekt
+.continue EL047 ? _((G|FALSE) & (U|xbselhist))
+.formula M|yebene     = H|grbez
+.formula M|yobjekt    = H|id
+.formula M|ynummer    = M|yobjekt^nummer                ? F|defined(M|ynummer)
+.formula M|ysuch      = M|yobjekt^such                  ? F|defined(M|ysuch)
+.formula M|ystatus    = H|yprojekt^ystatus
+.formula M|yname      = H|namebspr
+.formula M|ybz        = H|yprojekt^yprojleit^id
+.formula M|ytkunde    = H|yprojekt^ykunde^id
+.formula M|ytkuname   = H|yprojekt^ykunde^namebspr
+.formula M|yadatum    = H|yprojekt^yadatum
+.formula M|yedatum    = H|yprojekt^yedatum
+.assign M|ytprojekttyp   = H|yprojekt^yprojekttyp^id    ? F|defined(M|ytprojekttyp)
+.assign M|yteilprojektzu = H|yprojekt^yteilprojektzu^id ? F|defined(M|yteilprojektzu)
+.assign M|yverantwkst    = H|yprojekt^yverantwkst^id    ? F|defined(M|yverantwkst)
+.assign M|yprojsuch      = H|such                       ? F|defined(M|yprojsuch)
+.assign M|yreferenz     = H|yprojekt^yvorgangid         ? F|defined(M|yreferenz)
+.assign M|ytprojleit    = H|yprojekt^yprojleit^id       ? F|defined(M|ytprojleit)
+.continue EL048 ? _(_(F|empty(H|yprojekt^yftext)))
+.select from 'H|yprojekt^yftext'
+.formula M|yftext = H|yprojekt^yftext
+!EL048
+.continue FI047
+!EL047
+.formula M|yebene     = H|grbez
+.formula M|yobjekt    = H|id
+.formula M|ynummer    = M|yobjekt^nummer        ? F|defined(M|ynummer)
+.formula M|ysuch      = M|yobjekt^such          ? F|defined(M|ysuch)
+.formula M|ystatus    = H|ystatus
+.formula M|yname      = H|namebspr
+.formula M|ybz        = H|yprojleit^id
+.formula M|ytkunde    = H|ykunde^id
+.formula M|ytkuname   = H|ykunde^namebspr
+.formula M|yadatum    = H|yadatum
+.formula M|yedatum    = H|yedatum
+.assign  M|ytprojekttyp   = H|yprojekttyp^id    ? F|defined(M|ytprojekttyp)
+.assign  M|yteilprojektzu = H|yteilprojektzu^id ? F|defined(M|yteilprojektzu)
+.assign  M|yverantwkst    = H|yverantwkst^id    ? F|defined(M|yverantwkst)
+.assign  M|yprojsuch      = H|such              ? F|defined(M|yprojsuch)
+.formula M|ybucheckliste  = H|yclclvorhanden    ? F|defined(M|ybucheckliste)
+.assign M|yreferenz     = H|yvorgangid           ? F|defined(M|yreferenz)
+.assign M|ytprojleit    = H|yprojleit^id         ? F|defined(M|ytprojleit)
+.continue EL049 ? _(_(F|empty(H|yftext)))
+.select from 'H|yftext'
+.formula M|yftext = H|yftext
+!EL049
+!FI047
+.copy    M|ytb1       = G|TRUE
+.formula M|tbaumstufe = 0
+.formula U|xiphzeile = M|aktzeile
+.formula U|xizeile = M|aktzeile
+.formula U|xistufe = 0
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt==" + H|id
+.formula U|xtsel = U|xtsel + ";ybezugsdatum==" + 'M|ystichtag:8'    ?  F|defined(M|ystichtag) & U|xbselhist
+.formula U|xtsel = U|xtsel + ";ygehoertzu==`"
+.formula U|xtsel = U|xtsel + ";ybprojektversion=(No)"                       ?  U|xbselhist
+.formula U|xtsel = U|xtsel + ";@ablageart=(1);@ordnung=ysort,nummer"
+.load 0 group 'U|xydbgrpvorgang' 'U|xtsel'  ? _U|xbselhist
+.load 0 group 'U|xydbgrpvstat' 'U|xtsel'    ?  U|xbselhist
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC004
+!RET004
+.formula xprocsp = xprocsp - 1
+.continue EL050 ? _(F|sysinfo(18)^allpstd)
+.select screen line 'U|xipbzeile'
+.select screen line 'M|tzeilen'         ? M|aktzeile = 0
+.formula U|xistufe = 0
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt==" + H|id
+.formula U|xtsel = U|xtsel + ";ytpvorgang==`;@ablageart=(1);@zeilen=(1)"
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC001
+!RET005
+.formula xprocsp = xprocsp - 1
+.formula U|xristber   = U|xristber   + U|xriststd
+.formula U|xrfaktber  = U|xrfaktber  + U|xrfaktstd
+.formula U|xrabgerber = U|xrabgerber + U|xrabgerstd
+!EL050
+.formula U|xiaktzeile = M|aktzeile
+.select screen line 'U|xiphzeile'
+.formula M|ysollalle  = U|xrprsollges           ? F|defined(M|ysollalle)
+.formula M|yplanalle  = U|xrprplanges           ? F|defined(M|yplanalle)
+.formula M|ysollph    = U|xrprsollges           ? F|defined(M|ysollph)
+.formula M|yplanph    = U|xrprplanges           ? F|defined(M|yplanph)
+.formula M|ysollpo    = U|xrpvsollges           ? F|defined(M|ysollpo)
+.formula M|yplanpo    = U|xrpvplanges           ? F|defined(M|yplanpo)
+.formula M|ysolltask  = U|xraasollges           ? F|defined(M|ysolltask)
+.formula M|yplantask  = U|xraaplanges           ? F|defined(M|yplantask)
+.formula M|yistar     = U|xristges              ? F|defined(M|yistar)
+.formula M|yfaktar    = U|xrfaktges             ? F|defined(M|yfaktar)
+.formula M|yzusatzalle= U|xrzusges              ? F|defined(M|yzusatzalle)
+.formula M|ysolloffen = M|ysollph - M|yfaktar   ? F|defined(M|ysolloffen)
+.formula M|yplanoffen = M|yplanph - M|yistar    ? F|defined(M|yplanoffen)
+.continue EL051 ? _((F|defined(M|ybuebersicht)) ; (F|defined(M|ybstrpruef)))
+.formula M|ybersollph   = U|xrprsollber
+.formula M|yberplanph   = U|xrprplanber
+.formula M|ybersollpo   = U|xrpvsollber
+.formula M|yberplanpo   = U|xrpvplanber
+.formula M|ybersolltask = U|xraasollber
+.formula M|yberplantask = U|xraaplanber
+.formula M|yberist      = U|xristber
+.formula M|yberfakt     = U|xrfaktber
+.formula M|ystdabger    = U|xrabgerber          ? F|defined(M|ystdabger)
+.formula M|ybersolloffen = M|ysollph - M|yberfakt
+.formula M|yberplanoffen = M|yplanph - M|yberist
+.continue EL052 ? _(F|defined(M|ybstrpruef))
+.select screen line 'M|tzeilen'
+.formula U|xizeile = M|aktzeile
+.formula U|xistufe = 0
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt=="     + H|id
+.formula U|xtsel = U|xtsel + ";ybezugsdatum==" + 'M|ystichtag:8'    ?  F|defined(M|ystichtag) & U|xbselhist
+.formula U|xtsel = U|xtsel + ";ygehoertzu^yistblatt=1"
+.formula U|xtsel = U|xtsel + ";ybprojektversion=(No)"                       ?  U|xbselhist
+.formula U|xtsel = U|xtsel + ";@ablageart=(1);@ordnung=ysort,nummer"
+.load 0 group 'U|xydbgrpvorgang' 'U|xtsel'  ? _U|xbselhist
+.load 0 group 'U|xydbgrpvstat' 'U|xtsel'    ?  U|xbselhist
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC004
+!RET006
+.formula xprocsp = xprocsp - 1
+.select screen line 'M|tzeilen'
+.formula U|xizeile = M|aktzeile
+.formula U|xistufe = 0
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt==" + H|id
+.formula U|xtsel = U|xtsel + ";ygehoertzu^ablagef=1"
+.formula U|xtsel = U|xtsel + ";@ablageart=(1);@ordnung=ysort,nummer"
+.load 0 group 'U|xydbgrpvorgang' 'U|xtsel'  ? _U|xbselhist
+.load 0 group 'U|xydbgrpvstat' 'U|xtsel'    ?  U|xbselhist
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC004
+!RET007
+.formula xprocsp = xprocsp - 1
+!EL052
+!EL051
+.select screen line 'M|tzeilen'
+!EL046
+.continue 'xprocst.xprocsp'
+!PROC006: ----- Farben -----
+.select screen header
+.select screen line
+!LOOP009: ==============================
+.continue ELOP009 ? _(G|mehr)
+.colour -BACKGROUND 'U|xtfarbe0' ystatus 'M|aktzeile'
+.colour -BACKGROUND 'M|yfarbe'           'M|aktzeile'
+.continue EL053 ? _(F|defined(M|ybuaufzu))
+.formula M|ybuaufzu  = ""
+.formula M|ybuaufzu  = "icon:plus_black"       ? M|tbaumstat = "+"
+.formula M|ybuaufzu  = "icon:minus_black"      ? M|tbaumstat = "-"
+!EL053
+.continue EL054 ? _(F|defined(M|ystufe))
+.formula M|ystufe = "----------" << (M|tbaumstufe) + 'M|tbaumstufe'
+!EL054
+.select screen line
+.continue LOOP009
+!ELOP009: ==============================
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.file -TEMPNAME U|xttemp
+.copy U|xstunden = U|xypmstunden
+.continue BRK001 ? _(G|evtvar = "ybuaufzu")
+.continue EL055 ? _(M|ybsort)
+.set TRANS +
+.box Hinweis
+Die Tabelle wurde sortiert.
+Auf- und zuklappen ist nicht mehr m”glich.
+
+Bitte das Projekt neu laden.
+.set TRANS -
+.continue FI055
+!EL055
+.continue BRK002 ? _(M|tbaumstat = "+")
+.formula M|tbaumstat = "-"
+.formula U|xistufe = M|tbaumstufe
+.load 8 add M|yobjekt
+.continue EL056 ? _(((M|yobjekt^dnr    = U|xydbprojekt) & (M|yobjekt^gruppe = U|xygrprojekt)) ; ((M|yobjekt^dnr    = U|xydbprojstat) & (M|yobjekt^gruppe = U|xygrprojstat)))
+.copy M|ytb1      = G|FALSE
+.copy U|xbprojekt = G|TRUE
+.select add M|yobjekt
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC005
+!RET008
+.formula xprocsp = xprocsp - 1
+.select screen line 'G|evtzeile'
+.copy M|ytb1      = G|TRUE
+!EL056
+.continue EL057 ? _(((M|yobjekt^dnr    = U|xydbpvorgang) & (M|yobjekt^gruppe = U|xygrpvorgang)) ; ((M|yobjekt^dnr    = U|xydbpvstat) & (M|yobjekt^gruppe = U|xygrpvstat)))
+.formula U|xizeile    =  M|aktzeile
+.formula M|ytb1       =  G|FALSE
+.formula U|xbpvorgang =  G|TRUE
+.formula U|xbblatt    =  M|yobjekt^yistblatt
+.select add M|yobjekt^yprojekt
+.continue EL058 ? _(U|xbselhist)
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt=="     +  M|yobjekt^yprojekt^id
+.formula U|xtsel = U|xtsel + ";ybezugsdatum==" + 'M|ystichtag:8'
+.formula U|xtsel = U|xtsel + ";ybprojektversion=(No)"
+.formula U|xtsel = U|xtsel + ";@ablageart=(1)"
+.load 0 group 'U|xydbgrpvstat' 'U|xtsel'    ?  U|xbselhist
+!EL058
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC003
+!RET009
+.formula xprocsp = xprocsp - 1
+.select screen line 'G|evtzeile'
+.formula M|ytb1       = G|TRUE
+!EL057
+.continue EL059 ? _(((M|yobjekt^dnr    = U|xydbaufgabe) & (M|yobjekt^gruppe = U|xygraufgabe)) ; ((M|yobjekt^dnr    = 4) & (M|yobjekt^gruppe = 5)))
+.formula M|ytb1      = G|FALSE
+.formula U|xbaufgabe = G|TRUE
+.select add M|yobjekt^yprojekt
+.load 1 object 'M|yobjekt^id'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC002
+!RET010
+.formula xprocsp = xprocsp - 1
+.select screen line 'G|evtzeile'
+.formula M|ytb1       = G|TRUE
+!EL059
+.continue ESAC002
+!BRK002
+.continue BRK003 ? _(M|tbaumstat = "-")
+.formula M|tbaumstat = "+"
+.formula U|xizeile = G|evtzeile
+.select screen line 'U|xizeile'
+.continue EL060 ? _(G|mehr)
+.formula U|xistufe = M|tbaumstufe
+.select screen line
+.continue EL061 ? _(G|mehr)
+!LOOP010: ==============================
+.continue ELOP010 ? _(M|tbaumstufe > U|xistufe)
+.make screen line -O
+.continue LOOP010
+!ELOP010: ==============================
+!EL061
+.select screen line 'U|xizeile
+.continue FI060
+!EL060
+.error(1111)
+.end 1
+!FI060
+.copy U|xbnocl = G|TRUE
+.continue ESAC002
+!BRK003
+.continue
+!ESAC002: =====   ENDCASE   =====
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC006
+!RET011
+.formula xprocsp = xprocsp - 1
+!FI055
+.continue ESAC001
+!BRK001
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC005
+!RET012
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET013" 
+.continue PROC006
+!RET013
+.formula xprocsp = xprocsp - 1
+!ESAC001: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJM.PROJEKT.LADETAB")'  ? F|fileexists(F|foppath("IFOP.IS.PRJM.PROJEKT.LADETAB"))
+.continue

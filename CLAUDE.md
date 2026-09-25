@@ -2,6 +2,8 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+For GitHub Copilot, use `.github/copilot-instructions.md` as the primary instruction file.
+
 ## Project Overview
 
 **cucumbergnerator** is a local web app for generating Cucumber/Gherkin BDD test scenarios in an **abas ERP** consulting context. Consultants write customization concepts (Anforderungstexte) and need to generate structured test scenarios documenting deviations from standard behavior — new fields, record creation, process changes.
@@ -67,3 +69,12 @@ Vitest with happy-dom environment. Pure logic tests in `src/lib/*.test.ts` are t
 ### Note on Node Version
 
 The project was scaffolded on Node 18.17.1. Vite 7 and some dev deps emit engine warnings but work. Upgrading to Node 20+ is recommended.
+
+## graphify
+
+This project has a graphify knowledge graph at graphify-out/.
+
+Rules:
+- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
+- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
+- After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)

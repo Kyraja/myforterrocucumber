@@ -1,0 +1,69 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDI.DO.OSEARCH.CONFIGPARTNER
+.. Author         : carue
+.. Verantwortlich : carue
+.. Kontrolle      : dsch
+.. Functionality  : Find partner for configuration of edi processing
+..*****************************************************************************
+.set trans -
+..
+.type text    xtfehler     ? _F|defined(U|xtfehler)
+.type text    xtfrbez      ? _F|defined(U|xtfrbez)
+.type text    xtgruppe     ? _F|defined(U|xtgruppe)
+.type text    xtgln        ? _F|defined(U|xtgln)
+.type text    xtbezeichner ? _F|defined(U|xtbezeichner)
+.type P53     xvedifact    ? _F|defined(U|xvedifact)
+..
+.type P0      xvkunde      ? _F|defined(U|xvkunde)
+..
+.formula U|xtfehler = "rmtmp/X.ERR." + pid + ".TMP"
+..
+..Required: edi message in H buffer
+.continue NOEDI  ? _F|defined(H|edinachr)
+.continue NOTYPE ?  F|empty(H|edinachr)
+..
+.. Lock Edi message!
+.select lock edifact 'H|id'
+.continue NOLOCK ? _G|mehr ; _G|gesperrt
+..
+.formula U|xtfrbez      = H|idkundeab
+.formula U|xtgruppe     = "1.2"
+.formula U|xtgln        = H|glkundeab
+.formula U|xvedifact    = H|id
+..
+.set trans +
+.formula U|xtbezeichner = "Kunde"
+.set trans -
+..
+.input "EDI.DO.OSEARCH.ORDERS.CUSTOMER"
+.continue NOCUST ? F|empty(U|xvkunde)
+..
+.formula H|partner = U|xvkunde
+.continue RETURN
+..
+..*****************************************************************************
+..
+!NOCUST: No Success!
+.formula H|fcode  = 60
+.formula H|status = 4
+.formula H|ftext  = U|xtfehler
+..
+!RETURN
+.rewrite
+..
+..*****************************************************************************
+!END
+.continue
+..
+!NOLOCK
+.error Das Sperren des EDI-Datensatzes 'H|nummer' ist gescheitert.
+.end 1
+..
+!NOEDI
+.error Fehler bei Start der Objektsuche: Kein EDI-Datensatz angegeben.
+.end 1
+..
+!NOTYPE
+.error Fehler bei Start der Objektsuche: EDI-Datensatz 'H|nummer' hat keinen Nachrichten-Eintrag.
+.end 1

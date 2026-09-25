@@ -1,0 +1,174 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : DISPLAYS.EV
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      : xg
+.. Funktion       : Behandelt je nach Ereignis die Nebenfunktionen.
+.. Ablauf         : Zentrales Ereignis-EFOP
+..
+.. Functionality  : Event handling of the smaller functions.
+.. Program flow   : Central event efop
+...Includes       :
+.. include email/SENDTO
+..*****************************************************************************
+.set trans -
+..------------------------------ Header:  -------------------------------------
+.continue RANGE   ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "anzstufen"
+.continue CLEAR   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "anzstufen"
+.continue CLEAR   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "userexcl"
+.continue CLEAR   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "screenexcl"
+.continue CLEAR   ? G|evtartengl = "FIELD_FILL"    & G|evtvar = "userview"
+.continue CLEAR   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "pidexpiry"
+.continue EMAIL   ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "buemail"
+.continue PREKILL ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "tbukill"
+.continue KILLPID ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "tbukill"
+.continue CLIENT  ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "buselclientname"
+.continue TSTMODE ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "testmode"
+.continue INPFILE ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "treeviewfile"
+..==============================================================================
+.continue END
+..
+!INPFILE: Input file was set
+.continue ERROR10 ? _M|testmode
+.continue ERROR10 ?  F|empty(M|treeviewfile)
+.continue CLEAR
+..
+!TSTMODE: Test mode was clicked
+.continue TESTOFF ? _M|testmode
+.protection -reset treeviewfile 0
+.assign M|treeviewfile = ""
+.continue CLEAR
+..
+!TESTOFF: Test mode off
+.file -screen -tempname M|treeviewfile
+.protection treeviewfile 0
+.continue CLEAR
+..
+!CLIENT: Select a client name
+.input "is/SELECT.NAMEOFCLIENT"
+.formula M|clientname = U|xclient
+.continue CLEAR
+..
+!PREKILL: Init breaking the process
+.continue ERROR05 ? F|empty(M|thost)
+.continue ERROR06 ? F|empty(M|tinterface)
+.continue ERROR07 ? F|empty(M|tscreen)
+.continue ERROR08 ? F|empty(M|tpid)
+.continue ERROR09 ? G|mandant = M|tclient & G|pid = M|tpid
+..
+.type ID87:9 xcallparam
+.assign U|xcallparam = M|callparam^id
+.continue END ? F|empty(U|xcallparam)
+.input "st/CALLPARAM.EXEC"
+.continue END
+..
+!KILLPID: Break process
+.. Takes a little time to clear datmod.dat
+.system "sleep 10" background
+.continue CLEAR
+..
+!EMAIL: Open MUA to send an email to the staff member
+.continue ERROR02 ? F|empty(M|userref)
+.continue ERROR03 ? F|empty(M|userref^email)
+.continue ERROR04 ? _F|diraccessible("email")
+.type text xmail ? _F|defined(U|xmail)
+.assign U|xmail = M|userref^email
+.input "email/SENDTO"
+.continue END
+..
+!RANGE: Check validation of given tree level
+.type integer xanzstufen
+.assign U|xanzstufen = G|evtfeldneu
+.continue ERROR01 ? _G|mehr
+.continue ERROR01 ? U|xanzstufen < 1 ; U|xanzstufen > 3
+.continue END
+..
+!CLEAR: This will clear header data which are based on the table data
+.formula M|allscreens  = 0
+.formula M|allusers    = 0
+.formula M|allpids     = 0
+.formula M|pidsofscr   = 0
+.formula M|usersofscr  = 0
+.formula M|scrofuser   = 0
+.formula M|pidsofuser  = 0
+.formula M|stufe = 0
+.formula M|rootrow = 0
+.formula M|motherrow = 0
+.formula M|lineoffile = 0
+.formula M|interface = ""
+.formula M|screen = ""
+.formula M|usersymbol = ""
+.formula M|passwdref = ""
+.formula M|userref = ""
+.formula M|client = ""
+.formula M|host = ""
+.formula M|location = ""
+.formula M|pid = ""
+.formula M|callerno = ""
+.formula M|dateofpid = ""
+.formula M|timeofpid = ""
+.continue TABLE
+..
+!REFRESH: Clear process table and refresh report table
+.system  'F|expr("sleep 3")' background
+.input "sy/DISPLAYS.BSTART.BV"
+.input "sy/DISPLAYS.BSTART.BN"
+.continue END
+..
+!TABLE: This will clear table
+.input 'M|cleartable' ? _F|empty(M|cleartable)
+.continue REFRESH ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tbukill"
+.continue END
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!BREAK
+.end 1
+..
+..
+!ERROR01: Wrong number of levels!
+.error -line 0 -field M|anzstufen -message Die Anzahl der Stufen muss zwischen 1 und 3 liegen!
+.continue BREAK
+..
+!ERROR02: No staffer found!
+.error -line 0 -field M|userref -message Es ist kein Mitarbeiter als EmpfÑnger vorhanden!
+.continue BREAK
+..
+!ERROR03: Staffer has no email address!
+.error -line 0 -field M|userref -message Der Mitarbeiter 'F|trim(F|tostring(M|userref))' hat keine E-Mail-Adresse!
+.continue BREAK
+..
+!ERROR04: Permission for emails is missing!
+.error -line 0 -field M|buemail -message Die Kontaktaufnahme durch diesen Button ist nicht erlaubt!
+.continue BREAK
+..
+!ERROR05: You cannot kill processes without host!
+.cursor host 0
+.continue KILLERR
+..
+!ERROR06: You cannot kill processes without interface!
+.cursor interface 0
+.continue KILLERR
+..
+!ERROR07: You cannot kill processes without display!
+.cursor screen 0
+.continue KILLERR
+..
+!ERROR08: You cannot kill processes without ID of process!
+.cursor pid 0
+.continue KILLERR
+..
+!KILLERR
+.error -message Um einen Abbruch auszufÅhren, benîtigt man diese Angabe!
+.continue BREAK
+..
+!ERROR09: You cannot kill own process!
+.error -line 'M|aktzeile' -field M|tbukill -message Das eigene Programm darf man nicht beenden!
+.continue BREAK
+..
+!ERROR10: Program (test mode) is not correctly used
+.error -line 0 -field M|treeviewfile -message Falsche Verwendung des Programms!
+.continue BREAK

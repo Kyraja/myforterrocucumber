@@ -1,0 +1,97 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name                    : DISPLAYS.BSTART.BV
+.. Autor                       : fwester
+.. Verantwortlich              : fwester
+.. Kontrolle                   : xg
+.. Funktion                    : Erzeugt unter Verwendung von lizinfo.sh die
+.. Dateien, aus denen die Baumstruktur erstellt sowie die gesamte Zahl von
+.. Bildschirmen bzw. Benutzern der Installation berechnet wird.
+.. Ablauf                      : Button-vor-EFOP des Startbuttons
+..
+.. Functionality               : Creates the files for the visualization of the
+.. treeview as well as for calculaating the the number of screens and user of the
+.. installation by using the shell script lizinfo.sh.
+.. Program flow                : Before button efop of the start button
+..*****************************************************************************
+.set trans -
+..
+.continue ERROR02 ?  F|empty(M|treeviewfile)
+.continue ERROR03 ?  M|testmode & _F|fileexists('M|treeviewfile')
+.continue SUMS    ? _F|defined(M|cleartable)
+.input 'M|cleartable' ? M|cleartable <> "" & M|tzeilen > 0
+..
+!SUMS: Reset header fields which refers to table data
+.formula M|allscreens  = 0
+.formula M|allusers    = 0
+.formula M|allpids     = 0
+.formula M|pidsofscr   = 0
+.formula M|usersofscr  = 0
+.formula M|scrofuser   = 0
+.formula M|pidsofuser  = 0
+.formula M|stufe = 0
+.formula M|rootrow = 0
+.formula M|motherrow = 0
+.formula M|lineoffile = 0
+.formula M|interface = ""
+.formula M|screen = ""
+.formula M|usersymbol = ""
+.formula M|passwdref = ""
+.formula M|userref = ""
+.formula M|client = ""
+.formula M|host = ""
+.formula M|location = ""
+.formula M|pid = ""
+.formula M|callerno = ""
+.formula M|dateofpid = ""
+.formula M|timeofpid = ""
+..
+.. Declarations
+.type text xsyscmmd
+..
+.. Control test mode and userview
+.continue NUMSCR  ? M|testmode & M|userview
+.continue NUMUSR  ? M|testmode
+.continue USRVIEW ? M|userview
+..
+.. Create result file with treeview data sorted in order of screens, users and processes
+.occupy 'M|treeviewfile'
+.formula U|xsyscmmd = "lizinfo.sh -s -t" + M|fieldsep + " >" + M|treeviewfile
+.system 'U|xsyscmmd' background
+.continue ERROR01 ? _G|mehr
+..
+!NUMUSR: Create result file with number of users in the whole installation
+.formula U|xsyscmmd = "cut -f2,3 -d" + M|fieldsep + " -s " + M|treeviewfile + " | sort -u | wc -l > " + M|usersfile
+.system 'U|xsyscmmd' background
+.continue ERROR01 ? _G|mehr
+.continue UNLOCK
+..
+!USRVIEW: Create result file with treeview data sorted in order of users, screens and processes
+.formula U|xsyscmmd = "lizinfo.sh -u -t" + M|fieldsep + " >" + M|treeviewfile
+.system 'U|xsyscmmd' background
+.continue ERROR01 ? _G|mehr
+..
+!NUMSCR: Create result file with number of licenses in the whole installation
+.formula U|xsyscmmd = "cut -f3 -d" + M|fieldsep + " -s " + M|treeviewfile + " | sort -u | wc -l > " + M|usersfile
+.system 'U|xsyscmmd' background
+.continue ERROR01 ? _G|mehr
+..
+!UNLOCK
+.occupy
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR01: System call failed!
+.occupy
+.error -message Das Bestimmen der Lizenzdaten ist gescheitert!
+.end 1
+..
+!ERROR02: Filename ist empty!
+.error -line 0 -message Dateiname fehlt!
+.end 1
+..
+!ERROR03: Filename ist empty!
+.error -line 0 -message 'F|formatstr("Die Datei {1} wurde nicht gefunden!", M|treeviewfile)'
+.end 1

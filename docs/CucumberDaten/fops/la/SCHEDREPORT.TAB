@@ -1,0 +1,214 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SCHEDREPORT.TAB
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type GL9   xifehlertyp   ? _F|defined(U|xifehlertyp)
+.type A288  xfehlertyp    ? _F|defined(U|xfehlertyp)
+.type text  xartikel      ? _F|defined(U|xartikel)
+.type text  xbeschaffung  ? _F|defined(U|xbeschaffung)
+.type text  xreservierung ? _F|defined(U|xreservierung)
+.type text  xhinweis      ? _F|defined(U|xhinweis)
+.type PS2:1 xvartikel      ? _F|defined(U|xvartikel)
+..
+.atext -language 'G|bsprache' xartikel 779 Artikel
+.atext -language 'G|bsprache' xreservierung 3139 Reservierung
+.atext -language 'G|bsprache' xbeschaffung 2408 Beschaffung
+..
+.formula U|xhinweis = ""
+..
+.continue END   ? _F|empty(M|lgruppe) & (H|bezobj^id <> M|lgruppe^id)
+.continue END   ? (H|prio = 2 ; H|prio = 3 ; H|prio = 4) & M|alle & H|menge = 0
+.continue END   ? H|prio > 8
+.continue END   ? H|prio = 0
+.assign U|xifehlertyp = F|value(H|prio, "I9")
+.assign U|xfehlertyp = F|tovalue(F|tostring(U|xifehlertyp), "AN288")
+.continue END   ? (H|vorgang^dnr <> 2 & _H|vorgang^dnr = 0) & M|bfehler & _F|equals(U|xfehlertyp, "(Shortage)")
+..
+.continue CONTINUE ? F|empty(H|vorgang)
+.assign U|xvartikel  = H|vorgang       ? H|gruppe = 2
+.assign U|xvartikel  = H|vorgang^artex ? F|empty(U|xvartikel) 
+.continue END   ? M|eigen & _F|equals(U|xvartikel^bsart, "(InhouseProduction)")
+.continue END   ? M|fremd & _F|equals(U|xvartikel^bsart, "(ExternalProcurement)")
+.continue END   ? _F|empty(M|ebetreuer) & U|xvartikel^ebetreuer^id <> M|ebetreuer^id
+.continue END   ? _F|empty(M|fbetreuer) & U|xvartikel^fbetreuer^id <> M|fbetreuer^id
+..
+!CONTINUE
+.continue TYP5  ? M|alle & _F|empty(M|artikel)
+.continue PTYP3 ? H|prio = 1 & M|alle
+.continue PTYP2 ? (H|prio = 5 ; H|prio = 6 ; H|prio = 7) & M|alle
+.continue PTYP  ? M|alle
+.continue TYP   ? M|dtyp1 ; M|dtyp2 ; M|dtyp3 ; M|dtyp7
+.continue TYP2  ? M|dtyp4
+.continue TYP3  ? M|dtyp5
+.continue TYP4  ? M|dtyp6
+.continue TYP5
+..
+!TYP: Negativer Bestand / Fehlmenge / šberdeckung / gesperrte Artikel 
+.continue END ? M|dtyp1 & (H|prio = 1 ; H|prio = 3 ; H|prio = 4 ; H|prio = 5 ; H|prio = 6 ; H|prio = 7 ; H|prio = 8)
+.continue END ? M|dtyp2 & (H|prio = 1 ; H|prio = 2 ; H|prio = 4 ; H|prio = 5 ; H|prio = 6 ; H|prio = 7 ; H|prio = 8)
+.continue END ? M|dtyp3 & (H|prio = 1 ; H|prio = 2 ; H|prio = 3 ; H|prio = 5 ; H|prio = 6 ; H|prio = 7 ; H|prio = 8)
+.. gesperrte Artikel wie Fehlmenge bahandeln
+.continue END ? M|dtyp7 & (H|prio = 1 ; H|prio = 2 ; H|prio = 4 ; H|prio = 5 ; H|prio = 6 ; H|prio = 7 ; H|prio = 8)
+..
+!PTYP 
+.make screen line +o
+.assign M|bezobj    = H|bezobj
+.copy M|prio        = H|prio
+.formula M|erfass   = H|erfass
+.formula M|stand    = H|stand
+.assign M|fehlertyp = U|xfehlertyp
+.assign M|vorgang   = H|vorgang
+.formula M|vtyp     = U|xartikel       ? H|vorgang^dnr = 2 & H|vorgang^gruppe = 1
+.formula M|vtyp     = U|xreservierung  ? H|vorgang^dnr = 4 & H|vorgang^gruppe = 4
+.formula M|vtyp     = U|xbeschaffung   ? H|vorgang^dnr = 4 & (H|vorgang^gruppe = 2 ; H|vorgang^gruppe = 5)
+.formula M|menge    = H|menge
+.assign M|tartikel  = H|vorgang       ? H|gruppe = 2
+.assign M|tartikel  = H|vorgang^artex ? F|empty(M|tartikel)
+.formula M|ticon    = "icon:stop"     ? H|vorgang^dnr = 2 & (H|prio = 2 ; H|prio = 4 ; H|prio =8)
+.formula M|ticon    = "icon:ok"          ? H|vorgang^dnr = 4 & H|prio = 2
+.formula M|ticon    = "icon:information" ? H|vorgang^dnr = 4 & H|prio = 4
+.formula M|ticon    = "icon:stop"        ? H|vorgang^dnr = 4 & H|prio = 3
+.copy M|le          = M|tartikel^le
+.copy M|tbsart      = M|tartikel^bsart
+.copy M|tdispoa     = M|tartikel^dispoa
+.copy M|teart       = M|tartikel^eart
+.formula M|tmindest = M|tartikel^mindest
+.formula M|tlosgr   = M|tartikel^losgr
+.formula M|tlosbild = M|tartikel^losbild
+.copy M|tebetreuer  = M|tartikel^ebetreuer
+.copy M|tfbetreuer  = M|tartikel^fbetreuer
+.assign M|tlgruppe  = H|bezobj            ? H|bezobj^dnr = 39
+.reserve
+.select add M|tartikel
+.continue END ? _G|mehr
+.copy H|lgruppean = M|tlgruppe   ? _F|empty(M|tlgruppe)
+.copy M|bplanaktuell = H|disponiert
+..gesperrte Artikel raussortieren
+.make screen line -o    ? M|dtyp7 & M|fehlertyp = "Fehlmenge"
+.select 
+.continue END
+..
+!TYP2: Plankarte mit zu vielen BS / RES / MZ
+.continue END   ? (H|prio = 1 ;  H|prio = 2 ; H|prio = 3 ; H|prio = 4 ; H|prio = 8)  
+..
+!PTYP2
+.make screen line +o
+.assign M|bezobj     = H|bezobj
+.copy M|prio         = H|prio
+.formula M|erfass    = H|erfass
+.formula M|stand     = H|stand
+.assign M|fehlertyp  = U|xfehlertyp
+.assign M|vorgang    = H|vorgang
+.formula M|vtyp      = U|xartikel       ? H|vorgang^dnr = 2 & H|vorgang^gruppe = 1
+.formula M|vtyp      = U|xreservierung  ? H|vorgang^dnr = 4 & H|vorgang^gruppe = 4
+.formula M|vtyp      = U|xbeschaffung   ? H|vorgang^dnr = 4 & (H|vorgang^gruppe = 2 ; H|vorgang^gruppe = 5)
+.formula M|wert      = H|wert
+.assign M|tartikel   = H|vorgang ? H|gruppe = 2
+.formula M|ticon     = "icon:stop"      ? H|vorgang^dnr = 2
+.copy M|tbsart       = M|tartikel^bsart
+.copy M|tdispoa      = M|tartikel^dispoa
+.copy M|teart        = M|tartikel^eart
+.formula M|tmindest  = M|tartikel^mindest
+.formula M|tlosgr    = M|tartikel^losgr
+.formula M|tlosbild  = M|tartikel^losbild
+.copy M|tebetreuer   = M|tartikel^ebetreuer
+.copy M|tfbetreuer   = M|tartikel^fbetreuer
+.assign M|tlgruppe   = H|bezobj ? H|bezobj^dnr = 39
+.reserve
+.select add M|vorgang
+.continue PLAN  ? _G|mehr
+.formula H|lgruppean = M|tlgruppe ? _F|empty(M|tlgruppe)
+.copy M|bplanaktuell = H|disponiert 
+.select 
+!PLAN
+.set trans +
+.formula U|xhinweis = F|formatstr("Plankarte mit {1} Zeilen.", 'M|wert')
+.set trans -
+.formula M|hinweis  = U|xhinweis 
+.continue END
+..
+!TYP3: Konfiguration          
+.continue END         ? (H|prio = 2 ; H|prio = 3 ; H|prio = 4 ; H|prio = 5 ; H|prio = 6 ; H|prio = 7 ; H|prio = 8)
+..
+!PTYP3
+.make screen line +o
+.copy M|prio        = H|prio
+.assign M|fehlertyp = U|xfehlertyp
+.formula M|erfass   = H|erfass
+.formula M|stand    = H|stand
+.formula M|varname  = H|varname
+.formula M|wert     = H|wert
+.assign M|tartikel  = H|vorgang ? H|gruppe = 2
+.copy M|tbsart      = M|tartikel^bsart
+.copy M|tdispoa     = M|tartikel^dispoa
+.copy M|teart       = M|tartikel^eart
+.formula M|ticon    = "icon:stop"
+.formula M|tmindest = M|tartikel^mindest
+.formula M|tlosgr   = M|tartikel^losgr
+.formula M|tlosbild = M|tartikel^losbild
+.copy M|tebetreuer  = M|tartikel^ebetreuer
+.copy M|tfbetreuer  = M|tartikel^fbetreuer
+.assign M|tlgruppe  = H|bezobj    ? H|bezobj^dnr = 39
+.copy M|bplanaktuell = G|FALSE
+.set trans +
+.formula U|xhinweis = F|formatstr("Wert {1} von Parameter {2} nicht erlaubt.", 'M|wert', 'M|varname')  
+.set trans -
+.formula M|hinweis  = U|xhinweis
+.continue END
+..
+!TYP4: Zyklus
+.continue END         ? (H|prio = 1 ; H|prio = 2 ; H|prio = 3 ; H|prio = 4 ; H|prio = 5 ; H|prio = 6 ; H|prio = 7)
+.continue PTYP
+..
+!TYP5: Artikel und Lagergruppe
+.continue END         ? H|prio = 0 
+.continue END         ? H|prio > 8
+.make screen line +o
+.assign M|bezobj    = H|bezobj
+.copy M|prio        = H|prio
+.formula M|erfass   = H|erfass
+.formula M|stand    = H|stand
+.assign M|fehlertyp = U|xfehlertyp
+.assign M|vorgang   = H|vorgang
+.formula M|vtyp     = U|xartikel       ? H|vorgang^dnr = 2 & H|vorgang^gruppe = 1
+.formula M|vtyp     = U|xreservierung  ? H|vorgang^dnr = 4 & H|vorgang^gruppe = 4
+.formula M|vtyp     = U|xbeschaffung   ? H|vorgang^dnr = 4 & (H|vorgang^gruppe = 2 ; H|vorgang^gruppe = 5)
+.assign M|tartikel  = H|vorgang        ? H|gruppe = 2
+.assign M|tartikel  = H|vorgang^artex  ? F|empty(M|tartikel)
+.formula M|ticon    = "icon:stop"        ? H|vorgang^dnr = 2 & (H|prio = 2 ; H|prio = 4 ; H|prio =8)
+.formula M|ticon    = "icon:ok"          ? H|vorgang^dnr = 4 & H|prio = 2
+.formula M|ticon    = "icon:information" ? H|vorgang^dnr = 4 & H|prio = 4
+.formula M|ticon    = "icon:stop"        ? H|vorgang^dnr = 4 & H|prio = 3
+.copy M|tbsart      = M|tartikel^bsart
+.copy M|tdispoa     = M|tartikel^dispoa
+.copy M|teart       = M|tartikel^eart
+.formula M|tmindest = M|tartikel^mindest
+.formula M|tlosgr   = M|tartikel^losgr
+.formula M|tlosbild = M|tartikel^losbild
+.copy M|tebetreuer  = M|tartikel^ebetreuer
+.copy M|tfbetreuer  = M|tartikel^fbetreuer
+.assign M|tlgruppe  = H|bezobj    ? H|bezobj^dnr = 39
+.formula M|menge    = H|menge
+.copy M|le          = M|tartikel^le
+.formula M|wert     = H|wert
+.reserve
+.select add M|tartikel^id
+.continue DELETEL ? _G|mehr
+.copy H|lgruppean = M|tlgruppe  ? _F|empty(M|tlgruppe)
+.copy M|bplanaktuell = H|disponiert
+.select
+!DELETEL
+.make screen line - ? (H|prio = 3 & (M|artikel^id <> M|tartikel^id)) ; (_F|empty(M|lgruppe) & (M|lgruppe^id <> M|tlgruppe^id))
+.continue END
+..
+.. ****************************************************************************
+!END
+.continue
+..
+!ERROR
+.error Lagergruppe ist leer!

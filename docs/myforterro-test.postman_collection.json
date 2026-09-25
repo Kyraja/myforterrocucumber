@@ -1,0 +1,346 @@
+{
+  "info": {
+    "name": "MyForterro API Test (Client Credentials)",
+    "description": "Testet den Client-Credentials-Flow gegen die MyForterro API.\n\n## Nutzung\n\n1. Collection importieren\n2. In den Collection-Variablen (Tab 'Variables') folgende Werte setzen:\n   - `client_id` — die Anwendungs-ID aus MyForterro\n   - `client_secret` — das Secret aus MyForterro\n   - (Optional) `token_host` und `api_host` umstellen, falls Produktion statt Integration\n3. Requests der Reihe nach ausfuehren:\n   - **1. Get Token** — holt den Token und speichert ihn automatisch in `access_token`; dekodiert und loggt die JWT-Claims in die Console\n   - **2. List Tenants** — listet verfuegbare Tenants; speichert die erste Tenant-ID in `tenant_id`\n   - **3. List Models** — listet KI-Modelle fuer den Tenant\n   - **4. Chat Completion** — sendet eine Test-Nachricht\n\n## Erwartetes Verhalten (laut docs/myforterro-setup.md)\n\nAlle vier Requests sollten 200 OK liefern. Wenn Request 2 oder spaeter mit 401/403 fehlschlaegt:\n- Pruefe die Console fuer JWT-Claims (Request 1)\n- Fehlende Claims `scope`, `role`, `mf:uid` deuten auf fehlende Rolle/Lizenz in MyForterro (docs/myforterro-setup.md Schritt 5-6)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "token_host",
+      "value": "integration-myforterro-core.fcs-dev.eks.forterro.com",
+      "type": "string",
+      "description": "Integration: integration-myforterro-core.fcs-dev.eks.forterro.com | Produktion: core.myforterro.com"
+    },
+    {
+      "key": "api_host",
+      "value": "integration-myforterro-api.fcs-dev.eks.forterro.com",
+      "type": "string",
+      "description": "Integration: integration-myforterro-api.fcs-dev.eks.forterro.com | Produktion: myforterro-api.forterro.com"
+    },
+    {
+      "key": "client_id",
+      "value": "",
+      "type": "string",
+      "description": "Client ID (Anwendungs-ID) aus MyForterro"
+    },
+    {
+      "key": "client_secret",
+      "value": "",
+      "type": "string",
+      "description": "Client Secret aus MyForterro"
+    },
+    {
+      "key": "tenant_id",
+      "value": "",
+      "type": "string",
+      "description": "Wird automatisch von Request 2 gesetzt, kann aber manuell ueberschrieben werden"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string",
+      "description": "Wird automatisch von Request 1 gesetzt"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Get Token (client_credentials)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Trim whitespace/newlines from credentials (common copy-paste issue)",
+              "const keys = ['client_id', 'client_secret', 'token_host', 'api_host', 'tenant_id'];",
+              "keys.forEach(k => {",
+              "    const v = pm.collectionVariables.get(k);",
+              "    if (typeof v === 'string' && v !== v.trim()) {",
+              "        console.log('🧹 Trimming whitespace from', k);",
+              "        pm.collectionVariables.set(k, v.trim());",
+              "    }",
+              "});"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "if (pm.response.code === 200) {",
+              "    const data = pm.response.json();",
+              "    pm.collectionVariables.set('access_token', data.access_token);",
+              "    console.log('✅ Access Token gespeichert. Gueltig fuer', data.expires_in, 'Sekunden.');",
+              "",
+              "    // JWT dekodieren und Claims loggen",
+              "    try {",
+              "        const parts = data.access_token.split('.');",
+              "        if (parts.length === 3) {",
+              "            const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');",
+              "            const pad = base64.length % 4;",
+              "            const padded = pad ? base64 + '='.repeat(4 - pad) : base64;",
+              "            const payload = JSON.parse(atob(padded));",
+              "            console.log('📜 JWT Claims:', JSON.stringify(payload, null, 2));",
+              "",
+              "            const expected = ['sub', 'aud', 'iss', 'scope', 'role', 'mf:app_id', 'mf:uid', 'mf:cid'];",
+              "            const missing = expected.filter(k => !(k in payload));",
+              "            if (missing.length > 0) {",
+              "                console.warn('⚠️ Fehlende Claims:', missing);",
+              "                console.warn('Ursache: Service Principal hat vermutlich keine Rolle / API-Lizenz in MyForterro (siehe docs/myforterro-setup.md Schritt 5-6)');",
+              "            }",
+              "        }",
+              "    } catch (e) {",
+              "        console.warn('JWT konnte nicht dekodiert werden:', e);",
+              "    }",
+              "} else {",
+              "    console.error('❌ Token-Request fehlgeschlagen:', pm.response.text());",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "grant_type",
+              "value": "client_credentials",
+              "type": "text"
+            },
+            {
+              "key": "client_id",
+              "value": "{{client_id}}",
+              "type": "text"
+            },
+            {
+              "key": "client_secret",
+              "value": "{{client_secret}}",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "https://{{token_host}}/connect/token",
+          "protocol": "https",
+          "host": [
+            "{{token_host}}"
+          ],
+          "path": [
+            "connect",
+            "token"
+          ]
+        },
+        "description": "Holt einen Access Token per Client Credentials Flow.\n\nRequest:\n- POST /connect/token\n- Content-Type: application/x-www-form-urlencoded\n- Body: grant_type=client_credentials&client_id=...&client_secret=...\n\nAntwort: access_token, token_type, expires_in\n\nDas Test-Script speichert den Token automatisch in der Collection-Variable `access_token` und dekodiert die JWT-Claims in die Console."
+      },
+      "response": []
+    },
+    {
+      "name": "2. List Tenants",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "if (pm.response.code === 200) {",
+              "    const tenants = pm.response.json();",
+              "    if (Array.isArray(tenants) && tenants.length > 0) {",
+              "        console.log('✅', tenants.length, 'Tenant(s) gefunden:');",
+              "        tenants.forEach(t => console.log('  -', t.tenantId, '|', t.slug));",
+              "        pm.collectionVariables.set('tenant_id', tenants[0].tenantId);",
+              "        console.log('➡️ Erster Tenant als tenant_id gespeichert:', tenants[0].tenantId);",
+              "    } else {",
+              "        console.warn('⚠️ Keine Tenants in der Antwort.');",
+              "    }",
+              "} else if (pm.response.code === 401) {",
+              "    console.error('❌ 401 Unauthorized — Token wird von der API abgelehnt.');",
+              "    console.error('WWW-Authenticate:', pm.response.headers.get('WWW-Authenticate'));",
+              "    console.error('Body:', pm.response.text());",
+              "    console.error('Hinweis: Der Service Principal braucht in MyForterro Rolle + API-Lizenz (docs/myforterro-setup.md Schritt 5-6).');",
+              "} else if (pm.response.code === 403) {",
+              "    console.warn('⚠️ 403 Forbidden — kein Admin-Zugriff. Tenant-ID manuell in tenant_id setzen.');",
+              "} else {",
+              "    console.error('❌ Unerwarteter Status:', pm.response.code, pm.response.text());",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "https://{{api_host}}/v1/admin/tenants",
+          "protocol": "https",
+          "host": [
+            "{{api_host}}"
+          ],
+          "path": [
+            "v1",
+            "admin",
+            "tenants"
+          ]
+        },
+        "description": "Listet alle Tenants, zu denen der Token Zugriff hat.\n\nRequest:\n- GET /v1/admin/tenants\n- Authorization: Bearer <token>\n- (kein MFT-Tenant-Id Header)\n\nAntwort: Array von `{ tenantId, slug }`\n\nDas Test-Script speichert die erste Tenant-ID in `tenant_id` fuer Folge-Requests.\n\n**Bei 401:** Token wird abgelehnt — IT-seitige Konfiguration pruefen.\n**Bei 403:** Kein Admin-Zugriff — Tenant-ID manuell setzen und direkt mit Request 3 weitermachen."
+      },
+      "response": []
+    },
+    {
+      "name": "3. List Models",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "if (pm.response.code === 200) {",
+              "    const data = pm.response.json();",
+              "    const models = data.data || [];",
+              "    if (models.length > 0) {",
+              "        console.log('✅', models.length, 'Modell(e) verfuegbar:');",
+              "        models.forEach(m => console.log('  -', m.id, '(owned_by:', m.owned_by + ')'));",
+              "    } else {",
+              "        console.warn('⚠️ Keine Modelle in der Antwort.');",
+              "    }",
+              "} else if (pm.response.code === 401) {",
+              "    console.error('❌ 401 Unauthorized — Token wird abgelehnt.');",
+              "    console.error('WWW-Authenticate:', pm.response.headers.get('WWW-Authenticate'));",
+              "    console.error('Body:', pm.response.text());",
+              "} else if (pm.response.code === 403) {",
+              "    console.error('❌ 403 Forbidden — Token gueltig, aber keine Berechtigung fuer diesen Tenant.');",
+              "    console.error('Body:', pm.response.text());",
+              "} else {",
+              "    console.error('❌ Unerwarteter Status:', pm.response.code, pm.response.text());",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          },
+          {
+            "key": "MFT-Tenant-Id",
+            "value": "{{tenant_id}}"
+          }
+        ],
+        "url": {
+          "raw": "https://{{api_host}}/v1/ai/inference/openai/models",
+          "protocol": "https",
+          "host": [
+            "{{api_host}}"
+          ],
+          "path": [
+            "v1",
+            "ai",
+            "inference",
+            "openai",
+            "models"
+          ]
+        },
+        "description": "Listet die verfuegbaren KI-Modelle fuer den gewaehlten Tenant.\n\nRequest:\n- GET /v1/ai/inference/openai/models\n- Authorization: Bearer <token>\n- MFT-Tenant-Id: <tenant-id>\n\nAntwort: `{ data: [{ id, object, created, owned_by }, ...] }`\n\nBenoetigt einen gesetzten `tenant_id` — wird normalerweise von Request 2 automatisch befuellt, kann aber auch manuell in den Collection-Variablen gesetzt werden."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Chat Completion (Test)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "if (pm.response.code === 200) {",
+              "    const data = pm.response.json();",
+              "    const answer = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;",
+              "    console.log('✅ Antwort:', answer);",
+              "    if (data.usage) {",
+              "        console.log('📊 Token-Verbrauch:', data.usage.total_tokens, '(prompt:', data.usage.prompt_tokens, ', completion:', data.usage.completion_tokens + ')');",
+              "    }",
+              "} else {",
+              "    console.error('❌ Chat fehlgeschlagen:', pm.response.code, pm.response.text());",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          },
+          {
+            "key": "MFT-Tenant-Id",
+            "value": "{{tenant_id}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Antworte nur mit: OK\" }\n  ]\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://{{api_host}}/v1/ai/inference/openai/chat/completions",
+          "protocol": "https",
+          "host": [
+            "{{api_host}}"
+          ],
+          "path": [
+            "v1",
+            "ai",
+            "inference",
+            "openai",
+            "chat",
+            "completions"
+          ]
+        },
+        "description": "Sendet eine Test-Chat-Anfrage (OpenAI-kompatibles Format).\n\nRequest:\n- POST /v1/ai/inference/openai/chat/completions\n- Authorization: Bearer <token>\n- MFT-Tenant-Id: <tenant-id>\n- Content-Type: application/json\n- Body: `{ model, messages }`\n\nFalls `gpt-4o-mini` nicht verfuegbar ist, den Modellnamen aus Request 3 ins Body kopieren."
+      },
+      "response": []
+    }
+  ]
+}

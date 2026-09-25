@@ -1,0 +1,88 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SQANALYSIS.BEHAELTER
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  : Lagermengenanalyse mit BehÑlterinfo
+..*****************************************************************************
+..
+.set trans -
+.. Behaelterfunktion
+.make container group12
+.assign H|kverw = M|verw    ? _F|empty(M|verw)
+.assign H|charge    = M|charge      ? _F|empty(M|charge)
+.assign H|behaelter = M|selbehaelter  ? _F|empty(M|selbehaelter)
+.assign H|projekt   = M|projekt       ? _F|empty(M|projekt)  
+.assign H|artikel = 0|artikel^id  
+.assign H|platz   = 0|platz^id   
+.select header
+..
+!SELLINE
+.select line 
+.continue END     ? _G|mehr
+.. bei verwendungs- oder projektbezogen nur die BestÑnde mit gefÅllter Verwendung oder Projekt ausgeben
+.continue SELLINE ? M|verwendbez & F|empty(H|verw)
+.continue SELLINE ? M|projektbez & F|empty(H|tprojekt)
+.make screen line +O 
+.assign M|tartikel     = H|tartikel^id
+.assign M|tlplatz      = H|tplatz
+.assign M|tlgruppe = H|tplatz^lgruppe
+.copy M|internlgruppe = M|tlgruppe^intlager
+.assign M|dispoa = M|tartikel^dispoa
+.assign M|tprojekt   = H|tprojekt
+.assign M|tle        = H|gebeinh
+.formula M|tfaktor   = H|gebf
+.copy M|tcharge      = H|ztcharge
+.formula M|gebmge    = H|mge
+.assign M|tbehaelter = H|tbehaelter  ? M|behaelter
+.formula M|tmge      = H|mge
+.formula M|tverw     = H|verw
+.copy M|tfertig      = H|lffert
+.formula M|tlagereinheit = M|tartikel^le
+.formula M|taufzu = M|attention ? M|gebmge < 0
+.protection -line 'M|aktzeile'  ? M|taufzu = M|attention
+.protection tmark 'M|aktzeile'  ? M|taufzu = M|attention
+.protection -exception -protected buinfosys 'M|aktzeile' ? M|taufzu = M|attention
+.protection -exception -protected buaktion 'M|aktzeile'  ? M|taufzu = M|attention
+.protection tbehaelterzu 'M|aktzeile'  ? F|empty(M|tbehaelter)
+.assign M|tbehaelterzu = M|tbehaelter ? _F|empty(M|tbehaelter)
+..
+.continue INTLG ? M|internlgruppe
+.. externe Lagergruppeneigenschaften prÅfen
+.formula U|xsel ="$,,art=" + M|tartikel^id + ";lgruppe=" + M|tlgruppe^id +  ";@gruppe=3;@ablageart=(Active)"
+.load 6 modificationlock nowait warehousedata 'U|xsel'
+.continue INTLG ? _G|mehr
+.assign M|dispoa = 6|dispoa
+.. Feld schÅtzen, wenn Dispoart= leer,r,m ober b
+.protection tverwzu 'M|aktzeile' ? (F|equals(6|dispoa, "(EmptyEntry)") ; F|equals(6|dispoa, "(RemainingQuantitiesRelated)") ; F|equals(6|dispoa, "(MinimumStockLevelRelated)") ; F|equals(6|dispoa, "(RequirementRelated)"))
+..
+!INTLG
+.formula M|taufzu = M|attention ? F|equals(H|artikel^bsart, "(Subcontracting)") & F|empty(M|tfertig)
+.formula M|taufzu = M|attention ? F|equals(H|artikel^earta, "(None)") & F|equals(H|artikel^dispoa, "(EmptyEntry)") & F|empty(M|tfertig)
+.protection -line 'M|aktzeile'  ? M|taufzu = M|attention
+.protection tmark 'M|aktzeile'  ? M|taufzu = M|attention
+.protection -exception -protected buinfosys 'M|aktzeile' ? M|taufzu = M|attention
+.protection -exception -protected buaktion 'M|aktzeile'  ? M|taufzu = M|attention
+.assign M|tlplatzzu = M|tlplatz^id
+.formula M|tfaktorzu = H|gebf
+.assign M|tchargezu = M|tcharge^id
+.copy M|tlezu = H|gebeinh
+.formula M|tverwzu = H|verw         ? M|projektbez
+.formula M|tprojektzu = H|projekt   ? M|verwendbez
+.protection tverwzu 'M|aktzeile'    ? M|projektbez
+.protection tprojektzu 'M|aktzeile' ? M|verwendbez
+.. Feld schÅtzen, wenn Dispoart= leer,r,m ober b
+.protection tverwzu 'M|aktzeile'    ? M|internlgruppe & (F|equals(H|artikel^dispoa, "(EmptyEntry)") ; F|equals(H|artikel^dispoa, "(RemainingQuantitiesRelated)") ; F|equals(H|artikel^dispoa, "(MinimumStockLevelRelated)") ; F|equals(H|artikel^dispoa, "(RequirementRelated)"))
+.protection tprojektzu 'M|aktzeile' ? M|internlgruppe & (F|equals(h|artikel^dispoa, "(EmptyEntry)") ; F|equals(h|artikel^dispoa, "(RemainingQuantitiesRelated)") ; F|equals(H|artikel^dispoa, "(MinimumStockLevelRelated)"))
+.assign M|tfertigzu = H|lffert
+.protection -line 'M|aktzeile' ? _F|empty(H|tbehaelter) & _M|behaelter
+.protection tbehaelterzu 'M|aktzeile'
+.protection -exception -protected buinfosys 'M|aktzeile' ? _F|empty(H|tbehaelter) & _M|behaelter
+.protection -exception -protected buaktion 'M|aktzeile'  ? _F|empty(H|tbehaelter) & _M|behaelter
+..
+.continue SELLINE
+..
+!END
+.continue
+

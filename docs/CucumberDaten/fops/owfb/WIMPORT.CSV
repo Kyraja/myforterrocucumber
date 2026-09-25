@@ -1,0 +1,108 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : WIMPORT.CSV
+.. Date           : 02/19/2015
+.. Version        : 1.0
+.. Author         : RASC
+.. Copyright      : 
+.. Functionality  : Import W„rhungskurse aus CSV-Datei
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xtcmd              ? _F|defined(U|xtcmd)
+.type text U|xttmp              ? _F|defined(U|xttmp)
+.type text U|xtdat              ? _F|defined(U|xtdat)
+.type text U|xtedp              ? _F|defined(U|xtedp)
+.type text U|xterr              ? _F|defined(U|xterr)
+.type text U|xtcurr             ? _F|defined(U|xtcurr)
+.type text U|xtfakt             ? _F|defined(U|xtfakt)
+.type text U|xtkurs             ? _F|defined(U|xtkurs)
+.type integer U|xiz             ? _F|defined(U|xiz)
+.type integer U|xim             ? _F|defined(U|xim)
+.type GD2 U|xdate               ? _F|defined(U|xdate)
+.type real U|xrkurs             ? _F|defined(U|xrkurs)
+..
+.formula U|xtdat        = "owfb/WIMPORT14"
+.continue END           ? _F|fileexists(U|xtdat)
+.continue END           ? F|filesize(U|xtdat) = 0
+..
+.file -TEMPNAME U|xtedp
+.file -TEMPNAME U|xterr
+.output NEW 'U|xterr'
+.output NEW 'U|xtedp'
+.input DATEI.F
+#!database=95
+#!group=1
+#!action=NEW
+.....kursdat;fwaehr;ikurs;
+kursdat;fwaehr;faktfeinh;fkurs;
+.output
+..
+.select from
+.formula U|xiz          = 0
+.formula U|xim          = 3
+.formula U|xtcurr       = "U|xttmp;"
+.formula U|xtfakt       = "U|xttmp;"
+.formula U|xtkurs       = "U|xdate;"
+!CURR
+.formula U|xiz          = U|xiz + 1
+.continue ECURR         ? U|xiz > U|xim
+.type P94:1   U|xcurr.U|xiz        ? _F|defined(U|xcurr.U|xiz)
+.type integer U|xrfkt.U|xiz        ? _F|defined(U|xrfkt.U|xiz)
+.type realx   U|xrkurs.U|xiz       ? _F|defined(U|xrkurs.U|xiz)
+.type text    U|xscurr.U|xiz       ? _F|defined(U|xscurr.U|xiz)
+.formula U|xtcurr       = U|xtcurr + "U|xscurr" + 'U|xiz'
+.formula U|xtcurr       = U|xtcurr + ";"        ? U|xiz < U|xim
+.formula U|xtfakt       = U|xtfakt + "U|xrfkt" + 'U|xiz'
+.formula U|xtfakt       = U|xtfakt + ";"        ? U|xiz < U|xim
+.formula U|xtkurs       = U|xtkurs + "U|xrkurs" + 'U|xiz'
+.formula U|xtkurs       = U|xtkurs + ";"        ? U|xiz < U|xim
+.continue CURR
+!ECURR
+.formula U|xtcmd        = "select from 'U|xtdat' " + U|xtcurr
+.'U|xtcmd'
+.formula U|xtcmd        = "select from 'U|xtdat' " + U|xtfakt
+.'U|xtcmd'
+.output ADDEDTO 'U|xtedp'
+!LOOP
+.formula U|xtcmd        = "select from 'U|xtdat' " + U|xtkurs
+.'U|xtcmd'
+.continue IMPORT        ? _G|mehr
+..
+.formula U|xiz          = 0
+!OUTPUT
+.formula U|xiz          = U|xiz + 1
+.continue LOOP          ? U|xiz > U|xim
+..
+.assign U|xcurr.U|xiz   = U|xscurr.U|xiz
+.formula U|xtcmd        = "$,@database=95;@group=1;such="+'U|xscurr.U|xiz'+";kursdat=="+'U|xdate'
+.load 0 nolock object 'U|xtcmd'
+.continue OUTPUT        ? G|mehr
+..
+.....formula U|xrkurs.U|xiz = 1/U|xrkurs.U|xiz * U|xrfkt.U|xiz
+.....'U|xdate';'U|xcurr.U|xiz';'U|xrkurs.U|xiz'
+'U|xdate:8';'U|xcurr.U|xiz';'U|xrfkt.U|xiz';'U|xrkurs.U|xiz';
+.continue OUTPUT
+!IMPORT
+.output
+.edi 'U|xtedp'
+.input
+.formula U|xtcmd        = "edpimport.sh -P -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp + " 2>" + U|xterr
+.system 'U|xtcmd' PASSWORD background
+..
+.continue END           ? F|filesize(U|xterr) = 0
+.. .edi 'U|xterr'
+.continue END
+..
+!END
+.continue

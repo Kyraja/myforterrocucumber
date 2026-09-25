@@ -1,0 +1,1321 @@
+..!interpreter english
+..@@BEGINHEAD
+..========================================================================
+..==
+..==  Name              : EDI.EDI2VKEDLKD
+..==
+..==  Pfad              : dfue
+..==
+..==  Funktion          : EDL-Meldungen
+..==                      aus EDI-Datenbank in Funktionen umsetzen
+..==                      (Main-Programm zur Initialisierung, Kundenauswahl
+..==                      und Aufruf des Programms EDI.EDI2VKEDLKD)
+..==
+..==  Erstellungsdatum  : 01.11.2002
+..==
+..==  Autor             : Ozan Kesim
+..==  Verantwortlich    : mh
+..==  notwendige Pfade  : dfue, dfue1, dfue2
+..==
+..==  Menuepunkte       :
+..==
+..==  Maskenprioritaet
+..==  bei EFOP          :
+..==
+..==  Besonderheiten    :
+..==
+..==  Aenderungshistorie:
+..#KOR#EDI-MODUL#DATUM#éNDERUNGS-INDEX#MitarbeiterkÅrzel#
+..#KOR#EDL#01.11.2002#0#ok#
+..#KOR#EDL#23.01.2003#1#ok#
+..#KOR#EDL#07.02.2003#2#ok# fcode 17 entfernt
+..#KOR#EDL#10.02.2003#3#ok# Prozedur "EDISchreibeProtokoll" wurde entfernt
+..#KOR#EDL#16.06.2003#4#ok#
+..#KOR#EDL#04.08.2008#5#ok# (Spooler abgeschafft)
+..==
+..========================================================================
+..@@ENDHEAD
+..
+.input ARB
+..
+.. Variablendefinition
+..@@BEGINVARDEFS
+..====================================================
+.set trans -
+..>> variablendefinition
+..>>
+..... procedure stack pointer .....
+.type integer   xprocsp
+..>> Art der EDL-Meldungen
+.type text       xabrufart
+..>> Verzeichnisse aus ABAS-Pa·wort
+.type text       xarber
+..>> in neuem Auftrag mit Kunde eingetragene Parameter mit denen
+..>> aus EDL-Meldungen Åberschreiben
+.type bool       xaukdparueb
+..>> debug
+.type bool       xdebug
+..>> Name des DFUE-Programms
+.type text       xdfueprog
+..>> Name des DFUE-Unterprogramms
+.type text       xdfueuprog
+..>> Datum der INHOUSE-Schnittstellen-Datei
+.type date      xdinhouse
+..>> Post-Sendeprogramm
+.type text       xdPostSenden
+..
+..>> Name der VKEDL-Unterprogramms DFUE.CHKFILE
+.type text       xduchkfile
+..>> Name der VKEDL-Unterprogramms EDI.EDI2VKEDL
+..>> (EDL-Meldungen)
+.type text       xduedi2vkedl
+..>> Name der VKEDL-Unterprogramms DFUE.IHSS2EDI
+.type text       xduihss2edi
+..>> Name des VKEDL-Unterprogramms DFUE.IMP.INI
+.type text       xduimpini
+..>> Name der VKEDL-Unterprogramms DFUE.IN
+.type text       xduin
+..>> Name der VKEDL-Unterprogramms DFUE.LADADMIN
+.type text       xduladadmin
+..>> Name der VKEDL-Unterprogramms DFUE.LADMAIN
+.type text       xduladmain
+..>> Name der VKEDL-Unterprogramms EDI.LADPOSTVKEDL
+..>> (Name des LGP, das nach Ende des Batch-LG mit Lader fÅr neue EDL-Meldungen
+..>>  ausgefÅhrt werden soll)
+.type text       xduladpostvkedl
+..>> Name der VKEDL-Unterprogramms DFUE.LADSTART
+.type text       xduladstart
+..>> Name des VKEDL-Unterprogramms DFUE.VKEDLMES
+.type text       xduvkedlmes
+..
+..>> Match-String fÅr PrÅfung EDI-Info bei Verarbeitung
+.type text       xediinfomatch
+..>> Nummer des bearbeiteten ABAS-EDI-Datensatzes
+.type text       xedinumactinnachr1
+..>> Anzahl der Beschreibungen der Fehlercodes
+..>> aus ABAS-EDI-Referenzdatensatz (R-VKEDL)
+.type integer    xedinumfcod
+..>> Anzahl der Beschreibungen der Kopf-Variablen des EDI-Datensatzes
+..>> aus ABAS-EDI-Referenzdatensatz (R-VKEDL) fÅr Fehlermeldungen
+.type integer    xedinumkvbe
+..>> Anzahl der Namen der Kopf-Variablen des EDI-Datensatzes
+..>> aus ABAS-EDI-Referenzdatensatz (R-VKEDL) fÅr Fehlermeldungen
+.type integer    xedinumkvna
+..>> Anzahl der Beschreibungen der Bearbeitungsstati
+..>> aus ABAS-EDI-Referenzdatensatz (R-VKEDL)
+.type integer    xedinumstat
+..>> Beschreibungen der Fehlercodes
+..>> aus ABAS-EDI-Referenzdatensatz (R-VKEDL)
+.type text       xedireffcod
+..>> Zeile auf ABAS-EDI-Referenzdatensatz
+.type text       xedirefftzeile
+..>> Beschreibungen der Kopf-Variablen des EDI-Datensatzes
+..>> aus ABAS-EDI-Referenzdatensatz (R-VKEDL) fÅr Fehlermeldungen
+.type text       xedirefkvbe
+..>> Namen der Kopf-Variablen des EDI-Datensatzes
+..>> aus ABAS-EDI-Referenzdatensatz (R-VKEDL) fÅr Fehlermeldungen
+.type text       xedirefkvna
+..>> Beschreibungen der Bearbeitungsstati
+..>> aus ABAS-EDI-Referenzdatensatz (R-VKEDL)
+.type text       xedirefstat
+..>> 1. SuchschlÅssel EDI
+.type text       xedisuchschluessel1
+..>> ABAS-Umgebungsvariable "MANDANTDIR"
+.type text       xeksmandantdir
+..>> ABAS-Umgebungsvariable "MANDANT"
+.type text       xeksmname
+..>> ABAS-Umgebungsvariable "PATH"
+.type text       xekspath
+..>> ABAS-Programmverzeichnis
+.type text       xeksprogdir
+..>> ABAS-Batch-Pa·wort
+.type text       xekspasswort
+..>> Empfangsverzeichnis
+.type text       xEmpfangsVerz
+..>> FO-Befehl
+.type text       xfobefehl
+..>> Identnummer des Kunden beim Lieferanten
+.type text       xidkundeab
+..>> Identnummer des RechnungsempfÑngers beim Lieferanten
+.type text       xidkundeabr
+..>> Identnummer des Kundenkontakts beim Lieferanten
+.type text       xidkundeabs
+..>> fÅr éndern Kunde in Kundenkontakt
+.type text       xidkundeabt
+..>> Identnummer des Kunden beim Lieferanten (öbergabe an EDI.EDI2VKEDL)
+.type text       xidkundeabe
+..>> GLN-Nr. Kunde
+.type text       xglkundeab
+..>> GLN-Nr. RechnungsempfÑnger
+.type text       xglkundeabr
+..>> GLN-Nr. WarenempfÑnger
+.type text       xglkundeabs
+..
+..>> temporÑrer Schalter, ob Fehler
+.type bool       xistfehler
+..>> globaler Schalter, ob Protokoll erweitert
+.type bool       xistfproterw
+..>> Schalter, ob bereits Kunde in Liste fÅr Verarbeitung der EDL-Meldungen
+.type bool       xistkdeliste
+..>> Schalter, ob EDL-Meldungen fÅr Kunden aktiviert
+.type bool       xediaktiv
+..>> Schalter, ob EDL-Meldungen fÅr Kunden manuell
+.type bool       xedimanu
+..
+..>> 1. Schalter, ob nach Holen Satz vorhanden
+.type bool       xistsatz1
+..>> 2. Schalter, ob nach Holen Satz vorhanden
+.type bool       xistsatz2
+..>> 3. Schalter, ob nach Holen Satz vorhanden
+.type bool       xistsatz3
+..>> 1. Schalter, ob nach Holen Tabellenzeile vorhanden
+.type bool       xistzeile1
+..>> 2. Schalter, ob nach Holen Tabellenzeile vorhanden
+.type bool       xistzeile2
+..
+..>> SuchschlÅssel fÅr Kundenkontakt
+.type text       xkdesuchschluessel1
+..>> Kunden-Identnummer
+.type text       xkdnumact
+..
+..**ok,14.04.2008 (Spooler abgeschafft: xladstatus)
+..
+..>> MenÅ-Auswahl
+.type integer    xmenu
+..>> Schalter, ob in Prozedur .merke lifo
+.type integer    xmerklifo
+..>> <ABAS-Modul><Vorgang><Vorgangstyp> (MMVVL - VKEDL)
+.type text       xmmvvl
+..>> <ABAS-Modul><Vorgang><Vorgangstyp> (mmvvl - vkaue, Kleinbuchstaben)
+.type text       xmmvvlklein
+..
+..>> Name der stderr-Protokoll-Datei fÅr Batch-LG
+.type text       xnbatchlogerr
+..>> Name der stdout-Protokoll-Datei fÅr Batch-LG
+.type text       xnbatchlogout
+..>> Spool-Verzeichnis des "batchlg.spooler"
+.type text       xnbatchspooldir
+..>> Name der Erweiterung der Ergebnis-Protokoll-Datei
+.type text       xneprotokollerw
+..>> Name des in Shell ausfÅhrbaren Programms
+.type text       xnexecutable
+..>> Name Datei
+.type text       xnfileact
+..>> Name der permanenten Protokoll-Datei
+.type text       xnfprotokoll
+..>> Name der Erweiterung der Fehler-Protokoll-Datei
+.type text       xnfprotokollerw
+..>> Name der Erweiterung der Protokoll-Datei öberwachungs-Batch-LG
+.type text       xnfprotokollerwblga
+..>> Name der INHOUSE-Schnittstellen-Datei
+.type text       xninhouse
+..>> Name der temporÑren Liste der Kunden-Identnummern beim Lieferanten
+.type text       xnkdeliste
+..>> Name der Lader-Datei
+.type text       xnlader
+..>> Name der Ergebnis- / Fehler-Protokoll-Datei
+.type text       xnprotokoll
+..>> Name temporÑre Datei
+.type text       xntemp
+..>> Anzahl der Wiederholungen des Tests auf aktiven Lader
+.type integer    xnumtestaktlader
+..
+..>> Name Verzeichnis
+.type text       xnverzact
+..>> Name des Verzeichnisses fÅr Fehler-Protokolle
+.type text       xnverzerr
+..>> Name des Verzeichnisses fÅr normale Protokolle
+.type text       xnverzout
+..
+..>> ABAS-Post-Betreff
+.type text       xPostBetreff
+..>> Verteiler
+..>> ABAS-Post-Verteiler
+.type text       xPostEmpf
+..>> ABAS-Post-Verteiler fÅr EDL-Meldungen import Ergebnisse
+.type text       xPostEmpfOut
+..>> ABAS-Post-Verteiler fÅr EDL-Meldungen import Fehler
+.type text       xPostEmpfErr
+..>> ABAS-Post-Freitext-Datei
+.type text       xPostFtext
+..>> ABAS-Post-Stichworte
+.type text       xPostStichw1
+.type text       xPostStichw2
+.type text       xPostStichw3
+.type text       xPostStichw4
+..
+..>> Schalter fÅr trace in Prozeduren
+.type bool       xproctrace
+.formula xproctrace = false
+..
+..>> ABAS-Drucker fÅr EDL-Meldungen import
+.type text       xProtDrucker
+..>> ABAS-Drucker fÅr EDL-Meldungen import Differenz-Report
+.type text       xProtDruckerDif
+..>> ABAS-Drucker fÅr EDL-Meldungen import Fehler
+.type text       xProtDruckerErr
+..>> ABAS-Drucker fÅr EDL-Meldungen import Ergebnisse
+.type text       xProtDruckerOut
+..>> Protokoll-Datei
+.type text       xProtText
+..
+..>> Richtung "rÅckwÑrts" fÅr Selektionsleiste aus LG
+.atext xSELSORTRUECK 2644
+..>> Richtung "vorwÑrts" fÅr Selektionsleiste aus LG
+.atext xSELSORTVORW 2643
+..>> SYS-Befehl
+.type text       xsybefehl
+..>> Schalter fÅr Dateitest ("w"ritable / "r"eadable)
+.type text       xtestfile
+..>> Schalter fÅr Verzeichnistest ("w"ritable / "r"eadable)
+.type text       xtestverz
+..
+..>> Timeout zwischen Wiederholungen des Tests auf aktiven Lader
+..>> (in Sekunden)
+.type integer    xtimtestaktlader
+..>> Timeout zwischen öberprÅfung der Proze·aktivitÑt des aktiven Laders
+..>> (in Sekunden)
+.type integer    xtimtestladerakt
+..>> TMP-Verzeichnis
+.type text       xtmpdir
+..
+..>> Vorgangsart
+.type text       xvorart
+..>> Wiederholungen die versucht werden, bis XXXXXOK da ist
+.type integer    xWaitForINHOUSECnt
+..>> Sleep-Zeit die gewartet wird, ob XXXXXOK da ist
+.type integer    xWaitForINHOUSETout
+..>> 1. SchleifenzÑhler
+.type integer    xzaehl1
+..>> Zeit der INHOUSE-Schnittstellen-Datei
+.type time       xzinhouse
+..
+.. include dfue/EDIIMPPROCESS.MODULSPERRE
+.type text xmmvvl ? _F|defined(U|xvvvvl)
+.type integer xaktion ? _F|defined(U|xaktion)
+.type bool xprocreturn ? _F|defined(U|xprocreturn)
+..
+..====================================================
+..@@ENDVARDEFS
+..
+.. initialize procedure stack pointer
+.formula xprocsp = 0
+.. alle variablen mÅssen definiert sein, sonst bricht das programm ab
+.set demand -
+.set cancel -
+..
+.. ----------------------------------------
+.continue EPROCDEF
+.. procedure definitions
+.. Prozedur: EDISchreibeProtokoll
+..
+!PROC001: ----- EDISchreibeProtokoll -----
+..>> AnhÑngen von Informationen an Fehlerprotokoll bei Fehlern bzgl. der
+..>> Verarbeitung von EKS-EDI-DatensÑtzen
+..>>
+..>> Parameter:
+..>>
+..>> Ein: - Name der Ergebnisprotokoll-Datei (xneprotokollerw)
+..>>      - Name der Fehlerprotokoll-Datei (xnfprotokollerw)
+..>>      - EKS-EDI-Identnummer des EKS-EDI-Datensatzes (xedinumactinnachr1)
+..>>      - Beschreibungen der Fehlercodes (xedireffcod<i>)
+..>>
+..>> Aus: - Erfolg Operation (xprocreturn)
+..>>      - globaler Schalter, ob Protokoll erweitert (xistfproterw)
+..>>
+..>> Interne Variablen: - xfobefehl
+..>>
+..
+..>> Erfolg der Operation
+.formula xprocreturn = true
+..
+.. >> Erweitern Protokoll-Datei
+.select edifact 'xedinumactinnachr1'
+..
+.. >> Protokollzeile
+....      Datum_Zeit     EDI-Nr    Vorgang  Vo Kunde    Fehl       Bemerkung
+....    # 29.04.98_21:29 15        400005   3           52 ausgehende VK-RE 400005
+....      29.04.98_21:29 16        400006   3  70001       ausgehende VK-RE 400006
+.set separator=^
+.formula xfobefehl = (('datum' + "_" + 'zeit' + "              ") << 14) + " "
+.formula xfobefehl = xfobefehl + ((num + "         ") << 9) + " "
+.formula xfobefehl = xfobefehl + ((ideksvor + "        ") << 8) + " "
+.formula xfobefehl = xfobefehl + (('vorart' + "  ") << 2) + " "
+.formula xfobefehl = xfobefehl + ((idkundeab + "        ") << 8) + " "
+..
+..
+.continue EL001 ? _(fcode = 0)
+.. IF001
+..
+.continue EL002 ? _((status = 5) ; (status = 6))
+.. IF002
+....                                 gespoolt      (e -> eingegegangen)
+....                                 |             (v -> verarbeitet)
+....                                 |
+.formula xfobefehl = "  " + xfobefehl + " s " + (name << ";") + ((name >> ";") >> "")
+..
+.continue FI002
+!EL002
+..
+.continue EL003 ? _(status = 10)
+.. IF003
+....                                 verarbeitet   (e -> eingegegangen)
+....                                 |             (s -> gespoolt)
+....                                 |
+.formula xfobefehl = "  " + xfobefehl + " v " + (name << ";") + ((name >> ";") >> "")
+..
+.continue FI003
+!EL003
+....                                 eingegegangen (s -> gespoolt)
+....                                 |             (v -> verarbeitet)
+....                                 |
+.formula xfobefehl = "  " + xfobefehl + " e " + (name << ";") + ((name >> ";") >> "")
+..
+!FI003
+..
+!FI002
+..
+.output addedto 'xneprotokollerw'
+.length 1
+.right 80
+.tablerecord
+..
+.continue FI001
+!EL001
+.formula xfobefehl = "# " + xfobefehl + (('fcode' + "  ") << 2) + " " + 'xedireffcod.fcode'
+..
+.formula xistfproterw = true
+..
+.output addedto 'xnfprotokollerw'
+.length 1
+.right 80
+.tablerecord
+..
+!FI001
+..
+'xfobefehl'
+.set
+..
+.output new WERF.WEG
+..
+.continue 'xprocst.xprocsp'
+..
+.. Prozedur: EKSErzeugePost
+..
+!PROC002: ----- EKSErzeugePost -----
+..>> Erzeugen ABAS-Post mit Protokoll Åber:
+..>> - Fehler (xistfehler = true)
+..>> - Ergebnis (xistfehler = false)
+..>>
+..>> Parameter:
+..>>
+..>> Ein: - <ABAS-Modul><Vorgang><Vorgangstyp> (xmmvvl)
+..>>      - Schalter, ob Fehler (xistfehler)
+..>>      - Name der Ergebnisprotokoll-Datei (xneprotokollerw)
+..>>      - Name der Fehlerprotokoll-Datei (xnfprotokollerw)
+..>>      - Name des DFUE-Programms (xdfueprog)
+..>>      - ABAS-Post-Verteiler fÅr EDL-Meldungen import Ergebnisse (xPostEmpfOut)
+..>>      - ABAS-Post-Verteiler fÅr EDL-Meldungen import Fehler (xPostEmpfErr)
+..>>
+..>> Aus: - Erfolg Operation (xprocreturn)
+..>>
+..>> Interne Variablen: - Verteiler (xPostEmpf)
+..>>                    - Betreff (xPostBetreff)
+..>>                    - Protokoll-Datei (xPostFtext)
+..>>                    - Stichworte
+..>>                      (xPostStichw1, xPostStichw2, xPostStichw3, xPostStichw4)
+..>>
+..
+..>> Erfolg der Operation
+.formula xprocreturn = true
+..
+.. >> Erzeugen abas Post
+..>> Test, ob Fehlerprotokoll
+..
+..
+.continue EL004 ? _(xistfehler)
+.. IF004
+..>> EmpfÑnger
+.formula xPostEmpf = xPostEmpfErr
+..>> Betreff
+.set trans +
+.formula xPostBetreff = xdfueprog + ": Operationen fehlerhaft ausgefÅhrt (siehe Freitext 1)"
+.set trans -
+..>> Fehlerprotokoll-Datei
+.formula xPostFtext = xnfprotokollerw
+..>> Stichworte
+.set trans +
+.formula xPostStichw1 = "DFUE"
+.formula xPostStichw2 = xmmvvl
+.formula xPostStichw3 = "Eingang"
+.formula xPostStichw4 = "Fehler"
+.set trans -
+..
+..
+.continue EL005 ? _(xPostEmpf <> "")
+.. IF005
+.input 'xdPostSenden' ? xPostEmpf<>""
+..
+!EL005
+.. FI005
+..
+!EL004
+.. FI004
+..
+.formula xsybefehl = "grep -s -E '.*eingehende EDL-Meldung$' " + xneprotokollerw + " > ${DEVNULL:-/dev/null}"
+.system 'xsybefehl' background
+..
+..>> Test, ob (mindestens) eine neue EDL-Meldungen eingetragen oder verarbeitet
+..
+..
+.continue EL006 ? _(mehr)
+.. IF006
+..>> EmpfÑnger
+.formula xPostEmpf = xPostEmpfOut
+..>> Betreff
+.set trans +
+.formula xPostBetreff = xdfueprog + ": Operationen fehlerfei ausgefÅhrt (siehe Freitext 1)"
+.set trans -
+..>> Protokoll-Datei
+.formula xPostFtext = xneprotokollerw
+..>> Stichworte
+.set trans +
+.formula xPostStichw1 = "DFUE"
+.formula xPostStichw2 = xmmvvl
+.formula xPostStichw3 = "Eingang"
+.formula xPostStichw4 = "Ergebnis"
+.set trans -
+..
+.continue FI006
+!EL006
+.formula xPostEmpf = ""
+..
+!FI006
+..
+..
+.continue EL007 ? _(xPostEmpf <> "")
+.. IF007
+.input 'xdPostSenden' ? xPostEmpf<>""
+..
+!EL007
+.. FI007
+..
+.continue 'xprocst.xprocsp'
+..
+.. Prozedur: EKSDruckeProtokoll
+..
+!PROC003: ----- EKSDruckeProtokoll -----
+..>> Erzeugen ABAS-Druck mit Protokoll Åber:
+..>> - Fehler (xistfehler = true)
+..>> - Ergebnis (xistfehler = false)
+..>>
+..>> Parameter:
+..>>
+..>> Ein: - <ABAS-Modul><Vorgang><Vorgangstyp> (xmmvvl)
+..>>      - Schalter, ob Fehler (xistfehler)
+..>>      - Name der Ergebnisprotokoll-Datei (xneprotokollerw)
+..>>      - Name der Fehlerprotokoll-Datei (xnfprotokollerw)
+..>>      - Name des DFUE-Programms (xdfueprog)
+..>>      - ABAS-Drucker fÅr EDL-Meldungen import Ergebnisse (xProtDruckerOut)
+..>>      - ABAS-Drucker fÅr EDL-Meldungen import Fehler (xProtDruckerErr)
+..>>
+..>> Aus: - Erfolg Operation (xprocreturn)
+..>>
+..>> Interne Variablen: - Drucker (xProtDrucker)
+..>>                    - Protokoll-Datei (xProtText)
+..>>
+..
+..>> Erfolg der Operation
+.formula xprocreturn = true
+..
+.. >> Erzeugen abas-Druck
+..>> Test, ob Fehlerprotokoll
+..
+..
+.continue EL008 ? _(xistfehler)
+.. IF008
+..>> Drucker
+.formula xProtDrucker = xProtDruckerErr
+..>> Druck-Datei
+.formula xProtText = xnfprotokollerw
+..
+..>> Test, ob Druckername konfiguriert
+..
+..
+.continue EL009 ? _(xProtDrucker <> "")
+.. IF009
+.output 'xProtDrucker'
+.input "BLANKOB.F"
+.input 'xProtText'
+.output terminal
+..
+!EL009
+.. FI009
+..
+!EL008
+.. FI008
+..
+.formula xsybefehl = "grep -s -E '.*eingehende EDL-Meldung$' " + xneprotokollerw + " > ${DEVNULL:-/dev/null}"
+.system 'xsybefehl' background
+..
+..>> Test, ob (mindestens) eine neue EDL-Meldungen eingetragen oder verarbeitet
+..
+..
+.continue EL010 ? _(mehr)
+.. IF010
+..>> Drucker
+.formula xProtDrucker = xProtDruckerOut
+..>> Druck-Datei
+.formula xProtText = xneprotokollerw
+..
+.continue FI010
+!EL010
+.formula xProtDrucker = ""
+..
+!FI010
+..
+..
+.continue EL011 ? _(xProtDrucker <> "")
+.. IF011
+.output 'xProtDrucker'
+.input "BLANKOB.F"
+.input 'xProtText'
+.output terminal
+..
+!EL011
+.. FI011
+..
+.continue 'xprocst.xprocsp'
+..
+.. Prozedur: EKSErgaenzePermanentesProtokoll
+..
+!PROC004: ----- EKSErgaenzePermanentesProtokoll -----
+..>> AnhÑngen der Erweiterungen des Protokolls an permanente Protokoll-Datei
+..>>
+..>> Parameter:
+..>>
+..>> Ein: - globaler Schalter, ob Fehlerprotokoll erweitert
+..>>        (xistfproterw)
+..>>      - Name der Ergebnisprotokoll-Datei
+..>>        Erweiterung (xnfprotokollerw)
+..>>      - Name der Fehlerprotokoll-Datei
+..>>        Erweiterung (xnfprotokollerw)
+..>>      - Name der Protokoll-Datei (xnfprotokoll)
+..>>
+..>> Aus: - Erfolg Operation (xprocreturn)
+..>>
+..>> Interne Variablen: - xsybefehl
+..>>
+..
+..>> Erfolg der Operation
+.formula xprocreturn = true
+..
+.. >> Erweitern permanente Protokoll-Dateien
+..>> Test, ob Name fÅr permanente Protoll-Datei konfiguriert
+..
+..
+.continue EL012 ? _(xnfprotokoll <> "")
+.. IF012
+.output addedto 'xnfprotokoll'
+.length 1
+.right 80
+.tablerecord
+..
+.formula xsybefehl = "grep -s -E '.*eingehende EDL-Meldung$' " + xneprotokollerw + " > ${DEVNULL:-/dev/null}"
+.system 'xsybefehl' background
+..
+..>> Test, ob (mindestens) eine neue EDL-Meldungen eingetragen oder verarbeitet
+..
+..
+.continue EL013 ? _(mehr)
+.. IF013
+.input 'xneprotokollerw'
+..
+.output addedto 'xnfprotokoll'
+.length 1
+.right 80
+.tablerecord
+
+..
+!EL013
+.. FI013
+..
+..>> Test, ob Fehler
+..
+..
+.continue EL014 ? _(xistfproterw)
+.. IF014
+.input 'xnfprotokollerw'
+..
+.output addedto 'xnfprotokoll'
+.length 1
+.right 80
+.tablerecord
+
+..
+!EL014
+.. FI014
+..
+.output new WERF.WEG
+..
+.formula xsybefehl = "rm -f " + xneprotokollerw + " 1> ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+..
+.formula xsybefehl = "rm -f " + xnfprotokollerw + " 1> ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+..
+!EL012
+.. FI012
+..
+.continue 'xprocst.xprocsp'
+..
+!EPROCDEF: ----- end procedure definitions -----
+.. ----------------------------------------
+..
+.. Modulsperre setzen
+.formula U|xmmvvl = "VKEDL"
+.formula U|xaktion = 1
+.input "EDIIMPPROCESS.MODULSPERRE"
+..
+..
+.continue EL015 ? _(xprocreturn)
+.. IF015
+.. >> Testergebnis positiv: Start Modul VKEDL
+.output terminal
+Initialisierung Programm <'tname'>, bitte warten ...
+..
+.. >> Initialisierung dynamische globale Variablen
+..>> Name des DFUE-Programms (tname aus ARB)
+.formula xdfueprog = tname
+..>> Name des DFUE-Unterprogramms
+.formula xdfueuprog = tname
+..>> <ABAS-Modul><Vorgang><Vorgangstyp>
+.formula xmmvvl = "VKEDL"
+..>> <ABAS-Modul><Vorgang><Vorgangstyp> (Kleinbuchstaben)
+.formula xmmvvlklein = "vkedl"
+..>> Vorgangsart
+.formula xvorart = "27"
+..>> Identnummer des Kunden beim Lieferanten (öbergabe an EDI.EDI2VKEDL)
+.formula xidkundeabe = ""
+..>> globaler Schalter, ob Protokoll erweitert
+.formula xistfproterw = false
+..>> vorÅbergehendes Verzeichnis temporÑre Dateien in "."
+.formula xtmpdir = ""
+..>> Name der Ergebnis-Protokoll-Datei Erweiterung
+.formula xneprotokollerw = xtmpdir + "XDFU.IMP.E" + 'panummer' + ".TMP"
+..>> Name der Fehler-Protokoll-Datei Erweiterung
+.formula xnfprotokollerw = xtmpdir + "XDFU.IMP.F" + 'panummer' + ".TMP"
+..>> Name der temporÑren Liste der Kunden-Identnummern beim Lieferanten
+.formula xnkdeliste = xtmpdir + "XDFU.KDE." + panummer + ".TMP"
+..>> debug
+.formula xdebug = false
+..
+.output new 'xnfprotokollerw'
+.length 1
+.right 80
+.tablerecord
+..
+.output new WERF.WEG
+..
+.output new 'xneprotokollerw'
+.length 1
+.right 80
+.tablerecord
+..
+.output new WERF.WEG
+..
+..>> Test VKEDL-Unterprogramms DFUE.IMP.INI
+..**ok,23.01.2003 (xarb wurde entfernt)
+..**ok,23.01.2003 (Test von DFUE.IMP.INI wurde entfernt)
+.formula xduimpini = "dfue/DFUE.IMP.INI"
+..
+.formula xdfueuprog = xduimpini
+..
+.input 'xduimpini'
+..
+..>> Name der Protokoll-Datei fÅr Import
+..**ok,23.01.2003 (xarb wurde mit "dfue/" ersetzt)
+.formula xnfprotokoll = "dfue/" + xnfprotokoll
+..>> Name der stdout-Protokoll-Datei fÅr Lader-Batch-LG
+.formula xnbatchlogoutl = xnverzout + "/" + xnbatchlogoutl ? xnbatchlogoutl <> "" & xnverzout <> ""
+..>> Name der stderr-Protokoll-Datei fÅr Lader-Batch-LG
+.formula xnbatchlogerrl = xnverzerr + "/" + xnbatchlogerrl ? xnbatchlogerrl <> "" & xnverzerr <> ""
+..>> Name der stdout-Protokoll-Datei fÅr öberwachungs-Batch-LG
+.formula xnbatchlogoutu = xnverzout + "/" + xnbatchlogoutu ? xnbatchlogoutu <> "" & xnverzout <> ""
+..>> Name der stderr-Protokoll-Datei fÅr öberwachungs-Batch-LG
+.formula xnbatchlogerru = xnverzerr + "/" + xnbatchlogerru ? xnbatchlogerru <> "" & xnverzerr <> ""
+..>> Name des VKEDL-Unterprogramms, mit dem Post gesendet wird
+..**ok,23.01.2003 (xarb wurde entfernt)
+.formula xdPostSenden = xdPostSenden
+..
+..**ok,23.01.2003 (Aufruf von "EDI.EDI2VKEDLKDINI" wurde entfernt)
+..
+..**ok,23.01.2003 ("DFUE.VKEDLMES hier Åber neue Variable "xduvkedlmes" eingelesen)
+.input 'xduvkedlmes'
+..
+.output addedto 'xnfprotokoll'
+.length 1
+.right 80
+.tablerecord
+..
+.output new WERF.WEG
+..
+.output addedto 'xneprotokollerw'
+.length 1
+.right 80
+.tablerecord
+'txname                        'START: 'datum'_'zeit'   PID: 'pid'
+  Datum_Zeit     EDI-IdNr  abas-IdNr Vo Kunde    Fehl       Bemerkung
+--------------------------------------------------------------------------------
+..
+.output new WERF.WEG
+..
+.output addedto 'xnfprotokollerw'
+.length 1
+.right 80
+.tablerecord
+'txname                        'START: 'datum'_'zeit'   PID: 'pid'
+  Datum_Zeit     EDI-IdNr  abas-IdNr Vo Kunde    Fehl       Bemerkung
+--------------------------------------------------------------------------------
+..
+.output new WERF.WEG
+..
+.output new 'xnkdeliste'
+.length 1
+.right 80
+.tablerecord
+..
+.output new WERF.WEG
+..
+.formula xistkdeliste = false
+..
+.. >> Vorselektion der Kunden per MenÅ
+.output terminal
+.input BILD.F
+'tname         ' - Verarbeitung EDL-Meldungen fÅr
+                   Kunden und / oder Kundenkontakte
+
+..
+.formula T|xmenu = 3
+.continue NOMENU  ?  G|edp
+..
+.menu Methode zur Auswahl der Kunden(kontakte)
+1 Alle Kunden/Kundenkontakte mit man. Verarbeitung EDL-Meldungen
+2 Alle Kunden/Kundenkontakte mit aut. Verarbeitung EDL-Meldungen
+3 Alle Kunden/Kundenkontakte mit man. oder aut. Verarbeitung EDL-Meldungen
+4 WÑhlen Kunden/Kundenkontakte mit man. Verarbeitung EDL-Meldungen
+5 WÑhlen Kunden/Kundenkontakte mit aut. Verarbeitung EDL-Meldungen
+6 WÑhlen Kunden/Kundenkontakte mit man. oder aut. Verarbeitung EDL-Meldungen
+Ende
+....
+..
+..**ok,16.06.2003 (unten "E-M" --> "-M" usw.
+..
+.formula xmenu = menu
+..
+!NOMENU
+..
+..
+.. =====   CASE001   =====
+.continue BRK001 ? _(xmenu = 1)
+.formula xediinfomatch = xmmvvl + "-M"
+..
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(xmenu = 2)
+.formula xediinfomatch = xmmvvl + "-A"
+..
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(xmenu = 3)
+.formula xediinfomatch = xmmvvl + "-/AM/"
+..
+.continue ESAC001
+!BRK003
+.continue BRK004 ? _(xmenu = 4)
+.formula xediinfomatch = xmmvvl + "-M"
+..
+.continue ESAC001
+!BRK004
+.continue BRK005 ? _(xmenu = 5)
+.formula xediinfomatch = xmmvvl + "-A"
+..
+.continue ESAC001
+!BRK005
+.continue BRK006 ? _(xmenu = 6)
+.formula xediinfomatch = xmmvvl + "-/AM/"
+..
+.continue ESAC001
+!BRK006
+.formula xsybefehl = "rm -f " + xneprotokollerw + " 1> ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+..
+.formula xsybefehl = "rm -f " + xnfprotokollerw + " 1> ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+..
+.continue Ende
+..
+!ESAC001: =====   ENDCASE   =====
+..
+.. >> Erzeugen temporÑre Liste Kunden-Identnummern
+.formula xistsatz2 = true
+..
+..
+!REPT001: ==============================
+..>> Initialisierung Identnummer des Kunden beim Lieferanten
+.formula xidkundeabe = ""
+..
+..>> Test, ob manuelle Auswahl Kunde oder Kundenkontakt
+..
+..
+.continue EL016 ? _((xmenu > 3) & (xmenu < 7))
+.. IF016
+.. >> Testergebnis positiv: Abfrage Kunde/Kundenkontakt
+.output terminal
+.input BILD.F
+'tname         ' - Verarbeitung EDL-Meldungen
+                   fÅr Kunden und / oder Kundenkontakte
+
+..
+..>> Test, ob Liste vorhanden
+..
+..
+.continue EL017 ? _(xistkdeliste)
+.. IF017
+Liste der ausgewÑhlten Kundenkontakte
+======================================
+
+.input 'xnkdeliste'
+
+-------------------------------------------------------------------------------
+
+..
+.menu Liste der gewÑhlten Kunden(kontakte)
+Erweitern
+Beenden,  Verarbeitung der EDL-Meldungen
+Neu Eingeben
+Abbrechen, Programm Beenden
+....
+..
+..
+.. =====   CASE002   =====
+.continue BRK007 ? _(menu = 1)
+.formula xfobefehl = "%" + ",,num=;such=;name=;gruppe=;@ordnung=nummer"
+.select customer 'xfobefehl'
+..
+.formula xistsatz1 = mehr
+..
+.continue ESAC002
+!BRK007
+.continue BRK008 ? _(menu = 2)
+..>> Merken, da· kein Kunde ausgewÑhlt
+.formula xistsatz1 = false
+..
+.continue ESAC002
+!BRK008
+.continue BRK009 ? _(menu = 3)
+.output new 'xnkdeliste'
+.length 1
+.right 80
+.tablerecord
+..
+.output new WERF.WEG
+..
+.formula xistkdeliste = false
+.formula xfobefehl = "%" + ",,num=;such=;name=;gruppe=;@ordnung=nummer"
+.select customer 'xfobefehl'
+..
+.formula xistsatz1 = mehr
+..
+.continue ESAC002
+!BRK009
+.formula xsybefehl = "rm -f " + xneprotokollerw + " 1> ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+..
+.formula xsybefehl = "rm -f " + xnfprotokollerw + " 1> ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+..
+.formula xistkdeliste = false
+.continue Ende
+..
+!ESAC002: =====   ENDCASE   =====
+..
+.continue FI017
+!EL017
+.formula xfobefehl = "%" + ",,num=;such=;name=;gruppe=;@ordnung=nummer"
+.select customer 'xfobefehl'
+..
+.formula xistsatz1 = mehr
+..
+!FI017
+..
+.formula xistsatz2 = xistsatz1
+..
+.. EDI-Info-EintrÑge prÅfen
+..
+!LOOP001: ==============================
+.continue ELOP001 ? _(xistsatz1)
+.formula xediaktiv = false
+..
+.formula xsybefehl = "grep -s " + 'num' + " " + xnkdeliste
+.system 'xsybefehl' background
+..
+..>> Test, ob Kunde oder Kundenkontakt noch nicht in Liste
+..
+..
+.continue EL018 ? _(_(mehr))
+.. IF018
+.. update xediaktiv/auto/manu from customer/contact
+.input "DFUE.GET.PROTOK"
+..
+..
+.continue EL019 ? _(xediaktiv)
+.. IF019
+.. >> Testergebnis positiv: Ermitteln Identnummer des Lieferanten beim Kunden aus abas-Kunde
+..>> Test, ob Kundenkontakt
+..
+..
+.continue EL020 ? _(gruppe = 2)
+.. IF020
+.add firma
+..
+!EL020
+.. FI020
+..
+..
+.continue EL021 ? _((gruppe = 1) ; (mehr))
+.. IF021
+..
+.continue EL022 ? _(frbez <> "")
+.. IF022
+..
+.continue EL023 ? _(gruppe = 2)
+.. IF023
+.add
+..
+!EL023
+.. FI023
+..
+.formula xidkundeabe = h|num
+..
+.formula xistkdeliste = true
+..
+.set separator=^
+.formula xfobefehl = (("        " + xidkundeabe) >> 8) + " " + ((such + "        ") << 8) + " " + name
+.output addedto 'xnkdeliste'
+.length 1
+.right 299
+'xfobefehl'
+.set
+..
+.output new WERF.WEG
+..
+.continue FI022
+!EL022
+..
+.continue EL024 ? _(gruppe = 2)
+.. IF024
+.add
+..
+!EL024
+.. FI024
+..
+..>> Test, ob manuelle Auswahl
+..
+..
+.continue EL025 ? _((xmenu > 9) & (xmenu < 19))
+.. IF025
+.box Fehler
+
+ Kunde <'num'>
+ hat keinen Eintrag der Identnummer des Lieferanten beim Kunden !
+
+..
+..
+!EL025
+.. FI025
+..
+!FI022
+..
+.continue FI021
+!EL021
+..
+.continue EL026 ? _(gruppe = 2)
+.. IF026
+..>> Test, ob manuelle Auswahl
+..
+..
+.continue EL027 ? _((xmenu > 9) & (xmenu < 19))
+.. IF027
+.box Fehler
+
+ Kundenkontakt 'num'
+ hat keinen Eintrag Kunde !
+
+..
+..
+!EL027
+.. FI027
+..
+!EL026
+.. FI026
+..
+!FI021
+..
+.continue FI019
+!EL019
+.. >> Testergebnis negativ: Fehlermeldung
+..>> Test, ob manuelle Auswahl
+..
+..
+.continue EL028 ? _((xmenu > 3) & (xmenu < 7))
+.. IF028
+..>> Test, ob Kunde
+..
+..
+.continue EL029 ? _(gruppe = 1)
+.. IF029
+.box Fehler
+
+ Kunde <'num'>
+ hat in EDI Info keinen aktivierten Eintrag fÅr gewÑhlte Art der Verarbeitung
+ eingehender EDL-Meldungen !
+
+..
+..
+.continue FI029
+!EL029
+.box Fehler
+
+ Kundenkontakt <'num'>
+ hat in EDI Info keinen aktivierten Eintrag fÅr gewÑhlte Art der Verarbeitung
+ eingehender EDL-Meldungen !
+
+..
+..
+!FI029
+..
+!EL028
+.. FI028
+..
+!FI019
+..
+.continue FI018
+!EL018
+.. >> Testergebnis negativ: Hinweis
+..>> Test, ob manuelle Auswahl
+..
+..
+.continue EL030 ? _((xmenu > 3) & (xmenu < 7))
+.. IF030
+..
+.continue EL031 ? _(gruppe = 1)
+.. IF031
+.box Hinweis
+
+ Kunde <'num'>
+ bereits ausgewÑhlt, bitte wÑhlen Sie weiteren
+ oder beenden Sie die Liste.
+
+..
+..
+.continue FI031
+!EL031
+.box Hinweis
+
+ Kundenkontakt <'num'>
+ bereits ausgewÑhlt, bitte wÑhlen Sie weiteren
+ oder beenden Sie die Liste.
+
+..
+..
+!FI031
+..
+!EL030
+.. FI030
+..
+!FI018
+..
+.select customer
+..
+.formula xistsatz1 = mehr
+..
+.continue LOOP001
+!ELOP001: ==============================
+..
+.continue FI016
+!EL016
+.formula xistsatz1 = mehr
+..
+.formula xistsatz2 = false
+..
+!FI016
+..
+..>> Abbruch bei leerer Auswahl und leerer Liste quittieren lassen
+..
+..
+.continue EL032 ? _((_(xistsatz2)) & (_(xistkdeliste)) & ((xmenu > 3) & (xmenu < 7)))
+.. IF032
+.menu Abbruch ohne Verarbeitung von EDL-Meldungen
+nein
+ja
+....
+..
+..
+.. =====   CASE003   =====
+.continue BRK010 ? _(menu = 1)
+.formula xistsatz2 = true
+..
+.continue ESAC003
+!BRK010
+.formula xsybefehl = "rm -f " + xneprotokollerw + " 1> ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+..
+.formula xsybefehl = "rm -f " + xnfprotokollerw + " 1> ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+..
+.formula xistkdeliste = false
+.continue Ende
+..
+!ESAC003: =====   ENDCASE   =====
+..
+!EL032
+.. FI032
+..
+.continue REPT001 ? _(_(xistsatz2))
+..
+..>> Test, ob temporÑre Liste der Lieferanten-Identnummern bei den Kunden erzeugt
+..>> oder Auswahl der Verarbeitung von EDL-Meldungen
+..
+..
+.continue EL033 ? _(xistkdeliste)
+.. IF033
+.. >> Verarbeiten der neuen EDL-Meldungen der Liste der Kunden
+.select from
+..
+.select from 'xnkdeliste' xidkundeabe xfobefehl^
+..
+.formula xistkdeliste = mehr & xidkundeabe <> ""
+..
+..
+!LOOP002: ==============================
+.continue ELOP002 ? _(xistkdeliste)
+.output terminal
+Verarbeitung eingegangene EDL-Meldungen fÅr Kunden <'xidkundeabe'>,
+bitte warten ...
+..
+.formula xdfueuprog = xduedi2vkedl
+.formula xdfueuprog = xdfueuprog >$ "/" ? xdfueuprog / "*\/*"
+..
+.input 'xduedi2vkedl'
+..
+.. >> 1. Zeile aus Liste entfernen
+..>>
+.formula xsybefehl = "X=`awk '{ if(NR != 1) print $0 }' " + xnkdeliste + "`;echo " + dblquote + "$X" + dblquote + " > " + xnkdeliste
+.system 'xsybefehl' background
+..
+.select from 'xnkdeliste' xidkundeabe xfobefehl^
+..
+.formula xistkdeliste = mehr & xidkundeabe <> ""
+..
+.continue LOOP002
+!ELOP002: ==============================
+..
+.continue FI033
+!EL033
+.output terminal
+Verarbeitung eingegangene EDL-Meldungen fÅr Kunden <'xidkundeabe'>,
+bitte warten ...
+..
+.formula xdfueuprog = xduedi2vkedl
+.formula xdfueuprog = xdfueuprog >$ "/" ? xdfueuprog / "*\/*"
+..
+.input 'xduedi2vkedl'
+..
+!FI033
+..
+.output terminal
+Beenden Programm, bitte warten ...
+..
+..
+.. .. Holen alle EDI-DatensÑtze fÅr aktive Lader EDI-EDL-Meldungen
+.formula xedisuchschluessel1 = "$,,;@gruppe=0;@ablage=(1);@zeilen=(0);imex=IM;fcode=0;status=5!10;vorart=" + xvorart
+.load 1 edifact 'xedisuchschluessel1'
+..
+.formula xistaktlader = mehr
+..
+..
+!LOOP003: ==============================
+.continue ELOP003 ? _(xistaktlader)
+..>> Merken EDI-Datensatz
+.formula xedinumactinnachr1 = 1|nummer
+..
+..
+.. =====   CASE004   =====
+.continue BRK011 ? _(1|status = 10)
+.output terminal
+Komplettieren abas-Objekte zu EDI-EDL-Meldungen <'xedinumactinnachr1'>, bitte warten ...
+..
+..>> Setzen Unterprogrammname
+.formula xdfueuprog = xduladpostvkedl
+.formula xdfueuprog = xdfueuprog >$ "/" ? xdfueuprog / "*\/*"
+..
+.input 'xduladpostvkedl'
+..
+.continue ESAC004
+!BRK011
+!ESAC004: =====   ENDCASE   =====
+..
+..>> nÑchsten aktiven Lader fÅr EDI-EDL-Meldungen
+.load 1 edifact
+..
+.formula xistaktlader = mehr
+..
+.continue LOOP003
+!ELOP003: ==============================
+..
+.formula xistfehler = xistfproterw
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC002
+!RET001
+.formula xprocsp = xprocsp - 1
+..
+.formula xistfehler = xistfproterw
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC003
+!RET002
+.formula xprocsp = xprocsp - 1
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC004
+!RET003
+.formula xprocsp = xprocsp - 1
+..
+!Ende:
+..
+.formula xsybefehl = "rm -f " + xnkdeliste + " 1> ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+..
+.. Modulsperre freigeben
+.formula U|xmmvvl = "VKEDL"
+.formula U|xaktion = 2
+.input "EDIIMPPROCESS.MODULSPERRE"
+..
+.continue FI015
+!EL015
+.. Fehlermeldung: Keine Sperre erhalten
+.error Die EDI-Verarbeitung ist gesperrt.
+.end 1
+..
+!FI015
+..
+.end .
+..

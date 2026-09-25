@@ -1,0 +1,1137 @@
+..!interpreter english declaration noabbrev
+.. at 2017-04-27, 10:54
+.set trans -
+..========================================================================
+..==  Name              : IS.PRJMVORKALK.EV
+..==  Pfad              : allppro
+..==  Funktion          : EFOP an IS PRJMVORKALK
+..==  Erstellungsdatum  : 24.11.2011
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..==
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allppro/LV.KONFIG.INI"
+.input "allpstart/LART.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF"
+..====================================================
+.type text    xtsys xtsel xtcmd xttemp xtkalkpos xtkoko xtextid xtid xtaltid xtindex xtkunde
+.type text    xtvar xtvorgang xtvorpos xtprojsuch xtarbpaket xteinh xtedpdat xtedpout xtedperr xtedpmsg xtoberposid xtoberkalkposid
+.type text    xytaufrufernr xytzeitstempel xtsperrstempel xtsummekoko
+.type integer xizeile xievtzeile xiaktzeile xineuzeile xistufe ximerkstufe xivar xispalte xi1 xitvar xitp xikvar ximenue ximonat
+.type real    xreigwert xrfremdwert xrsonstwert xrfertwert xrvar xrzvksatz xrstunden xrllekwert
+.type R7.3    xrmgeneu xrmgealt
+.type realx   xxurmge xxproz xxmgefaktor
+.type R9.3    xrllmge
+.type GJ      xgjahr
+.type bool    xbok xbmehr xbvar xbfremdleist xbllneu xbzakt xbignid xbausloese xbnurkalk xbistblatt
+.type TAZ7    xeinh xstunden
+.type symtab  xstzeilen
+.type ARTR52000 xrwert xrpreis
+.type P94:1   xpland
+.type text    xykoobjekt
+.type bool    xyberlaubt
+.type integer xyred xygreen xyblue xyhue
+.type realx   xysat xyval
+.type bool    xybrgb2hsv xybhsv2rgb
+.type bool    xbparam   ? _F|defined(U|xbparam)
+.type bool    xbnosave  ? _F|defined(U|xbnosave)
+.type bool    xbladetab ? _F|defined(U|xbladetab)
+.type bool    xbnoifop  ? _F|defined(U|xbnoifop)
+.type integer xprocsp   ? _F|defined(U|xprocsp)
+.set DEMAND -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Sperre_entfernen -----
+.continue EL001 ? _((M|ysperre) & (_(F|empty(M|ykalkblatt))))
+.continue EL002 ? _(M|ykalkblatt^ysperre)
+.select lock add M|ykalkblatt
+.continue EL003 ? _(G|mehr)
+.assign H|ysperre = G|FALSE
+.rewrite
+.continue FI003
+!EL003
+.set TRANS +
+.box Hinweis
+Das Kalkulationsblatt 'M|ykalkblatt^nummer'/'M|ykalkblatt^such' konnte nicht freigegeben werden.
+Bitte Sperre manuell entfernen.
+.set TRANS -
+!FI003
+!EL002
+!EL001
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Rechtepruefung -----
+.continue EL004 ? _(U|xypmrepruefkst)
+.formula U|xykoobjekt = M|ykalkblatt^yverantwkst^id
+.input 'U|xypmrepruefkstprog'
+.continue EL005 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderliche Rechte fÅr diese Kostenstelle.
+.set TRANS -
+.assign M|ykalkblatt  = ""
+!EL005
+!EL004
+.continue EL006 ? _(U|xypmrepruefind)
+.input 'U|xypmrepruefindprog'
+.continue EL007 ? _(_(U|xyberlaubt))
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderliche Rechte fÅr diese Kostenstelle.
+.set TRANS -
+.assign M|ykalkblatt  = ""
+!EL007
+!EL006
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Projektanlage_AU_und_AN -----
+.select group "3:22" "%,,nummer=;such=;sucherw=;yprjmproj==`;@.gruppe=22;.@filingmode=(Active)"       ? G|menue = 1
+.select group "3:21" "%,,nummer=;such=;sucherw=;yprjmproj==`;@.gruppe=21;.@filingmode=(Active)"       ? G|menue = 2
+.continue EL008 ? _(G|mehr)
+.formula U|xtvorgang  = H|id
+.formula U|xtvorpos   = ""
+.formula U|xtprojsuch = ""
+.formula U|xtprojsuch = H|yprjmproj^such        ? _F|empty(H|yprjmproj)
+.select line
+!LOOP001: ==============================
+.continue ELOP001 ? _(U|xbmehr)
+.formula U|xtvorpos   = H|id                                    ?  F|empty(H|projekt) & F|empty(U|xtvorpos)
+.formula U|xtprojsuch = U|xtprojsuch + ";" + H|projekt^such     ? _F|empty(H|projekt)
+.select line
+.continue LOOP001
+!ELOP001: ==============================
+.copy U|xbmehr = G|FALSE
+.continue EL009 ? _(_(F|empty(H|yprjmproj)))
+.load 0 group 'U|xydbgrpvorgang' 'F|expr("$,,yprojekt==" + H|yprjmproj^id + ";@filingmode=(Active)")'
+.copy U|xbmehr = G|mehr
+!EL009
+.continue EL010 ? _(_(F|empty(U|xtprojsuch)))
+!REPT001: ==============================
+.formula U|ximenue = 0
+.set TRANS +
+.menu Achtung
+Der gewÑhlte Auftrag enthÑlt bereits Projektzuordnungen zu den Projekten
+'U|xtprojsuch                                                           '
+
+Sie haben folgende Mîglichkeiten:
+Projekt nicht diesem Vorgang zuordnen                        >>.formula U|ximenue = 1
+Vorhandene Zuordnungen mit neuem Projekt Åberschreiben       >>.formula U|ximenue = 2
+?Projektplan fÅr Projekt 'H|yprjmproj' anlegen               >>.formula U|ximenue = 3   ? _F|empty(H|yprjmproj) & _U|xbmehr
+.set TRANS -
+.continue REPT001 ? _((G|menue = 0) ; (U|ximenue <> 0))
+!EL010
+.continue EL011 ? _((G|menue   <> 0) & (U|ximenue <> 1))
+.continue EL012 ? _((U|ximenue = 2) ; (F|empty(U|xtprojsuch)))
+.formula U|xtcmd = "<(Sales)>" + H|id + "<(Edit)> ?yprjmsbutton=yprjmbukdproj"
+.formula U|xtcmd = U|xtcmd + "|[invisible]=1"
+.comman -WAIT 'U|xtcmd'
+.select object 'U|xtvorgang'
+.continue EL013 ? _(G|mehr)
+.assign M|yprojekt = H|yprjmproj^id
+!EL013
+.continue FI012
+!EL012
+.continue EL014 ? _(U|ximenue = 3)
+.assign M|yprojekt = H|yprjmproj^id
+.continue FI014
+!EL014
+.box
+Diese Funktion ist noch nicht fertig gestellt.
+!FI014
+!FI012
+!EL011
+.continue FI008
+!EL008
+
+
+!FI008
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskende")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.end 1         ? M|ybmaskezu
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "buttonnach")
+.continue BRK003 ? _(G|evtvar = "ybulvbabdeckblatt")
+.continue EL015 ? _(_(F|empty(M|ykalkblatt)))
+.formula U|xtcmd = G|kkomname38 + " PRJMLVBABDECKBLATT ? ykalkblatt=" + M|ykalkblatt^id + "|ybmaskezu=1|bstart="
+.command -PARALLEL 'U|xtcmd'
+!EL015
+.continue ESAC002
+!BRK003
+.continue BRK004 ? _(G|evtvar = "ybuangebotneu")
+.continue EL016 ? _((F|empty(M|ykalkblatt)) ; (M|tzeilen = 0))
+.set TRANS +
+.box Hinweis
+Bitte erst ein Kalkulationsblatt wÑhlen und die Kalkulationsstruktur laden.
+.set TRANS -
+.error
+.end 1
+.continue FI016
+!EL016
+.formula U|xtsel = "$,,yprjmlvkalkid==" + M|ykalkblatt^id + ";kotyp==(" + 'G|ANKO' + ");@ablageart=(3)"
+.load 0 group "3:21" 'U|xtsel'
+.continue EL017 ? _(G|mehr)
+!REPT002: ==============================
+.set trans +
+.menu(0,0,4) Hinweis
+Zu diesem Kalkulationsblatt wurde schon ein Angebot erstellt.
+
+weiteres Angebot erstellen
+vorhandenes Angebot îffnen
+.set trans -
+.continue       ? G|menue = 0
+.continue REPT002 ? _(G|menue > 2)
+.continue BRK005 ? _(G|menue = 3)
+.continue ESAC003
+!BRK005
+.continue BRK006 ? _(G|menue = 4)
+.formula U|xtsel = "%,,nummer==;such=;sucherw=;yprjmproj=;vom=;.yprjmlvkalkid==" + M|ykalkblatt^id + ";.kotyp==(" + 'G|ANKO' + ");@ablageart=(3);@autostart=(1)"
+.load 0 group "3:21" 'U|xtsel'
+.command -WAIT 'F|expr(0|id)'   ? G|mehr
+.continue
+.continue ESAC003
+!BRK006
+.continue
+!ESAC003: =====   ENDCASE   =====
+!EL017
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"
+.select lock add M|ykalkblatt
+.continue EL018 ? _(_(G|mehr))
+.set TRANS +
+Das Kalkulationsblatt kann nicht zum bearbeiten geîffnet werden.
+Das Angebot wird nicht erstellt.
+.set TRANS -
+.error
+.end 1
+!EL018
+.continue EL019 ? _(F|empty(M|ykunde))
+.continue EL020 ? _(F|empty(M|ykalkblatt^ykunde))
+.set trans +
+.box Hinweis
+Im Kalkulationsblatt ist kein Kunde eingetragen.
+Bitte Kunden selektieren.
+.set trans -
+.continue EL021 ? _(G|mehr)
+.select customer "%,,.@filingmode=(Active)"
+.continue       ? _G|mehr
+.formula U|xtkunde = H|id
+.copy    U|xpland  = H|land
+.continue FI021
+!EL021
+.continue
+!FI021
+.continue FI020
+!EL020
+.copy    M|ykunde   = M|ykalkblatt^ykunde
+.formula U|xtkunde  = M|ykunde^id
+.copy    U|xpland   = M|ykunde^land
+!FI020
+.continue FI019
+!EL019
+.formula U|xtkunde = M|ykunde^id
+.copy    U|xpland  = M|ykunde^land
+!FI019
+.continue EL022 ? _((F|empty(5|ypmlvstdanpos)) ; (F|empty(5|ypmlvstdomanpos)) ; (F|empty(5|ypmlvtxtanpos)))
+.set TRANS +
+.box Hinweis
+Bitte zuerst in der Projektkonfiguration die Standard-Angebots-
+und Standard-Textposition fÅllen.
+.set TRANS -
+.error
+.end 1
+.continue FI022
+!EL022
+.continue EL023 ? _(_(5|ypmlvstdanpos^gruppe = 1))
+.continue EL024 ? _(_(5|ypmlvstdanpos^gruppe = 4))
+.set TRANS +
+.box Hinweis
+Die Standard Angebotsposition muss ein Artikel oder eine Zusatzposition vom Typ "AU/BE-Position,BV" sein.
+Bitte in der Projektkonfiguration korrigieren.
+.set TRANS -
+.error
+.end 1
+.continue FI024
+!EL024
+.continue EL025 ? _(_('5|ypmlvstdanpos^zptyp(L="0")' = "(7)"))
+.set TRANS +
+.box Hinweis
+Die Standard Angebotsposition muss ein Artikel oder eine Zusatzposition vom Typ "AU/BE-Position,BV" sein.
+Bitte in der Projektkonfiguration korrigieren.
+.set TRANS -
+.error
+.end 1
+!EL025
+!FI024
+!EL023
+.continue EL026 ? _(_(5|ypmlvstdomanpos^gruppe = 4))
+.set TRANS +
+.box Hinweis
+Die Standard Angebotsposition ohne Menge muss Zusatzposition vom Typ "neutrale Position" sein.
+Bitte in der Projektkonfiguration korrigieren.
+.set TRANS -
+.error
+.end 1
+.continue FI026
+!EL026
+.continue EL027 ? _(_('5|ypmlvstdomanpos^zptyp(L="0")' = "(12)"))
+.set TRANS +
+.box Hinweis
+Die Standard Angebotsposition ohne Menge muss Zusatzposition vom Typ "neutrale Position" sein.
+Bitte in der Projektkonfiguration korrigieren.
+.set TRANS -
+.error
+.end 1
+!EL027
+!FI026
+.continue EL028 ? _(_(5|ypmlvtxtanpos^gruppe = 4))
+.set TRANS +
+.box Hinweis
+Die Standard Textposition fÅr Angebote muss Zusatzposition vom Typ "Text" sein.
+Bitte in der Projektkonfiguration korrigieren.
+.set TRANS -
+.error
+.end 1
+.continue FI028
+!EL028
+.continue EL029 ? _(_('5|ypmlvtxtanpos^zptyp(L="0")' = "(26)"))
+.set TRANS +
+.box Hinweis
+Die Standard Textposition fÅr Angebote muss Zusatzposition vom Typ "Text" sein.
+Bitte in der Projektkonfiguration korrigieren.
+.set TRANS -
+.error
+.end 1
+!EL029
+!FI028
+!FI022
+.copy U|xbok = G|TRUE
+.select screen header
+.select screen line
+!LOOP002: ==============================
+.continue ELOP002 ? _((U|xbok) & (G|mehr))
+.continue EL030 ? _(M|ytistblatt)
+.continue EL031 ? _((_(F|empty(M|yteinh))) ; (_(M|ytmge = 0)))
+.continue EL032 ? _((M|ytmge = 0) ; (F|empty(M|yteinh)))
+.cursor ytmge  'M|aktzeile'     ? M|ytmge = 0
+.cursor yteinh 'M|aktzeile'     ? F|empty(M|yteinh)
+.set TRANS +
+.box Fehler
+?Bitte Menge eintragen      ? M|ytmge = 0
+?Bitte Einheit eintragen    ? F|empty(M|yteinh)
+.set TRANS -
+.error
+.end 1
+.continue FI032
+!EL032
+.continue EL033 ? _((_(M|yteinh = 5|ypmlvstdanpos^le)) & (_(M|yteinh = 5|ypmlvstdanpos^vhe)) & (_(M|yteinh = 5|ypmlvstdanpos^vpe)) & (_(M|yteinh = 5|ypmlvstdanpos^ehe)) & (_(M|yteinh = 5|ypmlvstdanpos^epe)) & (F|empty(M|ytartikel)))
+.set TRANS +
+.box -BUTTON yes:no -TITLE Hinweis
+Nicht alle in der Kalkulation verwendeten Einheiten sind in der Standard Angebotsposition definiert.
+Sollen diese Positionen mit der Standard Angebotsposition ohne Menge angelegt werden.
+.set TRANS -
+.continue EL034 ? _(G|box = G|boxyes)
+.copy U|xbok = G|FALSE
+.continue FI034
+!EL034
+.error
+.end 1
+!FI034
+!EL033
+!FI032
+!EL031
+!EL030
+.select screen line
+.continue LOOP002
+!ELOP002: ==============================
+.file -TEMPNAME U|xtedpdat
+.file -TEMPNAME U|xtedpout
+.file -TEMPNAME U|xtedperr
+.file -TEMPNAME U|xtedpmsg
+.set SEPARATOR
+.set SUBSTITUTION "+LX,&,&amp;, ,<,&lt;, ,>,&gt;,"
+.output NEW 'U|xtedpdat' -ENCODING "UTF-8"
+.input DATEI.F
+<'G|fragechar'xml version='G|dblquote'1.0'G|dblquote' encoding='G|dblquote'UTF-8'G|dblquote''G|fragechar'>
+<?edp langcode 'G|bsprache'?>
+<'G|fragechar'edp updatemode strict'G|fragechar'>
+<ABASData reftype='G|dblquote'ref'G|dblquote'>
+  <RecordSet>
+    <Record database='G|dblquote'3'G|dblquote' group='G|dblquote'21'G|dblquote' action='G|dblquote'NEW'G|dblquote'>
+      <Field name='G|dblquote'kunde'G|dblquote'>'U|xtkunde'</Field>
+      <Field name='G|dblquote'yprjmverantwkst'G|dblquote'>'M|ykalkblatt^yverantwkst^id'</Field>
+      <Field name='G|dblquote'yprjmlvkalkid'G|dblquote'>'M|ykalkblatt^id'</Field>
+      <Field name='G|dblquote'betreff'G|dblquote'>'M|ykalkblatt^namebspr'</Field>
+.select screen header
+.select screen line
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.output ADDEDTO 'U|xtedpdat' -ENCODING UTF-8
+      <Row rowOp='G|dblquote'+'G|dblquote'>
+.continue EL035 ? _(M|ytistblatt)
+.formula U|xrwert  = M|ytvkwertman * F|fxrate(U|xpland, , G|inland)
+.formula U|xrpreis = M|yteinhpreis * F|fxrate(U|xpland, , G|inland)
+.continue EL036 ? _(F|empty(M|ytartikel))
+.continue EL037 ? _((M|ytmge =  0) ; (F|empty(M|yteinh)) ; ((_(M|yteinh = 5|ypmlvstdanpos^le)) & (_(M|yteinh = 5|ypmlvstdanpos^vhe)) & (_(M|yteinh = 5|ypmlvstdanpos^vpe)) & (_(M|yteinh = 5|ypmlvstdanpos^ehe)) & (_(M|yteinh = 5|ypmlvstdanpos^epe))))
+                <Field name='G|dblquote'artex'G|dblquote'>'5|ypmlvstdomanpos^id'</Field>
+                <Field name='G|dblquote'pwert'G|dblquote'>'U|xrwert'</Field>
+.continue FI037
+!EL037
+                <Field name='G|dblquote'artex'G|dblquote'>'5|ypmlvstdanpos^id'</Field>
+                <Field name='G|dblquote'he'G|dblquote'>'M|yteinh(L="0")'</Field>
+                <Field name='G|dblquote'mge'G|dblquote'>'M|ytmge'</Field>
+                <Field name='G|dblquote'preis'G|dblquote'>'U|xrpreis'</Field>
+!FI037
+.continue FI036
+!EL036
+.continue EL038 ? _(F|empty(M|yteinh))
+                <Field name='G|dblquote'artex'G|dblquote'>'M|ytartikel^id'</Field>
+                <Field name='G|dblquote'pwert'G|dblquote'>'U|xrwert'</Field>
+.continue FI038
+!EL038
+                <Field name='G|dblquote'artex'G|dblquote'>'M|ytartikel^id'</Field>
+                <Field name='G|dblquote'he'G|dblquote'>'M|yteinh(L="0")'</Field>
+                <Field name='G|dblquote'mge'G|dblquote'>'M|ytmge'</Field>
+                <Field name='G|dblquote'preis'G|dblquote'>'U|xrpreis'</Field>
+                <Field name='G|dblquote'pwert'G|dblquote'>'U|xrwert'</Field>
+!FI038
+!FI036
+                <Field name='G|dblquote'pnum'G|dblquote'>'M|ytposnum'</Field>
+                <Field name='G|dblquote'ptext'G|dblquote'>'M|ytposname'</Field>
+.continue FI035
+!EL035
+                <Field name='G|dblquote'artex'G|dblquote'>'5|ypmlvtxtanpos^id'</Field>
+                <Field name='G|dblquote'pnum'G|dblquote'>'M|ytposnum'</Field>
+                <Field name='G|dblquote'ptext'G|dblquote'>'M|ytposname'</Field>
+!FI035
+.continue EL039 ? _(_(F|empty(M|ytposftext)))
+.'F|expr("file -TEMPNAME U|xttemp -SUFFIX X." + F|tostring(G|versionneu))'
+.output NEW 'U|xttemp'
+.input -TEXT 'M|ytposftext'
+.output ADDEDTO 'U|xtedpdat' -ENCODING UTF-8
+                <Field name='G|dblquote'pftext'G|dblquote' url='G|dblquote'file:'U|xttemp''G|dblquote' urlEncoding='G|dblquote'S3'G|dblquote'/>
+!EL039
+      </Row>
+.continue EL040 ? _(true)
+.continue FI040
+!EL040
+.continue EL041 ? _(M|ytistblatt)
+.copy U|xbmehr = G|FALSE
+.select add M|ytkalkpos
+.continue EL042 ? _(G|mehr)
+.select line "$,,ytleistlistid<>`"
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.load 0 group 'U|xydbgrleistliste' 'H|ytleistlistid'
+.continue EL043 ? _(G|mehr)
+.continue EL044 ? _(0|tzeilen > 0)
+.load 0 line
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.continue EL045 ? _((_(0|ytmge       =  0)) & (_(0|ytvkwertman =  0)))
+.output ADDEDTO 'U|xtedpdat' -ENCODING UTF-8
+      <Row rowOp='G|dblquote'+'G|dblquote'>
+?        <Field name='G|dblquote'artex'G|dblquote'>'0|ytteil^id'</Field>            ? _F|empty(0|ytteil)
+?        <Field name='G|dblquote'artex'G|dblquote'>'5|ypmlvstdanpos^id'</Field>     ?  F|empty(0|ytteil) & _0|ytmge =  0
+?        <Field name='G|dblquote'artex'G|dblquote'>'5|ypmlvstdanpos^id'</Field>     ?  F|empty(0|ytteil) &  0|ytmge =  0
+?        <Field name='G|dblquote'mge'G|dblquote'>'0|ytmge'</Field>                  ? _0|ytmge =  0
+?        <Field name='G|dblquote'pe'G|dblquote'>'0|yteinh(L=":")'</Field>           ? _F|empty(0|yteinh)
+        <Field name='G|dblquote'pwert'G|dblquote'>'0|ytvkwertman'</Field>
+      </Row>
+!EL045
+.load 0 line
+.continue LOOP005
+!ELOP005: ==============================
+!EL044
+!EL043
+.select line
+.continue LOOP004
+!ELOP004: ==============================
+!EL042
+!EL041
+!FI040
+.select screen line
+.continue LOOP003
+!ELOP003: ==============================
+    </Record>
+  </RecordSet>
+</ABASData>
+.set SUBSTITUTION
+.output NEW WERF.WEG
+.formula U|xtsys = "xmlimport.sh"
+.formula U|xtsys = U|xtsys + " -p " + G|einmalpw
+.formula U|xtsys = U|xtsys + " -o UPDATEMODE=STRICT"
+.formula U|xtsys = U|xtsys + " -r REF"
+.formula U|xtsys = U|xtsys + " -I " + U|xtedpdat + " -H " + U|xtedpmsg + " 1>" + U|xtedpout + " 2>" + U|xtedperr
+.input "allpstart/FOP.ALL.EDP.CHECK"
+.continue EL046 ? _(U|xbfehler)
+.set TRANS +
+.box Hinweis
+Das Angebot konnte nicht angelegt werden.
+.set TRANS -
+.error
+.end 1
+!EL046
+.select from
+.select from 'U|xtedpout' xtid
+.continue EL047 ? _(F|empty(U|xtid))
+.set TRANS +
+.box Hinweis
+Das erstellte Angebot konnte nicht ermittelt werden.
+.set TRANS -
+!EL047
+.select lock add M|ykalkblatt
+.continue EL048 ? _(G|mehr)
+.assign H|ybfixiert = G|TRUE
+.rewrite
+.select group "3:1" 'U|xtid'
+.continue EL049 ? _(G|mehr)
+.set TRANS +
+.box Hinweis
+Das Angebot wurde mit der Nummer 'H|nummer' angelegt'
+.set TRANS -
+.continue FI049
+!EL049
+.set TRANS +
+.box Hinweis
+Das erstellte Angebot konnte nicht ermittelt werden.
+.set TRANS -
+!FI049
+!EL048
+!FI016
+.continue ESAC002
+!BRK004
+.continue BRK007 ? _(G|evtvar = "ybuprojplanneu")
+.continue EL050 ? _((F|empty(M|ykalkblatt)) ; (M|tzeilen = 0))
+.set TRANS +
+.box Hinweis
+Bitte erst ein Kalkulationsblatt wÑhlen und die Kalkulationsstruktur laden.
+.set TRANS -
+.error
+.end 1
+.continue FI050
+!EL050
+.input "is/ABASFARBEN.DEF"
+.assign U|xstunden = U|xypmstunden
+.select lock add M|ykalkblatt
+.formula U|xivar = 1
+!LOOP006: ==============================
+.continue ELOP006 ? _(F|defined(M|ykkokogessum.U|xivar))
+.continue EL051 ? _(M|ykkokogessum.U|xivar)
+.formula U|xtsummekoko = M|ykkoko.U|xivar^id
+!EL051
+.formula U|xivar = U|xivar + 1
+.continue LOOP006
+!ELOP006: ==============================
+.continue EL052 ? _(_(G|mehr))
+.set TRANS +
+Das Kalkulationsblatt kann nicht zum bearbeiten geîffnet werden.
+Der Projektplan wird nicht erstellt.
+.set TRANS -
+.error
+.end 1
+!EL052
+.continue EL053 ? _(_(F|empty(M|ykalkblatt^yprojekt)))
+.load 0 group 'U|xydbgrpvorgang' 'F|expr("$,,yprojekt==" + M|ykalkblatt^yprojekt^id + ";ystatus<>(_08);@filingmode=(Active)")'
+.continue EL054 ? _(G|mehr)
+.set TRANS +
+.box Hinweis
+Zu diesem Kalkulationsblatt wurde bereits ein Projektplan erstellt.
+.set TRANS -
+.continue
+!EL054
+!EL053
+.continue EL055 ? _(M|ybtpzukoko)
+.formula U|xivar = 1
+!LOOP007: ==============================
+.continue ELOP007 ? _(F|defined(M|yzuteilprojekt.xivar))
+.continue EL056 ? _((M|yzuteilprojekt.xivar <> 0) & (F|empty(M|ytpverantwkst.xivar)))
+.set TRANS +
+.box Fehler
+Bitte verantwortliche Kostenstelle zu den Teilprojekten angeben.
+.set TRANS -
+.'F|expr("cursor ytpverantwkst" + F|tostring(U|xivar) + " 0")'
+.continue
+!EL056
+.formula U|xivar = U|xivar + 1
+.continue LOOP007
+!ELOP007: ==============================
+!EL055
+.continue EL057 ? _(F|empty(M|yprojekt))
+.load 0 group "145:4" 'F|expr("$,,ykblattid==" + M|ykalkblatt^id + ";@filingmode=(Active)")'
+.copy U|xbmehr = G|mehr
+!LOOP008: ==============================
+.continue ELOP008 ? _(U|xbmehr)
+.load 1 group 'U|xydbgrpvorgang' 'F|expr("$,,ykalkposid==" + 0|id + ";@filingmode=(Active)")'
+.continue EL058 ? _(G|mehr)
+!REPT003: ==============================
+.set trans +
+.menu(0,0,4) Hinweis
+Zu dieser Kalkulation existiert bereits ein Projekt mit Projektplan.
+
+weiteres Projekt zur gleichen Kalkulation erstellen.
+Abbruch         >>.continue
+.set trans -
+.continue       ? G|menue = 0
+.continue REPT003 ? _(G|menue > 2)
+.copy U|xbmehr = G|FALSE
+.continue FI058
+!EL058
+.load 0 continue
+.copy U|xbmehr = G|mehr
+!FI058
+.continue LOOP008
+!ELOP008: ==============================
+!EL057
+.continue EL059 ? _(F|empty(M|yprojekt))
+.formula U|xtvorgang = ""
+.copy U|xbok = G|FALSE
+!REPT004: ==============================
+.set TRANS +
+.menu Auswahl
+Projekt einem Auftrag zuordnen
+Projekt einem Angebot zuordnen
+Projekt ohne  Auftrag/Angebot anlegen
+.set TRANS -
+.continue       ? G|menue = 0
+.continue BRK008 ? _(G|menue = 1)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC003
+!RET002
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK008
+.continue BRK009 ? _(G|menue = 2)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC003
+!RET003
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK009
+.continue BRK010 ? _(G|menue = 3)
+.continue EL060 ? _(F|empty(M|yprojekt))
+.formula U|xtextid = 'G|versionneu' + G|PID
+.input 'U|xtupprojanlage'
+.formula U|xtsel = "$,,yextid==" + U|xtextid + ";@filingmode=(Active)"
+.select group 'U|xydbgrprojekt' 'U|xtsel'
+.continue EL061 ? _(G|mehr)
+.assign M|yprojekt = H|id
+.continue FI061
+!EL061
+.set TRANS +
+.box Fehler
+Das Projekt konnte nicht angelegt werden.
+.set TRANS -
+!FI061
+!EL060
+.continue ESAC004
+!BRK010
+!ESAC004: =====   ENDCASE   =====
+.copy U|xbok = G|TRUE   ? _F|empty(M|yprojekt)
+.continue REPT004 ? _(U|xbok)
+!EL059
+.select lock add M|ykalkblatt
+.assign H|yprojekt = M|yprojekt^id
+.rewrite
+.select lock add M|yprojekt
+.continue EL062 ? _(G|mehr)
+.formula H|yvokapgk = M|yprojgkzuord
+.rewrite
+.select -
+!EL062
+.file -TEMPNAME U|xtedpdat
+.file -TEMPNAME U|xtedpout
+.file -TEMPNAME U|xtedperr
+.file -TEMPNAME U|xtedpmsg
+.set SEPARATOR
+.set SUBSTITUTION "+LX,&,&amp;, ,<,&lt;, ,>,&gt;,"
+.output NEW 'U|xtedpdat' -ENCODING "UTF-8"
+.input DATEI.F
+<'G|fragechar'xml version='G|dblquote'1.0'G|dblquote' encoding='G|dblquote'UTF-8'G|dblquote''G|fragechar'>
+<?edp langcode 'G|bsprache'?>
+<'G|fragechar'edp updatemode ERRABORT'G|fragechar'>
+<ABASData reftype='G|dblquote'ref'G|dblquote'>
+<RecordSet>
+.type text xttp0 xtvkst0
+.formula U|xttp0   = 'G|versionneu' + G|PID
+.formula U|xtvkst0 = M|yprojekt^yverantwkst^id
+.continue EL063 ? _(M|ybtpzukoko)
+.formula U|xivar = 1
+!LOOP009: ==============================
+.continue ELOP009 ? _(F|defined(M|yzuteilprojekt.xivar))
+.formula U|xi1 = M|yzuteilprojekt.xivar
+.continue EL064 ? _((M|yzuteilprojekt.xivar <> 0) & (_(F|defined(U|xttp.xi1))))
+.type text xttp.xi1 xtvkst.xi1
+.formula U|xttp.xi1   = 'G|versionneu' + G|PID
+.formula U|xtvkst.xi1 = M|ytpverantwkst.xivar^id
+<Record database="86" group="5" action='G|dblquote'NEW'G|dblquote' tag='G|dblquote'TP'U|xi1''G|dblquote'>
+        <Field name='G|dblquote'name'G|dblquote'>'M|yprojekt^namebspr'</Field>
+        <Field name='G|dblquote'yteilprojektzu'G|dblquote'>'M|yprojekt^id'</Field>
+        <Field name='G|dblquote'yverantwkst'G|dblquote'>'M|ytpverantwkst.xivar^id'</Field>
+        <Field name='G|dblquote'yadatum'G|dblquote'>'M|yprojekt^yadatum:8'</Field>
+        <Field name='G|dblquote'yedatum'G|dblquote'>'M|yprojekt^yedatum:8'</Field>
+        <Field name='G|dblquote'yprojleit'G|dblquote'>'M|yprojekt^yprojleit^id'</Field>
+        <Field name='G|dblquote'yprojverantw'G|dblquote'>'M|yprojekt^yprojverantw^id'</Field>
+        <Field name='G|dblquote'ykunde'G|dblquote'>'M|yprojekt^ykunde^id'</Field>
+        <Field name='G|dblquote'yprgtypk'G|dblquote'>'M|yprojekt^yprgtypk'</Field>
+        <Field name='G|dblquote'yextid'G|dblquote'>'U|xttp.xi1'</Field>
+?</Record>
+!EL064
+.formula U|xivar = U|xivar + 1
+.continue LOOP009
+!ELOP009: ==============================
+!EL063
+.continue EL065 ? _(M|ybtpzulvteilen)
+.select screen header
+.select screen line
+!LOOP010: ==============================
+.continue ELOP010 ? _(G|mehr)
+.formula U|xi1 = M|ytzuteilprojekt
+.continue EL066 ? _((M|ytzuteilprojekt <> 0) & (_(F|defined(U|xttp.xi1))))
+.type text xttp.xi1 xtvkst.xi1
+.formula U|xttp.xi1   = 'G|versionneu' + G|PID
+.formula U|xtvkst.xi1 =  M|yttpverantwkst.xivar^id
+<Record database="86" group="5" action='G|dblquote'NEW'G|dblquote' tag='G|dblquote'TP'U|xi1''G|dblquote'>
+        <Field name='G|dblquote'name'G|dblquote'>'M|yprojekt^namebspr'</Field>
+        <Field name='G|dblquote'yteilprojektzu'G|dblquote'>'M|yprojekt^id'</Field>
+        <Field name='G|dblquote'yverantwkst'G|dblquote'>'M|yttpverantwkst^id'</Field>
+        <Field name='G|dblquote'yadatum'G|dblquote'>'M|yprojekt^yadatum:8'</Field>
+        <Field name='G|dblquote'yedatum'G|dblquote'>'M|yprojekt^yedatum:8'</Field>
+        <Field name='G|dblquote'yprojleit'G|dblquote'>'M|yprojekt^yprojleit^id'</Field>
+        <Field name='G|dblquote'yprojverantw'G|dblquote'>'M|yprojekt^yprojverantw^id'</Field>
+        <Field name='G|dblquote'ykunde'G|dblquote'>'M|yprojekt^ykunde^id'</Field>
+        <Field name='G|dblquote'yprgtypk'G|dblquote'>'M|yprojekt^yprgtypk'</Field>
+        <Field name='G|dblquote'yextid'G|dblquote'>'U|xttp.xi1'</Field>
+?</Record>
+!EL066
+.select screen line
+.continue LOOP010
+!ELOP010: ==============================
+!EL065
+.copy    U|xgjahr  = F|getfy(M|ybezugsdatum)
+.formula U|ximonat = F|month(M|ybezugsdatum)
+.formula U|xitp = 0
+!LOOP011: ==============================
+.continue ELOP011 ? _(F|defined(U|xttp.xitp))
+.formula U|xrzvksatz = 0
+.continue EL067 ? _(_(F|empty(U|xtvkst.xitp)))
+.load 9 group "5:2" 'U|xtvkst.xitp'
+.continue EL068 ? _(G|mehr)
+.continue EL069 ? _(_(F|empty(9|yprjmwipleiart)))
+.formula U|xtsel = "$,,ykstelle==" + 9|id + ";yleiart==" + 9|yprjmwipleiart^id + ";ygjahr=" + 'U|xgjahr' + ";ybstd=0;@filingmode=(Active);@zeilen=(1)"
+.load 8 group 'U|xydbgrversatz' 'U|xtsel'
+.continue EL070 ? _(G|mehr)
+.load 8 line '8|selzeile'
+.formula U|xrzvksatz = 8|yvsf.ximonat                                                   ?  8|yvland = G|inland ;  F|empty(8|yvland)
+.formula U|xrzvksatz = F|fxamount(G|inland,8|yvsf.ximonat,M|ystichdatum,8|yvland)       ? _8|yvland = G|inland & _F|empty(8|yvland)
+.continue FI070
+!EL070
+.formula U|xtsel = "$,,yleiart==" + 9|yprjmwipleiart^id + ";ygjahr=" + 'U|xgjahr' + ";ybstd=1;@filingmode=(Active);@zeilen=(1)"
+.load 8 group 'U|xydbgrversatz' 'U|xtsel'
+.continue EL071 ? _(G|mehr)
+.load 8 line '8|selzeile'
+.formula U|xrzvksatz = 8|yvsf.ximonat                                                   ?  8|yvland = G|inland ;  F|empty(8|yvland)
+.formula U|xrzvksatz = F|fxamount(G|inland,8|yvsf.ximonat,M|ystichdatum,8|yvland)       ? _8|yvland = G|inland & _F|empty(8|yvland)
+!EL071
+!FI070
+!EL069
+.load 8
+.load 9
+!EL068
+!EL067
+.select screen header
+.select screen line
+!LOOP012: ==============================
+.continue ELOP012 ? _(G|mehr)
+.continue EL072 ? _((_(M|ytboptpos)) & (((_(M|ybtpzukoko)) & (_(M|ybtpzulvteilen))) ; (M|ybtpzukoko)))
+.formula U|xreigwert   = 0
+.formula U|xrfremdwert = 0
+.formula U|xrsonstwert = 0
+.formula U|xrfertwert  = 0
+.formula U|xreigwert   = U|xreigwert   + M|ytekwerteigen
+.formula U|xrfremdwert = U|xrfremdwert + M|ytekwertfremd
+.continue EL073 ? _(G|true)
+.continue FI073
+!EL073
+.formula U|xi1 = 1
+!LOOP013: ==============================
+.continue ELOP013 ? _(F|defined(M|ytekwerteigen.xi1))
+.println -screen  U|xreigwert: 'U|xreigwert'
+.formula U|xreigwert   = U|xreigwert   + M|ytekwerteigen.xi1    ? M|yzuteilprojekt.xi1 = U|xitp ; _M|ybtpzukoko
+.formula U|xrfremdwert = U|xrfremdwert + M|ytekwertfremd.xi1    ? M|yzuteilprojekt.xi1 = U|xitp ; _M|ybtpzukoko
+.formula U|xi1 = U|xi1 + 1
+.continue LOOP013
+!ELOP013: ==============================
+!FI073
+.continue EL074 ? _(((M|ytekwertgesamt <> 0) ; (U|xreigwert + U|xrfremdwert <> 0) ; (G|true)) & (M|tbaumstufe <= M|ystufepplan))
+.continue EL075 ? _((_(M|ybpvprokoko)) & (_(M|ybpvausleilist)))
+.formula U|xrstunden = 0
+.formula U|xrstunden = U|xreigwert / U|xrzvksatz        ? U|xrzvksatz <> 0
+.continue EL076 ? _((M|ytekwertgesamt <> 0) ; (U|xreigwert <> 0) ; (G|true))
+<Record database='G|dblquote''U|xydbpvorgang''G|dblquote' group='G|dblquote''U|xygrpvorgang''G|dblquote' action='G|dblquote'NEW'G|dblquote' tag='G|dblquote'PVEL'M|ytzid''G|dblquote'>
+?        <Field name='G|dblquote'yprojekt'G|dblquote'>'M|yprojekt^id'</Field>                                                                                                   ? U|xitp =  0
+?        <Field name='G|dblquote'yprojekt'G|dblquote' reftag='G|dblquote'TP'U|xitp''G|dblquote' reffield='G|dblquote'ref'G|dblquote' reftype='G|dblquote'status'G|dblquote'/>   ? U|xitp <> 0
+        <Field name='G|dblquote'name'G|dblquote'><![CDATA['M|ytposname']]></Field>
+        <Field name='G|dblquote'yverantw'G|dblquote'>'M|yprojekt^yprojleit^id'</Field>
+        <Field name='G|dblquote'ypvsollstd'G|dblquote'>'U|xrstunden'</Field>
+        <Field name='G|dblquote'ypvvokastd'G|dblquote'>'U|xrstunden'</Field>
+        <Field name='G|dblquote'ypvplanstd'G|dblquote'>'U|xrstunden'</Field>
+        <Field name='G|dblquote'yleistwertplan'G|dblquote'>'M|yteigwert'</Field>
+        <Field name='G|dblquote'yadatum'G|dblquote'>'M|yprojekt^yadatum:8'</Field>
+        <Field name='G|dblquote'yedatum'G|dblquote'>'M|yprojekt^yedatum:8'</Field>
+        <Field name='G|dblquote'ykalkposid'G|dblquote'>'M|ytkalkpos^id'</Field>
+        <Field name='G|dblquote'yskalkpos'G|dblquote'>'M|ytkalkpos^id'</Field>
+        <Field name='G|dblquote'ysort'G|dblquote'>'M|aktzeile'</Field>
+?        <Field name='G|dblquote'yistblatt'G|dblquote'>1</Field>                                ? M|tbaumstufe =  M|ystufepplan ;  M|ytistblatt
+?        <Field name='G|dblquote'yistblatt'G|dblquote'>0</Field>                                ? M|tbaumstufe <> M|ystufepplan & _M|ytistblatt
+?        <Field name='G|dblquote'ygehoertzu'G|dblquote' reftag='G|dblquote'PVEL'M|ytknotenid''G|dblquote' reffield='G|dblquote'ref'G|dblquote' reftype='G|dblquote'status'G|dblquote'/>   ? M|tbaumstufe > 0
+        <Field name='G|dblquote'ybnocheck'G|dblquote'>(Yes)</Field>
+?</Record>
+!EL076
+.continue EL077 ? _((G|false) & (U|xrfremdwert <> 0))
+<Record database='G|dblquote''U|xydbpvorgang''G|dblquote' group='G|dblquote''U|xygrpvorgang''G|dblquote' action='G|dblquote'NEW'G|dblquote' tag='G|dblquote'PVFL'M|ytzid''G|dblquote'>
+?        <Field name='G|dblquote'yprojekt'G|dblquote'>'M|yprojekt^id'</Field>                                                                                                   ? U|xitp =  0
+?        <Field name='G|dblquote'yprojekt'G|dblquote' reftag='G|dblquote'TP'U|xitp''G|dblquote' reffield='G|dblquote'ref'G|dblquote' reftype='G|dblquote'status'G|dblquote'/>   ? U|xitp <> 0
+        <Field name='G|dblquote'name'G|dblquote'><![CDATA['M|ytposname']]></Field>
+        <Field name='G|dblquote'yverantw'G|dblquote'>'M|yprojekt^yprojleit^id'</Field>
+        <Field name='G|dblquote'yleistwertplan'G|dblquote'>'M|ytfremdwert'</Field>
+        <Field name='G|dblquote'yadatum'G|dblquote'>'M|yprojekt^yadatum:8'</Field>
+        <Field name='G|dblquote'yedatum'G|dblquote'>'M|yprojekt^yedatum:8'</Field>
+        <Field name='G|dblquote'ykalkposid'G|dblquote'>'M|ytkalkpos^id'</Field>
+        <Field name='G|dblquote'yskalkpos'G|dblquote'>'M|ytkalkpos^id'</Field>
+        <Field name='G|dblquote'ysort'G|dblquote'>'M|aktzeile'</Field>
+?        <Field name='G|dblquote'yistblatt'G|dblquote'>1</Field>                                ? M|tbaumstufe =  M|ystufepplan ;  M|ytistblatt
+?        <Field name='G|dblquote'yistblatt'G|dblquote'>0</Field>                                ? M|tbaumstufe <> M|ystufepplan & _M|ytistblatt
+?        <Field name='G|dblquote'ygehoertzu'G|dblquote' reftag='G|dblquote'PVFL'M|ytknotenid''G|dblquote' reffield='G|dblquote'ref'G|dblquote' reftype='G|dblquote'status'G|dblquote'/>   ? M|tbaumstufe > 0
+        <Field name='G|dblquote'ybnocheck'G|dblquote'>(Yes)</Field>
+?</Record>
+!EL077
+!EL075
+.continue EL078 ? _(M|ybpvausleilist)
+<Record database='G|dblquote''U|xydbpvorgang''G|dblquote' group='G|dblquote''U|xygrpvorgang''G|dblquote' action='G|dblquote'NEW'G|dblquote' tag='G|dblquote'PVLL'M|ytzid''G|dblquote'>
+?        <Field name='G|dblquote'yprojekt'G|dblquote'>'M|yprojekt^id'</Field>                                                                                                   ? U|xitp =  0
+?        <Field name='G|dblquote'yprojekt'G|dblquote' reftag='G|dblquote'TP'U|xitp''G|dblquote' reffield='G|dblquote'ref'G|dblquote' reftype='G|dblquote'status'G|dblquote'/>   ? U|xitp <> 0
+        <Field name='G|dblquote'name'G|dblquote'><![CDATA['M|ytposname']]></Field>
+        <Field name='G|dblquote'yverantw'G|dblquote'>'M|yprojekt^yprojleit^id'</Field>
+        <Field name='G|dblquote'ypvsollstd'G|dblquote'>'U|xrstunden'</Field>
+        <Field name='G|dblquote'ypvvokastd'G|dblquote'>'U|xrstunden'</Field>
+        <Field name='G|dblquote'ypvplanstd'G|dblquote'>'U|xrstunden'</Field>
+        <Field name='G|dblquote'yadatum'G|dblquote'>'M|yprojekt^yadatum:8'</Field>
+        <Field name='G|dblquote'yedatum'G|dblquote'>'M|yprojekt^yedatum:8'</Field>
+        <Field name='G|dblquote'ykalkposid'G|dblquote'>'M|ytkalkpos^id'</Field>
+        <Field name='G|dblquote'yskalkpos'G|dblquote'>'M|ytkalkpos^id'</Field>
+        <Field name='G|dblquote'ysort'G|dblquote'>'M|aktzeile'</Field>
+?        <Field name='G|dblquote'yistblatt'G|dblquote'>0</Field>
+?        <Field name='G|dblquote'ygehoertzu'G|dblquote' reftag='G|dblquote'PVLL'M|ytknotenid''G|dblquote' reffield='G|dblquote'ref'G|dblquote' reftype='G|dblquote'status'G|dblquote'/>   ? M|tbaumstufe > 0
+        <Field name='G|dblquote'ybnocheck'G|dblquote'>(Yes)</Field>
+?</Record>
+!EL078
+.continue EL079 ? _(M|ybpvprokoko)
+<Record database='G|dblquote''U|xydbpvorgang''G|dblquote' group='G|dblquote''U|xygrpvorgang''G|dblquote' action='G|dblquote'NEW'G|dblquote' tag='G|dblquote'PVLL'M|ytzid''G|dblquote'>
+?        <Field name='G|dblquote'yprojekt'G|dblquote'>'M|yprojekt^id'</Field>                                                                                                   ? U|xitp =  0
+?        <Field name='G|dblquote'yprojekt'G|dblquote' reftag='G|dblquote'TP'U|xitp''G|dblquote' reffield='G|dblquote'ref'G|dblquote' reftype='G|dblquote'status'G|dblquote'/>   ? U|xitp <> 0
+        <Field name='G|dblquote'name'G|dblquote'><![CDATA['M|ytposname']]></Field>
+        <Field name='G|dblquote'yverantw'G|dblquote'>'M|yprojekt^yprojleit^id'</Field>
+        <Field name='G|dblquote'ypvsollstd'G|dblquote'>'U|xrstunden'</Field>
+        <Field name='G|dblquote'ypvvokastd'G|dblquote'>'U|xrstunden'</Field>
+        <Field name='G|dblquote'ypvplanstd'G|dblquote'>'U|xrstunden'</Field>
+        <Field name='G|dblquote'yadatum'G|dblquote'>'M|yprojekt^yadatum:8'</Field>
+        <Field name='G|dblquote'yedatum'G|dblquote'>'M|yprojekt^yedatum:8'</Field>
+        <Field name='G|dblquote'ykalkposid'G|dblquote'>'M|ytkalkpos^id'</Field>
+        <Field name='G|dblquote'yskalkpos'G|dblquote'>'M|ytkalkpos^id'</Field>
+        <Field name='G|dblquote'ysort'G|dblquote'>'M|aktzeile'</Field>
+?        <Field name='G|dblquote'yistblatt'G|dblquote'>0</Field>
+?        <Field name='G|dblquote'ygehoertzu'G|dblquote' reftag='G|dblquote'PVLL'M|ytknotenid''G|dblquote' reffield='G|dblquote'ref'G|dblquote' reftype='G|dblquote'status'G|dblquote'/>   ? M|tbaumstufe > 0
+        <Field name='G|dblquote'ybnocheck'G|dblquote'>(Yes)</Field>
+?</Record>
+!EL079
+.continue EL080 ? _((M|ybpvausleilist) & (M|ytistblatt))
+.copy U|xbfremdleist = G|FALSE
+.select add M|ytkalkpos
+.continue EL081 ? _(G|mehr)
+.select line
+!LOOP014: ==============================
+.continue ELOP014 ? _(G|mehr)
+.continue EL082 ? _(_(F|empty(H|ytleistlistid)))
+.load 9 group 'U|xydbgrleistliste' 'H|ytleistlistid'
+.continue EL083 ? _(G|mehr)
+.load 9 line
+!LOOP015: ==============================
+.continue ELOP015 ? _(G|mehr)
+.continue EL084 ? _(9|ytwertkategoriek = "EL")
+.formula U|xrstunden =  0
+.continue EL085 ? _(9|ytmge <> 0)
+.assign  U|xeinh     = '9|yteinh(L="0")'
+.continue EL086 ? _(_(F|empty(U|xeinh)))
+.continue EL087 ? _((U|xstunden <> U|xeinh) & (F|unitconvfactor(U|xeinh, U|xstunden) <> 1))
+.formula U|xrstunden = 9|ytmge * F|unitconvfactor(U|xeinh, U|xstunden)
+.continue FI087
+!EL087
+.formula U|xrstunden = 9|ytmge
+!FI087
+!EL086
+.continue FI085
+!EL085
+.formula U|xrstunden = 9|ytvkwertman / U|xrzvksatz      ? U|xrzvksatz <> 0
+!FI085
+<Record database='G|dblquote''U|xydbpvorgang''G|dblquote' group='G|dblquote''U|xygrpvorgang''G|dblquote' action='G|dblquote'NEW'G|dblquote' tag='G|dblquote'LLEL'M|ytzid''G|dblquote'>
+?        <Field name='G|dblquote'yprojekt'G|dblquote'>'M|yprojekt^id'</Field>                                                                                                   ? U|xitp =  0
+?        <Field name='G|dblquote'yprojekt'G|dblquote' reftag='G|dblquote'TP'U|xitp''G|dblquote' reffield='G|dblquote'ref'G|dblquote' reftype='G|dblquote'status'G|dblquote'/>   ? U|xitp <> 0
+        <Field name='G|dblquote'name'G|dblquote'>'9|ytname';'M|ytposname'</Field>
+        <Field name='G|dblquote'yverantw'G|dblquote'>'M|yprojekt^yprojleit^id'</Field>
+        <Field name='G|dblquote'ypvsollstd'G|dblquote'>'U|xrstunden'</Field>
+        <Field name='G|dblquote'ypvvokastd'G|dblquote'>'U|xrstunden'</Field>
+        <Field name='G|dblquote'ypvplanstd'G|dblquote'>'U|xrstunden'</Field>
+        <Field name='G|dblquote'yleistwertplan'G|dblquote'>'9|ytvkwertman'</Field>
+        <Field name='G|dblquote'yadatum'G|dblquote'>'M|yprojekt^yadatum:8'</Field>
+        <Field name='G|dblquote'yedatum'G|dblquote'>'M|yprojekt^yedatum:8'</Field>
+?        <Field name='G|dblquote'yleiart'G|dblquote'>'9|ytleiart^id'</Field>                    ? _F|empty(9|ytleiart)
+        <Field name='G|dblquote'ykalkposid'G|dblquote'>'M|ytkalkpos^id'</Field>
+        <Field name='G|dblquote'yskalkpos'G|dblquote'>'M|ytkalkpos^id'</Field>
+        <Field name='G|dblquote'ykoko'G|dblquote'>'H|ytkoko^id'</Field>
+?        <Field name='G|dblquote'yarbpaket'G|dblquote'>'9|ytarbpaket^id'</Field>                ? _F|empty(9|ytarbpaket)
+        <Field name='G|dblquote'ysort'G|dblquote'>'M|aktzeile'</Field>
+        <Field name='G|dblquote'yistblatt'G|dblquote'>1</Field>
+        <Field name='G|dblquote'ygehoertzu'G|dblquote' reftag='G|dblquote'PVLL'M|ytzid''G|dblquote' reffield='G|dblquote'ref'G|dblquote' reftype='G|dblquote'status'G|dblquote'/>
+        <Field name='G|dblquote'ybnocheck'G|dblquote'>(Yes)</Field>
+?</Record>
+!EL084
+.continue EL088 ? _(9|ytwertkategoriek = "FL")
+.continue EL089 ? _(_(U|xbfremdleist))
+.copy U|xbfremdleist = G|TRUE
+<Record database='G|dblquote''U|xydbpvorgang''G|dblquote' group='G|dblquote''U|xygrpvorgang''G|dblquote' action='G|dblquote'NEW'G|dblquote' tag='G|dblquote'LLFL'M|ytzid''G|dblquote'>
+?        <Field name='G|dblquote'yprojekt'G|dblquote'>'M|yprojekt^id'</Field>                                                                                                   ? U|xitp =  0
+?        <Field name='G|dblquote'yprojekt'G|dblquote' reftag='G|dblquote'TP'U|xitp''G|dblquote' reffield='G|dblquote'ref'G|dblquote' reftype='G|dblquote'status'G|dblquote'/>   ? U|xitp <> 0
+        <Field name='G|dblquote'name'G|dblquote'>'9|ytname';'M|ytposname'</Field>
+        <Field name='G|dblquote'yverantw'G|dblquote'>'M|yprojekt^yprojleit^id'</Field>
+        <Field name='G|dblquote'yleistwertplan'G|dblquote'>'9|ytvkwertman'</Field>
+        <Field name='G|dblquote'yadatum'G|dblquote'>'M|yprojekt^yadatum:8'</Field>
+        <Field name='G|dblquote'yedatum'G|dblquote'>'M|yprojekt^yedatum:8'</Field>
+        <Field name='G|dblquote'ykalkposid'G|dblquote'>'M|ytkalkpos^id'</Field>
+        <Field name='G|dblquote'yskalkpos'G|dblquote'>'M|ytkalkpos^id'</Field>
+        <Field name='G|dblquote'ykoko'G|dblquote'>'H|ytkoko^id'</Field>
+?        <Field name='G|dblquote'yarbpaket'G|dblquote'>'9|ytarbpaket^id'</Field>                ? _F|empty(9|ytarbpaket)
+        <Field name='G|dblquote'ysort'G|dblquote'>'M|aktzeile'</Field>
+        <Field name='G|dblquote'yistblatt'G|dblquote'>1</Field>
+        <Field name='G|dblquote'ygehoertzu'G|dblquote' reftag='G|dblquote'PVLL'M|ytzid''G|dblquote' reffield='G|dblquote'ref'G|dblquote' reftype='G|dblquote'status'G|dblquote'/>
+        <Field name='G|dblquote'ybnocheck'G|dblquote'>(Yes)</Field>
+?</Record>
+!EL089
+!EL088
+.load 9 line
+.continue LOOP015
+!ELOP015: ==============================
+!EL083
+!EL082
+.select line
+.continue LOOP014
+!ELOP014: ==============================
+!EL081
+!EL080
+.continue EL090 ? _((M|ybpvprokoko) & (M|ytistblatt))
+.copy U|xbfremdleist = G|FALSE
+.select add M|ytkalkpos
+.continue EL091 ? _(G|mehr)
+.select line
+!LOOP016: ==============================
+.continue ELOP016 ? _(G|mehr)
+.continue EL092 ? _(_(H|ytkoko^id = U|xtsummekoko))
+.formula U|xrstunden  =  0
+.formula U|xrllekwert = 0
+.continue EL093 ? _((_(U|xrzvksatz = 0)) & (_(F|empty(H|ytleistlistid))))
+.load 9 group 'U|xydbgrleistliste' 'H|ytleistlistid'
+.continue EL094 ? _(G|mehr)
+.formula U|xrstunden  = 9|yekwerteigen / U|xrzvksatz
+.formula U|xrllekwert = 9|yekwerteigen
+.load 9
+!EL094
+!EL093
+<Record database='G|dblquote''U|xydbpvorgang''G|dblquote' group='G|dblquote''U|xygrpvorgang''G|dblquote' action='G|dblquote'NEW'G|dblquote' tag='G|dblquote'LLEL'M|ytzid''G|dblquote'>
+?        <Field name='G|dblquote'yprojekt'G|dblquote'>'M|yprojekt^id'</Field>                                                                                                   ? U|xitp =  0
+?        <Field name='G|dblquote'yprojekt'G|dblquote' reftag='G|dblquote'TP'U|xitp''G|dblquote' reffield='G|dblquote'ref'G|dblquote' reftype='G|dblquote'status'G|dblquote'/>   ? U|xitp <> 0
+        <Field name='G|dblquote'name'G|dblquote'><![CDATA['H|ytkoko^namebspr': 'M|ytposname']]></Field>
+        <Field name='G|dblquote'yverantw'G|dblquote'>'M|yprojekt^yprojleit^id'</Field>
+        <Field name='G|dblquote'ypvsollstd'G|dblquote'>'U|xrstunden'</Field>
+        <Field name='G|dblquote'ypvvokastd'G|dblquote'>'U|xrstunden'</Field>
+        <Field name='G|dblquote'ypvplanstd'G|dblquote'>'U|xrstunden'</Field>
+        <Field name='G|dblquote'yleistwertplan'G|dblquote'>'U|xrllekwert'</Field>
+        <Field name='G|dblquote'yadatum'G|dblquote'>'M|yprojekt^yadatum:8'</Field>
+        <Field name='G|dblquote'yedatum'G|dblquote'>'M|yprojekt^yedatum:8'</Field>
+        <Field name='G|dblquote'ykalkposid'G|dblquote'>'M|ytkalkpos^id'</Field>
+        <Field name='G|dblquote'yskalkpos'G|dblquote'>'M|ytkalkpos^id'</Field>
+        <Field name='G|dblquote'ykoko'G|dblquote'>'H|ytkoko^id'</Field>
+        <Field name='G|dblquote'ysort'G|dblquote'>'M|aktzeile'</Field>
+        <Field name='G|dblquote'yistblatt'G|dblquote'>1</Field>
+        <Field name='G|dblquote'ygehoertzu'G|dblquote' reftag='G|dblquote'PVLL'M|ytzid''G|dblquote' reffield='G|dblquote'ref'G|dblquote' reftype='G|dblquote'status'G|dblquote'/>
+        <Field name='G|dblquote'ybnocheck'G|dblquote'>(Yes)</Field>
+?</Record>
+!EL092
+.select line
+.continue LOOP016
+!ELOP016: ==============================
+!EL091
+!EL090
+!EL074
+!EL072
+.select screen line
+.continue LOOP012
+!ELOP012: ==============================
+.formula U|xitp = U|xitp + 1
+.continue LOOP011
+!ELOP011: ==============================
+</RecordSet>
+</ABASData>
+.set SUBSTITUTION
+.output NEW WERF.WEG
+.formula U|xtsys = "xmlimport.sh"
+.formula U|xtsys =  U|xtsys + " -p " + G|einmalpw
+.formula U|xtsys =  U|xtsys + " -r NUM"
+.formula U|xtsys =  U|xtsys + " -I " + U|xtedpdat + " -H " + U|xtedpmsg + " 1>" + U|xtedpout + " 2>" + U|xtedperr
+.input "allpstart/FOP.ALL.EDP.CHECK"
+.continue EL095 ? _(M|ybtpzukoko)
+.formula U|xitp = 1
+!LOOP017: ==============================
+.continue ELOP017 ? _(F|defined(U|xttp.xitp))
+.select group 'U|xydbgrprojekt' 'F|expr("$,,yextid==" + U|xttp.xitp)'
+.formula U|xttp.xitp = H|id     ? G|mehr
+.formula U|xitp = U|xitp + 1
+.continue LOOP017
+!ELOP017: ==============================
+.formula U|xivar = 1
+!LOOP018: ==============================
+.continue ELOP018 ? _(F|defined(M|yzuteilprojekt.xivar))
+.continue EL096 ? _(F|defined(U|xttp.xivar))
+.assign M|yprojekterzeugt.xivar = U|xttp.xivar
+!EL096
+.formula U|xivar = U|xivar + 1
+.continue LOOP018
+!ELOP018: ==============================
+!EL095
+.continue EL097 ? _(_(U|xbfehler))
+.set TRANS +
+.box Hinweis
+Der Projektplan wurde erfolgreich angelegt.
+.set TRANS -
+!EL097
+!FI050
+.continue ESAC002
+!BRK007
+.continue BRK011 ? _(G|evtvar = "ybuloereferenz")
+.continue EL098 ? _(_(F|empty(M|ykalkblatt)))
+.formula U|xtsel = "$,,yprjmlvkalkid==" + M|ykalkblatt^id + ";@filingmode=(Active)"
+.load 0 group "P3:21" 'U|xtsel'
+.copy U|xbmehr = G|mehr
+.continue EL099 ? _((_(F|empty(M|ykalkblatt^yprojekt))) ; (U|xbmehr))
+.set TRANS +
+.menu Referenz auflîsen
+?Projekt aus Kalkulationsblatt entfernen>>.formula U|ximenue = 1    ? _F|empty(M|ykalkblatt^yprojekt)
+?Kalkulationsblatt aus Angebot entfernen>>.formula U|ximenue = 2    ?  U|xbmehr
+.set TRANS -
+.continue EL100 ? _(_(G|menue = 0))
+.continue BRK012 ? _(U|ximenue = 1)
+.continue EL101 ? _(_(F|empty(M|ykalkblatt^yprojekt)))
+.select lock add M|ykalkblatt
+.continue EL102 ? _(G|mehr)
+.set TRANS +
+.box -BUTTON yes:no -TITLE Achtung
+Das Projekt 'H|yprojekt^such' wird aus dem Kalkulationsblatt entfernt.
+.set TRANS -
+.continue EL103 ? _(G|box = G|boxyes)
+.load 9 add H|yprojekt
+.assign H|yprojekt = ""
+.assign M|yprojekt = ""
+.rewrite
+.continue EL104 ? _(F|defined(9|id))
+.load 0 group 'U|xydbgrpvorgang' 'F|expr("$,,yprojekt==" + 9|id + ";ykalkposid<>`;@filingmode=(Active)")'
+!LOOP019: ==============================
+.continue ELOP019 ? _(G|mehr)
+.select lock add 0|id
+.continue EL105 ? _(G|mehr)
+.assign H|ykalkposid = ""
+.rewrite
+!EL105
+.load 0 continue
+.continue LOOP019
+!ELOP019: ==============================
+!EL104
+.select -
+.input "java:de.alltrotec.ps.control.is.allppro.prjmvorkalk.BillOfServicesCostingEventHandler@ALLPS"
+!EL103
+.continue FI102
+!EL102
+.set TRANS +
+Das Kalkulationsblatt kann nicht zum bearbeiten geîffnet werden.
+.set TRANS -
+.error
+.end 1
+!FI102
+!EL101
+.continue ESAC005
+!BRK012
+.continue BRK013 ? _(U|ximenue = 2)
+.formula U|xtsel = "$,,yprjmlvkalkid==" + M|ykalkblatt^id + ";@filingmode=(Active)"
+.load 0 group "P3:21" 'U|xtsel'
+.continue EL106 ? _(G|mehr)
+.formula U|xtsel = "%,,nummer=;such=;sucherw=;vom=;.yprjmlvkalkid==" + M|ykalkblatt^id + ";@autostart=(Yes);@filingmode=(Active)"
+.select lock group "P3:21" 'U|xtsel'
+!LOOP020: ==============================
+.continue ELOP020 ? _(G|mehr)
+.set TRANS +
+.box -BUTTON yes:no -TITLE Achtung
+Das Kalkulationsblatt wird aus dem Angebot 'H|nummer' entfernt.
+.set TRANS -
+.continue EL107 ? _(G|box = G|boxyes)
+.formula H|yprjmlvkalkid = ""   ? H|yprjmlvkalkid = M|ykalkblatt^id
+.rewrite
+!EL107
+.select lock continue
+.continue LOOP020
+!ELOP020: ==============================
+!EL106
+.continue ESAC005
+!BRK013
+!ESAC005: =====   ENDCASE   =====
+!EL100
+!EL099
+!EL098
+.continue ESAC002
+!BRK011
+.continue BRK014 ? _(G|evtvar = "ytbumark")
+.input 'M|tab'
+.continue ESAC002
+!BRK014
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK002
+.continue BRK015 ? _(G|evtart = "feldaus")
+.continue EL108 ? _(G|evtvar<<13 = "ytpverantwkst")
+.continue EL109 ? _((_(F|empty(M|.evtvar))) & (F|empty(M|.evtvar^yprjmzugvktr)))
+.set TRANS +
+.box Hinweis
+Die Kostenstelle 'M|.evtvar' darf hier nicht eingetragen
+werden, da in dieser Kostenstelle kein zugehîriger
+VerdichtungskostentrÑger hinterlegt ist.
+.set TRANS -
+.assign M|.evtvar = ""
+!EL109
+!EL108
+.continue ESAC001
+!BRK015
+!ESAC001: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJMVORKALK.EV")'    ? F|fileexists(F|foppath("IFOP.IS.PRJMVORKALK.EV")) & _U|xbnoifop
+.continue

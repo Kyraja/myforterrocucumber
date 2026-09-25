@@ -1,0 +1,299 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : BABNEU
+..  Verantwortlich : tiwe
+..  Kontrolle      : mh
+..  Funktion       : Infosystem, Betriebsabrechnungsbogen neu
+..  Ablauf         : Buttonvor - vor Start - Selectfeld fllen
+..                   Feldprfung Gesch„ftsmonate
+..                   Feldaustritt fr die n„chsten 10 Kostenstellen
+..                   Feldaustritt fr "von vorne"
+..                   Feldprfung/austritt fr von/bis/einzelne Kst/Ktr
+..
+.. include ko/BABNEU.COLORS
+..
+..*****************************************************************************
+.type integer  xiz
+..
+.set trans -
+..
+.continue START            ? G|evtartengl = "BUTTON_BEFORE" & (G|evtvar = "bstart" ; G|evtvar = "tbaumaufzu")
+.continue KSTSEL           ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bukstselect"
+.continue KTRSEL           ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "buktrselect"
+.continue PROJSEL          ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "buprojektselect"
+.continue FANEXT           ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "next"
+.continue FAANF            ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "anfang"
+.continue PERIOD           ? G|evtvar = "anfm"
+.continue PERIOD           ? G|evtvar = "endm"
+.continue PERIOD           ? G|evtvar = "anfj"
+.continue PERIOD           ? G|evtvar = "endj"
+.continue CORANGE          ? G|evtartengl = "FIELD_EXIT" &  G|evtvar = "kst"
+.continue CORANGE          ? G|evtartengl = "FIELD_EXIT" &  G|evtvar = "ktr"
+.continue CORANGE          ? G|evtartengl = "FIELD_EXIT" &  G|evtvar = "projekt"
+.continue KSTFA            ? G|evtartengl = "FIELD_EXIT" &  G|evtvar = "vkst"
+.continue KSTFA            ? G|evtartengl = "FIELD_EXIT" &  G|evtvar = "bkst"
+.continue KTRFA            ? G|evtartengl = "FIELD_EXIT" &  G|evtvar = "vktr"
+.continue KTRFA            ? G|evtartengl = "FIELD_EXIT" &  G|evtvar = "bktr"
+.continue PROJFA           ? G|evtartengl = "FIELD_EXIT" &  G|evtvar = "vprojekt"
+.continue PROJFA           ? G|evtartengl = "FIELD_EXIT" &  G|evtvar = "bprojekt"
+.continue BABNAME          ? G|evtartengl = "FIELD_EXIT" &  G|evtvar = "babform"
+.continue SETOFBOOKS       ? G|evtvar = "bukreis"
+.continue OUTCURR          ? G|evtvar = "auswaehr"
+.continue POSTCURR         ? G|evtvar = "buwaehr"
+.continue END
+..
+..*****************************************************************************
+!SETOFBOOKS
+..*****************************************************************************
+.input "is/EVT.FIELD.SETOFBOOKS"
+.continue END
+..
+..*****************************************************************************
+!OUTCURR
+..*****************************************************************************
+.input "is/EVT.FIELD.OUTCURR"
+.continue END
+..
+..*****************************************************************************
+!POSTCURR
+..*****************************************************************************
+.input "is/EVT.FIELD.POSTCURR"
+.continue END
+..
+..*****************************************************************************
+!PERIOD: Setting of the period (from and to)
+..*****************************************************************************
+.type bool xxbknbm ? _F|defined(U|xxbknbm)
+.copy U|xxbknbm = G|true
+.input "fb/IS.SETPERIOD"
+.continue END
+..
+..*****************************************************************************
+!START: Start infosystem
+..*****************************************************************************
+.continue F14 ? 'M|atyp(L=":")' = "(Excel)" & M|tzeilen = 0
+.continue HOL ? 'M|atyp(L=":")' = "(Excel)"
+..
+.input "is/TABLEEREN" ? G|evtvar = "bstart"
+..RangeCheck
+.type GL30 xpvon ? _F|defined(U|xpvon)
+.type GL30 xpbis ? _F|defined(U|xpbis)
+.formula U|xpvon = "vkst"
+.formula U|xpbis = "bkst"
+.input "is/RANGECHECK" ? (_F|empty(M|vkst) ; _F|empty(M|bkst))
+.formula U|xpvon = "vktr"
+.formula U|xpbis = "bktr"
+.input "is/RANGECHECK" ? (_F|empty(M|vktr) ; _F|empty(M|bktr))
+..
+.continue F01 ? F|empty(M|babform)
+.continue F02 ? F|empty(M|anfj) ; F|empty(M|endj)
+.continue F03 ? F|empty(M|waehr)
+..
+.formula U|xiz=1
+..*****************************************************************************
+!BV1:
+..*****************************************************************************
+.continue BV3   ? G|evtzeile = 0
+.continue CLOSE ? 'M|tbaumstat(L=":")' = "(Minus)"
+..
+..*****************************************************************************
+!BV3
+..*****************************************************************************
+.continue HOL ? G|evtzeile > 0
+.copy M|anfang = G|false
+.continue HOL
+..
+..*****************************************************************************
+!HOL
+..*****************************************************************************
+.copy M|grliste = M|isref^grliste
+.formula M|select = M|babform^id
+.input "is/HOL.LISTE"
+.continue SETCOL
+..
+..*****************************************************************************
+!SETCOL
+..*****************************************************************************
+.input "ko/BABNEU.COLORS"
+.continue END
+..
+..*****************************************************************************
+!CLOSE: close tree node
+..*****************************************************************************
+.type integer xibaumstufe
+.formula U|xibaumstufe = M|tbaumstufe
+.assign M|tbaumstat = "(Plus)"
+.select screen line
+.continue SETCOL ? _G|mehr
+..
+..*****************************************************************************
+!CLOOP
+..*****************************************************************************
+.continue SETCOL ? M|tbaumstufe <= U|xibaumstufe
+.make screen line -O
+.continue CLOOP
+..
+..*****************************************************************************
+!FANEXT:
+..*****************************************************************************
+.formula M|zaehl = M|zaehl + 1 ?  M|next
+.formula M|zaehl = M|zaehl - 1 ? _M|next
+.formula M|zaehl = 1           ?  M|zaehl <= 0
+.continue END
+..
+..*****************************************************************************
+!FAANF:
+..*****************************************************************************
+.continue END ? _M|anfang
+.formula M|zaehl = 1
+.formula M|vkst  = ""
+.formula M|bkst  = ""
+.formula U|xiz   = 1
+.continue END
+..
+..*****************************************************************************
+!CORANGE: Cost object range(s) (de)activated
+..*****************************************************************************
+.formula M|vkst = ""   ? _M|kst
+.formula M|bkst = ""   ? _M|kst
+.protection vkst          ? _M|kst
+.protection -reset vkst   ?  M|kst
+.protection bkst          ? _M|kst
+.protection -reset bkst   ?  M|kst
+..
+.formula M|vktr = ""   ? _M|ktr
+.formula M|bktr = ""   ? _M|ktr
+.protection vktr          ? _M|ktr
+.protection -reset vktr   ?  M|ktr
+.protection bktr          ? _M|ktr
+.protection -reset bktr   ?  M|ktr
+..
+.formula M|vprojekt = ""   ? _M|projekt
+.formula M|bprojekt = ""   ? _M|projekt
+.protection vprojekt       ? _M|projekt
+.protection -reset vprojekt?  M|projekt
+.protection bprojekt       ? _M|projekt
+.protection -reset bprojekt?  M|projekt
+..
+.continue END
+..
+..*****************************************************************************
+!KSTFA:
+..*****************************************************************************
+.type text xpvon xpbis
+.formula U|xpvon = "vkst"
+.formula U|xpbis = "bkst"
+.input "is/RANGECHECK"
+.formula M|bkst = M|vkst ? G|evtvar = "vkst" & F|empty(M|bkst)
+.continue RSTSINGLE
+..
+..*****************************************************************************
+!PROJFA:
+..*****************************************************************************
+.type text xpvon xpbis
+.formula U|xpvon = "vprojekt"
+.formula U|xpbis = "bprojekt"
+.input "is/RANGECHECK"
+.formula M|bprojekt = M|vprojekt ? G|evtvar = "vprojekt" & F|empty(M|bprojekt)
+.continue RSTSINGLE
+..
+..*****************************************************************************
+!KTRFA:
+..*****************************************************************************
+.type text xpvon xpbis
+.formula U|xpvon = "vktr"
+.formula U|xpbis = "bktr"
+.input "is/RANGECHECK"
+.formula M|bktr = M|vktr ? G|evtvar = "vktr" & F|empty(M|bktr)
+.continue RSTSINGLE
+..
+..*****************************************************************************
+!RSTSINGLE: Resets single cost objects
+..*****************************************************************************
+.formula U|xiz = 1
+..*****************************************************************************
+!KSTFA1:
+..*****************************************************************************
+.formula M|ekst.U|xiz = ""
+.formula U|xiz = U|xiz + 1
+.continue KSTFA1 ? U|xiz < 21
+.continue END
+..
+..*****************************************************************************
+!BABNAME:
+..*****************************************************************************
+.input "is/TABLEEREN"
+.continue END
+..
+..*****************************************************************************
+!KSTSEL
+..*****************************************************************************
+.type text xtsel ? _F|defined(U|xtsel)
+.formula M|grliste = "5:2"
+.formula G|evtfeldneu ="%,,@gruppe=2"
+.input "is/AUSWAHL"
+.formula M|kstselect = M|select
+.continue END
+..
+..*****************************************************************************
+!KTRSEL
+..*****************************************************************************
+.formula M|grliste = "5:4"
+.formula G|evtfeldneu ="%,,@gruppe=4"
+.input "is/AUSWAHL"
+.formula M|ktrselect  = M|select
+.continue END
+..
+..*****************************************************************************
+!PROJSEL
+..*****************************************************************************
+.formula M|grliste = "86:1"
+.formula G|evtfeldneu ="%,,@gruppe=1"
+.input "is/AUSWAHL"
+.formula M|projektselect  = M|select
+.continue END
+..
+..*****************************************************************************
+!END:
+..*****************************************************************************
+.continue
+..
+..*****************************************************************************
+!E1:
+..*****************************************************************************
+.error
+.end 1
+..
+.set trans +
+..
+..*****************************************************************************
+!F01:
+..*****************************************************************************
+.box
+Kein BAB-Formular ausgew„hlt.
+.cursor babform 0
+.continue E1
+..
+..*****************************************************************************
+!F02:
+..*****************************************************************************
+.box
+Kein Gesch„ftsjahr gew„hlt.
+.cursor anfj 0
+.continue E1
+..
+..*****************************************************************************
+!F03:
+..*****************************************************************************
+.box
+Keine W„hrung gew„hlt.
+.cursor waehr 0
+.continue E1
+..
+..*****************************************************************************
+!F14:
+..*****************************************************************************
+.error Keine Tabellenzeilen vorhanden
+.cursor atyp
+.end 1
+

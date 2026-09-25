@@ -1,0 +1,209 @@
+..!interpreter english declaration noabbrev
+.set TRANS -
+..========================================================================
+..==  Name              : FOP.44.PRJM.EV
+..==  Pfad              : allpstart
+..==  Funktion          : Events fÅr ProjectSuite an der RÅckmeldung
+..==                      - Fortschritt in Projektvorgang schreiben
+..==  Erstellungsdatum  : 26.03.2009
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2014 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..==
+..==
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF"
+..====================================================
+.type text    xtsys xtsel xtaufgabe xtpvorgang
+.type text    xtid                  ? _F|defined(U|xtid)
+.type text    xtpvindex             ? _F|defined(U|xtpvindex)
+.type integer xias                  ? _F|defined(U|xias)
+.type integer xistufe               ? _F|defined(U|xistufe)
+.type integer xi1                   ? _F|defined(U|xi1)
+.type GD      xdelm                 ? _F|defined(U|xdelm)
+.type GD      xdllm                 ? _F|defined(U|xdllm)
+.type real    xrproz xrasproz xrbaproz xriststd xrrmzeit xrfortplan xrfortbudget
+.type realx   xxgeszeit
+.type MP6.3   xrbamge xrbagutmge
+.type bool    xbistzeit             ? _F|defined(U|xbistzeit)
+.type bool    xbmehr                ? _F|defined(U|xbmehr)
+.type bool    xballestufen          ? _F|defined(U|xballestufen)
+.type bool    xbpv                  ? _F|defined(U|xbpv)
+.type integer xprocsp               ? _F|defined(xprocsp)
+.formula U|xprocsp = 0
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- ProjektvorgangZumFertigungsvorschlag -----
+.load 0 group 'U|xydbgrpvorgang' 'F|expr("$,,yrefid==" + H|id + ";@filingmode=(Active)")'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.formula U|xtpvindex = "PV" + (0|id<<",")<<-1
+.type text U|xtmerkpv.xtpvindex         ? _F|defined(U|xtmerkpv.xtpvindex)
+.type bool U|xbmerkpv.xtpvindex         ? _F|defined(U|xbmerkpv.xtpvindex)
+.formula U|xtmerkpv.xtpvindex = 0|id
+.formula U|xbmerkpv.xtpvindex = U|xbpv
+.copy U|xbmehr = G|TRUE
+.load 0 continue
+.continue LOOP001
+!ELOP001: ==============================
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Reservierungen -----
+.reserve lifo
+.reserve application
+.select application
+!LOOP002: ==============================
+.continue ELOP002 ? _(_(G|bvkenn = ""))
+.continue EL001 ? _(G|bvkenn = "R")
+.continue EL002 ? _((H|typ = G|FEVOR) ; (H|typ = G|RESERV))
+.reserve lifo
+.select add H|id    ? H|typ = G|FEVOR
+.select add H|vor   ? H|typ = G|RESERV
+.continue EL003 ? _(H|typ = G|FEVOR)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC002
+!RET002
+.formula xprocsp = xprocsp - 1
+.select lifo
+!EL003
+!EL002
+!EL001
+.select application                 ? _G|bvkenn = ""
+.continue LOOP002
+!ELOP002: ==============================
+.select lifo
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Fortschritt_aktualisieren -----
+.continue EL004 ? _((_(0|ytechfort      = U|xrbaproz)) ; (_(0|yfortschritt   = U|xrfortplan)) ; (_(0|yfortistbudget = U|xrfortbudget)) ; (_(0|ypviststd      = U|xrrmzeit)))
+.select lock add 0|id
+.continue EL005 ? _(G|mehr)
+.formula H|ypviststd      = U|xrrmzeit
+.formula H|yfortschritt   = U|xrfortplan
+.formula H|yabwfortplan   = H|yfortschritt - 100
+.formula H|yfortistbudget = U|xrfortbudget
+.formula H|yabwfortbudget = H|yfortistbudget - 100
+.formula H|ytechfort      = U|xrbaproz              ? U|xbmerkpv.xtpvindex
+.formula H|yabwphysplan   = H|yfortschritt - H|ytechfort
+.assign  H|ystatusk       = "03"                    ? F|empty(H|ystatusk) ; H|ystatusk = "01" ; H|ystatusk = "02"
+.copy    H|ydatumerstelm  = M|vom                   ? F|empty(H|ydatumerstelm)  ; M|vom < H|ydatumerstelm
+.copy    H|ydatumletztelm = M|vom                   ? F|empty(H|ydatumletztelm) ; M|vom > H|ydatumletztelm
+.formula H|yabwterminist  = F|numworkdays("", "", H|ydatumletztelm, H|yedatum) * (-1)   ? H|yedatum >= H|ydatumletztelm & _F|empty(H|ydatumletztelm)
+.formula H|yabwterminist  = F|numworkdays("", "", H|yedatum, H|ydatumletztelm)          ? H|yedatum  < H|ydatumletztelm & _F|empty(H|ydatumletztelm)
+.formula H|yabwterminplan = F|numworkdays("", "", H|yistend, H|yedatum)        * (-1)   ? H|yedatum >= H|yistend
+.formula H|yabwterminplan = F|numworkdays("", "", H|yedatum, H|yistend)                 ? H|yedatum  < H|yistend
+.rewrite
+.select -
+.copy    U|xbistzeit  = G|FALSE
+.formula U|xtaufgabe  = ""
+.formula U|xtpvorgang = ""
+.formula U|xtpvorgang = 0|id
+.input 'U|xtupgsvorgangakt'
+!EL005
+!EL004
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue EL006 ? _((U|xybfertigung) & (G|evtkommd = G|kaktname9))
+.copy U|xballestufen = G|TRUE
+.select add M|lres
+.continue EL007 ? _(G|mehr)
+.select add H|vor   ? H|typ = G|RESERV
+.continue EL008 ? _(G|mehr)
+.copy U|xbmehr = G|FALSE
+.copy U|xbpv   = G|TRUE
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+.continue EL009 ? _(U|xbmehr)
+.load 9 work 'M|nummer'
+.continue EL010 ? _(G|mehr)
+.load 9 add 9|snba      ? '9|typ(L=":")' = "(WorkSlips)"
+.formula U|xrbagutmge = 9|rgutmge
+.formula U|xrbagutmge = 9|emge          ? 9|emge > 9|rgutmge
+.formula U|xrbamge    = 9|mge
+.formula U|xriststd = 0
+.load 8 work 'F|expr("$,,snba==" + 9|id + ";@filingmode=(Active)")'
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.formula U|xxgeszeit = U|xxgeszeit + (8|te * 8|zesek)
+.formula U|xias = U|xias + 1
+.type realx xxaszeit.xias   ? _F|defined(xxaszeit.xias)
+.type real  xrasproz.xias   ? _F|defined(xrasproz.xias)
+.type M6.3  xrasgutmge.xias ? _F|defined(xrasgutmge.xias)
+.type M6.3  xrasmge.xias    ? _F|defined(xrasmge.xias)
+.formula U|xrasgutmge.xias = 8|rgutmge
+.formula U|xrasgutmge.xias = 8|emge             ? 8|emge > 8|rgutmge
+.formula U|xrasmge.xias    = 8|mge
+.formula U|xxaszeit.xias   = 8|te * 8|zesek
+.formula U|xrasproz.xias   = U|xrasgutmge.xias * 100 / (U|xrasgutmge.xias + U|xrasmge.xias) ? _(U|xrasgutmge.xias + U|xrasmge.xias) = 0
+.load 8 work
+.continue LOOP003
+!ELOP003: ==============================
+.continue EL011 ? _((U|xias      = 0) ; (U|xxgeszeit = 0))
+.formula U|xrbaproz = 0
+.formula U|xrbaproz = U|xrbagutmge * 100 / (U|xrbagutmge + U|xrbamge)   ? _(U|xrbagutmge + U|xrbamge) = 0
+.continue FI011
+!EL011
+.formula U|xi1      = 0
+.formula U|xrbaproz = 0
+!REPT001: ==============================
+.formula U|xi1 = U|xi1 + 1
+.formula U|xrproz   = 0
+.formula U|xrproz   = U|xxaszeit.xi1 * 100 / U|xxgeszeit
+.formula U|xrasproz = U|xrasproz.xi1 * U|xrproz / 100
+.formula U|xrbaproz = U|xrbaproz + U|xrasproz
+.formula U|xriststd = U|xriststd + U|xxaszeit.xi1
+.continue REPT001 ? _(U|xi1 = U|xias)
+!FI011
+.continue FI010
+!EL010
+.formula U|xrbaproz = 100
+!FI010
+!EL009
+.copy U|xbpv   = G|TRUE
+.continue EL012 ? _(((H|dispo = "A") ; (H|dispo = "V")) & (U|xballestufen))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC002
+!RET004
+.formula xprocsp = xprocsp - 1
+!EL012
+.formula U|xtpvindex = ""
+.formula U|xtpvindex = F|nextelem(U|xtmerkpv, xtpvindex)
+!LOOP004: ==============================
+.continue ELOP004 ? _(_(F|empty(U|xtpvindex)))
+.load 0 group 'U|xydbgrpvorgang' 'U|xtmerkpv.xtpvindex'
+.continue EL013 ? _(G|mehr)
+.formula U|xrrmzeit     = 0|ypviststd + M|bzeit + M|bzeit2 + M|bzeit3 + M|bzeit4 + M|bzeit5
+.formula U|xrfortplan   = U|xrrmzeit / 0|ypvplanstd * 100   ? _0|ypvplanstd = 0
+.formula U|xrfortbudget = U|xrrmzeit / 0|ypvsollstd * 100   ? _0|ypvsollstd = 0
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC003
+!RET005
+.formula xprocsp = xprocsp - 1
+!EL013
+.formula U|xtpvindex = F|nextelem(U|xtmerkpv, xtpvindex)
+.continue LOOP004
+!ELOP004: ==============================
+!EL008
+!EL007
+!EL006

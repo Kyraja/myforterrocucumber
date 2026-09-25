@@ -1,0 +1,136 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : DFUE.PUT.PROTOK.UEBNR
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : dsch
+.. Functionality  : set transmit number into edi-info object
+..
+..    Argument          meaning
+..    -------------------------------------------------------------------------
+..    h/d buffer        customer/supplier
+..    xedinachr         P109:2 / AuszÑhlung EDI-Nachricht
+..    xvorgang          transmit protokoll, text
+..    xmmvvl            <Modul><Vorgang><Vorgangstyp>    (optional)
+..    xediuebnr         to be set new transmit number
+..    xediuebnrMOD      modifies existing transmit number by modifier value
+..                      e.g. +1 or -1 for "next number" or "revert number"
+..
+..    Return value      meaning
+..    -------------------------------------------------------------------------
+..    xDFUEprotoTXT     VDA     EDIFACT ODETTE  other
+..    xDFUEproto        1       3       2       4+
+..
+..*****************************************************************************
+.set trans -
+..
+.. required arguments (xmmvvl is used only if xvorgang is empty)
+.type P109:2 xedinachr       ? _F|defined(xedinachr)
+.type text   xvorgang        ? _F|defined(xvorgang)
+.type text   xmmvvl          ? _F|defined(xmmvvl)
+..
+.. transmit number (only use ONE)
+.type text       xediuebnr       ? _F|defined(U|xediuebnr)
+.type integer    xediuebnrMOD    ? _F|defined(U|xediuebnrMOD)
+..
+.. return values: protocoll / standard
+.type text   xDFUEprotoTXT   ? _F|defined(xDFUEprotoTXT)
+.type integer    xDFUEproto      ? _F|defined(xDFUEproto)
+..
+.. return values: old/new transmit numbers
+.type text    xUebNrNeu       ? _F|defined(U|xUebNrNeu)
+.type text    xUebNrAlt       ? _F|defined(U|xUebNrAlt)
+..
+.. local variables
+.type VPK17  xvpartner       ? _F|defined(xvpartner)
+.type text   xtselPROT       ? _F|defined(xtselPROT)
+.. convert uebnr from text to int and back, .. if possible
+.type integer xiuebnr        ? _F|defined(U|xiuebnr)
+..
+.. initialize return value
+.formula U|xDFUEprotoTXT = ""
+.formula U|xDFUEproto = -1
+..
+.. avoid d-buffer / h-buffer complication
+.formula U|xvpartner = ""
+.assign U|xvpartner = H|id      ?  F|defined(H|id)
+.assign U|xvpartner = D|id      ?  F|defined(D|id)  &  F|empty(U|xvpartner)
+..
+.. 2012R1: no xvorgang but xmmvvl?
+.formula U|xvorgang = U|xmmvvl  ?  F|empty(U|xvorgang) & F|empty(U|xedinachr) & _F|empty(U|xmmvvl)
+..
+.. check required arguments
+.. must be customer or supplier database
+.continue NOXVOR  ?  F|empty(U|xvorgang) & F|empty(U|xedinachr)
+.continue NOKULI  ?  F|empty(U|xvpartner)
+.continue NOKULI  ?  U|xvpartner^dnr <> 0 & U|xvpartner^dnr <> 1
+..
+.. query directly from edinfo rows
+.formula U|xtselPROT = "$,,;@gruppe=4;@zeile=(1);erlaubt=yes"
+.formula U|xtselPROT = U|xtselPROT + ";vorgang=" + U|xvorgang           ?  F|empty(U|xedinachr)
+.formula U|xtselPROT = U|xtselPROT + ";edinachr=" +  U|xedinachr^id     ? _F|empty(U|xedinachr)
+.formula U|xtselPROT = U|xtselPROT + ";klnum="   + U|xvpartner^id
+..
+.select lock customer 'U|xtselPROT'         ?  U|xvpartner^dnr = 0
+.select lock supplier 'U|xtselPROT'     ?  U|xvpartner^dnr = 1
+.continue NOPROT  ? _G|mehr ; _G|gesperrt
+.continue NOPROT  ?  H|selzeile = 0
+.select lock line 'H|selzeile'
+.continue NOPROT  ? _G|mehr
+..
+.continue MODNUM ? _F|empty(U|xediuebnrMOD)
+..
+!NEWNUM: set current (new last) transmit number
+.formula H|uebnr = U|xediuebnr
+.continue ENDNUM
+.. 
+!MODNUM: modify existing number
+.formula U|xUebNrAlt = H|uebnr
+.formula U|xediuebnr = H|uebnr
+.assign U|xiuebnr = H|uebnr  
+.assign U|xiuebnr = 0 ? F|empty(H|uebnr)
+.continue NONUM ? _G|mehr
+.formula U|xiuebnr = U|xiuebnr + U|xediuebnrMOD
+.formula U|xUebNrNeu = 'U|xiuebnr'
+.formula U|xediuebnrMOD = 0
+.formula H|uebnr = U|xediuebnr
+.continue ENDNUM
+..
+!ENDNUM
+.rewrite
+.continue END  ? _G|mehr
+..
+.. return protokoll (serves as confirmation if not-0)
+.formula U|xDFUEprotoTXT = -H|protokoll
+..
+.. VDA / ODETTE / EDIFACT
+.formula U|xDFUEproto = 1    ?  U|xDFUEprotoTXT = "VDA"
+.formula U|xDFUEproto = 2    ?  U|xDFUEprotoTXT = "ODETTE"
+.formula U|xDFUEproto = 3    ?  U|xDFUEprotoTXT = "EDIFACT"
+..
+.. release buffer!
+.select -
+..*****************************************************************************
+!END
+.continue
+..
+..
+!NOXVOR
+.error Fehler bei Ermittlung des öbertragungs-Protokolls: Keine Vorgangsart angegeben.
+.end 1
+..
+!NOKULI
+.error Fehler bei Ermittlung des öbertragungs-Protokolls: Keine Handelspartner angegeben.
+.end 1
+..
+!NOPROT
+.note Das Protokoll fÅr Vorgangsart 'U|xedinachr' konnte nicht ermittelt werden.
+.formula U|xDFUEprotoTXT = ""
+.formula U|xDFUEproto = 0
+.continue
+.. 
+!NONUM
+.error Fehler beim Inkrementieren der öbertragungsnummer.
+.end 1
+
+

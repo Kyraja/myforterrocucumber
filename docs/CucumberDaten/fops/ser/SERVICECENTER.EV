@@ -1,0 +1,405 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SERVICECENTER.EV
+.. Autor          : cl
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       :
+.. Functionality  :
+...Includes	      :
+.. include ser/SERVICECENTER.AUFZU
+..*****************************************************************************
+.type integer    xiline      ? _F|defined(xiline)
+.type integer    xitype      ? _F|defined(xitype)
+.type text   xtprev      ? _F|defined(xtprev)
+.type integer    xitmp       ? _F|defined(xitmp)
+.type text   xtcom       ? _F|defined(xtcom)
+.type realx  xramount    ? _F|defined(xramount)
+.type realx  xrkurs      ? _F|defined(xrkurs)
+.type ID94:1 xiwbu       ? _F|defined(xiwbu)
+.type ID94:1 xland       ? _F|defined(xland)
+.type ID94:1 xauswaehr   ? _F|defined(xauswaehr)
+.type RP7.6  xrate       ? _F|defined(xrate)
+.type IP1    xrundung    ? _F|defined(xrundung)
+.type realx  xiwbuamount ? _F|defined(xiwbuamount)
+.type integer    xttranstyp  ? _F|defined(xttranstyp)
+.type text   xvktyp      ? _F|defined(xvktyp)
+.type ARTR51000   xliefern    ? _F|defined(xliefern)
+.type ARTR51000   xberechnen  ? _F|defined(xberechnen)
+.type VID10  xmerk       ? _F|defined(xmerk)
+.type VID10  x2merk      ? _F|defined(x2merk)
+.type integer    xitzeile    ? _F|defined(xitzeile)
+.type integer    xtzeilen    ? _F|defined(xtzeilen)
+.type bool   xberst      ? _F|defined(xberst)
+.type integer    xaktzeile   ? _F|defined(xaktzeile)
+.type integer    xtbaumstufe ? _F|defined(xtbaumstufe)
+.type bool   xerststufe  ? _F|defined(xerststufe)
+.type integer    xistufe     ? _F|defined(xistufe)
+.type integer    xazeile     ? _F|defined(xazeile)
+.type integer    xmerkstufe  ? _F|defined(xmerkstufe)
+.type A162   xetyp       ? _F|defined(xetyp)
+.type A163   xvtyp       ? _F|defined(xvtyp)
+..
+.set trans -
+.copy U|xberst = G|TRUE
+.assign U|xmerk = ""
+.assign U|x2merk = ""
+..
+.formula U|xrundung    = M|auswaehr^nkst
+.copy U|xauswaehr = M|auswaehr
+..
+.copy M|tfold = G|TRUE         ? M|topen = M|iopen
+.continue PLAN                 ? G|evtvar = "tplan"
+.continue DETAIL               ? G|evtvar = "tdetail"
+.continue POST                 ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tpost"
+.continue P2OST                ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tpost2" & F|empty(M|tshort)
+.continue ERROR                ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "tpost2" & _M|ttrans^uebertr
+.. freigeben
+.continue RELEASE              ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "trelease"
+.continue R2ELEASE             ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "trelease2"
+.. auf-/zuklappen
+.input "ser/SERVICECENTER.AUFZU" ? G|evtvar = "bstart"
+.continue END
+..
+!PLAN: Infosystem PLANKARTE îffnen / Planning Board
+.continue END ? F|empty(M|tpart)
+.continue END ? M|tpart^gruppe <> 1
+.command -parallel 'F|formatstr("<(Infosystem)>10044<(Call)> ? kart={1} | klgruppe={2} | bstart=", M|tpart^id, M|lgruppe^id )'
+.continue END
+..
+!DETAIL: Vorgangszeilen / Transaction Detail
+.continue END     ? _F|empty(M|tpart) ; _F|empty(M|serprod)
+.continue ODETAIL ? _M|tdo
+.continue FDETAIL ?  M|tdo
+..
+!FDETAIL: zuklappen / Fold Detail
+.formula M|tdetail = M|detail1
+.formula M|tdo     = G|FALSE
+..
+.select screen line
+..
+!NDETAIL
+.continue EVTZEILE ? _G|mehr
+.continue EVTZEILE ? M|aktzeile = 0
+.continue EVTZEILE ? _F|empty(M|tdetail)
+..
+.make screen line -O
+.continue NDETAIL
+..
+!EVTZEILE
+.select screen line 'G|evtzeile'   ? G|evtvar = "topen" ; G|evtvar = "trelease" ; G|evtvar = "trelease2"
+.continue FOLD                     ? G|evtvar = "topen" ; G|evtvar = "trelease" ; G|evtvar = "trelease2"
+.continue END
+..
+!ODETAIL: aufklappen / Open Detail
+.select add M|ttrans
+.formula U|xmerkstufe = M|tbaumstufe
+.formula M|tdetail    = M|detail2
+.formula M|tdo        = G|TRUE
+..
+!ARTIKEL: Artikel / Dienstleistungen und ein paar Zusatzpositionen
+.select line
+.continue E4      ? _G|mehr
+.continue ARTIKEL ? _F|empty(M|kprojekt) & M|kprojekt^id <> H|projekt^id   
+.continue SERVICE ? H|dnr = 122
+.continue ARTIKEL ? _M|mitalternativpos & H|alternativpos
+.continue ARTIKEL ? H|art^gruppe = 2 ; H|art^gruppe = 3
+.continue ARTIKEL ? H|typ = 16 ; H|typ = 19 ; H|typ = 51 ; H|typ = 8 ; H|typ = 9 ; H|typ = 10
+.continue KSER
+..
+!SERVICE
+.make screen line +O
+.copy M|serprod       = H|serprod
+.copy M|tbearbeit     = H|tbearbeit
+.copy M|projekt       = H|projekt
+.formula M|tpartname  = H|tanfbesch
+.formula M|ttyp2      = M|typ2a  ? _F|empty(H|kostenv) & _H|kostenv^ablagef
+.formula M|ttyp2      = M|typ2b  ? _F|empty(H|kostenv) &  H|kostenv^ablagef
+.formula M|ttyp3      = M|typ2a  ? _F|empty(H|serau)   & _H|serau^ablagef
+.formula M|ttyp3      = M|typ2b  ? _F|empty(H|serau)   &  H|serau^ablagef
+.formula M|ttyp6      = M|typ2a  ? _F|empty(H|repau)   & _H|repau^ablagef
+.formula M|ttyp6      = M|typ2b  ? _F|empty(H|repau)   &  H|repau^ablagef
+.formula M|ttyp8      = M|typ2a  ? _F|empty(H|bextdl)  & _H|bextdl^ablagef
+.formula M|ttyp8      = M|typ2b  ? _F|empty(H|bextdl)  &  H|bextdl^ablagef
+
+.protection brerelease 'M|aktzeile'        ? _F|empty(M|serprod)
+.continue ARTIKEL
+..
+!KSER
+.add H|kopf
+.make screen line +O
+.assign M|tvorgwaehr  = D|land
+.formula M|tsymbvorgw = D|land^symbol
+.assign M|sumnetto    = D|sumnetto
+.assign M|sumnettoinl = D|sumnettoinl
+.assign M|ttrans      = D|id
+.assign M|seranf      = D|seranf ? F|defined(D|seranf)
+.assign U|xrkurs      = D|kurs
+.copy U|xiwbu         = D|iwbu
+.copy U|xland         = D|land
+.formula M|tbaumstufe = U|xmerkstufe
+.formula U|xrate      = F|fxrate(U|xauswaehr,D|budat,D|iwbu)
+.add
+.copy M|boffen        = G|FALSE
+.copy M|boffen        = G|TRUE       ? (H|limge - H|lifrg):3 > 0
+.formula M|tfold      = G|TRUE
+.copy M|alternativpos = H|alternativpos
+.assign M|tpart       = H|art^id
+.formula M|tplan      = ""
+.formula M|tplan      = M|plan       ?  H|art^gruppe = 1
+.protection brerelease 'M|aktzeile'  ? _F|empty(M|tpart)
+.copy M|tterm         = H|tterm      ?  F|defined(H|tterm)
+.copy M|lgruppe       = H|lgruppe
+.copy M|serprod       = H|serprod
+.copy M|techniker     = H|techniker  ?  F|defined(H|techniker)
+.assign M|projekt     = H|projekt
+.formula M|status     = H|status
+.copy M|platz         = H|platz
+.formula M|tqty       = H|mge
+.formula M|sterm      = H|tsterm
+.assign M|the         = H|he
+.formula U|xliefern   = (H|limge - H|lifrg)
+.formula U|xberechnen = (H|remge - H|refrg)
+.formula M|tliefern   = U|xliefern
+.formula M|tberechnen = U|xberechnen
+.assign U|xramount    = H|preis
+.assign U|xiwbuamount = U|xramount / U|xrkurs
+.assign U|xramount    = U|xiwbuamount ? U|xauswaehr = U|xiwbu & U|xiwbu <> U|xland
+.assign U|xramount    = U|xramount    ? U|xauswaehr = U|xland
+.assign U|xramount    = F|round(xrate*xiwbuamount,U|xrundung) ? U|xauswaehr<>U|xland & U|xauswaehr<>U|xiwbu
+.formula M|tuprice    = U|xramount
+.assign U|xramount    = H|npwert
+.assign U|xiwbuamount = U|xramount / U|xrkurs
+.assign U|xramount    = U|xiwbuamount ? U|xauswaehr = U|xiwbu & U|xiwbu <> U|xland
+.assign U|xramount    = U|xramount    ? U|xauswaehr = U|xland
+.assign U|xramount    = F|round(xrate*xiwbuamount,U|xrundung) ? U|xauswaehr<>U|xland & U|xauswaehr<>U|xiwbu
+.formula M|teprice    = U|xramount
+.copy M|tauswaehr     = U|xauswaehr
+..
+.continue ARTIKEL ? _F|empty(M|kprojekt) & M|kprojekt^id <> H|projekt^id
+.continue ARTIKEL ? H|art^gruppe = 2 ; H|art^gruppe = 3
+.continue ARTIKEL ? (H|typ = 16 ; H|typ = 19 ; H|typ = 8 ; H|typ = 9)
+.continue ARTIKEL ? H|kotyp <> 4
+.continue ARTIKEL ? H|dnr = 3 & H|mge <= 0
+.continue ARTIKEL ? H|dnr = 4 & H|mge >= 0
+.continue ARTIKEL ? H|art^gruppe = 4 ; H|art^gruppe = 5
+..
+.formula M|select = "$,,"
+.formula M|select = M|select + ";artikel=" + H|art^id
+.formula M|select = M|select + ";platz="   + H|platz^id
+.formula M|select = M|select + ";@ablageart=(Active)"
+.load 0 group "40:3" 'M|select'
+..
+.continue S4 ? _G|mehr
+.continue ARTIKEL ?  H|dnr = 3 & H|mge <= 0|bestand
+.continue ARTIKEL ?  H|dnr = 4 & H|mge >= 0|bestand
+..
+!S4: hole lmenge war nicht erfolgreich!
+.formula M|tshort = M|short
+.continue ARTIKEL
+..
+!E4
+.formula M|tdetail = M|detail1           ? G|evtzeile = M|aktzeile
+.formula M|tdo     = G|FALSE             ? G|evtzeile = M|aktzeile
+.continue END
+..
+!RELEASE: Release transaction
+.continue END ?  F|empty(M|trelease)
+.continue END ? _F|empty(M|tpart)
+.continue END ?  M|ttrans^typ = 5
+.continue END ?  M|ttrans^typ = 4 & _M|ttrans^faktura
+.continue END ?  M|ttrans^ablagen
+.continue END ?  M|ttrans^uebertr
+.continue END ?  M|ttrans^typ = 31 & M|ttrans^vsperre
+..
+.continue VERKAUF  ? M|ttrans^dnr = 3
+..
+.. erzeuge Lieferschein aus Bestellung
+.formula U|xtcom = "<(Purchasing)>" + 'M|ttrans^id' + "<(Delivery)>"  ? M|ttrans^typ = 3 & _M|brerelease
+.. erzeuge Rechnung aus Bestellung
+.formula U|xtcom = "<(Purchasing)>" + 'M|ttrans^id' + "<(Invoice)>"  ? M|ttrans^typ = 3 &  M|brerelease
+.. erzeuge Rechnung aus Lieferschein
+.formula U|xtcom = "<(Purchasing)>" + 'M|ttrans^id' + "<(Invoice)>"  ? M|ttrans^typ = 4
+.continue KOMMANDO
+..
+!VERKAUF
+.. erzeuge Rechnung aus Lieferschein
+.formula U|xtcom = "<(Sales)>" + 'M|ttrans^id' + "<(Invoice)>"  ? M|ttrans^typ = 4
+.. erzeuge Serviceauftrag aus Serviceangebot
+.formula U|xtcom = "<(Sales)>" + 'M|ttrans^id' + "<(Release)>"  ? M|ttrans^typ = 33
+.. erzeuge Lieferschein aus Serviceauftrag
+.formula U|xtcom = "<(Sales)>" + 'M|ttrans^id' + "<(Delivery)>"  ? M|ttrans^typ = 34 & _M|brerelease
+.. erzeuge Rechnung aus Serviceauftrag
+.formula U|xtcom = "<(Sales)>" + 'M|ttrans^id' + "<(Invoice)>"  ? M|ttrans^typ = 34 &  M|brerelease
+.. erzeuge Rechnung aus Reparaturauftrag
+.formula U|xtcom = "<(Sales)>" + 'M|ttrans^id' + "<(Invoice)>"  ? M|ttrans^typ = 35 &  M|brerelease
+.. erzeuge Kostenvoranschlag aus Reparaturauftrag: Reparaturauftrag Ñndern -> Button Kostenvoranschlag muss man selbst drÅcken
+.formula U|xtcom = "<(Sales)>" + 'M|ttrans^id' + "<(Edit)>" ? M|ttrans^typ = 35 & _M|brerelease
+.continue KOMMANDO
+..
+!KOMMANDO
+.command -wait 'xtcom'
+..
+!R2ELEASE
+.formula M|tpost    = ""
+.formula M|tpost    = M|view
+.formula M|tpost    = M|edit      ? _M|ttrans^ablagef  & _F|empty(M|ttyp1)
+.formula M|trelease = ""          ?  M|ttrans^ablagef
+.formula M|trelease = ""          ?  M|ttrans^typ = 4 & _M|ttrans^faktura
+.formula M|ttyp1    = M|typ2b     ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp4) & F|empty(M|ttyp5) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp2    = M|typ2b     ?  M|ttrans^ablagef & F|empty(M|ttyp1) & F|empty(M|ttyp3) & F|empty(M|ttyp4) & F|empty(M|ttyp5) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp3    = M|typ2b     ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp4) & F|empty(M|ttyp1) & F|empty(M|ttyp5) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp4    = M|typ2b     ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp1) & F|empty(M|ttyp5) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp5    = M|typ2b     ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp1) & F|empty(M|ttyp4) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp6    = M|typ2b     ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp4) & F|empty(M|ttyp5) & F|empty(M|ttyp1) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp7    = M|typ2b     ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp4) & F|empty(M|ttyp5) & F|empty(M|ttyp1) & F|empty(M|ttyp6) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp8    = M|typ2b     ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp4) & F|empty(M|ttyp5) & F|empty(M|ttyp1) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp9    = M|typ2b     ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp4) & F|empty(M|ttyp5) & F|empty(M|ttyp1) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp10)
+.formula M|ttyp10   = M|typ2b     ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp1) & F|empty(M|ttyp5) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp4)
+..
+.copy M|brerelease = G|FALSE ?  M|ttyp3 = M|typ2b ; M|ttyp8 = M|typ2b
+.protection brerelease 'M|aktzeile'  ?  M|ttyp3 = M|typ2b ; M|ttyp8 = M|typ2b
+.continue FOLD
+..
+!POST: Post transaction
+.continue END      ? _F|empty(M|tpart)
+.continue END      ?  M|tpost = ""
+.. no "posting" for service requests
+.formula U|xtcom = F|formatstr("<(ServiceRequest)>{1}<(Edit)>", M|ttrans^id)  ?  M|ttrans^dnr = 122
+.continue OEFFNEN    ? _M|ttrans^uebertr
+.continue NOWARNUNG  ?  F|empty(M|tshort)
+..
+.box Hinweis
+Lagerbestand ist geringer als die Liefermenge!
+Bitte vor dem Freigeben ÅberprÅfen!
+..
+!NOWARNUNG
+.formula U|xtcom = F|formatstr("<(Sales)>{1}<(Edit)> ? ueb=(Yes)", M|ttrans^id)      ? M|ttrans^dnr = 3
+.formula U|xtcom = F|formatstr("<(Purchasing)>{1}<(Edit)> ? ueb=(Yes)", M|ttrans^id) ? M|ttrans^dnr = 4
+.command -wait 'U|xtcom'
+..
+!P2OST
+.formula M|tpost    = ""
+.formula M|tpost    = M|view
+.formula M|tpost    = M|edit       ? _M|ttrans^ablagef  & _F|empty(M|ttyp1)
+.formula M|trelease = M|release    ? _M|ttrans^uebertr & M|ttrans^typ = 4
+.formula M|ttyp1    = M|typ2b      ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp4) & F|empty(M|ttyp5) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp2    = M|typ2b      ?  M|ttrans^ablagef & F|empty(M|ttyp1) & F|empty(M|ttyp3) & F|empty(M|ttyp4) & F|empty(M|ttyp5) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp3    = M|typ2b      ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp4) & F|empty(M|ttyp1) & F|empty(M|ttyp5) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp4    = M|typ2b      ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp1) & F|empty(M|ttyp5) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp5    = M|typ2b      ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp1) & F|empty(M|ttyp4) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp6    = M|typ2b      ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp4) & F|empty(M|ttyp5) & F|empty(M|ttyp1) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp7    = M|typ2b      ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp4) & F|empty(M|ttyp5) & F|empty(M|ttyp1) & F|empty(M|ttyp6) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp8    = M|typ2b      ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp4) & F|empty(M|ttyp5) & F|empty(M|ttyp1) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp9) & F|empty(M|ttyp10)
+.formula M|ttyp9    = M|typ2b      ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp4) & F|empty(M|ttyp5) & F|empty(M|ttyp1) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp10)
+.formula M|ttyp10   = M|typ2b      ?  M|ttrans^ablagef & F|empty(M|ttyp2) & F|empty(M|ttyp3) & F|empty(M|ttyp1) & F|empty(M|ttyp5) & F|empty(M|ttyp6) & F|empty(M|ttyp7) & F|empty(M|ttyp8) & F|empty(M|ttyp9) & F|empty(M|ttyp4)
+.continue END
+..
+!OEFFNEN: Vorgang îffnen
+.formula U|xtcom = F|formatstr("<(Sales)>{1}<(View)" , M|ttrans^id)      ? M|ttrans^dnr = 3
+.formula U|xtcom = F|formatstr("<(Purchasing)>{1}<(View)>", M|ttrans^id) ? M|ttrans^dnr = 4
+.command -wait 'U|xtcom'
+.continue END
+..
+!FOLD: schlie·en / Fold the trans
+.formula U|xtbaumstufe = M|tbaumstufe
+.continue FDETAIL  ? M|tdo
+.formula M|topen  = M|iopen   ? F|empty(M|tpart)
+.formula M|tfold  = G|TRUE
+..
+.select screen line
+.continue E1         ? _G|mehr
+..
+!L1
+.continue E1         ?  M|tbaumstufe <= U|xtbaumstufe
+..
+.make screen line -O
+.continue L1
+..
+!E1
+.select screen line 'G|evtzeile'  ? G|evtvar = "trelease" ; G|evtvar = "trelease2"
+.continue OPEN                    ? G|evtvar = "trelease" ; G|evtvar = "trelease2"
+.continue END
+..
+!OPEN: ôffnen / Open folder/trans
+.continue END     ? _F|empty(M|tpart)
+.continue END     ? _M|tfold
+..
+.formula M|topen = M|open
+.formula M|tfold = G|FALSE
+.continue SELECT  ? _M|tdo
+..
+!TEIL
+.select screen line
+.continue S0.2    ? _G|mehr
+.continue TEIL    ? _F|empty(M|tpart)
+.formula U|xitmp = M|aktzeile - 1
+.select screen line 'xitmp'
+.continue SELECT
+..
+!S0.2
+.select screen line 'ozeilen'
+..
+!SELECT
+.formula M|grliste = "3:1"   ? M|ttrans^dnr = 3
+.formula M|grliste = "4:1"   ? M|ttrans^dnr = 4
+.load 2 group 'M|grliste' 'M|ttrans^id'
+.continue E0                  ? _G|mehr
+.continue ZEILE
+..
+!WEITER
+.load 2 line continue
+.continue E0                  ? _G|mehr
+..
+!ZEILE
+.formula U|xtprev = ""
+.formula U|xitmp  = M|aktzeile
+..
+.load 2 line
+.continue E0 ? _G|mehr
+.formula M|grliste = "3:2" ? M|ttrans^dnr = 3
+.formula M|grliste = "4:2" ? M|ttrans^dnr = 4
+.formula M|select  = "$,,orig="+ 2|id
+.formula M|select  = M|select+";@ablageart=(Both)"
+.formula M|select  = M|select+";@ordnung=orig.(Backwards)"
+.load  1 group  'M|grliste' 'M|select'
+.continue E0     ? _G|mehr
+.continue WEITER ?  F|empty(1|kopf)
+.continue WEITER ?  U|xmerk = '1|kopf^id' & U|x2merk = '1|okopf^id'
+.continue KOPF
+..
+!LADE
+.load 1 continue
+.continue END    ? _G|mehr
+.continue LADE   ?  F|empty(1|kopf)
+..
+!KOPF
+.assign U|xmerk = 1|kopf
+.assign U|x2merk = 1|okopf
+.select add 1|kopf
+.formula U|xistufe = M|tbaumstufe  ? G|evtvar = "topen" & M|tzeilen > 0 & _U|xerststufe
+.formula U|xistufe = M|tbaumstufe  ? (G|evtvar = "trelease" ; G|evtvar = "trelease2") & _U|xerststufe
+.input 'M|bkopf'
+.copy U|xerststufe = G|TRUE
+.continue E0    ? _F|defined(2|id)
+.continue WEITER
+..
+!E0
+.formula M|topen = M|iopen   ? U|xitmp = M|aktzeile & F|empty(M|tpart) & M|ttrans^typ <> 5
+.formula M|tfold = G|TRUE    ? U|xitmp = M|aktzeile
+.continue LADE
+..
+!LEEREN
+.input "is/TABLEEREN"
+.continue END
+..
+!SEND
+.formula M|topen = "" ? M|zn = U|xaktzeile
+.continue END
+..
+!END
+.continue
+..
+!ERROR
+.error 
+.end 1

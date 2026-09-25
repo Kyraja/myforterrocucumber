@@ -1,0 +1,98 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KONTAKT.BSTART.BN
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Datenbankanfragen formulieren und starten.
+.. Functionality  : Build and execute database queries.
+..*****************************************************************************
+.set trans -
+..
+.. Check for plausibilities
+.continue END ? F|empty(M|vartab)
+..
+.. Declarations
+.type integer  xindex ? _F|defined(U|xindex)
+..
+.. Initializations
+.formula U|xindex = 0
+.copy M|tabelle = G|FALSE
+.copy M|vartabende = G|FALSE
+..
+!RELOAD: Reload source into buffer "puffer"
+.load 'M|puffer' object 'M|kontextid'
+.continue ERROR1 ? _G|mehr
+.continue VARTAB
+..
+!NEXTROW
+.load 'M|puffer' object line
+.continue END ? _G|mehr
+.continue ROWREFS
+..
+!VARTAB: Load table of variables into buffer "0"
+.load 0 object 'M|vartab^id'
+.continue ERROR2 ? _G|mehr
+..
+!GETROW
+.load 0 line
+.continue ENDVTAB ? _G|mehr
+.continue GETROW  ? 0|inalias
+.formula M|varname = (0|vname << -2)
+.formula M|varname = M|puffer + M|pufftrenner + M|varname
+.formula M|varnameid = M|varname + "^id"
+.continue LOADTAB ? 0|vkt & _M|tabelle
+..
+!DEFINED
+.continue GETROW  ? _F|defined(F|eval(M|varnameid))
+.continue TABVAR  ? M|tabelle
+.continue GETROW  ? F|empty(F|eval(M|varnameid))
+..
+!ASSIGN
+.assign M|verweisid = F|eval(M|varnameid)
+.input 'M|tab' ? _F|empty(M|tab)
+.continue ITERATE ? M|vartabende
+.continue GETROW
+..
+!TABVAR: Save names of references found in table of context
+.formula U|xindex = U|xindex + 1
+.type text xtabvar.xindex ? _F|defined(U|xtabvar.U|xindex)
+.formula U|xtabvar.U|xindex = M|varname
+.continue GETROW
+..
+!ROWREFS: Start showing references in loaded row
+.formula U|xindex = 1
+..
+!REFID
+.formula M|varname = U|xtabvar.U|xindex
+.continue ITERATE ? F|empty(F|eval(M|varname))
+.formula M|varnameid = M|varname + "^id"
+.continue ASSIGN
+..
+!LOADTAB: Load first row to find defined references
+.load 'M|puffer' object line
+.continue END ? _G|mehr
+.copy M|tabelle = G|TRUE
+.continue DEFINED
+..
+!ENDVTAB: Reached end of table of variables
+.continue END ? U|xindex <= 0
+.copy M|vartabende = G|TRUE
+.continue ROWREFS
+..
+!ITERATE: Iterate index for references in table
+.formula U|xindex = U|xindex + 1
+.continue NEXTROW ? _F|defined(U|xtabvar.U|xindex)
+.continue REFID
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1: Context was not found anymore!
+.error -line 0 -field M|kontext -message Der Datenkontext wurde nicht mehr gefunden!
+.end 1
+..
+!ERROR2: Table of variables was not found anymore!
+.error -line 0 -field M|vartab -message Die Variablentabelle wurde nicht mehr gefunden!
+.end 1

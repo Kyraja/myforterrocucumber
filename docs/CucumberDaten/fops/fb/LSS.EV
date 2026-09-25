@@ -1,0 +1,185 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : LSS.EV
+..  Datum          : 14.12.2009
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : Allgemeines Event-FOP des Infosystems fb/LSS
+..
+.. include fb/LSS.CSVEXPORT
+.. include fb/LSS.VJ
+.. include fb/LSS.SET.COLORS
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.continue END     ? G|evtvar = "csvexpdat" ; G|evtvar = "csvexpclient" ; G|evtvar = "csvexpopen" ; G|evtvar = "csvexpencoding"
+.continue CSVEXP  ? G|evtartengl = "BUTTON_BEFORE"  & G|evtvar = "bucsvexport"
+.continue LANG    ? G|evtartengl = "FIELD_EXIT"    &  G|evtvar = "spra"
+..
+.make screen line --
+..
+.continue REPTYPE ? G|evtartengl = "FIELD_VALIDATION" & G|evtvar = "berichtsart"
+.continue DATEI   ? G|evtvar = "vdn" ; G|evtvar = "vgr" ; G|evtvar = "vtab"
+.continue BERVON  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bervon"
+.continue BERBIS  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "berbis"
+.continue START   ? G|evtartengl = "BUTTON_BEFORE"  & G|evtvar = "bstart"
+.continue SELEK   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bselek"
+.continue PER1    ? G|evtvar = "jahr" ; G|evtvar = "jahr1"
+.continue PER1    ? G|evtvar = "von"  ; G|evtvar = "von1"
+.continue PER1    ? G|evtvar = "bis"  ; G|evtvar = "bis1"
+.continue PER1    ? G|evtvar = "mitvorjahr"
+.continue PER2    ? G|evtvar = "jahr2"
+.continue PER2    ? G|evtvar = "von2"
+.continue PER2    ? G|evtvar = "bis2"
+.continue SOB     ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "bukreis"
+.continue CURRENC ? G|evtartengl = "FIELD_EXIT" & (G|evtvar = "buwaehr" ; G|evtvar = "auswaehr")
+.continue END
+..
+..*****************************************************************************
+!REPTYPE
+..*****************************************************************************
+.end 1 ? F|value(M|berichtsart, "AS231") = "(None)"
+.continue
+..
+..*****************************************************************************
+!CSVEXP
+..*****************************************************************************
+.continue ERR01 ? M|vdn = 68
+.type text xausgabedatei
+.type bool xbclient
+.type bool xbopen
+.type A184 xencoding
+.formula   U|xausgabedatei = M|csvexpdat
+.copy U|xbclient  = M|csvexpclient
+.copy U|xbopen    = M|csvexpopen
+.copy U|xencoding = M|csvexpencoding
+.input "fb/LSS.CSVEXPORT"
+.continue END
+..
+..*****************************************************************************
+!CURRENC: Output or posting currency changed
+..*****************************************************************************
+.copy M|.G|evtvar = G|inland ? F|empty(M|.G|evtvar)
+.copy M|ausfrwaehr = M|buwaehr^id <> M|auswaehr^id
+.continue END
+..
+..*****************************************************************************
+!LANG: Language changed
+..*****************************************************************************
+.copy P|spra = M|spra
+.continue END
+..
+..*****************************************************************************
+!SOB: Set of books changed
+..*****************************************************************************
+.copy M|bukreis = G|bukreis ? F|empty(M|bukreis)
+.continue END
+..
+..*****************************************************************************
+!PER1: period 1 changed
+..*****************************************************************************
+.type text xxtemon xxtsmon xxtsyear xxteyear xxtfromd xxttod
+.formula U|xxtsmon = "von"
+.formula U|xxtemon = "bis"
+.formula U|xxtsyear= "jahr"
+.formula U|xxteyear= U|xxtsyear
+.formula U|xxtfromd= "adatum1"
+.formula U|xxttod  = "edatum1"
+.input "fb/IS.SETPERIOD"
+.formula M|jahr2 = "" ? _M|mitvorjahr
+.continue END ? _M|mitvorjahr
+.input "fb/LSS.VJ"
+.continue END
+..
+..*****************************************************************************
+!PER2: period 2 changed
+..*****************************************************************************
+.type text xxtemon xxtsmon xxtsyear xxteyear xxtfromd xxttod
+.formula U|xxtsmon = "von2"
+.formula U|xxtemon = "bis2"
+.formula U|xxtsyear= "jahr2"
+.formula U|xxteyear= U|xxtsyear
+.formula U|xxtfromd= "adatum2"
+.formula U|xxttod  = "edatum2"
+.input "fb/IS.SETPERIOD"
+.continue END
+..
+..*****************************************************************************
+!DATEI: Datei wÑhlen
+..*****************************************************************************
+.input "is/DBCHOOSER"
+.formula M|bervon = ""
+.formula M|berbis = ""
+.formula M|select = ""
+.formula M|selek  = G|false
+.continue END
+..
+..*****************************************************************************
+!BERVON: Bereich von
+..*****************************************************************************
+.continue END   ? F|empty(M|bervon)
+.formula M|selek   = G|false
+.formula M|berbis  = M|bervon ? F|empty(M|berbis)
+..
+..*****************************************************************************
+!BERBIS: Bereich bis
+..*****************************************************************************
+.continue END   ? F|empty(M|berbis)
+.formula M|selek = G|false
+.continue END
+..
+..*****************************************************************************
+!START: Start-Button druecken
+..*****************************************************************************
+.set setofbooks 'M|bukreis^bknr'
+.type text xpvon xpbis ? _F|defined(U|xpvon)
+.formula U|xpvon = "bervon"
+.formula U|xpbis = "berbis"
+.input "is/RANGECHECK"
+.input "is/DBCHOOSER"
+.formula M|select = M|bervon + "!" + M|berbis ? _M|selek
+.. set start and end date of period
+.select year 'M|jahr' 'M|von' 'M|bis'
+.formula M|adatum1 = G|adatum
+.formula M|edatum1 = G|edatum
+..
+.copy M|buwaehr  = G|inland  ? F|empty(M|buwaehr)
+.copy M|auswaehr = M|buwaehr ? F|empty(M|auswaehr)
+..
+.continue STASEL ? M|vdn <> 68
+..
+.formula M|verd = G|false
+.continue STASEL
+..
+..*****************************************************************************
+!STASEL
+..*****************************************************************************
+.formula M|select = "!" ? F|empty(M|select)
+.formula M|stufe  = 1
+.input "is/HOL.LISTE"
+.input "fb/LSS.SET.COLORS" ? M|vdn = 68 & _(G|batchmode ; G|edp)
+.continue END
+..
+..*****************************************************************************
+!SELEK: Selectionsleiste-Button
+..*****************************************************************************
+.formula M|bervon   = ""
+.formula M|berbis   = ""
+.formula G|evtfeldneu = "%"
+.input "is/AUSWAHL"
+.formula M|selek    = M|select <> "!"
+.continue END
+..
+..*****************************************************************************
+!ERR01
+..*****************************************************************************
+.error Kontenbereiche werden beim CSV-Export nicht unterstÅtzt.
+.end 1
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

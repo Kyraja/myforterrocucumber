@@ -1,0 +1,88 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SERBERICHT.ARBZEIT.EV
+.. Datum          : 19.02.2007
+.. Version        : 2007r1n00
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Berechnet die Arbeitszeit bei Feldaustritt
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+.. Ablauf         : Eventhandling fr Arbeitszeit-Felder
+..
+.. Functionality  : Calculates working time on field exit
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+.. Program flow   : Eventhandling efop for time fields
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.type text xtfenr   ? _defined(xtfenr)
+.type real xr1      ? _defined(xr1)
+.type real xr2      ? _defined(xr2)
+.type time    xz1      ? _defined(xz1)
+.type real xrpause  ? _defined(xrpause)
+.type time    xzvon    ? _defined(xzvon)
+.type time    xzbis    ? _defined(xzbis)
+..
+.. Die Arbeitstagsdaten gibt es 7 mal, die letzte Stelle des Variablennamens ist der Index
+.formula T|xtfenr = (T|evtvar >> 1)
+..
+.. event evaluation
+.. ----------- ----- Kopfteil Button -------------------------------------------
+.continue RECH1   ? T|evtartengl = "FIELD_EXIT"    & T|evtvar/"*arbzvon*"
+.continue RECH1   ? T|evtartengl = "FIELD_EXIT"    & T|evtvar/"*arbzbis*"
+.continue RECH1   ? T|evtartengl = "FIELD_EXIT"    & T|evtvar/"*arbzpse*"
+.continue RECH1   ? T|evtartengl = "FIELD_EXIT"    & T|evtvar/"*arbzdat*"
+.continue SUMME   ? T|evtartengl = "FIELD_EXIT"    & T|evtvar/"*arbzstd*"
+.continue SUMME   ? T|evtartengl = "FIELD_EXIT"    & T|evtvar/"*arbzuestd*"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+!RECH1: Wenn nicht beide Zeitfelder (von/bis) gefuellt sind werden die Stunden auf 0 gesetzt
+.continue RECH2       ? 'M|karbzvon.xtfenr' <> "" & 'M|karbzbis.xtfenr' <> ""
+.. Ausnahme: Das Datum wurde gerade ge„ndert, und es wurden bereits fixe Stunden ohne Angabe von Von/Bis-Zeiten angegeben
+.continue SUMME       ? T|evtvar/"*arbzdat*" & ( M|karbzstd.xtfenr > 0 ; M|karbzuestd.xtfenr > 0 )
+.assign M|karbzstd.xtfenr   = 0.00
+.assign M|karbzuestd.xtfenr = 0.00
+.continue SUMME
+..
+!RECH2: Normalstunden und Ueberstunden aus Zeiten berechnen
+.. Tageskapazit„t holen
+.assign T|adatum  = M|karbzdat.xtfenr
+.assign T|edatum  = M|karbzdat.xtfenr
+.select planchart
+.formula   T|astd = 0.00     ? _T|mehr
+..
+.assign T|xrpause = M|karbzpse.xtfenr
+.assign T|xzvon   = M|karbzvon.xtfenr
+.assign T|xzbis   = M|karbzbis.xtfenr
+..
+.formula   T|xz1 = "0:00"
+.formula   T|xr1 = (T|xzbis - T|xzvon) / 60              ? T|xzbis > T|xzvon
+.formula   T|xr1 = (T|xzvon - T|xz1)                     ? T|xzbis < T|xzvon
+.formula   T|xr2 = (T|xzbis - T|xz1)                     ? T|xzbis < T|xzvon
+.formula   T|xr1 = (T|xr1 + T|xr2) / 60                  ? T|xzbis < T|xzvon
+.formula   T|xr1 = T|xr1 - T|xrpause
+..
+.assign M|karbzstd.xtfenr   = T|xr1
+.assign M|karbzuestd.xtfenr = M|karbzstd.xtfenr - T|astd
+.assign M|karbzstd.xtfenr   = T|astd                  ? M|karbzuestd.xtfenr > 0.00
+.assign M|karbzuestd.xtfenr = 0.00                    ? M|karbzuestd.xtfenr < 0.00
+..
+..
+!SUMME: Summen zu Normalstunden und Ueberstunden bilden
+.assign M|karbzges   = M|karbzstd1 + M|karbzstd2 + M|karbzstd3 + M|karbzstd4 + M|karbzstd5 + M|karbzstd6 + M|karbzstd7
+.assign M|karbzueges = M|karbzuestd1 + M|karbzuestd2 + M|karbzuestd3 + M|karbzuestd4 + M|karbzuestd5 + M|karbzuestd6 + M|karbzuestd7
+..
+..*****************************************************************************
+!END
+.continue

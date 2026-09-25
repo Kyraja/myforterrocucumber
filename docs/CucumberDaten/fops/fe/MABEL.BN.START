@@ -1,0 +1,288 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : MABEL.BN.START
+.. Datum          : 29.11.06
+.. Version        : 2007
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Tabellenstart-FOP des IS MABEL
+..
+.. Ablauf         :
+..
+.. Functionality  :
+..
+.. Program flow   :
+.. Includes       :
+..
+..*****************************************************************************
+..
+.set trans -
+.input "is/TABLEEREN"
+.formula M|sbel1      = ""
+.formula M|sbel2      = ""
+.formula M|sbel3      = ""
+.formula M|skap1      = ""
+.formula M|skap2      = ""
+.formula M|skap3      = ""
+.formula M|ueberhang1 = ""
+.formula M|ueberhang2 = ""
+.formula M|ueberhang3 = ""
+.formula M|mgekap     = ""
+.formula M|mggkap     = ""
+..
+.input "ARB"
+.type GD      xdmax   ? _F|defined(U|xdmax)
+.type GD      xdat1   ? _F|defined(U|xdat1)
+.type GD      xdstart ? _F|defined(U|xdstart)
+.type GD      xdende  ? _F|defined(U|xdende)
+.type text    xsel    ? _F|defined(U|xsel)
+.type realx   xeff    ? _F|defined(U|xeff)
+.type realx   xstart  ? _F|defined(U|xstart)
+.type realx   xende   ? _F|defined(U|xende)
+.type realx   xanta   ? _F|defined(U|xanta)
+.type realx   xantm   ? _F|defined(U|xantm)
+.type realx   xante   ? _F|defined(U|xante)
+.type integer xigef   ? _F|defined(U|xigef)
+.type real    xmanz   ? _F|defined(U|xmanz)
+.type realx xbel1  xbel2  xbel3
+.type realx xsbel1 xsbel2 xsbel3
+.type realx xskap1 xskap2 xskap3
+.type bool  xbAbbruch
+..
+.select screen header
+.continue ERROR2 ? F|empty(M|adat) ; F|empty(M|edat)
+.formula U|xdat1 = M|adat
+.formula U|xdmax = M|edat
+..
+.select add M|mgident
+.continue ERROR                  ? _G|mehr
+.formula M|nschicht = H|nschicht
+.formula M|azpt     = H|azpt
+.formula U|xeff     = H|kapaz / (H|nschicht * H|azpt)
+.select capacity specific 'M|lgruppe'
+.continue OE                     ? _G|mehr
+.. Tageskapazitaetsangebot fuer diese MGr laden
+.select planchart
+..
+!ME
+.formula M|mgekap     = H|kapaz
+.formula M|mggkap     = H|gkapaz
+.copy M|abtident = M|mgident^abtlg
+.formula M|abtname    = M|mgident^abtlg^sucherw
+.add
+..
+.formula U|xigef  = 0
+..
+.. KapazitÑtsreservierungen eines zuvor geholten Maschinengruppen-Datensatzes
+.. alle ArbeitsgÑnge, die auf der Maschinen- und Lagergruppe
+.. eingelastet sind, nach Anfangstermin sortiert.
+.formula U|xsel = "$,,mgr=" + M|mgident + ";lgruppe=" + M|lgruppe + ";@gruppe=4;@ablageart=(Active);einplan=1;kapeinplan=1"
+.load 0 purchasing 'U|xsel'
+..
+!ZEILE
+.continue OE                   ? _G|mehr
+..
+.. Start- und Endtag des AG merken
+.. aterm = aktueller, hypothetischer Anfangstermin unter berÅcksichtigung
+.. der gebuchten RÅckmeldungen (= Restmenge)
+.. aterm = term minus Durchlaufzeit fÅr die Restmenge
+.formula U|xdstart   = 0|aterm
+.formula U|xdende    = 0|tterm
+.. Start- und Endtag als realx
+.formula U|xstart    = U|xdstart
+.formula U|xende     = U|xdende
+.. Start- und Enduhrzeit als realx
+.formula U|xanta     = 0|aterm
+.formula U|xanta     = (U|xanta - U|xstart) * 24
+.formula U|xante     = 0|tterm
+.formula U|xante     = (U|xante - U|xende) * 24
+.. spÑtesten Endtermin fÅr 3. Periode ermitteln
+.formula U|xdmax     = 0|tterm    ? 0|tterm > U|xdmax
+.. frÅhester Termin fÅr 1. Periode ermitteln
+.formula U|xdat1     = 0|sterm    ? 0|sterm < U|xdat1
+..
+.continue LADE         ? 0|vzeit <= 0
+..
+.continue VORBETRACHT  ?  U|xdende  <  M|adat
+.continue NACHBETRACHT ?  U|xdstart >  M|edat
+.continue IMBETRACHT   ?  U|xdstart >= M|adat  & U|xdende <= M|edat
+.continue DIFFERENZ
+..
+!VORBETRACHT: vor dem Betrachtungszeitraum (Periode 1)
+.formula U|xbel1  = 0|vzeit
+.formula U|xbel2  = 0
+.formula U|xbel3  = 0
+.continue SUMME
+..
+!IMBETRACHT: im Betrachtungszeitraum (Periode 2)
+.formula U|xbel1  = 0
+.formula U|xbel2  = 0|vzeit
+.formula U|xbel3  = 0
+.continue SUMME
+..
+!NACHBETRACHT: nach dem Betrachtungszeitraum (Periode 3)
+.formula U|xbel1  = 0
+.formula U|xbel2  = 0
+.formula U|xbel3  = 0|vzeit
+.continue SUMME
+..
+!SUMME:
+.formula U|xsbel1 = U|xsbel1 + U|xbel1
+.formula U|xsbel2 = U|xsbel2 + U|xbel2
+.formula U|xsbel3 = U|xsbel3 + U|xbel3
+.continue EBERECHNUNG
+..
+!DIFFERENZ: ansonsten Aufteilung der Vorgabezeiten auf die drei Perioden
+.formula U|xmanz = 0|manz
+.formula U|xmanz = 1        ? F|empty(0|manz)
+.. Periode 1 und 2
+.continue DIFF1             ?  U|xdstart <  M|adat & U|xdende <= M|edat
+.. Periode 2 und 3
+.continue DIFF2             ?  U|xdstart >= M|adat & U|xdende >  M|edat
+.. Periode 1 bis 3
+.continue DIFF3
+..
+!DIFF1: Bereich: Periode 1 und Periode 2
+.formula U|xbel1 = (F|numworkhours(M|mgident,M|lgruppe, U|xdstart, M|adat) - U|xanta * U|xeff) * U|xmanz
+.formula U|xbel2 = 0|vzeit - U|xbel1
+.formula U|xbel3 = 0
+.continue SUMME
+..
+!DIFF2: Bereich: Periode 2 und Periode 3
+.formula U|xbel1 = 0
+.formula U|xbel2 = (F|numworkhours(M|mgident,M|lgruppe, U|xdstart, M|edat+1) - U|xanta * U|xeff) * U|xmanz
+.formula U|xbel3 = 0|vzeit - U|xbel2
+.continue SUMME
+..
+!DIFF3: Bereich Periode 1, Periode 2 und Periode 3
+.formula U|xbel1 = (F|numworkhours(M|mgident,M|lgruppe, U|xdstart, M|adat) - U|xanta * U|xeff) * U|xmanz
+.formula U|xbel2 = F|numworkhours(M|mgident,M|lgruppe, M|adat, M|edat+1)
+.formula U|xbel2 = U|xbel2 * U|xmanz * U|xeff
+.formula U|xbel3 = 0|vzeit - U|xbel2 - U|xbel1
+.continue SUMME
+..
+!EBERECHNUNG: ENDE der Aufteilung der Vorgabezeiten auf die drei Terminfenster
+.formula U|xigef = U|xigef + 1
+..
+.continue LADE    ?  0|tterm < M|adat ; 0|aterm > M|edat
+.continue MACHE
+..
+!LADE
+.load 0 purchasing
+.continue ZEILE
+..
+!MACHE
+.make screen line +O
+.assign M|vorgang = 0|id
+.assign M|art     = 0|vor^artex
+.assign M|tbasisartikel = M|art^basisartikel
+.assign M|tag     = 0|elem^id
+.formula M|tagname   = 0|elem^name
+.copy M|ttr     = 0|lge
+.copy M|tzr     = 0|lme
+.copy M|tte     = 0|breite
+.copy M|tze     = 0|bme
+.formula M|verwend   = 0|verw
+.formula M|omge      = 0|limge
+.formula M|fmge      = 0|frgmge
+.formula M|planmge   = 0|planmge
+.formula M|aumge     = 0|aumge
+.formula M|tle       = 0|vor^artex^le
+.formula M|aterm     = 0|sterm
+.formula M|eterm     = 0|tterm
+.formula M|tvz       = 0|vzeit
+.assign M|kritisch   = F|value(0|krit, "AS305")
+.formula M|ampelz    = G|icokrit   ? F|equals(0|krit, "(ProcessIsCritical)")
+.formula M|ampelz    = G|icovkrit  ? F|equals(0|krit, "(PathIsCritical)")
+.formula M|ampelz    = G|icoukrit  ? F|equals(0|krit, "(Uncritical)")
+.formula M|bel1      = U|xbel1
+.formula M|bel2      = U|xbel2
+.formula M|bel3      = U|xbel3
+.assign M|fvid    = 0|vor^id
+.assign M|asnr    = 0|as
+.assign M|banum   = 0|vor^ba
+..
+.load 0 purchasing
+.continue ZEILE
+..
+!OE
+.continue MGR        ? U|xigef <> 0
+..
+.box
+Keine ArbeitsgÑnge im angegebenen Zeitraum gefunden !
+..
+.continue LEEREN
+..
+!MGR
+.formula M|sbel1  = U|xsbel1
+.formula M|sbel2  = U|xsbel2
+.formula M|sbel3  = U|xsbel3
+..
+!MBEL1: Maschinenbelegung Periode 1 -> Anfang bis M|adat
+.. adat um einen Tag erniedrigt, da adat in Periode 2 schon berÅcksichtigt ist
+.continue MBEL2                ? M|adat - 1 < U|xdat1
+..
+.formula U|xskap1 = F|totalcapacityhours(M|mgident^id, M|lgruppe^id, U|xdat1, M|adat - 1)
+.formula M|skap1  = U|xskap1
+..
+!MBEL2: Maschinenbelegung Periode 2 -> M|adat bis M|edat
+.continue MBEL3                ? M|edat < M|adat
+..
+.formula U|xskap2 = F|totalcapacityhours(M|mgident^id, M|lgruppe^id, M|adat, M|edat)
+.formula M|skap2  = U|xskap2
+..
+!MBEL3: Maschinenbelegung Periode 3 -> M|edat bis Ende
+.. edat um einen Tag erhîht, da edat in Periode 2 schon berÅcksichtigt ist
+.continue MERK             ? U|xdmax  < M|edat + 1
+..
+.formula U|xskap3 = F|totalcapacityhours(M|mgident^id, M|lgruppe^id, M|edat + 1, U|xdmax)
+.formula M|skap3  = U|xskap3
+..
+!MERK
+.formula M|dat4   = U|xdmax
+.formula M|dat1   = U|xdat1
+..
+!UEBERHANG
+.formula M|ueberhang1 = M|skap1 - M|sbel1
+.formula M|ueberhang2 = M|skap2 - M|sbel2
+.formula M|ueberhang3 = M|skap3 - M|sbel3
+..
+.cursor art 1  ?  M|tzeilen > 0
+.end
+..
+!ABBRUCH
+.copy U|xbAbbruch = G|TRUE ? U|xigef=0
+..
+!BEENDEN
+.error
+.end 2                  ? U|xbAbbruch
+.continue
+..
+!ERROR
+.error Bitte Maschinengruppe eintragen.
+.cursor mgident
+.end 1
+..
+!ERROR2
+.error Anfangs- und Enddatum eingeben.
+.end 1
+..
+!LEEREN
+.. alle Kopffelder leeren
+.formula M|sbel1      = ""
+.formula M|sbel2      = ""
+.formula M|sbel3      = ""
+.formula M|skap1      = ""
+.formula M|skap2      = ""
+.formula M|skap3      = ""
+.formula M|ueberhang1 = ""
+.formula M|ueberhang2 = ""
+.formula M|ueberhang3 = ""
+.formula M|dat1       = ""
+.formula M|dat4       = ""
+.formula M|mgekap     = ""
+.formula M|mggkap     = ""
+.. Tabelle leeren
+.input "is/TABLEEREN"
+.end 1

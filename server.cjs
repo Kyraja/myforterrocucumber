@@ -8,11 +8,14 @@
 
 'use strict';
 
-const http = require('node:http');
-const https = require('node:https');
-const fs = require('node:fs');
-const path = require('node:path');
-const { exec } = require('node:child_process');
+// Plain (un-prefixed) core requires so the binary also runs on older Node
+// base binaries (nexe's prebuilt Windows base is Node 14.15.3, which predates
+// the `node:` require prefix added in 14.18).
+const http = require('http');
+const https = require('https');
+const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
 
 const PORT = parseInt(process.env.PORT || '5173', 10);
 const DIST = path.join(__dirname, 'dist');
@@ -91,6 +94,9 @@ function proxyRequest(req, res, prefix, target) {
       proxyRes.pipe(res);
     },
   );
+
+  // 10-minute timeout — AI agent calls can take several minutes
+  proxyReq.setTimeout(600000, () => { proxyReq.destroy(); });
 
   proxyReq.on('error', (err) => {
     res.writeHead(502, { 'Content-Type': 'text/plain' });

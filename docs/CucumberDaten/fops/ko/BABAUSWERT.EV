@@ -1,0 +1,159 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  Autor          : male
+..  Verantwortlich : tiwe
+..  Kontrolle      : mh
+..  Funktion       : Allgemeines Event-FOP des Infosystems ko/BABAUSWERT
+..  Functionality  : Common event FOP of the Infosystem ko/BABAUSWERT
+..*****************************************************************************
+..
+.set trans -
+..
+..!meta M|=ko/BABAUSWERT
+..
+.type bool xbremoved
+..
+.continue PERIOD    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "amonat"
+.continue PERIOD    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "emonat"
+.continue PERIOD    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "ajahr"
+.continue PERIOD    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "ejahr"
+.continue SETOFBOOKS  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "bukreis"
+.continue SELDB     ? G|evtvar = "vdn" ; G|evtvar = "vgr" ; G|evtvar = "vtab"
+.continue ADDDATA   ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bstart"
+.continue REMDUPES  ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bentfdopp"
+.continue REMMARKED ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bentfmark"
+.continue SELBAR    ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bselekt"
+.continue ACCSEL    ? G|evtartengl = "FIELD_EXIT"   & G|evtzeile > 0
+.continue END
+..
+..*****************************************************************************
+!SETOFBOOKS: Sets the field bukreis (SetOfBooksConfiguration) to default value if empty
+..*****************************************************************************
+.continue END ? _F|empty(M|bukreis)
+.input "is/EVT.FIELD.SETOFBOOKS"
+.assign M|bukreis = U|evtdefault
+.continue END
+..*****************************************************************************
+!PERIOD: Sets the beginning resp. end date of period
+..*****************************************************************************
+.type text xxtemon xxtsmon xxtsyear xxteyear xxtfromd xxttod
+.formula U|xxtsmon = "amonat"
+.formula U|xxtemon = "emonat"
+.formula U|xxtsyear= "ajahr"
+.formula U|xxteyear= "ejahr"
+.formula U|xxtfromd= "adatum"
+.formula U|xxttod  = "edatum"
+.input "fb/IS.SETPERIOD"
+.continue END
+..
+..*****************************************************************************
+!SELDB
+..*****************************************************************************
+.input "is/DBCHOOSER"
+.formula M|select = "!"
+.continue END
+..
+..*****************************************************************************
+!ADDDATA
+..*****************************************************************************
+.continue ERR01 ? F|empty(M|babform)
+.select year 'M|ajahr' 'M|amonat' 'M|emonat' ? M|ajahr  = M|ejahr ; F|empty(M|ejahr)
+.select period 'M|adatum' 'M|edatum'       ? M|ajahr <> M|ejahr & _F|empty(M|ejahr)
+.formula M|select = "!" ? F|empty(M|select) 
+..
+.type text xxlbuffer
+.formula U|xxlbuffer = "9"
+..
+.input "is/HOL.LISTE"
+.continue END
+..
+..*****************************************************************************
+!ACCSEL: Data added or changed in table row
+..*****************************************************************************
+.continue END     ?  G|evtzeile = 0
+.continue END     ?  F|empty(M|tkonto)
+.continue ERR01   ?  F|empty(M|babform)
+.select year 'M|ajahr' 'M|amonat' 'M|emonat' ? M|ajahr = M|ejahr ; F|empty(M|ejahr)
+.select period 'M|adatum' 'M|edatum'       ? M|ajahr <> M|ejahr & _F|empty(M|ejahr)
+.load 9 add M|tkonto
+.continue END     ? _G|mehr
+.input 'M|tab'    ? _F|empty(M|tab)
+.continue END
+..
+..*****************************************************************************
+!SELBAR: Invoke selection bar for selected item type
+..*****************************************************************************
+.type text xtsel ? _F|defined(U|xtsel)
+.formula M|datnr = M|vdn
+.formula M|select = "!"
+.formula U|xtsel = "%,,@gruppe=" + 'M|vgr'
+.select 'G|hdatname.M|datnr' 'U|xtsel'
+.continue END ? _G|mehr
+.formula M|select = "$," + 'G|selkrit' ? _'G|selkrit'/("$*")
+.continue ADDDATA
+..
+..*****************************************************************************
+!REMDUPES: Remove duplicate entries
+..*****************************************************************************
+.type text xtfile
+.type text xtid xtlid xtsys
+.type integer  xirow
+.continue END ? M|tzeilen = 0
+.file -tempname U|xtfile
+.output new 'U|xtfile'
+.select screen header
+..
+..*****************************************************************************
+!REM1
+..*****************************************************************************
+.select screen line
+.continue REM2 ? _G|mehr
+.continue REM1 ? F|empty(M|tid)
+'M|tid^id'# 'M|aktzeile'
+.continue REM1
+..
+..*****************************************************************************
+!REM2
+..*****************************************************************************
+.output terminal
+.formula U|xtsys = "sort -o " + 'U|xtfile' + " " + 'U|xtfile'
+.system 'U|xtsys' background
+..
+..*****************************************************************************
+!REM3
+..*****************************************************************************
+.select from 'U|xtfile' U|xtid # U|xirow
+.continue REMMARKED        ? _G|mehr
+.select screen line 'U|xirow'
+.copy M|trem = G|false       ? U|xtlid <> U|xtid
+.copy M|trem = G|true        ? U|xtlid  = U|xtid
+.copy U|xtlid = U|xtid
+.continue REM3
+..
+..*****************************************************************************
+!REMMARKED
+..*****************************************************************************
+.continue END ? M|tzeilen = 0
+.select screen header
+..
+..*****************************************************************************
+!REMM1
+..*****************************************************************************
+.select screen line ? _U|xbremoved
+.continue END ? _G|mehr
+.continue END ? M|tzeilen = 0
+.copy U|xbremoved = M|trem
+.make screen line -O ? M|trem
+.continue REMM1
+..
+..*****************************************************************************
+!ERR01
+..*****************************************************************************
+.error Kein BAB-Formular angegeben
+.cursor babform 0
+.end 1
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

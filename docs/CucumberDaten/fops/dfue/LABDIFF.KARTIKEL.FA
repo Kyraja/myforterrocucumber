@@ -1,0 +1,97 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LABDIFF.KARTIKEL.FA
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Feldaustritt und/oder Button zum Wechsel der Artikel
+..                  Die Artikel mÅssen zum Rahmenauftrag passen
+.. Functionality  : Field exit and/or button to change product. product must
+..                  match to given blanket order.
+..*****************************************************************************
+.set trans -
+..
+.. no point entering product if blanket order is empty
+.continue ERRRAH  ?  F|empty(M|krahmen)
+..
+.. query for product in blanket order
+.type text xtsel
+.. remember product (mask field is by blanket order efop if no forecast exists)
+.type P2   xvartikel
+..
+..
+.. event evaluation
+.. ----------- ---------- ---------- -------------------------------------------
+.continue ARTIKEL ? G|evtartengl = "FIELD_EXIT"     & G|evtvar = "kartikel"
+.continue KUARTNR ? G|evtartengl = "FIELD_EXIT"     & G|evtvar = "kkuartnr"
+.continue WAEHLEN ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "kbuartikel"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+..
+!WAEHLEN
+.formula U|xtsel = "%,,;@autostart=(1);@ablage=(1);.kotyp=(BlanketOrder)"
+.formula U|xtsel = U|xtsel + ";.kopf="  + M|krahmen^id
+.formula U|xtsel = U|xtsel + ";artex="
+.formula U|xtsel = U|xtsel + ";zkuartnr="
+.select nolock sales 'U|xtsel'
+.continue END     ? _G|mehr
+.formula M|kartikel = H|artex^id
+.formula M|kkuartnr = H|zkuartnr
+.continue ENDHOL
+..
+..
+!ARTIKEL
+.formula U|xtsel = "$,,;@gruppe=2;@ablage=(1);kotyp=(BlanketOrder)"
+.formula U|xtsel = U|xtsel + ";kopf="   + M|krahmen^id
+.formula U|xtsel = U|xtsel + ";artex==" + M|kartikel^id
+.select nolock sales 'U|xtsel'
+.continue ERRART  ? _G|mehr
+.formula M|kartikel = H|artex^id
+.formula M|kkuartnr = H|zkuartnr
+.continue ENDHOL
+..
+..
+!KUARTNR
+.formula U|xtsel = "$,,;@gruppe=2;@ablage=(1);kotyp=(BlanketOrder)"
+.formula U|xtsel = U|xtsel + ";kopf="      + M|krahmen^id
+.formula U|xtsel = U|xtsel + ";zkuartnr==" + M|kkuartnr
+.select nolock sales 'U|xtsel'
+.continue ERRART  ? _G|mehr
+.formula M|kartikel = H|artex^id
+.formula M|kkuartnr = H|zkuartnr
+.continue ENDHOL
+..
+..
+!ENDHOL
+.select -
+..
+.formula  M|klab = ""        ?  _F|empty(M|kartikel)
+.formula  M|klabnummer = ""  ?  _F|empty(M|kartikel)
+.formula  U|xvartikel = M|kartikel^id
+..
+.. find previous forecasts with blanket-order FA efop
+.input "dfue/LABDIFF.KRAHMEN.FA"
+..
+.. no forecast (edi msg) for this product and blanket order
+.continue EMPTY   ?  _F|empty(M|krahmen)  &  F|empty(M|kartikel)  &  F|empty(M|kkuartnr)  &  F|empty(M|klab)
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERRRAH
+.continue ? M|kbportal
+.error Geben Sie zuerst einen Rahmenauftrag an.
+.end 1
+..
+!ERRART
+.continue ? M|kbportal
+.error Der Artikel passt nicht zum Rahmenauftrag.
+.end 1
+..
+!EMPTY
+.continue ? M|kbportal
+.formula M|kartikel = U|xvartikel^id
+.error Zu diesem Artikel und Rahmenauftrag ist kein Abruf vorhanden.
+.end 1

@@ -1,0 +1,84 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : CALLPARAM.CHECK.AUFRBED
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      : xg
+.. Functionality  : Regarding to his condition of calling this will check the
+.. visibility of the callparameter loaded in buffer 0.
+..*****************************************************************************
+.set trans -
+..
+.. Initializations
+.copy U|xvisible = G|FALSE
+.copy U|xerrmessage = ""
+..
+.. check condition for each type
+.continue VISIBLE ? F|empty(0|aufrbed)
+.continue HBUFFER ? F|equals(0|aufrbedtyp, "(HeaderField)")
+.continue TBUFFER ? F|equals(0|aufrbedtyp, "(TableField)")
+.continue PBUFFER ? F|equals(0|aufrbedtyp, "(PrintParameter)")
+.continue FORMULA ? F|equals(0|aufrbedtyp, "(Formula)")
+.continue CONSTNT
+..
+!HBUFFER: condition is a name for a boolean variable in the header of buffer M
+.copy U|xfadr = F|formatstr("F|adr({1}M{1}, {1}{2}{1}, 0)", G|DBLQUOTE, 0|aufrbed)
+.continue CHECKVAR
+..
+!TBUFFER: condition is a name for a boolean variable in the table of buffer M
+.copy U|xfadr = F|formatstr("F|adr({1}M{1}, {1}{2}{1}, {3})", G|DBLQUOTE, 0|aufrbed, M|aktzeile)
+.continue CHECKVAR
+..
+!PBUFFER: condition is a name for a boolean variable in the head of buffer P
+.copy U|xfadr = F|formatstr("F|adr({1}P{1}, {1}{2}{1}, 0)", G|DBLQUOTE, 0|aufrbed)
+.continue CHECKVAR
+..
+!FORMULA: condition is a boolean FO expression
+.continue ERROR2 ? _F|compatible(F|typeof(F|eval(0|aufrbed)),"B")
+.copy U|xvisible = F|eval(0|aufrbed)
+.continue VISIBLE ? U|xvisible
+.continue NOTTRUE
+..
+!CONSTNT: condition is a boolean constant
+.assign U|xvisible = '0|aufrbed'
+.continue ERROR2 ? _G|mehr
+.continue VISIBLE ? U|xvisible
+.continue NOTTRUE
+..
+!CHECKVAR
+.continue ERROR2 ? _F|compatible(F|typeof(F|eval(U|xfadr)),"B")
+.copy U|xvisible = F|value(F|eval(U|xfadr))
+.continue VISIBLE ? U|xvisible
+.continue NOTTRUE
+..
+!VISIBLE: callparameter is visible
+.copy U|xvisible = G|TRUE
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!NOTTRUE: condition is not true
+.set trans +
+.assign U|xerrmessage = F|formatstr("Das Ergebnis seiner Bedingung {1} ist nicht wahr", 0|aufrbed)
+.set trans -
+.continue END
+..
+!ERROR2
+.set trans +
+.assign U|xerrmessage = "Die Auswertung der Aufrufbedingung liefert kein Boolsches Ergebnis"
+.continue SCREEN ? U|xscreen
+.set trans -
+.continue END
+..
+!SCREEN
+.set trans +
+.output terminal
+Aufrufparameter '0|nummer':
+'U|xerrmessage'
+.set trans -
+.continue BREAK
+..
+!BREAK
+.error -message Die öberprÅfung der Aufrufbedingung im Aufrufparameter '0|nummer' wurde abgebrochen!
+.end 1

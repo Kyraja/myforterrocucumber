@@ -1,0 +1,234 @@
+..!interpreter english translate
+..*****************************************************************************
+..
+..  Name      : BILANZ
+..  Datum     : 08.03.96
+..  Vers.     : 7.1
+..  Autor     : Andrzej Klusek
+..
+..  Verantwortlich : hc
+..  Kontrolle      : 
+..
+..
+..  Funktion  : Bilanz / GuV
+..
+..  Ablauf    : Ausgabe mit EXCEL
+..
+..              BILANZ
+..                 ≥
+..                 ¿ƒ> ARB
+..                 ≥
+..                 ¿ƒ> FIRMA.BETR
+..                 ≥
+..                 ¿ƒ> MAND.INI
+..                 ≥
+..                 ¿ƒ> DRUCKER
+..                 ≥
+..                 ¿ƒ> BILKON.ABFR
+..                          ≥
+..                          ¿ƒ> DDE.MENUE
+..                                  ≥
+..                                  ¿ƒ> DDE.INI
+..                          ≥
+..                          ¿ƒ> VKZRAUM
+..                                  ≥
+..                                  ¿ƒ> VKZHOLJAHR
+..                 ≥
+..                 ¿ƒ> BILKON.OBEN
+..                          ≥
+..                          ¿ƒ> VKZHOLJAHR
+..                 ≥
+..                 ¿ƒ> BILKON.HOL
+..                          ≥
+..                          ¿ƒ> BILKON.KONTO
+..                                  ≥
+..                                  ¿ƒ> VKZHOLJAHR
+..                                  ≥
+..                                  ¿ƒ> BILKON.WERT
+..                                  ≥
+..                                  ¿ƒ> BILKON.RECH
+..                          ≥
+..                          ¿ƒ> VKZHOLJAHR
+..                          ≥
+..                          ¿ƒ> BILKON.WERT
+..                          ≥
+..                          ¿ƒ> BILKON.RECH
+..                 ≥
+..                 ¿ƒ> BILKON.EXCEL
+..
+..*****************************************************************************
+..                           SUBROUTINE
+..                           ----------
+.input "ARB"
+..
+..  Gesellschaftsform holen
+..  neu: aus FIRMA BETR -> xtgesf
+..  alt: aus MAND.INI   -> gform
+.input FIRMA.BETR
+.type integer gform
+.input MAND.INI
+..
+.formula xtbf = xarb + "BILANZ.FEHL"
+..
+.type text xko1:8 xko2:8 xsko1:8 xsko2:8
+.select company "$,gruppe=7;@gruppe=7"
+.formula xko1  =  verb
+.formula xko2  =  ford
+.formula xsko1 =  sverb
+.formula xsko2 =  sford
+.select
+..*****************************************************************************
+.set trans +
+..  xybmit = true  -> mit EXCEL
+..  xybmit = false -> ohne EXCEL
+.type bool xybmit
+.type integer  xwastun xips xii xih1 xih2
+.type text xtips  xdatei xtger:15 xwahl:1 xytlgp xtskip:7 xtfkt:15 xtexcel:15
+.type text xl:3 xlg:3 xlg1:3 xlg2:3
+.formula xdatei  = "S"
+.formula xtfkt   = xarb + "BILKON.HOL"
+.formula xtexcel = xarb + "BILKON.EXCEL"
+.formula xtkotab = xarb + "KOTAB"
+..
+.. Die Varialble xnachweis wird in den beiden Programmen BILANZ und KONACH
+.. verwendet, um zu einscheiden, ob die Verkehrszahlen
+..    - detailiert (fÅr Kontennachweis fb/KONACH, xnachweis=ja)
+..    - gesammelt  (fÅr Bilanz fb/BILANZ, xnachweis=nein)
+.. ausgegeben werden sollen.
+.type bool xnachweis
+.formula xnachweis = FALSE
+..
+.. *** WAEHRUNG ***
+.input WAEHRUNG.INI
+.formula x = auswaehr
+.. *** WAEHRUNG - Ende ***
+..
+!G1
+.input DRUCKER1
+.formula xtger = geraet
+.formula xtger = "Bildschirm"  ?  geraet = ""
+..
+!M0
+.output terminal
+.input BILD.F
+.up
+.set thoussep
+.set decpoint
+..
+.menu AuswÑhlen
+Bilanz                                           >>  .formula xwahl = "A"
+GuV                                              >>  .formula xwahl = "B"
+Wechsel des Ausgabemediums: 'xtger             ' >>  .continue G1
+BuchungswÑhrung, z.Zt. 'xxbuwaehr '              >>  .continue WAEHR
+AusgabewÑhrung,  z.Zt. 'auswaehr '               >>  .continue AWAEHR
+Beenden                                          >>  .continue BEENDEN
+..
+.continue BEENDEN  ?  F|empty(G|menue)
+?                                     Bilanz  ?  xwahl = "A"
+?                                      GuV    ?  xwahl = "B"
+
+.input BILKON.ABFR
+.continue M0       ?  xwastun = 99
+.continue VB1      ?  xwahl = "B"
+..
+.. Initialisierung der Variablen fÅr Gesellschaftsform
+.formula xlg = ""
+.formula xlg1 = ""
+.formula xlg2 = ""
+..
+..  Salden der Konten der anderen Gesellschaftsform mÅssen ausgeglichen sein!
+..  d.h. wenn Personengesellschaft definiert ist,
+..  mu· dann Saldo aller Konten, die fÅr die Kapitalgesellschaftsform in KOTAB
+..  (bak, bpk) definiert sind, NULL sein.
+                                  SaldoprÅfung
+
+'txname': Bitte warten
+
+.formula xlg1 = "bak"  ?  gform=1 ; xtgesf = "P"
+.formula xlg2 = "bpk"  ?  gform=1 ; xtgesf = "P"
+.formula xlg1 = "bap"  ?  gform=2 ; xtgesf = "K"
+.formula xlg2 = "bpp"  ?  gform=2 ; xtgesf = "K"
+..
+.formula xsal = 0
+.output new 'xtbf'
+.input "DATEI.F"
+.formula xgef = false
+.select from
+..
+!VA1
+.select from 'xtkotab' xkenn # xart # xber # xinf # xnam^
+.continue VB1             ? _mehr & _xgef  & xsal=0
+.continue FEHL            ? _mehr &  xgef
+.continue VA1             ?  xkenn<> xlg1  & xkenn<> xlg2  ; xber="" ; xinf="d"
+..
+!VA5
+.formula xtber = xber << ","
+.continue VA1             ?  xtber=""
+.formula xber  = xber >> ","
+.select account 'xtber'
+.continue VA5             ? _mehr
+.continue VA20            ? _bu  &  xko1 <> num  &  xko2 <> num  &  xsko1 <> num  &  xsko2 <> num
+..
+!VA10
+.formula xgef = true         ?  saldo<>0  &  _xgef
+?'num'   SALDO='saldo'  ?  saldo<>0
+..
+!VA20
+.select account
+.continue VA5             ? _mehr
+.continue VA20            ? _bu  &  xko1 <> num  &  xko2 <> num  &  xsko1 <> num  &  xsko2 <> num
+.continue VA10
+..
+!VB1: Bilanz + GuV
+.input BILKON.OBEN
+.continue GV  ?  xwahl = "B"
+..
+..  BILANZ
+..  Aktiva
+.formula xl  = "ba"
+.formula xlg = "bap"  ?  gform = 1  ;  xtgesf = "P"
+.formula xlg = "bak"  ?  gform = 2  ;  xtgesf = "K"
+.input 'xtfkt'
+.page
+..
+..  Passiva
+.formula xl  = "bp"
+.formula xlg = "bpp"  ?  gform = 1  ;  xtgesf = "P"
+.formula xlg = "bpk"  ?  gform = 2  ;  xtgesf = "K"
+.input 'xtfkt'
+.output terminal ...    ?  geraet = ""
+.input 'xtexcel'   ?  xybmit
+.continue M0
+..
+!GV: GuV-RECHNUNG
+.formula xl  = "gv"
+.formula xlg = "gv"
+.input 'xtfkt'
+.output terminal ...    ?  geraet = ""
+.input 'xtexcel'   ?  xybmit
+.continue M0
+..
+..
+.. *** WAEHRUNG ***
+!WAEHR: BuchungswÑhrung bestimmen
+.input VBUWAEHRUNG
+.continue M0
+..
+!AWAEHR: AusgabewÑhrung fÅr Endsaldo bestimmen
+.input AUSWAEHRUNG
+.formula x = auswaehr
+.continue M0
+.. *** WAEHRUNG - Ende ***
+..
+..
+!BEENDEN
+.end .
+..
+!FEHL: Fehlermeldung
+
+Die Salden der vorangehenden Konten mÅssen ausgeglichen sein!
+
+..
+.output terminal
+.editing 'xtbf'
+.continue VB1

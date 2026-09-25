@@ -1,0 +1,109 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : CALLPARAM.GET.PARAMDUPEL -> which means PARAMTUPEL ;-))
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      : xg
+.. Functionality  : Gets the name value matching from the row of a callparameter
+.. loaded in buffer 0. If the value for the target item in the row is a mandatory
+.. field and empty, the whole callparameter will be invisible.
+..*****************************************************************************
+.set trans -
+..
+.continue END ? _F|defined(0|aktzeile)
+.continue END ? 0|aktzeile <= 0
+..
+.. Initializations
+.copy U|xvisible = G|FALSE
+.copy U|xinheader = G|FALSE
+.copy U|xposcursor = G|FALSE
+.copy U|xtupel = ""
+.copy U|xtupelname = ""
+.copy U|xerrmessage = ""
+.copy U|xcallval = ""
+.copy U|xtargetname = ""
+.copy U|xtargetrow = U|XHEADER
+.copy U|xfatal = 0
+.copy U|xerror = 0
+..
+.. Get target row in U|xtargetrow
+.input "st/CALLPARAM.GET.ROW"
+.continue FATAL1 ? U|xfatal > 0
+.continue ERROR ? U|xerror > 0
+..
+.. Get target item or action in U|xtargetname
+.input "st/CALLPARAM.GET.TARGET"
+.continue ACTION ? U|xisaction
+.continue FATAL2 ? U|xfatal > 0
+..
+.. We have an item
+.copy U|xtupelname = U|xtargetname
+.continue SOURCE ? U|xinheader
+.copy U|xtupelname = U|xtargetrow + U|XCOLON + U|xtupelname
+.continue SOURCE
+..
+!ACTION: We have an action
+.copy U|xtupelname = U|xtargetname + U|XASSIGN
+.continue HEADER ? U|xinheader
+..
+.. Located item or action in table
+.copy U|xtupelname = U|xtupelname + U|xtargetrow
+.copy U|xtupelname = U|xtupelname + U|XCOLON + 0|zielvar ? _F|empty(0|zielvar)
+.continue TUPEL
+..
+!HEADER: Located item oder action in header
+.formula U|xtupelname = U|xtupelname + U|xtargetrow
+.formula U|xtupelname = U|xtupelname + U|XCOLON + 0|zielvar ? _F|empty(0|zielvar)
+.continue TUPEL
+..
+!SOURCE: Get source value in U|xcallval
+.input "st/CALLPARAM.GET.SOURCE"
+.continue FATAL3  ? U|xfatal > 0
+.continue NOVALUE ? U|xnovalue
+..
+!TUPEL: compose result, quote value to hide special characters
+.copy U|xtupel = U|xtupelname
+.continue VISIBLE ? U|xisaction
+.copy U|xtupel = U|xtupel + U|XASSIGN + (U|xcallval * "+#X=E+#|?=")
+..
+!VISIBLE
+.copy U|xvisible = G|TRUE
+.copy U|xerrmessage = ""
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+.set trans +
+..
+!NOVALUE: mandatory value for target is empty
+.copy U|xvisible = G|FALSE
+.assign U|xtupel = ""
+.assign U|xerrmessage = F|formatstr("Der Pflichtwert {1} fÅr seine Zielvariable {2} ist leer", 0|aufrwert, 0|zielvar)
+.continue END
+..
+!ERROR
+.assign U|xerrmessage = "Das aufrufende Objekt hat keine ID (Feld id)!" ? U|xerror = 1
+.assign U|xerrmessage = "Das aufrufende Objekt hat keine Zeilen-ID (Feld zid)!" ? U|xerror = 2
+.continue SCREEN
+..
+!FATAL1: always complain and abort while fatal error
+.assign U|xerrmessage = F|formatstr("Der Typ des Zielzeilenwerttyps {1} ist unbekannt", 0|aufrwtyp)
+.continue SCREEN
+..
+!FATAL2: always complain and abort while fatal error
+.assign U|xerrmessage = F|formatstr("Der Typ des Zielfeldes {1} ist unbekannt", 0|zielaktion)
+.continue SCREEN
+..
+!FATAL3: always complain and abort while fatal error
+.assign U|xerrmessage = F|formatstr("Der Typ des Aufrufwertes {1} ist unbekannt", 0|aufrwtyp)
+.continue SCREEN
+..
+!SCREEN
+.output terminal
+Aufrufparameter '0|nummer', in Zeile '0|aktzeile':
+'U|xerrmessage'
+.continue BREAK
+..
+!BREAK
+.error -message Die Ermittlung des Parametertupels wurde abgebrochen!
+.end 1

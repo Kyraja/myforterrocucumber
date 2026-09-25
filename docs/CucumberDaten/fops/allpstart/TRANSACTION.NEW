@@ -1,0 +1,207 @@
+..!interpreter english declaration noabbrev
+.. at 2016-09-01, 09:13
+.set trans -
+..========================================================================
+..==  Name              : TRANSACTION.NEW
+..==  Pfad              : allpstart
+..==  Funktion          : Programm erzeugt in ZDB Transaktion DatensÑtze,
+..==                      aus denen dann nach PrÅfung Buchungen abgesetzt werden
+..==  Erstellungsdatum  : 09.01.08
+..==  Autor             : alltrotec GmbH/CP
+..==  Copyright         : (c) 1990 - 2016 alltrotec GmbH
+..==
+..==  Besonderheiten    : Steuerung der Feldzuordnung Åber INI-Datei
+..==                      Kommandoaufruf -> Aufruf INI-Datei als Parameter
+..==                      Maskenereignis -> Name INI-Datei "TRANSACTION."+'G|evtmaske'+".INI"
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..==
+..========================================================================
+.input DATEI.F
+..====================================================
+.type integer  xprocsp      ? _F|defined(xprocsp)
+.type text     xtmp xini xsys xhlp xmerk x0transid x1transid
+.type integer  xi01 XIDAT
+.type bool     xb00 xb01 xzei
+.type text xini     ? _F|defined(U|xini)
+.type text xdat     ? _F|defined(U|xdat)
+.type text xprot    ? _F|defined(U|xprot)
+.type text xleer    ? _F|defined(U|xleer)
+.type text xvorg    ? _F|defined(U|xvorg)
+.type text xnum     ? _F|defined(U|xnum)
+..====================================================
+.set demand -
+.formula xtmp = "rmtmp/XTRANSACTION" + G|PID + ".TMP"
+.continue EPROCDEF
+!PROC001: ----- transaktionsdatensatz -----
+.select lock object 'U|x1transid'
+.select lock line 'h|tzeilen'
+.make line +O
+.formula U|xi01 = 1
+!LOOP001: ==============================
+.continue ELOP001 ? _(F|defined(U|x1bef.xi01))
+.'U|x1bef.xi01'
+.formula U|xi01 = U|xi01 + 1
+.continue LOOP001
+!ELOP001: ==============================
+.rewrite
+.select --
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.input "allpstart/TRANS.KONFIG.INI"
+.input KDATNAME.KONST
+.continue EL001 ? _(G|evtart = "noevent")
+.continue EL002 ? _(G|argc = 7)
+.formula xini  = 'G|arg1'
+.formula xdat  = 'G|arg2'
+.formula xprot = 'G|arg3'
+.formula xleer = 'G|arg4'
+.formula xvorg = 'G|arg5'
+.formula xnum  = 'G|arg6'
+.continue FI002
+!EL002
+.continue EL003 ? _(G|argc = 2)
+.formula U|xini = G|arg1
+.continue FI003
+!EL003
+.set trans +
+.box HINWEIS
+
+Beim Programmaufruf muss als Argument die zu
+verwendende INI-Datei angegeben werden. Beispiel:
+
+<text>TRANSACTION.NEW ow1/TRANSACTION.NEW.INI<zeigen>
+
+.set trans -
+.error(0)
+.end 2
+!FI003
+!FI002
+.continue FI001
+!EL001
+.formula U|xini = "TRANSACTION." + 'G|evtmaske' + ".INI"
+.formula U|xini = F|foppath(U|xini)
+!FI001
+.continue EL004 ? _(U|xb00)
+.output TERMINAL
+verwendete INI: 'U|xini'
+!EL004
+.continue EL005 ? _(F|filenotempty(U|xini))
+.input 'U|xini'
+.continue EL006 ? _(F|empty(U|xdat))
+.copy U|xb01 = G|true
+.continue FI006
+!EL006
+.formula U|xsys = U|xpfad1 + U|xdat
+.copy U|xb01 = F|fileexists(U|xsys)
+!FI006
+.continue EL007 ? _(xb01)
+.make projectsuitetransactions group1 NEW
+.formula U|xi01 = 1
+!LOOP002: ==============================
+.continue ELOP002 ? _(F|defined(x0bef.xi01))
+.'U|x0bef.xi01'
+.formula U|xi01 = U|xi01 + 1
+.continue LOOP002
+!ELOP002: ==============================
+.rewrite
+.formula U|x0transid = H|id
+.select --
+.continue EL008 ? _(U|xb00)
+.output TERMINAL
+Transaktion 'U|x0transid' angelegt
+!EL008
+.continue EL009 ? _(F|empty(U|xdat))
+.select screen header
+.continue FI009
+!EL009
+.formula U|xsys = "cp " + U|xpfad1 + U|xdat + " " + U|xtmp
+.system 'U|xsys' background
+.formula xsys = "crlf- " + U|xtmp
+.system 'U|xsys' background
+.file -open XIDAT 'U|xtmp'
+!FI009
+.copy U|xb01 = G|false
+.'U|xles'
+!LOOP003: ==============================
+.continue ELOP003 ? _(mehr)
+.copy U|xb01 = G|true  ? _U|xmerk = U|.U|xkenn
+.continue EL010 ? _(U|xb01)
+.copy U|xb01 = G|false
+.formula U|xmerk = U|.U|xkenn
+.make projectsuitetransactions group2 NEW
+.rewrite
+.formula U|x1transid = H|id
+.select --
+.continue EL011 ? _(U|xb00)
+.output TERMINAL
+Transaktionsdatensatz 'x1transid' erzeugt
+        Kenner fÅr Wechsel 'xkenn' ( Inhalt: 'xmerk' )
+!EL011
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.select lock object 'U|x0transid'
+.select lock line 'h|tzeilen'
+.make line +O
+.formula h|ytrdaten = 'U|x1transid'
+.rewrite
+.select --
+.continue FI010
+!EL010
+.continue EL012 ? _(U|xb00)
+.output TERMINAL
+Transaktionsdatensatz 'x1transid' erweitert
+        Kenner fÅr Wechsel 'xkenn' ( Inhalt: 'xmerk' )
+!EL012
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+!FI010
+.'U|xles'
+.continue LOOP003
+!ELOP003: ==============================
+.formula U|xi01 = 1
+!LOOP004: ==============================
+.continue ELOP004 ? _(F|defined(U|x2bef.xi01))
+.'U|x2bef.xi01'
+.formula U|xi01 = U|xi01 + 1
+.continue LOOP004
+!ELOP004: ==============================
+.system 'F|formatstr("rm -f {1}", U|xtmp)' background
+.command -parallel 'U|x0transid'    ? U|xzei
+.continue
+.continue FI007
+!EL007
+.set trans +
+.box HINWEIS
+Die in der INI-Datei benannte Datendatei
+
+'U|xdat'
+
+kann nicht gefunden werden!
+.set trans -
+.error (0)
+.end 2
+!FI007
+.continue FI005
+!EL005
+.set trans +
+.
+.box HINWEIS
+Die INI-Datei 'xini'
+
+kann nicht gefunden werden!
+.set trans -
+.error (0)
+.end 2
+!FI005

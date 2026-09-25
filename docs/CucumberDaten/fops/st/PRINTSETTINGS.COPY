@@ -1,0 +1,223 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PRINTSETTINGS.COPY
+.. Author         : kop
+.. Verantwortlich : teamreport
+.. Kontrolle      :
+.. Functionality  : finds all printer and layout lists attached to current login 
+..                  and shows all for context relevant ones as pre selection for 
+..                  printer dialogue
+..*****************************************************************************
+..
+..
+.. Declarations
+.type text xtooltip                  ? _F|defined(U|xtooltip)
+.type text xtreetext                 ? _F|defined(U|xtreetext)
+.type text xpreprintfop              ? _F|defined(U|xpreprintfop)
+.type ID88:2.3.8 xlayout             ? _F|defined(U|xlayout)
+.type IPN4 xanzahl                   ? _F|defined(U|xanzahl)
+.type  IPN4 xexemplare               ? _F|defined(U|xexemplare)
+.type ID91:1.2.9 xprinter            ? _F|defined(U|xprinter)
+.type ID87:9 xcallparam              ? _F|defined(U|xcallparam)
+.type ID87:9 xprcallparam            ? _F|defined(U|xprcallparam)
+.type ID91:13 xprinterlist           ? _F|defined(U|xprinterlist)
+.type ID88:14 xlayoutlist            ? _F|defined(U|xlayoutlist)
+.type AS273 xlayzeilentyp            ? _F|defined(U|xlayzeilentyp)
+.type AS129 xlayouttyp               ? _F|defined(U|xlayouttyp)
+.type ID88:1 xpdreinst               ? _F|defined(U|xpdreinst)
+.type ID91:1.2.9.13 xpdreinstdrucker ? _F|defined(U|xpdreinstdrucker)
+.type integer xtreelevel             ? _F|defined(U|xtreelevel)
+.type bool xparent                   ? _F|defined(U|xparent)
+.type integer xaktzeile              ? _F|defined(U|xaktzeile)
+.type A328 xendeaktion               ? _F|defined(U|xendeaktion)
+.type bool xsichtbar                 ? _F|defined(U|xsichtbar)
+.type bool xobjselektion             ? _F|defined(U|xobjselektion)
+.type bool xintabelle                ? _F|defined(U|xintabelle)
+.type bool xfirst                    ? _F|defined(U|xfirst)
+.type bool xlaystdprinter            ? _F|defined(U|xlaystdprinter)
+.type bool xvorschau                 ? _F|defined(U|xvorschau)
+.type bool xvorschauold              ? _F|defined(U|xvorschauold)
+.type text xvtext                    ? _F|defined(U|xvtext)
+.type bool xnurerlaubte              ? _F|defined(U|xnurerlaubte)
+..
+.set trans +
+.copy U|xvtext = "Vorschau"
+.set trans -
+.make screen line --
+..
+.copy U|xnurerlaubte = G|false
+.copy U|xnurerlaubte = M|pdreinst^nurerlaubte     ? F|defined(M|pdreinst)
+.copy U|xobjselektion = M|objektsel  ? F|defined(M|objektsel)
+.copy U|xobjselektion = G|true       ? G|avtmaske = -3
+.copy U|xintabelle = G|false
+.copy U|xintabelle = M|tabelle       ? F|defined(M|tabelle)
+.copy U|xintabelle = G|true          ? G|avtzeile > 0
+.continue ERRKONTEXT                 ? _U|xobjselektion & F|empty(M|aktkontext)
+.copy U|xfirst = G|true
+.copy U|xsichtbar = G|true
+.assign U|xendeaktion = "(Done)"
+..
+.copy U|xlayoutlist = M|layoutliste
+.continue RUN ? F|empty(U|xlayoutlist)
+.load 2 object 'U|xlayoutlist' ? _U|xobjselektion
+.load 2 group "88:3" "$,,laytyp==(UniversalObjectSelectionLayout);laytyp==(ObjectSelectionLayout);@verknuepfung=(Or)" ? U|xobjselektion
+.continue RUN ? _G|mehr
+..
+!PRINTS: Printer, print distributor, print allocator or list of printers
+.copy U|xpdreinstdrucker = M|druckerliste
+.continue MENU ? F|empty(U|xpdreinstdrucker)
+.load 1 object 'U|xpdreinstdrucker'
+..
+!MENU
+.copy U|xlaystdprinter = G|false
+.copy U|xtreelevel = 1
+.copy U|xparent = G|false
+.assign U|xlayout = ""
+.assign U|xanzahl = ""
+.assign U|xexemplare = ""
+.assign U|xcallparam = ""
+.assign U|xlayzeilentyp = ""
+.assign U|xprinter = ""
+.assign U|xprcallparam = ""
+.copy U|xtreetext = ""
+.copy U|xtooltip = ""
+.copy U|xpreprintfop = ""
+.load 2 line      ? _U|xobjselektion
+.load 2  continue ? U|xobjselektion & _U|xfirst
+.continue RUN   ? _G|mehr
+.copy U|xfirst = G|FALSE
+.continue OBJSEL ? U|xobjselektion
+.copy U|xlayout = 2|tlayout
+.copy U|xanzahl =  2|tanzahl
+.copy U|xexemplare = 2|texemplare
+.copy U|xprinter = 2|tlayout^drucker ? _F|empty(2|tlayout^drucker)
+.copy U|xlaystdprinter = G|true      ? _F|empty(2|tlayout^drucker)
+.copy U|xvorschau = G|true           ? _F|empty(2|tlayout^drucker)
+.continue CONTEXTCHK
+!OBJSEL
+.assign U|xlayout = 2|id
+!CONTEXTCHK
+.continue MENU    ? _F|empty(U|xlayout^kontext) & U|xlayout^kontext^id <> M|aktkontext^id
+..
+.continue LINETYPE ? U|xlayout^gruppe <> 3
+.assign U|xlayouttyp = U|xlayout^laytyp
+.continue MENU ? _ U|xlayout^aktiv & U|xobjselektion
+.continue MENU ? F|equals(U|xlayouttyp, "(UniversalObjectSelectionLayout)") & _U|xobjselektion
+.continue MENU ? F|equals(U|xlayouttyp, "(ObjectSelectionLayout)") & _U|xobjselektion
+.continue MENU ? M|aktkontext^dnr <> 65 & F|equals(U|xlayouttyp, "(UniversalInfosystemLayout)")
+.continue MENU ? F|equals(U|xlayouttyp, "(HardCopyLayout)") & "mask." + 'G|avtmaske' +"." + 'G|avtmaskprio' <> U|xlayout^maske
+.continue MENU ? M|aktkontext^dnr = 65 & M|aktkontext^gruppe = 1 & F|equals(U|xlayouttyp, "(UniversalScreenPrintLayout)")
+.continue MENU ? U|xintabelle & U|xlayout^laynurkopf
+.continue MENU ? _U|xintabelle & U|xlayout^laynurtab
+..
+!LINETYPE
+.continue SUBMENU ? U|xobjselektion
+.copy U|xlayzeilentyp = 2|layzeilentyp
+.continue SEPROW ? F|equals(U|xlayzeilentyp, "(SeparatorLine)") ; F|equals(U|xlayzeilentyp, "(BlankLine)")
+.copy U|xcallparam = 2|draufruf
+.copy U|xpreprintfop = 2|tpreprint
+.continue SUBMENU ? F|equals(U|xlayzeilentyp, "(SubMenu)")
+..
+!DOPRINT: Handle printer configuration
+.continue TOOLTIP ? U|xlaystdprinter
+.continue MENU    ? F|empty(U|xpdreinstdrucker)
+.continue PRINTER ? U|xpdreinstdrucker^gruppe = 1
+.continue DISTRIB ? U|xpdreinstdrucker^gruppe = 2
+.continue ALLOCAT ? U|xpdreinstdrucker^gruppe = 9
+.continue LISTOFP ? U|xpdreinstdrucker^gruppe = 13
+.. Fatal error - Not supported group
+.error -number 1111
+.end 1
+..
+!SEPROW: Separator row in menu
+.copy U|xtreetext = ""
+.assign U|xtooltip = U|xlayzeilentyp
+.input "PRINTSETTINGS.LINE"
+.continue MENU
+..
+!SUBMENU: Submenu
+.copy U|xparent = G|true
+.assign U|xtreetext = 2|tmenuetext        ? _U|xobjselektion
+.assign U|xtreetext =  U|xlayout^namebspr ? F|empty(U|xtreetext)
+.assign U|xtooltip = U|xlayout^namebspr
+.input "PRINTSETTINGS.LINE"
+.continue LISTOFP ? U|xvorschau
+.continue LISTOFP ? U|xlaystdprinter
+.continue DOPRINT
+..
+!PRINTER: Single printer
+!DISTRIB: Printer distributer will be handled as printer
+!ALLOCAT: Printer allocator will be handled as printer
+.assign U|xprinter = U|xpdreinstdrucker
+.continue TOOLTIP ? _F|equals(U|xlayzeilentyp, "(SubMenu)")
+..
+!LISTOFP: List of printers
+.assign U|xprinter = U|xpdreinstdrucker ? U|xpdreinstdrucker^gruppe <> 13
+.copy U|xtreelevel = 2 ? U|xparent
+.continue TOOLTIP      ? U|xpdreinstdrucker^gruppe <> 13
+.assign U|xprinterlist = U|xpdreinstdrucker
+.input "PRINTSETTINGS.STANDORTDR" ? _F|empty(M|standort) & F|equals(U|xprinterlist^standortdrverw, "(First)")
+.continue NEXTROW ? F|empty(1|vordrucker) & F|empty(1|stddrucker)
+..
+.. First handle preview and standard printer defined in head of the list
+.continue STPRINTER ? F|empty(1|vordrucker)
+.assign U|xprinter = 1|vordrucker
+.copy U|xvorschau = G|true
+.continue TOOLTIP
+!STPRINTER
+.assign U|xprinter = 1|stddrucker
+.copy U|xvorschau = G|false
+.continue TOOLTIP
+..
+!NEXTROW
+.load 1 line
+.input "PRINTSETTINGS.STANDORTDR" ? _G|mehr & _F|empty(M|standort) & F|equals(U|xprinterlist^standortdrverw, "(Last)")
+.continue MENU ? _G|mehr
+.copy U|xprinter = 1|spdrucker
+.copy U|xprcallparam = 1|praufruf
+..
+!TOOLTIP: Set tooltip and element text
+.formula U|xtooltip = U|xlayout^namebspr + "/" + U|xprinter^namebspr
+.formula U|xtooltip = U|xlayout^namebspr + "/" + U|xvtext ? U|xvorschau
+.formula U|xtreetext = 2|tmenuetext       ? _U|xobjselektion
+.formula U|xtreetext = U|xlayout^namebspr ?  F|empty(U|xtreetext)
+.continue MENUROW ? _F|defined(1|tmenuetext)
+.continue MENUROW ? F|empty(1|tmenuetext)
+..
+.formula U|xtreetext = U|xtreetext + "/" + 1|tmenuetext ? _F|empty(1|tmenuetext) & _U|xvorschau
+.formula U|xtreetext = U|xtreetext + "/" + 1|spdrucker^namebspr ? F|empty(1|tmenuetext) & _U|xvorschau
+.formula U|xtreetext = U|xtreetext + "/" + U|xvtext  ? U|xvorschau
+.continue INSERTL
+..
+!MENUROW
+.formula U|xtreetext = U|xtreetext + "/" + U|xprinter^namebspr ? _U|xvorschau
+.formula U|xtreetext = U|xtreetext + "/" + U|xvtext  ? U|xvorschau
+..
+!INSERTL
+.input "PRINTSETTINGS.LINE"
+.copy U|xvorschauold = U|xvorschau
+.copy U|xvorschau = G|false
+.continue MENU              ? U|xlaystdprinter & _U|xvorschauold
+.continue TOOLTIP           ? U|xlaystdprinter
+.continue NOLIST            ? U|xpdreinstdrucker^gruppe <> 13
+.continue STPRINTER         ? _F|empty(1|stddrucker) & U|xvorschauold
+!NOLIST
+.continue NEXTROW           ? U|xpdreinstdrucker^gruppe = 13
+.continue LISTOFP           ? U|xvorschauold & F|equals(U|xlayzeilentyp, "(SubMenu)")
+.continue MENU
+..
+!RUN: Start print if there is only one entry in print menu
+..
+.continue END ? M|tzeilen = 0
+.continue END ? M|tzeilen > 2
+.select screen line 1
+.copy M|menuevorauswahl = 1 ? M|tzeilen = 1
+.copy M|menuevorauswahl = 2 ? M|tzeilen = 2 & F|empty(M|tdrucker)
+.copy M|menuesofort = G|true ? _F|empty(M|menuevorauswahl)
+..*****************************************************************************
+!END
+.continue
+..
+!ERRKONTEXT
+.error Kein Druckkontext angegeben.
+.end 1

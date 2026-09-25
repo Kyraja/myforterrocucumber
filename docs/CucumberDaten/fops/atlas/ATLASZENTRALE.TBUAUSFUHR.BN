@@ -1,0 +1,100 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ATLASZENTRALE.TBUAUSFUHR.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Ruft Infosystem "ATLASAUSFUHR" per edp auf, um einen
+..                  Vorgang fÅr die Zollausfuhr anzumelden.
+.. Functionality  : Calls infosystem "ATLASAUSFUHR" with edpimport, to register
+..                  a transaction for customs.
+..  include     atlas/ATLASPARAMS
+..  include     atlas/ATLASSTATUS
+..*****************************************************************************
+.set trans -
+..
+.type text   xtsystem        ? _F|defined(xtsystem)
+.type text   xtfehler        ? _F|defined(xtfehler)
+.type text   xtausfuhredp    ? _F|defined(xtausfuhredp)
+.type text   xtausfuhredpout ? _F|defined(xtausfuhredpout)
+.type text   xtausfuhredperr ? _F|defined(xtausfuhredperr)
+..
+.. nothing to do
+.continue END     ?  M|tatlasgem
+..eiter ERRVORS ?  M|kbvorschau
+..eiter ERRABG  ?  M|tvorgang^uebertr = true
+..
+.. check if someone else registered this transaction
+.input "ATLASPARAMS"
+.assign T|xvatvorgang = M|tvorgang^id
+.input "ATLASSTATUS"
+.continue STATUS  ?  T|xbatgemeldet
+..
+.. assign temporary files
+.file -tempname T|xtausfuhredp
+.file -tempname T|xtausfuhredpout
+.file -tempname T|xtausfuhredperr
+..
+.output new 'T|xtausfuhredp'
+.input "DATEI.F"
+#!action=do
+#!typedcmd=38
+#!flddelimiter=#
+such         #kvorgang        #bstart  #kbuausfuhr
+ATLASAUSFUHR #'M|tvorgang^id' #1       #1
+.output
+..
+.formula T|xtsystem = "edpimport.sh -p " + 'T|einmalpw' + " -c EKS -I " + 'T|xtausfuhredp' + " >> " + 'T|xtausfuhredpout' + " 2>> " + 'T|xtausfuhredperr'
+.system 'T|xtsystem'  background
+.continue ERRANM  ? _T|mehr
+.continue ERRANM  ?  F|filenotempty(T|xtausfuhredperr) & F|fileexists(T|xtausfuhredperr)
+..
+.. examine transaction and file
+.input "ATLASPARAMS"
+.assign T|xvatvorgang = M|tvorgang^id
+.input "ATLASSTATUS"
+..
+!STATUS
+.assign M|tatlasgem = T|xbatgemeldet
+.assign M|tedi = T|xvatedi^id
+.formula M|tuebdatum = M|tedi^erfass  ? _F|empty(M|tedi)
+..
+.. status icon
+.formula M|tstatus  = ""
+.formula M|tstatusz = G|icook      ?  T|xbatgemeldet
+.formula M|tstatusz = "icon:ball_blue"       ?  T|xbatgemeldet   &  T|xvatedi^status = 2
+.formula M|tstatusz = G|icowarn     ?  T|xbatgemeldet   &  F|empty(T|xvatedi)
+.formula M|tstatusz = G|icowarn     ? _T|xbatgemeldet   & _F|empty(T|xvatedi)
+.formula M|tstatusz = G|icoerror        ?  T|xbathaserror
+.formula M|tstatusz = "icon:ball_orange"     ?  T|xbatdonotsend
+..
+.. icons for buttons with actions
+.formula M|tbuausfuhrz = "icon:process"
+.formula M|tbuvorschauz = "icon:screen_view"
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERRANM
+.set trans +
+.formula T|xtfehler = F|formatstr("Fehler bei Anmeldung zur Ausfuhr fÅr Vorgang {1}.", 'M|tvorgang^nummer')
+.set trans -
+.error 'T|xtfehler'
+.continue SHOWERR ?  F|fileexists(T|xtausfuhredperr) &  F|filenotempty(T|xtausfuhredperr)
+.end 1
+..
+!SHOWERR
+.editing -readonly 'T|xtausfuhredperr'
+.end 1
+..
+!ERRVORS
+.error Aus der Vorschau-Liste ist die Anmeldung zur Ausfuhr nicht erlaubt.
+.end 1
+..
+!ERRABG
+.set trans +
+.formula T|xtfehler = F|formatstr("Vorgang {1} ist nicht gebucht.", 'M|tvorgang^nummer')
+.set trans -
+.error 'T|xtfehler'
+.end 1

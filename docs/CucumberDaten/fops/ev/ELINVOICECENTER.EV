@@ -1,0 +1,223 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICECENTER.EV
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..
+...Includes
+..  include ev/ELINVOICECENTER.ZUGIMPORT
+..  include ev/ELINVOICECENTER.KBUIDENTIFIZIERENUNDUEBERNEHMEN.BB.FO
+..  include ev/ELINVOICECENTER.KBUIDENTIFIZIERENUNDUEBERNEHMEN.BA.FO
+..*****************************************************************************
+.set trans -
+.type text    xtmpfile       ? _F|defined(U|xtmpfile)
+.type text    xtout          ? _F|defined(U|xtout)
+.type text    xterr          ? _F|defined(U|xterr)
+.type text    xquelldatei    ? _F|defined(U|xquelldatei)
+.type text    xquelldateigf  ? _F|defined(U|xquelldateigf)
+.type text    xzieldatei     ? _F|defined(U|xzieldatei)
+.type text    xzieldateigf   ? _F|defined(U|xzieldateigf)
+.type text    xdateiendung   ? _F|defined(U|xdateiendung)
+..
+..<META M|='ev/ELINVOICECENTER'>
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+.. Event evaluation
+.continue TABINIT     ?  G|evtartengl = "FIELD_EXIT"   & G|evtvar = "kkunde"
+.continue TABINIT     ?  G|evtartengl = "FIELD_EXIT"   & G|evtvar = "datumv"
+.continue TABINIT     ?  G|evtartengl = "FIELD_EXIT"   & G|evtvar = "datumb"
+.continue TABINIT     ?  G|evtartengl = "FIELD_EXIT"   & G|evtvar = "kedinumvon"
+.continue TABINIT     ?  G|evtartengl = "FIELD_EXIT"   & G|evtvar = "kedinumbis"
+.continue MARK        ?  G|evtartengl = "BUTTON_AFTER" & G|evtvar = "sellall"
+.continue DEMARK      ?  G|evtartengl = "BUTTON_AFTER" & G|evtvar = "desellall"
+.continue BEMERK      ?  G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bubemerk"
+.continue IMPORT      ?  G|evtartengl = "BUTTON_AFTER" & G|evtvar = "buimport"
+.continue COPY        ?  G|evtartengl = "BUTTON_AFTER" & G|evtvar = "budateikopieren"
+.continue PROCESS     ?  G|evtartengl = "BUTTON_AFTER" & G|evtvar = "telinvoiceprocess"
+.continue DEAKTIV     ?  G|evtartengl = "BUTTON_AFTER" & G|evtvar = "redeaktivieren"
+..*****************************************************************************
+.continue END
+..
+..*****************************************************************************
+..
+!COPY
+.formula U|xquelldatei = M|rechnungsdatei
+.formula U|xzieldatei  = "zugferd" + "/" + ("\"+U|xquelldatei) >$ "\"
+..Bei Kopiervorgang Quell- und Zieldatei mit Gaensefuesschen (gf) gebraucht
+.formula U|xquelldateigf = G|dblquote + U|xquelldatei + G|dblquote
+.formula U|xzieldateigf  = G|dblquote + U|xzieldatei  + G|dblquote
+..
+..Abbruch, wennsdie Dateiendung weder xlm noch pdf ist
+.formula U|xdateiendung = F|tolower(M|rechnungsdatei >$ ".")
+.continue ERRFEXT ? _( F|equals(U|xdateiendung, "pdf") ; F|equals(U|xdateiendung, "xml"))
+..
+..Abbruch, wenn die Datei bereits vorhanden ist
+.continue ERRDPL ? F|fileexists(U|xzieldatei)
+..
+..Datei von PC in Mandant kopieren
+.pc.copy -BIN 'U|xquelldateigf' 'U|xzieldateigf'
+.formula M|rechnungsdatei = ""
+..Test ob Datei am Zielort ist
+.continue ERRCOPY ? _F|fileexists(U|xzieldatei)
+.set trans +
+.formula M|kopiestatus = F|formatstr("- {1} wurde kopiert;{2}", ("\"+U|xquelldatei)  >$ "\", M|kopiestatus)
+.set trans -
+.continue END
+..
+..*****************************************************************************
+..
+!IMPORT
+.input "ELINVOICECENTER.ZUGIMPORT"
+..
+..Neue Zeilen die Lieferanten identifizieren
+.input "ev/ELINVOICECENTER.HOL"
+.input "ev/ELINVOICECENTER.BSTART.BN"
+..
+..Neue Vorg�nge markieren und verarbeiten
+.select screen head
+!NEXTROW
+.select screen line
+.continue BUTTON ? _G|mehr
+.. Zeile markieren, wenn: status=blau (neu) ODER kein Lieferant ODER keine Rechnung vorhanden
+.copy M|tmark = G|false
+.continue NEXTROW ? _F|equals(M|fotoz, G|icomessage) ; _F|equals(M|edipartner, "") ; _F|equals(M|idvorgang, "")
+.copy M|tmark = G|true
+.continue NEXTROW
+..
+!BUTTON
+.input "ev/ELINVOICECENTER.KBUIDENTIFIZIERENUNDUEBERNEHMEN.BB.FO"
+.input "ev/ELINVOICECENTER.KBUIDENTIFIZIERENUNDUEBERNEHMEN.BA.FO"
+..
+.. Das Aktualisieren wird nach den FOPs gemacht, 
+.. aber nochmal, damit das Icon korrekt gesetzt wird
+..input "is/TABLEEREN"
+..input "is/HOL.LISTE"
+..
+.set trans +
+.formula M|kopiestatus = F|formatstr("--- Rechnungsimport beendet ---;{1}", M|kopiestatus)
+.set trans -
+.continue END
+..
+..*****************************************************************************
+..
+!MARK
+.assign M|mark = "(SelectAll)"
+.input 'M|tabmark' ? _F|empty(M|tabmark)
+.continue END
+..
+!DEMARK
+.assign M|mark = "(DeselectAll)"
+.input 'M|tabmark' ? _F|empty(M|tabmark)
+.continue END
+..
+..*****************************************************************************
+..
+!TABINIT: a key field was changed, remove old rows
+.make screen line -- ? M|tzeilen > 0
+.continue END
+..
+..*****************************************************************************
+..
+!PROCESS: Zeile in ELINVOICEPROCESS oeffnen
+.continue END ? F|empty(M|edipartner) ; F|empty(M|ediobjsuch) ; F|equals(M|tedistatusaz, "(Deactivated)") ;  F|equals(M|tedistatusaz, "(ProcessingError)")
+.continue END ? M|bdublette
+.type ID87:9 xcallparam
+.assign U|xcallparam = "53292"
+.input "st/CALLPARAM.EXEC"
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERRBEM
+.error Das Zur…kschreiben der Bemerkung ist gescheitert!
+.end 1
+..
+!ERRFEXT
+.error Es k馬nen nur PDF- und XML-Dateien kopiert werden.
+.end 1
+..
+!ERRDPL
+.error Die Datei wurde bereits kopiert.
+.formula M|rechnungsdatei=""
+.end 1
+..
+!ERRCOPY
+.error 'F|formatstr("{1} konnte nicht kopiert werden.", U|xquelldatei >$ "\")'
+.end 1
+..
+!ERREDI
+.input 'U|xterr'
+.error -message 始dern der EDI-Nachricht ist gescheitert.
+.end 1
+..
+!ERRDEAKT
+.error -message Es wurde bereits eine Rechnung erstellt. EDI-Nachricht kann nicht mehr deaktiviert werden.
+.end 1
+..
+!ERRSTATUS
+.error -message Es k馬nen nur EDI-Nachricht mit Status "neu" deaktiviert werden.
+.end 1
+..
+..*****************************************************************************
+.. Die EDP-Notation unterbricht das Code-Highlighting in Abas Tools, 
+.. daher EDP erst ab hier
+..*****************************************************************************
+..
+!DEAKTIV: Hier wird die EDI-Nachricht deaktiviert
+.. 4 = Verabeitungsfehler, 2 = Neu, -2 = Deaktiviert, 0 = Verarbeitung erfolgreich
+.continue AKTIVIEREN ? F|equals(M|tedistatusaz, "(Deactivated)")
+.continue ERRDEAKT   ? _F|empty(M|idvorgang)
+.continue ERRSTATUS  ? _F|equals(M|tedistatusaz, "(New)")
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=53
+#!action=modify
+#!charset=eks
+id;status;edistatusaz
+'M|edinr^id';-9;(Deactivated)
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERREDI  ? _G|mehr
+.assign M|fotoz = M|grauz
+.assign M|tedistatusaz = M|edinr^edistatusaz
+.continue END
+..
+..*****************************************************************************
+..
+!AKTIVIEREN
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=53
+#!action=modify
+#!charset=eks
+id;status;edistatusaz
+'M|edinr^id';2;(New)
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERREDI  ? _G|mehr
+.assign M|fotoz = M|blauz
+.assign M|tedistatusaz = M|edinr^edistatusaz
+.continue END
+..
+..*****************************************************************************
+..
+!BEMERK: Hier wird das Bemerkungsfeld in die EDI-Nachricht zur…kgeschrieben
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=53
+#!action=modify
+#!charset=eks
+id;bemerk
+'M|edinr';'M|bemerk'
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERRBEM ? _G|mehr
+.continue END
+..
+..*****************************************************************************

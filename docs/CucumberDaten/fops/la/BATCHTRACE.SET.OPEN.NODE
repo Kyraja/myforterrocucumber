@@ -1,0 +1,63 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : BATCHTRACE.SET.OPEN.NODE
+.. Autor          : fwester
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Setzt auf Basis der Eingabefelder das Selektionsmuster "select"
+..                  zusammen. Selektiert werden immer Journaleintraege mit Beteiligung
+..                  von Ab- und/oder Zugangscharge.
+.. Ablauf         : Unterprogramm
+..
+.. Functionality  : Based on the values of the input fields this will create the
+..                  search pattern "select". This pattern always choose entries of the
+..                  stock journal whith receipt and/or issue lot.
+.. Program flow   : Subroutine
+..*****************************************************************************
+.set trans -
+..
+.. This types of booking are uninteresting
+.formula M|select = "$,,;buart<>7;buart<>6"
+.formula M|select = M|select + ";storniert=false"  ? _M|mitstorno
+.formula M|select = M|select + ";stornolj=`"       ? _M|mitstorno
+.formula M|select = M|select + ";vom=" + 'M|beldatum:8' + "!" ? _F|empty(M|beldatum)
+..
+.. Separate selection for foward and backward
+.continue FORWARD ? M|vorwaerts
+.continue BWDBOOK ? M|istwurzel & M|mitbuchungen
+.continue BWDLOT  ? M|istwurzel & _M|mitbuchungen
+.continue BWDLOT  ? M|ktyp = M|typcharge
+..
+!BWDBOOK: Select bookings into a receipt lot
+.formula M|select = M|select + ";ncharge==" + M|nchargeauf^id
+.continue BWDOPTS
+..
+!BWDLOT: Select entries with this receipt lot and any issue lot
+.formula M|select = M|select + ";ncharge==" + M|nchargeauf^id + ";vcharge<>`"
+.continue BWDOPTS
+..
+!BWDOPTS: Add options for backward
+.formula M|select = M|select + ";@gruppe=1;@ablageart=(Both);@zeilen=" + 'G|TRUE'
+.continue BELDAT
+..
+!FORWARD
+.continue FWDBOOK ? M|istwurzel & M|mitbuchungen
+.continue FWDLOT  ? M|istwurzel & _M|mitbuchungen
+.continue FWDLOT  ? M|ktyp = M|typcharge
+..
+!FWDBOOK: Select bookings between from a issue lot
+.formula M|select = M|select + ";vcharge==" + M|vchargeauf^id
+.continue FWDOPTS
+..
+!FWDLOT: Select bookings between this issue lot and any receipt lot
+.formula M|select = M|select + ";vcharge==" + M|vchargeauf^id + ";ncharge<>`"
+.continue FWDOPTS
+..
+!FWDOPTS: Add options for forward
+.formula M|select = M|select + ";@gruppe=1;@ablageart=(Both);@zeilen=" + 'G|TRUE'
+..
+!BELDAT: Sorted by date of document
+.formula M|select = M|select + ";@ordnung=vom"
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,83 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : CASHMGMT.SELECT.CREDIT
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Selektion von Kreditlinien (Anfangs- und Endbestaende der Perioden)
+.. Functionality  :
+.. include fb/CASHMGMT.SELECT.VARS.RESET
+..*****************************************************************************
+..
+.set trans -
+..
+.input "fb/CASHMGMT.SELECT.VARS.RESET"
+..
+.continue END ? _F|empty(U|xpdocument^id) & U|xpdocument^dnr<>66
+..
+.type integer   xi         ? _F|defined(U|xi)
+.type real  xxr        ? _F|defined(U|xxr)
+.type RU    xxrOBLINE  ? _F|defined(U|xxrOBLINE)
+.type RU    xxrCBLINE  ? _F|defined(U|xxrCBLINE)
+.type RU    xxrAVGINTP ? _F|defined(U|xxrAVGINTP)
+.type RU    xxrAVGINTU ? _F|defined(U|xxrAVGINTU)
+..
+.formula U|xi = 0
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+.formula U|xi = U|xi + 1
+.continue END ? U|xi > U|ximaxperiod
+.formula U|xxrOBLINE  = 0
+.formula U|xxrCBLINE  = 0
+.formula U|xxrAVGINTP = 0
+.formula U|xxrAVGINTU = 0
+.formula U|xxr = 0
+.formula U|xtselect = "$,@gruppe=9;gruppe=9"
+.formula U|xtselect = U|xtselect + ";id=" + U|xpdocument^id ? _F|empty(U|xpdocument^id)
+.load 0 pmasterfiles 'U|xtselect'
+..*****************************************************************************
+!LOOP2
+..*****************************************************************************
+.continue OUT ? _G|mehr
+..
+..*****************************************************************************
+!ROW:
+..*****************************************************************************
+.load 0 line
+.continue NEXT ? _G|mehr
+.formula U|xxr = F|fxamount(U|xpoutcurr,0|kreditbetr,0|vondat,0|twaehr)
+.formula U|xxrOBLINE = U|xxrOBLINE + U|xxr ? 0|vondat <= U|xpstart.U|xi & (0|bisdat >= U|xpstart.U|xi ; F|empty(0|bisdat))
+.continue CB ? 0|vondat <= U|xpend.U|xi   & (0|bisdat >= U|xpend.U|xi   ; F|empty(0|bisdat))
+.continue ROW
+!CB
+.formula U|xxrCBLINE  = U|xxrCBLINE + U|xxr
+.formula U|xxrAVGINTP = U|xxrAVGINTP + 0|zinsbereitstell * U|xxr
+.formula U|xxrAVGINTU = U|xxrAVGINTU + 0|zinsinanspruch * U|xxr
+.continue ROW
+..
+..*****************************************************************************
+!NEXT
+..*****************************************************************************
+.load 0 continue
+.continue LOOP2
+..
+..*****************************************************************************
+!OUT
+..*****************************************************************************
+.. Typ # Intercompany # Kategorie # EK/VK # Periode # Betrag # Beleg-ID # Beleg-DNR # Beleg-Gruppe # Konto-ID # Konto-DNR # Konto-Gruppe # Termin # Belegdatum # ZBedingung # Skontosatz # Skonto #
+?(CreditLineOpeningBalance) # 0 #  #  # 'U|xi' # 'U|xxrOBLINE' #  #  #  #  #  #  # 'F|value(U|xpstart.U|xi, "GD8")' # 'F|value(U|xpstart.U|xi, "GD8")' # # # #? U|xxrOBLINE<>0
+.continue LOOP ? U|xxrCBLINE = 0
+..
+(CreditLineClosingBalance) # 0 #  #  # 'U|xi' # 'U|xxrCBLINE' # #  #  #  #  #  # 'F|value(U|xpend.U|xi, "GD8")' # 'F|value(U|xpend.U|xi, "GD8")' # # # #
+.formula U|xxrAVGINTP = U|xxrAVGINTP / U|xxrCBLINE
+.formula U|xxrAVGINTU = U|xxrAVGINTU / U|xxrCBLINE
+?(PercentCommitmentFee) # 0 #  #  # 'U|xi' # 'U|xxrAVGINTP' #  #  #  #  #  #  # 'F|value(U|xpend.U|xi, "GD8")' # 'F|value(U|xpend.U|xi, "GD8")' # # # #? U|xxrAVGINTP<>0
+?(PercentInterestOnAvailment) # 0 #  #  # 'U|xi' # 'U|xxrAVGINTU' #  #  #  #  #  #  # 'F|value(U|xpend.U|xi, "GD8")' # 'F|value(U|xpend.U|xi, "GD8")' # # # #? U|xxrAVGINTU<>0
+.continue LOOP
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue
+

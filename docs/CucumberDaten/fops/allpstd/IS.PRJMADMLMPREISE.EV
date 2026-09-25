@@ -1,0 +1,156 @@
+..!interpreter english declaration noabbrev
+.. at 2017-03-30, 08:53
+.set TRANS -
+..========================================================================
+..==  Name              : IS.PRJMADMLMPREISE.EV
+..==  Pfad              : allpstd
+..==  Funktion          : EV FOP PRJMADMLMPREISE
+..==  Erstellungsdatum  : 01.08.2012
+..==  Autor             : Thomas Saalborn alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird ber EasyCase bearbeitet und mit easy2lg generiert!
+..==  Žnderungen auáerhalb von EasyCase werden nach der n„chsten Žnderung
+..==  im EasyCase wieder berschrieben und drfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF"
+..====================================================
+.type text    xtcmd xtsel xtprojleistkatid xtkatartk
+.type GD      xdkonddat
+.type bool    xbnurnull xbok
+.type TAZ1    xpape
+.type TAZ7    xeinh
+.type P3:2    xpaupos
+.type P86:1   xpprojekt
+.type P149:3  xpaufgabe
+.type integer xprocsp      ? _F|defined(U|xprocsp)
+.set  DEMAND -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Preise_berechnen -----
+.input "is/PREISAUSKUNFT"   ? _F|defined(U|xpaartikel)
+.continue EL001 ? _(_(F|empty(M|ytlm)))
+.assign  U|xpprojekt        = M|ytprojekt^id
+.assign  U|xpaufgabe        = M|ytaufgabe^id
+.assign  U|xpaupos          = M|ytaufgabe^yvorpos
+.assign  U|xdkonddat        = M|ytadatum
+.formula U|xtprojleistkatid = M|ytprojekt^yprojleistkatid
+.continue EL002 ? _((_(U|xbnurnull)) ; (M|ytlmpreis = 0))
+.formula U|xpaartikel =  M|ytvkartikel^id   ? _F|empty(M|ytvkartikel)
+.formula U|xtkatartk  = "PQ"                ? _F|empty(M|ytvkartikel)
+.input 'U|xtupartpreis'
+.formula M|ytlmpreis = U|xyhpreis
+!EL002
+.continue EL003 ? _((_(U|xbnurnull)) ; (M|ytmzpreis = 0))
+.formula U|xpaartikel =  M|ytmaschvkart^id  ? _F|empty(M|ytmaschvkart)
+.formula U|xtkatartk  = "ML"                ? _F|empty(M|ytmaschvkart)
+.input 'U|xtupartpreis'
+.formula M|ytmzpreis = U|xyhpreis
+!EL003
+!EL001
+.continue EL004 ? _((M|ytlmpreis = M|ytlm^ylmpreis) & (M|ytmzpreis = M|ytlm^ymzpreis))
+.copy M|ytspeichern = G|FALSE
+.continue FI004
+!EL004
+.copy M|ytspeichern = G|TRUE
+!FI004
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskein")
+.input 'U|xtupprjmsel'
+.copy M|ybmldarchiv       = G|true
+.copy M|ybmldoffen        = G|true
+.copy M|ybmldabger        = G|true
+.copy M|ybmldfakt         = G|true
+.copy M|ybmitnabrechrelev = G|true
+.copy M|ybmldabger        = G|true
+.copy M|ybingebls         = G|true
+.copy M|ybmldfakt         = G|true
+.copy M|ybingebre         = G|true
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "feldaus")
+.continue EL005 ? _(G|evtzeile = 0)
+.input 'U|xtupprjmsel'
+.continue FI005
+!EL005
+.copy M|ytspeichern = G|TRUE    ? _G|evtvar = "ytspeichern"
+.colour -BACKGROUND "-1 -1 -1" 'M|aktzeile'
+!FI005
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtart = "buttonnach")
+.continue BRK004 ? _(G|evtvar = "bstart")
+.make screen line --O
+.input 'U|xtupprjmsel'
+.continue ESAC002
+!BRK004
+.continue BRK005 ? _(G|evtvar = "ybuspeichern")
+.input "is/ABASFARBEN.DEF"  ? _F|defined(U|xabaslightgreen)
+.select screen header
+.select screen line
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL006 ? _(M|ytspeichern)
+.select lock add M|ytlm
+.continue EL007 ? _(G|mehr)
+.formula H|ylmpreis = M|ytlmpreis
+.formula H|ymzpreis = M|ytmzpreis
+.rewrite
+.copy M|ytspeichern = G|FALSE
+.colour -BACKGROUND 'U|xabaslightgreen' 'M|aktzeile'
+.continue FI007
+!EL007
+.set TRANS +
+.box Fehler
+Die Leistungsmeldung in Zeile 'M|aktzeile' kann nicht bearbeitet werden.
+.set TRANS -
+!FI007
+!EL006
+.select screen line
+.continue LOOP001
+!ELOP001: ==============================
+.continue ESAC002
+!BRK005
+.continue BRK006 ? _(G|evtvar = "yrabdr")
+.set TRANS +
+.menu(0,0,0) Preise neu berechnen
+Nur Preise der Leistungsmeldungen ohne Preise neu berechnen >>.copy U|xbnurnull = G|TRUE
+Preise aller Leistungsmeldungen neu berechnen               >>.copy U|xbnurnull = G|FALSE
+.set TRANS -
+.continue EL008 ? _(_(G|menue = 0))
+.select screen header
+.select screen line
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.select screen line
+.continue LOOP002
+!ELOP002: ==============================
+!EL008
+.continue ESAC002
+!BRK006
+.continue BRK007 ? _(G|evtvar = "ytrabdr")
+.copy U|xbnurnull = G|FALSE
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK007
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK003
+!ESAC001: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJMADMLMPREISE.EV")'    ? F|fileexists(F|foppath("IFOP.IS.PRJMADMLMPREISE.EV"))
+.continue

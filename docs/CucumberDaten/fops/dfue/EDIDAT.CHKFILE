@@ -1,0 +1,505 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDIDAT.BSTART.CHKFILE
+.. Datum/Date     : 11.11.08
+.. Version        :
+.. Autor/Author   : dsch
+.. Verantwortlich : mh
+.. Funktion       : Vergleich zwischen EDI-Schema und EDI-Nachricht ausfÅhren.
+..                  Der Vergleich kann auch zwischen EDI-Schema und eine EDI-
+..                  Schnittstelle ausgefÅhrt werden.
+..                  Die PlausibilitÑtsprÅfung kann als Fehlerpotokoll gespeichert
+..                  werden (alle Fehlermeldungen erscheinen in dem Protokoll).
+..                  Folgende Fehlermeldungen werden mit einer Hintergrundfarbe
+..                  gekennzeichnet:
+..                    - Mussfelder ist nicht  gefÅllt
+..                    - Kein korrektes numerisches Feld
+..                    - FeldlÑnge wurde Åberschritten
+..                    - Laufende Zeilennummer ist nicht aufsteigend
+..                    - Muss-Zeile ist nocht vorhanden
+..                    - unbekannte Satzart (Segment) in der EDI-Schnittstelle
+..									ZusÑtzliche PrÅfungen erscheinen in dem Fehlerprotokoll:
+..                    - Zeile in EDI-Schnittstelle hat keine 25 Felder
+..                    - ungÅltige zulÑssige HÑufigkeit der Satzart
+..                    - Dummy-Feld ist nicht leer
+..                    - abweichende Versionnummer (Satzart 000)
+..
+.. Ablauf         : Die Schema-Struktur wird zuerst in Array-Felder gespeichert.
+..                  Danach wird die EDI-Nachricht bzw. Schnittstelle mit der
+..                  Schema-Struktur verglichen.
+..                  Ein Fehlerprotokoll (Ñhnlich dem Fop DFUE.CHKFILE) wird
+..                  erstellt.
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..    verwendet Arrayparameter (arg.i)          : nein
+..    verwendet Namensparameter (xpname=wert)   : nein
+..
+..    Parameter    Bedeutung
+..*****************************************************************************
+..
+.input "is/ABASFARBEN.DEF"
+.set trans -
+..
+.type text xtsel       ? _F|defined(xtsel)
+.type text xttmp       ? _F|defined(xttmp)
+.type text xttmp2      ? _F|defined(xttmp2)
+.type text xtref       ? _F|defined(xtref)
+.type text xttoken     ? _F|defined(xttoken)
+.type text xtaid       ? _F|defined(xtaid)
+.type text xttext1     ? _F|defined(xttext1)
+.type text xtfeld      ? _F|defined(xtfeld)
+.type text xtcmd       ? _F|defined(xtcmd)
+.type text xtzeile     ? _F|defined(xtzeile)
+.type text xtDefFarbe  ? _F|defined(xtDefFarbe)
+.type text xtFarbe     ? _F|defined(xtFarbe)
+.type text xtFileName  ? _F|defined(xtFileName)
+..
+.type integer  xindex      ? _F|defined(xindex)
+.type integer  xi          ? _F|defined(xi)
+.type integer  xl          ? _F|defined(xl)
+.type integer  xiaid       ? _F|defined(xiaid)
+.type integer  xilfdnr     ? _F|defined(xilfdnr)
+.type integer  xiwert      ? _F|defined(xiwert)
+..
+.type real4 xrwert     ? _F|defined(xrwert)
+.type GD2  xgd2wert    ? _F|defined(xd2wert)
+.type GD8  xgd8wert    ? _F|defined(xd8wert)
+.type GW2  xgw2wert    ? _F|defined(xgw2wert)
+.type GW4  xgw4wert    ? _F|defined(xgw4wert)
+..
+.type bool xbediinit   ? _F|defined(xbediinit)
+.type bool xbedirec    ? _F|defined(xbedirec)
+.type bool xbedifin    ? _F|defined(xbedifin)
+.type bool xbschemafin ? _F|defined(xbschemafin)
+.type bool xbedifile   ? _F|defined(xbedifile)
+.type bool xbende      ? _F|defined(xbende)
+.type bool xbstartsche ? _F|defined(xbstartsche)
+.type bool xbistvda    ? _F|defined(xbistvda)
+.type bool xberror     ? _F|defined(xberror)
+..
+..*****************************************************************************
+.. AufzÑhlungstyp 142 fÅr Feld-Typ:   97 ;alphanumerisch;
+..                                    110;numerisch;
+..                                      0; -leer-;
+..*****************************************************************************
+.type A142 xaftypan    ? _F|defined(xaftypan)
+.type A142 xaftypn     ? _F|defined(xaftypn)
+.type A142 xaftypd     ? _F|defined(xaftypd)
+.formula T|xaftypan = "(97)"
+.formula T|xaftypn  = "(110)"
+.formula T|xaftypd  = "(100)"
+..*****************************************************************************
+.. AufzÑhlungstyp 118 fÅr Feld-Typ:   73 ;inhouse;
+..                                    86 ;vda;
+..*****************************************************************************
+.type A118 xainhouse   ? _F|defined(xainhouse)
+.type A118 xavda       ? _F|defined(xavda)
+.formula U|xainhouse = "(73)"
+.formula U|xavda     = "(86)"
+.formula U|xbistvda  = true ? M|kstandard = U|xavda
+..*****************************************************************************
+.. hollt ein EDI-Record aus der EDI-Datenbank oder aus der EDI-Schnittstelle.
+..*****************************************************************************
+.formula T|xbchkok     = true
+.formula T|xtDefFarbe  = "-1 -1 -1"
+.formula T|xbedifile   = true ?  F|length(M|kdateiname) > 0
+.continue EDISCHEMA            ? _T|xbedifile
+..*****************************************************************************
+.. EDI-Schnittstelle kopieren, dann lesen
+..*****************************************************************************
+.formula T|xtFileName = F|regreplaceall(M|kdateiname,"\\","/")
+.formula T|xtFileName = "win/" + T|xtFileName ? F|substr(T|xtFileName,1,1) <> "/" & _F|fileexists(T|xtFileName)
+.continue NOFILE ? _F|fileexists(T|xtFileName) ; _F|filereadable(T|xtFileName)
+.file -tempname T|xtTempDatei
+.formula T|xtcmd "cp " + 'T|xtFileName' + " " + 'T|xtTempDatei'
+.system 'T|xtcmd' background
+.continue NOFILE ? _T|mehr
+.formula T|xtFileName = T|xtTempDatei
+..
+.formula T|xbstartsche = true
+.continue EDILOOP
+..
+..*****************************************************************************
+.. EDI-Datenbank (Nachricht) lesen
+..*****************************************************************************
+!EDISCHEMA
+.formula T|xbstartsche = true
+.select edifact 'M|kedinum'
+.continue EDIFIN ? _T|mehr
+..
+!EDILOOP
+.continue VDAFILE  ?  T|xbedifile &  U|xbistvda
+.continue IHSSFILE ?  T|xbedifile
+.select edifact line
+.continue EDIFIN  ? _T|mehr
+.formula T|xilfdnr = T|xilfdnr + 1
+.formula T|xl      = T|xl      + 1
+.formula T|xttext1 = H|text1
+.formula T|xbschemafin = false
+.formula T|xi = 1
+!ELOOP1
+.formula T|xtF.xi = H|text.xi
+.formula T|xi = T|xi + 1
+.continue ELOOP1 ? T|xi <= 25
+.continue WEDI0
+..*****************************************************************************
+.. Es wird eine Inhouse-Datei gelesen
+..*****************************************************************************
+!IHSSFILE
+.select from 'T|xtFileName' T|xtzeile^
+.continue EDIFIN ? _T|mehr
+.formula T|xilfdnr = T|xilfdnr + 1
+.formula T|xl      = T|xl      + 1
+.formula T|xi = 1
+.formula T|xttmp = T|xtzeile
+!IHSSLOOP
+.formula T|xtF.xi = T|xttmp << T|xtkztrenner
+.formula T|xttmp  = T|xttmp >> T|xtkztrenner
+.formula T|xi = T|xi + 1
+.continue IHSSLOOP ? T|xi <= 25
+..
+.formula T|xttext1 = T|xtF1
+.formula T|xbschemafin = false
+..
+.. EnthÑlt die Zeile 25 Felder (InHouse-Format) ?
+..
+.formula T|xi = F|length(F|regreplaceall(T|xtzeile,"[^#]",""))
+?'T|xtMZEI' ' T|xl', 'T|xtMSPA'       0:  'T|xtMSOL'= " 25", 'T|xtMIST'= "' T|xi'", 'T|xtM01'? T|xi <>25 & T|xbdoFProt
+.formula T|xbchkok = false ? T|xi <>25 & T|xbdoFProt
+.continue WEDI0
+..*****************************************************************************
+.. Es wird eine VDA-Datei gelesen
+..*****************************************************************************
+!VDAFILE
+.select from 'T|xtFileName' T|xtzeile ^
+.continue EDIFIN ? _T|mehr
+.formula T|xbschemafin = false
+.formula T|xilfdnr = T|xilfdnr + 1
+.formula T|xl      = T|xl      + 1
+.formula T|xttmp = T|xtzeile
+..a
+.. VDA-Satzart ÅberprÅfen, ob sie bekannt ist
+..
+.formula T|xtF1    = T|xttmp <<  3
+.formula T|xttext1 = F|Trim(T|xtF1)
+.continue EDIOUT3 ? F|trim(T|xttext1)="" ; F|strindex(T|xAStruktur.xthptid.xtL3TOKEN,T|xttext1) = 0
+.formula T|xi = 2
+.formula T|xttmp = T|xtzeile << -3
+.formula U|xtaid = T|xAToken.xttext1
+!VDA1LOOP
+.formula T|xtF.xi = T|xttmp <<  T|xAFeld.xtaid.xtMAXLEN.xi   ?  T|xi <= T|xAStruktur.xtaid.xtCNTID
+.formula T|xttmp  = T|xttmp << -T|xAFeld.xtaid.xtMAXLEN.xi   ?  T|xi <= T|xAStruktur.xtaid.xtCNTID
+.formula T|xtF.xi = T|xttmp                                  ?  T|xi = (T|xAStruktur.xtaid.xtCNTID + 1)
+.formula T|xtF.xi = ""                                       ?  T|xi > (T|xAStruktur.xtaid.xtCNTID + 1)
+.formula T|xi = T|xi + 1
+.continue VDA1LOOP ? T|xi <= 25
+..*****************************************************************************
+!WEDI0
+.continue EDIOUT3 ?  F|trim(T|xttext1)="" ; F|strindex(T|xAStruktur.xthptid.xtL3TOKEN,T|xttext1) = 0
+.continue CHECKSCHEMA ? _T|xbschemafin &  T|xbstartsche
+.continue WSCHEMA     ? _T|xbschemafin & _T|xbstartsche
+!WEDI1
+.continue SENDE1
+..
+!EDIFIN
+.formula T|xbedifin = true
+.formula T|xttext1  = "#####"
+.continue CHECKSCHEMA ? _T|xbschemafin &  T|xbstartsche
+.continue WSCHEMA     ? _T|xbschemafin & _T|xbstartsche
+!WEDI3
+.continue
+..*****************************************************************************
+.. Prueft die EDI-Satzart in der Schema-Struktur die gespeichert wurde
+..*****************************************************************************
+!CHECKSCHEMA
+..
+.type text xAEbene.xindex.xtMAINID ? _defined(xAebene.xindex.xtMAINID)
+.type text xAEbene.xindex.xtLISTID ? _defined(xAebene.xindex.xtLISTID)
+.type text xAEbene.xindex.xtACTID  ? _defined(xAebene.xindex.xtACTID)
+..
+.formula T|xAEbene.xindex.xtMAINID = T|xiaid
+.formula T|xAEbene.xindex.xtLISTID = T|xAStruktur.xiaid.xtLISTID
+.continue SUP ? T|xAStruktur.xiaid.xtLISTID = ""
+..
+!STLOOP
+.formula T|xAEbene.xindex.xtACTID  = T|xAEbene.xindex.xtLISTID    << T|xtkztrenner
+.formula T|xAEbene.xindex.xtLISTID = T|xAEbene.xindex.xtLISTID    >> T|xtkztrenner
+!STLOOP2
+.continue SUP       ? T|xAEbene.xindex.xtACTID = ""
+.formula T|xiaid   = T|xAEbene.xindex.xtACTID
+.continue SDOWN     ? T|xAStruktur.xiaid.xtGRP <> 3
+.formula T|xtref   = T|xAEbene.xindex.xtACTID
+.formula T|xttoken = T|xAStruktur.xiaid.xtREFTOKEN
+.continue EDIOUT1 ? T|xAStruktur.xiaid.xtREFTOKEN =  T|xttext1
+.continue EDIOUT2 ? T|xAStruktur.xiaid.xtREFTOKEN <> T|xttext1 & T|xAStruktur.xiaid.xtMIN > 0 & T|xAStruktur.xiaid.xtCOUNTER = 0
+!WSCHEMA
+.continue SUP
+..
+..>>> Wir gehen eine Stuffe in der Struktur zurÅck
+..
+!SUP
+.formula T|xindex = T|xindex - 1  ? T|xAEbene.xindex.xtLISTID = ""
+.continue SENDE1 ? T|xindex < 0
+.formula T|xtref   = T|xAEbene.xindex.xtACTID
+.formula T|xttoken = T|xAStruktur.xtref.xtREFTOKEN
+.formula T|xiaid   = T|xAEbene.xindex.xtMAINID
+..
+..>>> Wenn die Struktur mehrmals erlaubt ist, wiederhollen wir sofort den Satz
+..
+.continue STLOOP2 ? F|strindex(T|xAStruktur.xtref.xtL3TOKEN,T|xttext1) > 0 & F|trim(T|xttext1)<>""
+.continue STLOOP
+..
+..  >>> Wir gehen eine Ebene tiefer (in der Gruppe 2)
+..
+!SDOWN
+.formula T|xAStruktur.xiaid.xtCOUNTER = T|xAStruktur.xiaid.xtCOUNTER + 1 ? F|strindex(T|xAStruktur.xiaid.xtL3TOKEN,T|xttext1) > 0 & F|trim(T|xttext1)<>""
+?'T|xtMZEI' ' T|xl', 'T|xtMSPA'       1:  'T|xtMKAN'= "'T|xAStruktur.xiaid.xtMAX'", 'T|xtMIST'= "'T|xAStruktur.xiaid.xtCOUNTER'", 'xtM12'? T|xbdoFProt & T|xAStruktur.xiaid.xtCOUNTER > T|xAStruktur.xiaid.xtMAX
+.formula T|xtref = xAEbene.xindex.xtACTID
+.formula T|xiaid = T|xtref
+..
+..>>> Jeder ZÑhler (pro Struktur-ID) auf dem unteren Teil der Nachricht wird auf 0 zurÅckgesetzt
+..
+.formula T|xtsel = T|xAStruktur.xiaid.xtALLID
+!SLOOP3
+.formula T|xttmp = T|xtsel << T|xtkztrenner
+.formula T|xAStruktur.xttmp.xtCOUNTER = 0  ? F|trim(T|xttmp)<>""
+.formula T|xtsel = T|xtsel >> T|xtkztrenner
+.continue SLOOP3 ? F|trim(T|xtsel) <> ""
+..
+.formula T|xiaid   = xAEbene.xindex.xtACTID
+.formula T|xindex  = T|xindex + 1
+.continue SUP       ? T|xindex > 9
+..
+.continue CHECKSCHEMA
+!SENDE1
+..
+.. Wir sind die ganze Schema-Definition durchgelaufen.
+.. Wenn die Satzart bekannt ist, dann geht es von vorne wieder los
+.. Die gleiche EDI-Datei kann mehrere EDI-Nachrichten enthalten
+..
+.formula T|xindex  = 0
+.formula T|xilfdnr = 1
+.formula T|xAStruktur.xthptid.xtCOUNTER = 0
+.formula T|xtsel = T|xAStruktur.xthptid.xtLISTID
+!SLOOP4
+.formula T|xttmp = T|xtsel << T|xtkztrenner
+.formula T|xAStruktur.xttmp.xtCOUNTER = 0  ? F|trim(T|xttmp)<>""
+.formula T|xtsel = T|xtsel >> T|xtkztrenner
+.continue SLOOP4 ? F|trim(T|xtsel) <> ""
+.formula T|xiaid   = T|xthptid ? F|strindex(T|xAStruktur.xthptid.xtL3TOKEN,T|xttext1) > 0 & F|trim(T|xttext1)<>""
+.continue CHECKSCHEMA           ? F|strindex(T|xAStruktur.xthptid.xtL3TOKEN,T|xttext1) > 0 & F|trim(T|xttext1)<>""
+..
+!SENDE2
+.formula T|xbschemafin = true
+.continue WEDI1 ? _T|xbedifin
+.continue WEDI3 ?  T|xbedifin
+..*****************************************************************************
+.. Unterschiedliche Ausgaben von Tabellenzeilen:
+..     -EDIOUT1: Ausgabe einer Zeile (bekannte Satzart)
+..     -EDIOUT2: Ausgabe einer fehlende Zeile (Satzart fehlt in EDI Nachricht)
+..     -EDIOUT3: Ausgabe einer unbekannte Zeile (Satzart nicht definiert)
+..*****************************************************************************
+!EDIOUT1
+.make screen line +O
+.colour -background 'T|xtDefFarbe' text1 'M|aktzeile'
+.formula M|text1   = T|xttext1
+.formula M|utext1  = T|xtMSEG
+.formula T|xi = 2
+!LOOP2
+.continue FARBEN
+!WEDIOUT1
+.formula T|xttmp "text"+'T|xi'
+.colour -background 'T|xtFarbe' 'T|xttmp' 'M|aktzeile'
+.formula M|utext.xi  = T|xAFeld.xiaid.xtNAME.xi ?  T|xi <= T|xAStruktur.xiaid.xtCNTID
+.formula M|text.xi   = T|xtF.xi
+.formula T|xi = T|xi + 1
+.continue LOOP2 ? T|xi <= 25
+..
+.formula T|xAStruktur.xiaid.xtCOUNTER = T|xAStruktur.xiaid.xtCOUNTER + 1
+.formula T|xbstartsche = false
+?'T|xtMZEI' ' T|xl', 'T|xtMSPA'       1:  'T|xtMKAN'= "'T|xAStruktur.xiaid.xtMAX'", 'T|xtMIST'= "'T|xAStruktur.xiaid.xtCOUNTER'", 'xtM12'? T|xbdoFProt & T|xAStruktur.xiaid.xtCOUNTER > T|xAStruktur.xiaid.xtMAX
+.continue EDILOOP
+..*****************************************************************************
+!EDIOUT2
+.make screen line +O
+.colour -background 'T|xtDefFarbe' text1 'M|aktzeile'
+.formula M|text1   = "(*) "+T|xttoken
+.formula M|utext1  = T|xtMSEG
+..
+.formula T|xi      = 2
+!LOOP3
+.formula T|xttmp "text"+'T|xi'
+.colour -background 'T|xtDefFarbe' 'T|xttmp' 'M|aktzeile'
+.formula M|utext.xi  = T|xAFeld.xiaid.xtNAME.xi  ? T|xi <= T|xAStruktur.xiaid.xtCNTID
+.formula M|utext.xi  = ""                        ? T|xi >  T|xAStruktur.xiaid.xtCNTID
+.formula T|xi = T|xi + 1
+.continue LOOP3 ? T|xi <= 25
+..
+.formula M|fotoz = M|missingz
+.formula T|xAStruktur.xiaid.xtCOUNTER = T|xAStruktur.xiaid.xtCOUNTER + 1
+?'T|xtMZEI' ' T|xl', 'T|xtMSPA'       1:     'T|xtMSOL'= " 'T|xttoken'", 'T|xtMIST'=" 'T|xttext1'", 'T|xtM10'? T|xbdoFProt
+.formula T|xbchkok = false
+.continue WSCHEMA
+..*****************************************************************************
+!EDIOUT3
+.make screen line +O
+.colour -background 'T|xtDefFarbe' text1 'M|aktzeile'
+.formula M|text1   = "(?) "+T|xttext1
+.formula M|utext1  = T|xtMSEG
+..
+.formula T|xi      = 2
+!LOOP4B
+.formula T|xttmp "text"+'T|xi'
+.colour -background 'T|xtDefFarbe' 'T|xttmp' 'M|aktzeile'
+.formula M|text.xi   = T|xtF.xi
+.formula T|xi = T|xi + 1
+.continue LOOP4B ? T|xi <= 25
+..
+.formula M|fotoz = M|unknownz
+?'T|xtMZEI' ' T|xl', 'T|xtMSPA'       1:  'T|xtMKAN'= "'T|xAStruktur.xthptid.xtL3TOKEN'", 'T|xtMIST'= "'T|xttext1'"? T|xbdoFProt
+?'T|xtM11'? T|xbdoFProt
+.formula T|xbchkok = false
+.continue EDILOOP
+..*****************************************************************************
+.. Farbe in Tabellenzeilen und Feldern setzen und FehlerProtokoll schreiben.
+.. Es wird geprÅft:
+..   >>> Ist es ein leeres Mussfeld ?
+..   >>> Ist das Feld i.O. wenn es ein numerisches Feld ist ?
+..   >>> Stimmt die FeldlÑnge ?
+..   >>> Stimmt die fortlaufende Nummer ?
+..   >>> Ist ein Dummy-Feld leer ?
+..   >>> Stimmt die Versionnummer fÅr die Satzart 000
+..*****************************************************************************
+!FARBEN
+.formula T|xtFarbe  =  T|xtDefFarbe
+.formula T|xtfeld   =  T|xtF.xi
+.continue WEDIOUT1   ?  T|xtfeld   = "" & T|xi > T|xAStruktur.xiaid.xtCNTID
+.continue FNICHTLEER ?  T|xtfeld  <> "" & T|xi > T|xAStruktur.xiaid.xtCNTID
+.continue FNICHTLEER ?  T|xtfeld  <> "" & F|strindex(F|toupper(T|xAFeld.xiaid.xtREFTOKEN.xi),"DUMMY") > 0
+.continue MFLEER     ?  F|trim(T|xtfeld) = "" & T|xAFeld.xiaid.xtMIN.xi > 0 & _U|xbistvda
+.continue MFLEER     ?  F|trim(T|xtfeld) = "" & T|xAFeld.xiaid.xtMIN.xi > 0 & T|xi <= T|xAStruktur.xiaid.xtCNTID & U|xbistvda
+.continue MINLAENGE  ? +T|xtfeld  <  T|xAFeld.xiaid.xtMINLEN.xi
+.continue MAXLAENGE  ? +T|xtfeld  >  T|xAFeld.xiaid.xtMAXLEN.xi
+.continue NUMFELD    ?  T|xtfeld  <> "" & T|xAFeld.xiaid.xtTYP.xi = T|xaftypn
+.continue DATKEY     ?  T|xtfeld  <> "" & T|xAFeld.xiaid.xtTYP.xi = T|xaftypd & _F|empty(T|xAFeld.xiaid.xtKEY.xi)
+.continue DATFELD    ?  T|xtfeld  <> "" & T|xAFeld.xiaid.xtTYP.xi = T|xaftypd
+..
+.. .weiter VERSION    ?  T|xttext1 =  "000" & xi = 2 & T|xtfeld <> M|kversion
+..
+.continue WEDIOUT1
+!NUMFELD
+.assign T|xiwert = T|xtfeld ? T|xAFeld.xiaid.xtNKOMMA.xi = 0
+.assign T|xrwert = T|xtfeld ? T|xAFeld.xiaid.xtNKOMMA.xi > 0
+.continue LFDNR    ? T|mehr & T|xi = 25
+.continue WEDIOUT1 ? T|mehr
+.formula T|xtFarbe = M|colnumeric
+.formula M|fotoz = M|ferrorz
+?'T|xtMZEI' ' T|xl', 'T|xtMSPA' ' T|xi':  'T|xtMSOL'= "' xaftypn'", 'T|xtMIST'= "' T|xtFeld'",  'T|xtM02'? T|xbdoFProt
+.formula T|xbchkok = false
+.continue WEDIOUT1
+..
+!DATKEY
+.formula U|xberror = G|true
+.formula U|xberror = G|false ? F|strcmp(T|xtfeld, "000000") = 0
+.formula U|xberror = G|false ? F|strcmp(T|xtfeld, "00000000") = 0 & _U|xbistvda
+.formula U|xberror = G|false ? F|strcmp(T|xtfeld, "222222") = 0
+.formula U|xberror = G|false ? F|strcmp(T|xtfeld, "333333") = 0
+.formula U|xberror = G|false ? F|strcmp(T|xtfeld, "444444") = 0
+.formula U|xberror = G|false ? F|strcmp(T|xtfeld, "555555") = 0
+.formula U|xberror = G|false ? F|strcmp(T|xtfeld, "999999") = 0
+.continue LFDNR    ? _U|xberror & T|xi = 25
+.continue WEDIOUT1 ? _U|xberror
+..
+.. Monatsbedarf Format JJJJMM00 oder JJMM00
+..
+.formula U|xttmp2 = ""
+.formula U|xttmp2 =  F|substr(T|xtfeld,1,6) + "01" ? +T|xtfeld = 8 & F|strcmp(F|substr(T|xtfeld, -2, 2),"00") = 0 & _U|xbistvda
+.formula U|xttmp2 = "01." + F|substr(T|xtfeld,3,2) + "." + F|substr(T|xtfeld,1,2) ? +T|xtfeld = 6 & F|strcmp(F|substr(T|xtfeld, -2, 2),"00") = 0 & U|xbistvda
+.assign U|xgd8wert = U|xttmp2 ? _F|empty(U|xttmp2) & _U|xbistvda
+.assign U|xgd2wert = U|xttmp2 ? _F|empty(U|xttmp2) &  U|xbistvda
+.formula U|xberror = _T|mehr  ? _F|empty(U|xttmp2)
+.continue LFDNR    ? _U|xberror & T|xi = 25
+.continue WEDIOUT1 ? _U|xberror
+..
+.. Wochenbedarf Format JJJJ00WW oder JJ00WW
+..
+.formula U|xttmp2 = ""
+.formula U|xttmp2 =  F|substr(T|xtfeld,-2,2) + "/" + F|substr(T|xtfeld,1,4) ? +T|xtfeld = 8 & F|strcmp(F|substr(T|xtfeld, 5, 2),"00") = 0 & _U|xbistvda
+.formula U|xttmp2 =  F|substr(T|xtfeld,-2,2) + "/" + F|substr(T|xtfeld,1,2) ? +T|xtfeld = 6 & F|strcmp(F|substr(T|xtfeld, 3, 2),"00") = 0 &  U|xbistvda
+.assign U|xgw4wert = U|xttmp2 ? _F|empty(U|xttmp2) & _U|xbistvda
+.assign U|xgw2wert = U|xttmp2 ? _F|empty(U|xttmp2) &  U|xbistvda
+.formula U|xberror = _T|mehr  ? _F|empty(U|xttmp2)
+.continue LFDNR    ? _U|xberror & T|xi = 25
+.continue WEDIOUT1 ? _U|xberror
+..
+.. Wochenbedarf Format JJJJWWWW oder JJWWWW
+..
+.formula U|xttmp2 = ""
+.formula U|xttmp2 =  F|substr(T|xtfeld,5,2) + "/" + F|substr(T|xtfeld,1,4)? +T|xtfeld = 8 & _U|xbistvda
+.formula U|xttmp2 =  F|substr(T|xtfeld,3,2) + "/" + F|substr(T|xtfeld,1,2)? +T|xtfeld = 6 &  U|xbistvda
+.assign U|xgw4wert = U|xttmp2 ? _F|empty(U|xttmp2) & _U|xbistvda
+.assign U|xgw2wert = U|xttmp2 ? _F|empty(U|xttmp2) &  U|xbistvda
+.formula U|xberror = _T|mehr  ? _F|empty(U|xttmp2)
+.formula U|xttmp2 =  F|substr(T|xtfeld,7,2) + "/" + F|substr(T|xtfeld,1,4)? +T|xtfeld = 8 & _U|xbistvda
+.formula U|xttmp2 =  F|substr(T|xtfeld,5,2) + "/" + F|substr(T|xtfeld,1,2)? +T|xtfeld = 6 &  U|xbistvda
+.assign U|xgw4wert = U|xttmp2 ? _F|empty(U|xttmp2) & _U|xbistvda
+.assign U|xgw2wert = U|xttmp2 ? _F|empty(U|xttmp2) &  U|xbistvda
+.formula U|xberror = _T|mehr  ? _F|empty(U|xttmp2)
+.continue LFDNR    ? _U|xberror & T|xi = 25
+.continue WEDIOUT1 ? _U|xberror
+..
+!DATFELD
+.assign U|xgd8wert = T|xtfeld ? _U|xbistvda
+.assign U|xgd2wert = F|substr(T|xtfeld,5,2) + "." + F|substr(T|xtfeld,3,2) + "." + F|substr(T|xtfeld,1,2) ? U|xbistvda
+.continue LFDNR    ? T|mehr & T|xi = 25
+.continue WEDIOUT1 ? T|mehr
+.formula T|xtFarbe = M|colnumeric
+.formula M|fotoz = M|ferrorz
+?'T|xtMZEI' ' T|xl', 'T|xtMSPA' ' T|xi':  'T|xtMSOL'= "' xaftypd'", 'T|xtMIST'= "' T|xtFeld'",  'T|xtM03'? T|xbdoFProt
+.formula T|xbchkok = false
+.continue WEDIOUT1
+!LFDNR
+.assign T|xiwert = T|xtfeld
+.continue WEDIOUT1 T|xiwert = T|xilfdnr
+.formula T|xtFarbe = M|collfdnr
+.formula M|fotoz = M|ferrorz
+?'T|xtMZEI' ' T|xl', 'T|xtMSPA' ' T|xi':  'T|xtMSOL'= "'T|xilfdnr'", 'T|xtMIST'= "' T|xtFeld'",  'T|xtM16'? T|xbdoFProt
+.formula T|xilfdnr = T|xiwert
+.continue WEDIOUT1
+!MFLEER
+.formula T|xtFarbe = M|colempty
+.formula M|fotoz = M|ferrorz
+?'T|xtMZEI' ' T|xl', 'T|xtMSPA' ' T|xi':  'T|xtMSOL'= " M", 'T|xtMIST'= "",  'T|xtM14'? T|xbdoFProt
+.formula T|xbchkok = false
+.continue WEDIOUT1
+!FNICHTLEER
+.formula T|xtFarbe =  M|colnotempty
+?'T|xtMZEI' ' T|xl', 'T|xtMSPA' ' T|xi':  'T|xtMSOL'= " L", 'T|xtMIST'= "'T|xtfeld'",  'T|xtM15'? T|xbdoFProt
+.continue WEDIOUT1
+!MAXLAENGE
+.formula T|xtFarbe = M|collength
+.formula M|fotoz = M|ferrorz
+?'T|xtMZEI' ' T|xl', 'T|xtMSPA' ' T|xi':  'T|xtMSOL'= " 'T|xAFeld.xiaid.xtMAXLEN.xi:3'", 'T|xtMIST'= " 'F|length(T|xtfeld):3'",  'T|xtM13'? T|xbdoFProt
+.formula T|xbchkok = false
+.continue WEDIOUT1
+!MINLAENGE
+.formula T|xtFarbe = M|collength
+.formula M|fotoz = M|ferrorz
+?'T|xtMZEI' ' T|xl', 'T|xtMSPA' ' T|xi':  'T|xtMSOL'= " 'T|xAFeld.xiaid.xtMINLEN.xi:3'", 'T|xtMIST'= " 'F|length(T|xtfeld):3'",  'T|xtM13B'? T|xbdoFProt
+.formula T|xbchkok = false
+.continue WEDIOUT1
+!VERSION
+.formula T|xtFarbe = M|colversion
+.formula M|fotoz = M|ferrorz
+?'T|xtMZEI' ' T|xl', 'T|xtMSPA' ' T|xi':  'T|xtMSOL'= "'M|kversion:8'", 'T|xtMIST'= "'T|xtfeld:8'",   'T|xtM08'? T|xbdoFProt
+.formula T|xbchkok = false
+.continue WEDIOUT1
+..
+..*****************************************************************************
+..
+!NOFILE
+.error Die EDI-Datei kann nicht gelesen werden.
+.continue
+!NOPATH
+.error UngÅltiger Arbeitsbereich oder Dateiname.
+.continue

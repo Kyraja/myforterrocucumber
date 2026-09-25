@@ -1,0 +1,172 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : INVSHEETCENTER.ASCII
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  : ASCII Datei in ZÑhlliste aufnehmen
+..                  Dateiformat
+..                      1         2      3
+..                  artikelnr # platz # menge
+..
+..*****************************************************************************
+.set trans -
+..
+.type text    xartnr
+.type text    xcom
+.type text    xle
+.type realx   xmge
+.type text    xplatznr
+.type integer xzeile
+..
+!SELSTOCKT: ZÑhlliste mit sperre holen
+.select stocktaking lock 'M|tzaehlliste^id'
+.continue ERROR1 ? _G|mehr
+.continue ERROR2 ?  M|tzaehlliste^ablagef
+.select -
+..
+.continue ERROR7  ? F|empty(M|ascii)
+.continue ERROR12 ? _F|fileexists(M|ascii)
+.continue ERROR13 ? _F|filenotempty(M|ascii)
+..
+!EL004: Datei auslesen und die gesamte Datei erstmal prÅfen / Zeilen mitzÑhlen
+.continue EL005   ?   M|dummy
+.formula U|xzeile = 0
+.select from 'M|ascii' U|xartnr # U|xplatznr # U|xmge
+..
+!LOOP001
+.continue EL005   ? _G|mehr
+.formula U|xzeile = U|xzeile + 1
+.continue ERROR11 ? F|empty(U|xartnr)
+.select parts 'U|xartnr'
+..
+.continue ERROR8 ? _G|mehr
+.continue ERROR6 ?  H|invsperr
+..
+!EL007: Lagereinheit merken
+.formula U|xle = H|le
+.continue ERROR10 ? F|empty(U|xplatznr)
+..
+.select location 'U|xplatznr'
+.continue ERROR5 ? _G|mehr
+..
+!EL008:  gibt es evtl. schon ein inv_obj
+.formula U|xcom = "$,,"
+.formula U|xcom = U|xcom + "end=FALSE;@ordnung=artikel,platz,gebeinh,gebf,charge,baumverw,lffert;@ablageart=(Both);"
+.formula U|xcom = U|xcom + "artikel=" + U|xartnr + ";"
+.formula U|xcom = U|xcom + "platz="   + U|xplatznr + ";"
+.formula U|xcom = U|xcom + "gebeinh=" + U|xle
+.select stocktaking 'U|xcom'
+..
+.continue ERROR9 ? G|mehr
+..
+!EL009
+.select from 'M|ascii' U|xartnr # U|xplatznr # U|xmge
+.continue LOOP001
+..
+!EL005: ZÑhllistenzeilen aus ASCII-Datei erzeugen / öbernahme der Daten in ZÑhlliste 
+.. zeilen mitzÑhlen
+.formula U|xzeile = 0
+.select from 'M|ascii' U|xartnr # U|xplatznr # U|xmge
+..
+!LOOP002
+.continue END ? _G|mehr
+.formula U|xzeile = U|xzeile + 1
+..
+.select parts 'U|xartnr'
+.continue ERROR4 ? _G|mehr
+..
+!EL010: Lagereinheit merken
+.formula U|xle = H|le
+..
+!FI010
+.select location 'U|xplatznr'
+.continue ERROR3 ? _G|mehr
+..
+!EL011: invobj anlegen
+.continue DUMMY ?   M|dummy
+..
+.make stocktaking group1
+.assign  H|zlsnr    = M|tzaehlliste^id
+.formula H|artikel  = U|xartnr
+.formula H|platz    = U|xplatznr
+.formula H|gebeinh  = U|xle
+.formula H|gebf     = 1
+.formula H|nbest    = U|xmge
+.rewrite
+..
+.continue FI012
+..
+!DUMMY: invobj als dummy anlegen
+.make stocktaking group1
+.formula H|zlsnr    = M|tzaehlliste^id
+.formula H|istdummy = G|TRUE 
+.formula H|artikel  = U|xartnr
+.formula H|platz    = U|xplatznr
+.formula H|gebeinh  = U|xle
+.formula H|gebf     = 1
+.formula H|nbest    = U|xmge
+.rewrite
+..
+!FI012
+.select from 'M|ascii' U|xartnr # U|xplatznr # U|xmge
+.continue LOOP002
+..
+!END
+.set trans +
+.formula M|thinweis = "ZÑhlliste befÅllt."
+.set trans -
+.continue
+..
+!ERROR1
+.error Kann ZÑhlliste nicht exklusiv holen.
+.end 1
+..
+!ERROR2
+.error ZÑhlliste ist bereits abgeschlossen.
+.end 1
+..
+!ERROR3
+.error Lagerplatz 'U|xplatznr' nicht gefunden. Zeile: 'U|xzeile'
+.end 1
+..
+!ERROR4
+.error Teil 'U|xartnr' nicht gefunden. Zeile: 'U|xzeile'
+.end 1
+..
+!ERROR5
+.error Lagerplatz 'U|xplatznr' nicht gefunden. Zeile: 'U|xzeile'
+.end 1
+..
+!ERROR6
+.error Teil 'U|xartnr' hat Inventursperre. Zeile: 'U|xzeile'
+.end 1
+..
+!ERROR7
+.error -field M|aascii -message Bitte Datei eintragen aus der die ZÑhlliste befÅllt werden soll.
+.end 1
+..
+!ERROR8
+.error Teil 'U|xartnr' nicht gefunden. Zeile: 'U|xzeile'
+.end 1
+..
+!ERROR9
+.error Artikel 'U|xartnr' auf Lagerplatz 'U|xplatznr' ist bereits in ZÑhlliste 'H|zlsnr' eingetragen. Zeile: 'U|xzeile'
+.add
+.end 1
+..
+!ERROR10
+.error Kein Lagerplatz eingetragen. Zeile: 'U|xzeile'
+.end .
+..
+!ERROR11
+.error Kein Artikel eingetragen. Zeile: 'U|xzeile'
+.end 1
+..
+!ERROR12
+.error Datei 'M|ascii' existiert nicht.
+.end 1
+..
+!ERROR13
+.error Datei 'M|ascii' ist leer.
+.end 1

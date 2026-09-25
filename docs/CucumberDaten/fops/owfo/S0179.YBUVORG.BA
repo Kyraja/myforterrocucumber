@@ -1,0 +1,160 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : S0179.YBUAUFTR.BA
+.. Date           : 11/02/2015
+.. Version        : 1.0
+.. Author         : RASC
+.. Copyright      :
+.. Functionality  : BUTTON_AFTER <ybuvorg>
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xttext     ? _F|defined(U|xttext)
+.type text U|xtmen1     ? _F|defined(U|xtmen1)
+.type text U|xtmen2     ? _F|defined(U|xtmen2)
+.type text U|xtmen3     ? _F|defined(U|xtmen3)
+.type text U|xtmen4     ? _F|defined(U|xtmen4)
+.type text U|xtsel      ? _F|defined(U|xtsel)
+..
+.input S0179.REINIT
+..
+.set trans +
+.text U|xtmen1 'G|bspri' "Bestellung"
+.text U|xtmen2 'G|bspri' "Bestellposition"
+.text U|xtmen3 'G|bspri' "Auftrag"
+.text U|xtmen4 'G|bspri' "Auftragsposition"
+.set trans -
+..
+.menu(0,0) Auswahl
+'U|xtmen1'              >> .formula U|xtsel = "@database=4;@group=1;.typ=(3);nummer=;suchwerw=;lief=;vom=;kprojekt="
+'U|xtmen2'              >> .formula U|xtsel = "@database=4;@group=2;.kotyp=(3);kopf=;kl=;kl^name=;kovom=;projekt=;artex=;artex^name=;mge=;pwert="
+'U|xtmen3'              >> .formula U|xtsel = "@database=3;@group=1;.typ=(3);nummer=;suchwerw=;kunde=;vom=;kprojekt=;"
+'U|xtmen4'              >> .formula U|xtsel = "@database=3;@group=2;.kotyp=(3);kopf=;kl=;kl^name=;kovom=;projekt=;artex=;artex^name=;mge=;pwert="
+.continue END           ? G|menue = 0
+..
+.formula U|xtsel        = "%,," + U|xtsel
+.load 0 nolock object 'U|xtsel'
+.continue END           ? _G|mehr
+..
+.assign M|yvorgang      = 0|id          ? 0|gruppe = 1
+.assign M|yvorgpos      = 0|id          ? 0|gruppe = 2
+.assign M|yvorgang      = 0|kopf^id     ? 0|gruppe = 2
+.load 0
+..
+.continue ERROR         ? F|empty(M|yvorgang) & F|empty(M|yvorgpos)
+.continue ERRTYP        ? _'M|yvorgang^typ(L="0")'="(3)"
+..
+.formula U|xtsel        = "$,@database=41;@group=0;yvorgid=="+'M|yvorgang^id'
+.formula U|xtsel        = "$,@database=41;@group=0;yvorgid=="+'M|yvorgpos^id'    ? _F|empty(M|yvorgpos)
+.load 0 nolock object 'U|xtsel'
+.continue ERRDOUBL      ? G|mehr
+..
+.continue VORGPOS       ? _F|empty(M|yvorgpos)
+..
+.formula M|such         = M|yvorgang^such
+.formula M|yvorgid      = 'M|yvorgang^id'
+.assign  M|ykuli        = M|yvorgang^kunde
+.formula M|yklname      = M|ykl^name
+.formula M|yposwert     = M|yvorgang^sumnetto
+.copy    M|ywaehr       = M|yvorgang^land
+.assign  M|yprojekt     = M|yvorgang^kprojekt
+.assing  M|yprjmpproj   = M|yvorgang^yprjmproj  ? F|defined(M|yvorgang^yprjmproj)
+.continue LINES
+..
+!VORGPOS
+.formula M|yvorgpid     = 'M|yvorgpos^id'
+.formula M|such         = M|yvorgpos^kopf^such
+.assign  M|yvorgang     = M|yvorgpos^kopf^id
+.formula M|yvorgid      = 'M|yvorgang^id'
+.assign  M|ykuli        = M|yvorgang^kunde      ? M|yvorgang^dnr = 3
+.assign  M|ykuli        = M|yvorgang^lief       ? M|yvorgang^dnr = 4
+.formula M|yklname      = M|ykuli^name
+.assign  M|yartikel     = M|yvorgpos^artex^id
+.formula M|yartname     = M|yartikel^namebspr
+.formula M|yposwert     = M|yvorgpos^pwert
+.copy    M|ywaehr       = M|yvorgang^land
+.assign  M|yprojekt     = M|yvorgpos^projekt
+.assign  M|yprjmpproj   = M|yvorgpos^yprjmpproj ? F|defined(M|yvorgpos^yprjmpproj)
+..
+.continue ELINE         ? M|tzeilen = 0
+.continue LINES         ? M|yposwert <> 0
+..
+.set trans +
+.text U|xttext 'G|kspr' = "Der gewÑhlte Vorgang hat keinen Wert"
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!LINES
+.select screen line
+.continue END           ? _G|mehr
+..
+.formula M|ytschlussre  = G|true        ? M|aktzeile = M|tzeilen
+.protect ytanzpos 'M|aktzeile'          ? M|ytschlussre
+..
+.continue LINES         ? M|ytanteil    = 0
+.formula M|ytwert       = M|yposwert / 100 * M|ytanteil
+.continue LINES
+..
+!ELINE
+.continue END           ? M|tzeilen > 0
+.make screen line +o
+.formula M|ytereignis   = "Anzahlung"
+.formula M|ytschlag     = "Anzahlung"
+.formula M|ytanteil     = 100
+.formula M|ytwert       = M|yposwert
+.make screen line +o
+.formula M|ytereignis   = "Schlussrechnung"
+.formula M|ytschlag     = "Schlussrechnung"
+.formula M|ytanteil     = 100
+.formula M|ytwert       = M|yposwert
+.formula M|ytschlussre  = G|true
+.protect ytterm     'M|aktzeile'
+.protect ytanzpos   'M|aktzeile'
+.protect ytanteil   'M|aktzeile'
+.protect ytwert     'M|aktzeile'
+....protect ytprjmvorg 'M|aktzeile'
+....protect ytbuprjmv  'M|aktzeile'
+....protect ytbuaufg   'M|aktzeile'
+.protect ytbuplz    'M|aktzeile'
+.protect ytburech   'M|aktzeile'
+.continue END
+..
+!ERROR
+.set trans +
+.tet U|xttext 'G|bspri' "Der gewÑhlte Vorgang konnte nicht Åbernommen werden!"
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!ERRDOUBL
+.set trans +
+.tet U|xttext 'G|bspri' "Zum gewÑhlten Vorgang existiert bereits ein Zahlungsplan!"
+.set trans -
+.error 'U|xttext'
+.formula M|yvorgang     = ""
+.formula M|yvorgpos     = ""
+.continue END
+..
+!ERRTYP
+.set trans +
+.tet U|xttext 'G|bspri' "Dieser Vorgangstyp ist hier nicht erlaubt!"
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!END
+.continue
+
+
+

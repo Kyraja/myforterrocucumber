@@ -1,0 +1,391 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDI2VKAUV.ABRUFTERMIN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : EntschlÅsseln Abruftermine VDA und EDIFACT/DELFOR
+.. Functionality  : Decrypt schedule codes VDA and EDIFACT/DELFOR
+..
+..   Argument     meaning
+..   ---------------------------------------------------------
+..   H-Puffer           EDI-Nachricht, Zeile
+..   xsaveerw           Endung Variable fÅr Speicherung GesamtrÅckstand
+..
+..  Ein/Aus
+..   xmge               korrigierte Abrufmenge
+..   xptext             Abrufzeitraum, Inhalt fÅr Positionstext
+..   xrueckst.xsaveerw   RÅckstand
+..   xgesamt.xsaveerw   Gesamt ..?
+..   xistabrzeitraum    ja/nein, ZeitrÑume sind verschlÅsselt
+..
+..  Aus:
+..   xtterm             Abruftermin
+..   xttermtxt          Abruftermin als Text (z.B. bei Monatsvorschaumengen)
+..   xlabrufexpd        Zaehler expandierte Abrufe
+..
+...Includes       :
+..  include     dfue/EDI2VKAUV.ABTERM.VDA
+..  include     dfue/EDI2VKAUV.ABTERM.DELFOR
+..  include     dfue/EDI2VKAUV.ABTERM.KONST
+..*****************************************************************************
+.. Aenderungshistorie
+..  27.08.2008#mh# RÅckstand/Sofortbedarf, -1 "Arbeitstag" statt -1 "Tag"
+..  15.09.2008#mh# Abrufwochentermin bleibt Mittwoch
+..  12.12.2011#mh# Wochentrenner / weekform, week-delimeter week 50/12 or 50W12
+..*****************************************************************************
+.set trans -
+..
+..<META H|='P53:0'>
+.. 
+.. call params / return values for EDI2VKAUV.ABRUFTERMIN
+.type date       xtterm              ? _F|defined(U|xtterm)
+.type time       xttermzeit          ? _F|defined(U|xttermzeit)
+.type text       xttermtxt           ? _F|defined(U|xttermtxt)
+.type text       xptext              ? _F|defined(U|xptext)
+.type date       xttermlast          ? _F|defined(U|xttermlast)
+.type bool       xistabrzeitraum     ? _F|defined(U|xistabrzeitraum)
+.type integer    xlabrufexpd         ? _F|defined(U|xlabrufexpd)
+.type GD19       xdelivscheddate     ? _F|defined(U|xdelivscheddate)
+.type GD19       xforecastperiodend  ? _F|defined(U|xforecastperiodend)
+.type realx      xmge                ? _F|defined(U|xmge)
+..
+.. translate output text for return value T|xptext
+.type text       xtextKeinBedarf     ? _F|defined(U|xtextKeinBedarf)
+.type text       xtextRueckstand     ? _F|defined(U|xtextRueckstand)
+.type text       xtextSofortbedarf   ? _F|defined(U|xtextSofortbedarf)
+.type text       xtextVorschaumenge  ? _F|defined(U|xtextVorschaumenge)
+.type text       xtextWocheBisWoche  ? _F|defined(U|xtextWocheBisWoche)
+.type text       xtextWoche          ? _F|defined(U|xtextWoche)
+.type text       xtextMonat          ? _F|defined(U|xtextMonat)
+.type text       xtextTagBisTag      ? _F|defined(U|xtextTagBisTag)
+.type text       xtextAbrufzeitraum  ? _F|defined(U|xtextAbrufzeitraum)
+.type text       xtextUnbekannt      ? _F|defined(U|xtextUnbekannt)
+.set trans +
+.formula U|xtextKeinBedarf = "Kein Bedarf"
+.formula U|xtextRueckstand = "RÅckstand"
+.formula U|xtextSofortbedarf = "Sofortbedarf"
+.formula U|xtextVorschaumenge = "Vorschaumenge"
+.formula U|xtextWocheBisWoche  = "Woche {1} bis {2}"
+.formula U|xtextWoche = "Woche {1}"
+.formula U|xtextMonat = "Monat {1}/{2}"
+.formula U|xtextTagBisTag = "Tag {1} bis {2}"
+.formula U|xtextAbrufzeitraum = "Abrufzeitraum - Angaben folgen"
+.formula U|xtextUnbekannt = "Der Abruftermin kann nicht ausgegeben werden."
+.set trans -
+..
+.. call params / return values for sub routines EDI2VKAUV.ABTERM.*  (DELFOR / VDA)
+.type integer    xiausgabe           ? _F|defined(U|xiausgabe)
+.type GD         xdabruftermin       ? _F|defined(U|xdabruftermin)
+.type GD         xdabrufterminbis    ? _F|defined(U|xdabrufterminbis)
+.type text       xttermincode        ? _F|defined(U|xttermincode)
+.type text       xtjahr              ? _F|defined(U|xtjahr)
+.type text       xtmonat             ? _F|defined(U|xtmonat)
+.type text       xtwoche             ? _F|defined(U|xtwoche)
+.type text       xtwovon             ? _F|defined(U|xtwovon)
+.type text       xtwobis             ? _F|defined(U|xtwobis)
+.. return value: type of "schedule date" for experting to BI database
+.type A270       xitermintyp         ? _F|defined(U|xitermintyp)
+..
+.. locally used helpers
+.type integer    xijahr              ? _F|defined(U|xijahr)
+.type integer    ximonat             ? _F|defined(U|ximonat)
+.type integer    xiwoche             ? _F|defined(U|xiwoche)
+.type week       xkw1                ? _F|defined(U|xkw1)
+.type week       xkw2                ? _F|defined(U|xkw2)
+.type text       xtfehler            ? _F|defined(U|xtfehler)
+.copy U|xtfehler = ""
+..
+.. currently used week delimiter / verwendeter Wochentrenner
+.. normalized date "20171108" -> week "45/17" or "45W17" or "17S45" -> "/" or "W" or "S" etc.
+.type GD         xdtest              ? _F|defined(U|xdtest)
+.type week       xwtest              ? _F|defined(U|xwtest)
+.type text       xwtrenn             ? _F|defined(U|xwtrenn)
+.type bool       xwweekfirst         ? _F|defined(U|xwweekfirst)
+.type bool       xwyearfirst         ? _F|defined(U|xwyearfirst)
+.formula U|xdtest = "20171108"
+.formula U|xwtest = U|xdtest
+.formula U|xwtrenn = 'U|xwtest'<<-2
+.formula U|xwweekfirst = 'U|xwtrenn'<<-1 = "17"
+.formula U|xwyearfirst = 'U|xwtrenn'<<-1 = "45"
+.formula U|xwtrenn = 'U|xwtrenn'<<1
+..
+.. check if param from import configuration is defined
+.type text       xautofehldatumkorr  ? _F|defined(U|xautofehldatumkorr)
+..
+.. load constant values for xiausgabe, if not yet loaded
+.input "dfue/EDI2VKAUV.ABTERM.KONST"  ? _F|defined(U|kotermLEER)
+..
+.. initialize return values for EDI2VKAUV.ABRUFTERMIN
+.formula U|xlabrufexpd = 1
+.formula U|xtterm = ""
+.formula U|xttermtxt = ""
+.formula U|xptext = ""
+.formula U|xttermzeit = ""
+.formula U|xdelivscheddate = ""
+.formula U|xforecastperiodend = ""
+..
+.. initialize return values for sub routines EDI2VKAUV.ABTERM.*  (DELFOR / VDA)
+.formula U|xiausgabe = U|kotermUNBEKANNT
+.formula U|xitermintyp = U|kobiUNBEKANNT
+.formula U|xdabruftermin = ""
+.formula U|xdabrufterminbis = ""
+.formula U|xtjahr  = ""
+.formula U|xtmonat = ""
+.formula U|xtwoche = ""
+.formula U|xtwovon = ""
+.formula U|xtwobis = ""
+..
+..
+..  Call specific evaluation programm for each protocoll.
+..  The most important return value is T|xiausgabe,
+..  which uses an integer value to identify the type of forecast.
+..
+.continue EDI     ?  H|datennorm = "DELFOR"  &  H|datenart = "EDI"
+.continue VDA
+..
+!VDA
+.input "dfue/EDI2VKAUV.ABTERM.VDA"
+.continue AUSGABE
+..
+!EDI
+.input "dfue/EDI2VKAUV.ABTERM.DELFOR"
+.continue AUSGABE
+..
+!AUSGABE
+.continue ZRENDE  ?  U|xiausgabe = U|kotermZEITRAUMENDE
+.continue KEINBED ?  U|xiausgabe = U|kotermKEINBEDARF
+.continue RUECKS  ?  U|xiausgabe = U|kotermRUECKSTAND
+.continue SOFORT  ?  U|xiausgabe = U|kotermSOFORTBEDARF
+.continue ABMENGE ?  U|xiausgabe = U|kotermABRUFMENGE
+.continue REST    ?  U|xiausgabe = U|kotermREST
+.continue FREIG   ?  U|xiausgabe = U|kotermFREIGABE
+.continue TERMIN  ?  U|xiausgabe = U|kotermTERMIN
+.continue TAG2TAG ?  U|xiausgabe = U|kotermTAG2TAG
+.continue WO2WO   ?  U|xiausgabe = U|kotermWOCHE2WOCHE
+.continue MO2MO   ?  U|xiausgabe = U|kotermMONAT2MONAT
+.continue WOCHE   ?  U|xiausgabe = U|kotermWOCHE
+.continue MONAT   ?  U|xiausgabe = U|kotermMONAT
+.continue JAHR    ?  U|xiausgabe = U|kotermJAHR
+.continue LEER    ?  U|xiausgabe = U|kotermLEER
+.continue ERROR   ?  U|xiausgabe = U|kotermUNBEKANNT
+.continue END
+..
+..
+!ZRENDE: Marks last call of date of a product in current delivery forecast.
+..  - quantity is blank
+..  - no time intervall
+.formula U|xmge = 0
+.copy U|xistabrzeitraum = G|false
+.copy U|xitermintyp = U|kobiUNBEKANNT
+.formula U|xdelivscheddate = U|xtterm ? F|empty(U|xdelivscheddate)
+.formula U|xforecastperiodend = ""
+.continue END
+..
+!KEINBED: There is no demand for this product. All further quantites of this type are blank.
+..  - quantity: 0
+..  - no time intervall
+..  - pos text: no demand
+.formula U|xmge = 0
+.copy U|xistabrzeitraum = G|false
+.formula U|xptext = U|xtextKeinBedarf
+.copy U|xitermintyp = U|kobiKEINBEDARF
+.formula U|xdelivscheddate = U|xtterm ? F|empty(U|xdelivscheddate)
+.formula U|xforecastperiodend = ""
+.continue END
+..
+!RUECKS: This quantity is a backlog.
+.. mh, 27.08.2008: subtract 1 "work day", "-1" -> "& -1"
+..  - call off date: delfor date -1
+..  - remember backlog in array
+..  - pos text: backlog
+..  - no time intervall
+.formula U|xtterm = H|labrufd & -1
+.formula U|xttermtxt = 'U|xdabruftermin:8'
+.formula U|xrueckst.xsaveerw = U|xmge    ?  F|defined(U|xrueckst) & F|defined(U|xsaveerw)
+.copy U|xistabrzeitraum = G|false
+.formula U|xptext = U|xtextRueckstand
+.copy U|xitermintyp = U|kobiRUECKSTAND
+.formula U|xdelivscheddate = U|xtterm ? F|empty(U|xdelivscheddate)
+.formula U|xforecastperiodend = ""
+.continue END
+..
+!SOFORT: This quantity is an immediate demand.
+..  - new call off date
+..  - no time intervall
+..  - pos text: asap
+.formula U|xtterm = H|labrufd
+.formula U|xttermtxt = 'U|xdabruftermin:8'
+.copy U|xistabrzeitraum = G|false
+.formula U|xptext = U|xtextSofortbedarf
+.copy U|xitermintyp = U|kobiSOFORT
+.formula U|xdelivscheddate = U|xtterm ? F|empty(U|xdelivscheddate)
+.formula U|xforecastperiodend = ""
+.continue END
+..
+!ABMENGE: Call of quantities:
+..          This line flags, that the following lines contain call off
+..          quantities which apply to a time period, e.g. a month or
+..          week, or up to the end of a year.
+..          for this line quantity is to be set to zero.
+..  - this is not a call-of, quantity zero
+..  - following lines have schedule codes, e.g. month, weeks, etc.
+.formula U|xmge = 0
+.copy U|xistabrzeitraum = G|true
+.formula U|xptext = U|xtextAbrufzeitraum
+.copy U|xitermintyp = U|kobiTERMIN
+.formula U|xdelivscheddate = U|xtterm ? F|empty(U|xdelivscheddate)
+.formula U|xforecastperiodend = ""
+.continue END
+..
+!REST: remaining quantity / preview quantity
+..  - (vda) call-of-date set to last day of year, optinal of specific year.
+..  - (delfor) call-of-date as specifired in message
+..  - pos text: 'Vorschaumenge'
+.formula U|xtterm = U|xdabruftermin
+.formula U|xttermtxt = 'U|xdabruftermin:8'
+.copy U|xistabrzeitraum = G|false
+.formula U|xptext = U|xtextVorschaumenge
+.continue END     ? _(H|datennorm = "DELFOR"  &  H|datenart = "EDI")
+.. mh, 04.03.2010: preview qty in EDIFACT/DELFOR might have a date set
+.formula u|xptext = u|xtextVorschaumenge + " " + 'u|xtterm'
+.copy U|xitermintyp = U|kobiUNBEKANNT
+.formula U|xdelivscheddate = U|xtterm ? F|empty(U|xdelivscheddate)
+.formula U|xforecastperiodend = ""
+.continue END
+..
+!FREIG: (delfor) Materialfreigabe und Fertigungsfreigabe, keine Abrufmengen
+..  - Abrufmenge:      0
+..  - Abruftermin:     leer
+..  - Positionstext:   leer
+.formula U|xmge   = 0
+.formula U|xtterm = ""
+.formula U|xttermtxt = ""
+.formula U|xptext = ""
+.copy U|xitermintyp = U|kobiUNBEKANNT
+.formula U|xdelivscheddate = U|xtterm ? F|empty(U|xdelivscheddate)
+.formula U|xforecastperiodend = ""
+.continue END
+..
+!TERMIN: Specific date
+..  - call of date from text-date with 4-digit year
+.formula U|xtterm = U|xdabruftermin
+.formula U|xttermtxt = 'U|xdabruftermin:8'
+.copy U|xitermintyp = U|kobiTERMIN
+.formula U|xdelivscheddate = U|xtterm ? F|empty(U|xdelivscheddate)
+.formula U|xforecastperiodend = ""
+.continue END
+..
+!TAG2TAG: Bedarf fÅr Tag bis Tag
+..  Positionstext: "Tag TT.MM.JJJJ bis TT.MM.JJJJ"
+.formula U|xtterm     = U|xdabruftermin
+.formula U|xttermtxt = 'U|xdabruftermin:8'
+.formula U|xttermlast = U|xdabrufterminbis
+.formula U|xptext = F|formatstr(U|xtextTagBisTag, 'U|xdabruftermin', 'U|xdabrufterminbis')
+.copy U|xitermintyp = U|kobiTAG2TAG
+.formula U|xdelivscheddate = U|xtterm ? F|empty(U|xdelivscheddate)
+.formula U|xforecastperiodend = U|xttermlast ? F|empty(U|xforecastperiodend)
+.continue END
+..
+!WO2WO: Demand week to week
+..  - call of date wednesday of week
+..  - pos text: week ww/yy to ww|yy
+.. note: it is possible that a index for a week is larger than 52,
+..      this week carries over into the next year.
+.formula U|xtterm  = 'U|xkw1'
+.formula U|xttermtxt = 'U|xdabruftermin:8'
+.formula U|xttermlast = 'U|xkw2'
+.formula U|xptext  = F|formatstr(U|xtextWocheBisWoche, U|xkw1, U|xkw2)
+.copy U|xitermintyp = U|kobiWOCHE2WOCHE
+.formula U|xdelivscheddate = U|xtterm ? F|empty(U|xdelivscheddate)
+.formula U|xforecastperiodend = U|xttermlast ? F|empty(U|xforecastperiodend)
+.continue END
+..
+!MO2MO
+.formula U|xtterm = ""
+.formula U|xttermtxt = U|xtextUnbekannt
+.copy U|xitermintyp = U|kobiMONAT2MONAT
+.formula U|xdelivscheddate = U|xtterm ? F|empty(U|xdelivscheddate)
+.formula U|xforecastperiodend = U|xttermlast ? F|empty(U|xforecastperiodend)
+.continue END
+..
+!WOCHE: Demand for week
+..  - call of date: wednesday of week
+..  - pos text: week ww/yy
+.formula U|xtterm = 'U|xkw1'
+.formula U|xttermtxt = 'U|xdabruftermin:8'
+.formula U|xptext = F|formatstr(U|xtextWoche, U|xkw1)
+.copy U|xitermintyp = U|kobiWOCHE
+.formula U|xdelivscheddate = U|xtterm ? F|empty(U|xdelivscheddate)
+.formula U|xforecastperiodend = ""
+.continue END
+..
+!MONAT: Demand for month
+..  - call of date: first work day of month, if months is current month,
+..    'today' is used as call of date. Previous months keep first workday!
+..  - pos text: month mm/yy
+.formula U|xtterm = ( U|xtjahr + U|xtmonat + "01")
+.formula U|ximonat = U|xtmonat
+.formula U|xtterm = G|datum          ? 'U|ximonat' = 'F|month(G|datum)' & 'U|xtjahr' = 'F|year(G|datum)'
+.formula U|xtterm = U|xtterm &0
+.formula U|xttermtxt = 'U|xdabruftermin:8'
+.formula U|xijahr  = U|xtjahr
+.formula U|xijahr  = U|xijahr // 100
+.formula U|xtjahr  = ("00" + 'T|xijahr')>>2
+.formula U|xptext = F|formatstr(U|xtextMonat, U|xtmonat, U|xtjahr)
+.formula U|xdelivscheddate = U|xtterm ? F|empty(U|xdelivscheddate)
+.formula U|xforecastperiodend = ""
+.copy U|xitermintyp = U|kobiMONAT
+.continue END
+..
+!JAHR
+.continue END
+..
+!LEER:  H|text4 is no date and no schedule code (e.g. empty)
+.formula U|xdelivscheddate = ""
+.formula U|xforecastperiodend = ""
+.formula U|xtterm = ""
+.formula U|xttermtxt = ""
+.copy U|xitermintyp = U|kobiUNBEKANNT
+.continue END
+..
+!ERROR
+.formula U|xtterm = ""
+.copy U|xttermtxt = U|xtextUnbekannt
+.copy U|xttermtxt = U|xtfehler ? _F|empty(U|xtfehler)
+.copy U|xitermintyp = U|kobiUNBEKANNT
+..
+.. Set edi message status to pre processing failed (4) when normalizing date codes during pre processing (2) (3)
+.continue ERRCODE ? H|status=99
+.continue END ? H|status<>3 & H|status<>2
+.select lock nowait edifact 'H|id'
+.continue END ? _G|mehr ; _G|gesperrt
+.formula H|fcode = 99
+.formula H|status = 4
+.type text xtediftext ? _F|defined(U|xtediftext)
+.file -tempname U|xtediftext
+.output new 'xtediftext'
+.input "DATEI.F"
+.input -text 'H|ftext' ? _F|empty(H|ftext)
+'U|xtfehler'
+.output
+.formula H|ftext = U|xtediftext
+.rewrite
+.select -
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!NOPROT
+.error Das Protokoll 'H|datenart' 'H|datennorm' wird nicht unterstÅtzt.
+.end 1
+..
+!ERRCODE
+.set trans +
+.formula T|xtfehler = F|formatstr("Fehlerhafter Termincode: {1}", 'T|xttermincode')
+.set trans -
+.error 'T|xtfehler'
+.end 1

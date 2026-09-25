@@ -1,0 +1,157 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name              : EXPLORER.ZEILE
+.. Author            : tiwe
+.. Verantwortlich    : tiwe
+.. Kontrolleur       : cl
+.. Functionality	 : Einlesen einer Zeile aus Datei
+..                     Dateiprfung
+..                     Darstellen der Vergleichdateien !RECHTS
+..*****************************************************************************
+..Variablen
+.type text    xtline         ? _F|defined(U|xtline)
+.type integer xi             ? _F|defined(U|xi)
+.type text    xtcmd          ? _F|defined(U|xtcmd)
+.type text    xtendung       ? _F|defined(U|xtendung)
+..*****************************************************************************
+.set trans -
+.continue NOLINE ? F|empty(U|xtline)
+.continue ERSTLER ? F|strindex(U|xtline, " ") = 1
+.continue NORMAL
+!ERSTLER
+.formula U|xtline = 'F|regreplace(U|xtline, " ", "")' 
+!NORMAL
+..einheitlich immer als Trenner genau ein #
+..mehrere Leerzeichen werden zu einem #
+.formula U|xtline = 'F|regreplaceall(U|xtline, " +", "#")' 
+.formula U|xtzeile = U|xtline
+..ersten Wert aus Zeilen berlesen, wenn man rekursiv sucht
+.formula U|xtline          = U|xtline >> "#" ? M|rekursiv ; U|xbsichanzeigen
+.formula U|xtline          = U|xtline >> "#" ? M|rekursiv ; U|xbsichanzeigen
+.formula U|xtrechte        = U|xtline << "#"
+.formula U|xtline          = U|xtline >> "#"
+.formula U|xianzdat        = U|xtline << "#"
+.formula U|xtline          = U|xtline >> "#"
+.formula U|xtowner         = U|xtline << "#"
+.formula U|xtline          = U|xtline >> "#"
+.formula U|xtgruppe        = U|xtline << "#"
+.formula U|xtline          = U|xtline >> "#"
+.formula U|xtgroesse       = U|xtline << "#"
+.formula U|xtline          = U|xtline >> "#"
+.formula U|xtdatum         = U|xtline << "#"
+.formula U|xtline          = U|xtline >> "#"
+.formula U|xtdatum         = U|xtdatum + " " + U|xtline << "#"
+.formula U|xtline          = U|xtline >> "#"
+.formula U|xtuhrzeit       = U|xtline << "#"
+.formula U|xtline          = U|xtline >> "#"
+.formula U|xtkomplett      = U|xtline << "#"
+..regmatch funktioniert hier irgendwie nicht, / muss maskiert werden 
+.continue SLASH  ? U|xtkomplett / "*\/*"
+.continue NOSLASH
+!SLASH
+.. "ABCDECFG"<$"C" = "ABCDE"
+.. von rechtskommend den ersten / abschneiden
+.. xxxx/yyyy/zzzz/DATEINAME
+.formula U|xtdatei         = U|xtkomplett >$ "/"
+.formula U|xtpfad          = U|xtkomplett <$ "/"
+.continue ZEILE
+!NOSLASH
+.formula U|xtdatei         = U|xtkomplett
+!ZEILE
+.continue NEXT ? F|empty(U|xtkomplett)
+..Verzeichnisse nicht anzeigen
+.continue NEXT ? F|regindex(U|xtrechte, "d") = 1 & M|nurdatei
+..box
+..Rechte: 'U|xtrechte'
+..Datei:  'U|xianzdat'
+..Owner : 'U|xtowner'
+..Gruppe: 'U|xtgruppe' 
+..Gr”áe:  'U|xtgroesse'
+..Datum:  'U|xtdatum'
+..Uhr  :  'U|xtuhrzeit'
+..Pfad :  'U|xtkomplett'
+..Zeile:  'U|xtline'
+..
+.continue LINKS   ? _M|vergleichen
+.continue RECHTS  ? M|vergleichen 
+!LINKS
+.make screen line +o        
+.formula M|tzeile         = U|xtzeile
+.formula M|trechte1       = U|xtrechte 
+.formula M|towner1        = U|xtowner
+.formula M|tgruppe1       = U|xtgruppe
+.formula M|tgroesse1      = U|xtgroesse 
+.formula M|tdatum1        = U|xtdatum
+.formula M|tuhrzeit1      = U|xtuhrzeit
+.formula M|tpfad1         = M|pfad1              ? _M|rekursiv ; _U|xbsichanzeigen
+.formula M|tpfad1         = U|xtpfad +"/"        ? M|rekursiv  ;  U|xbsichanzeigen                     
+.formula M|tdatei1        = U|xtdatei 
+.formula M|tkomplett      = M|tpfad1 + M|tdatei1        ? _M|rekursiv ; _U|xbsichanzeigen
+.formula M|tkomplett      = U|xtpfad + "/" + M|tdatei1  ? M|rekursiv  ;  U|xbsichanzeigen
+.formula M|tzeilenicon    = M|iconverzzu   ? F|regindex(M|trechte1, "d") = 1
+..Dateienprfung
+.continue NCHECK ? M|tzeilenicon = M|iconverzzu
+.formula U|xi = 1
+.continue D1CHECK ? _F|empty(M|dattyp1)
+.continue D1CHECK ? _F|empty(M|dattyp2)
+.continue D1CHECK ? _F|empty(M|dattyp3)
+.continue D1CHECK ? _F|empty(M|dattyp4)
+.continue D1CHECK ? _F|empty(M|dattyp5)
+.continue NCHECK
+!D1CHECK
+.continue LEER ? F|empty(M|dattyp.xi)
+.continue INHALT ? _F|empty(M|datenthaelt.xi)
+.continue ENDUNG ? _F|empty(M|datendung.xi)
+!INHALT: erste Zeile der Datei prfen
+.formula U|xtcmd = "grep " + 'G|dblquote' +'M|datenthaelt.xi' + 'G|dblquote' + " " + 'M|tkomplett'
+.system 'U|xtcmd' background
+.continue DATGEF ? G|mehr
+.continue LEER   ? _G|mehr
+!DATGEF
+.formula M|tdattyp1 = M|dattyp.xi
+..wenn der Dateityp gefunden ist, wird beim ersten Treffer aussteigen
+.continue NCHECK
+!ENDUNG
+.formula U|xtendung = M|tdatei1 >> "."
+.formula U|xtendung = "." + 'U|xtendung'
+.continue ENDGEF ? U|xtendung = M|datendung.xi
+.continue LEER
+!ENDGEF
+.formula M|tdattyp1 = M|dattyp.xi
+..wenn der Dateityp gefunden ist, wird beim ersten Treffer aussteigen
+.continue NCHECK
+!LEER
+.formula U|xi = U|xi + 1
+.continue D1CHECK ? U|xi < 6
+!NCHECK
+.continue ORDNER ? M|tzeilenicon = M|iconverzzu
+.formula M|tzeilenicon    = M|icondatei           ? _F|empty(M|tdattyp1)
+.formula M|tzeilenicon    = M|icondateigesperrt   ? F|empty(M|tdattyp1)
+!ORDNER
+.continue NEXT
+!RECHTS
+.formula M|tzeile2        = U|xtzeile
+.formula M|trechte2       = U|xtrechte 
+.formula M|towner2        = U|xtowner
+.formula M|tgruppe2       = U|xtgruppe
+.formula M|tgroesse2      = U|xtgroesse 
+.formula M|tdatum2        = U|xtdatum
+.formula M|tuhrzeit2      = U|xtuhrzeit
+.formula M|tpfad2         = U|xtpfad
+.formula M|tkomplett2     = U|xtkomplett
+.formula M|tdatei2        = U|xtdatei 
+.continue NOSICH ? _M|sichverw 
+.formula M|tsichverz  = M|sichpfad
+!NOSICH
+.formula M|tkopieverz = M|kopiepfad
+.formula M|tzeilenicon2   = M|icondatei    ? F|regindex(M|trechte1, "d") <> 1
+.formula M|tzeilenicon2   = M|iconverzzu   ? F|regindex(M|trechte1, "d") = 1
+.formula M|tzeilenicon2   = M|icondateigesperrt ? F|empty(M|tdattyp1)  &  M|tzeilenicon2 = M|icondatei  
+.select from "rmtmp/EXPLORER.VERG" U|xtline ^
+.continue NEXT
+!NOLINE
+..Der Suchbefehl hat keine Treffer gefunden
+.continue NEXT                                  ? _M|vergleichen
+..Datei wurde im Vergleichspfad nicht gefunden
+.formula M|tpfad2 = M|pfad2                     ? M|vergleichen
+!NEXT

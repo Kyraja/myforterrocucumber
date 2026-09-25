@@ -1,0 +1,88 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           :     CLOSING.MONTH
+.. Date           :     01/09/2015
+.. Version        :     1.0
+.. Author         :     rasc
+.. Copyright      :
+.. Functionality  :     Closing Financial Accounting - Month
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+.. mage 09.06.16 : Fehlerbehandlung ge„ndert und Flagdatum fr EDP gesetzt.
+..*****************************************************************************
+.type text U|xtcmd      ? _F|defined(U|xtcmd)
+.type text U|xtdat      ? _F|defined(U|xtdat)
+.type text U|xtout      ? _F|defined(U|xtout)
+.type text U|xterrdat   ? _F|defined(U|xterrdat)
+.type text U|xttab      ? _F|defined(U|xttab)
+.type integer U|ximon   ? _F|defined(U|ximon)
+.type GD2  U|xdate      ? _F|defined(U|xdate)
+.type GJ   U|xyear      ? _F|defined(U|yxear)
+..
+.formula U|xdate        = M|qflagdate           ?  F|defined(M|qflagdate)
+.formula U|xdate        = G|datum               ? _F|defined(M|qflagdate)
+.....formula U|xdate        = "31.01.14"
+..
+.........................: RASC, 12.03.2015, den aktuellen Monat erst einen Monat sp„ter schlieáen ........................
+.formula U|ximon        = F|getfm(U|xdate)
+.formula U|xyear        = F|getfy(U|xdate)
+..
+..im ersten Jahr nach dem Aufsetzen im Januar nichts machen
+.continue END           ? U|ximon = 1 & ('U|xyear' = 'F|nextfy(F|getfy(F|sysinfo(12)^jaab))')
+..........................
+..letzter abgeschlossener Monat im offenen Gesch„ftsjahr ist maximal 12
+.continue END           ? F|sysinfo(12)^monneu=12
+..
+.formula U|ximon        = F|sysinfo(12)^monneu
+..da FIBU vorher schon zu, hier nicht mehr hochz„hlen
+.....formula U|ximon        = U|ximon + 1
+.continue END           ? U|ximon > 12
+..
+..jetzt noch drei Zeilen fr die Nachbuchungsmonate hinzuz„hlen
+.formula U|ximon        = U|ximon + 3
+.continue END           ? U|ximon > 15
+..
+......formula U|xttab        = "fbbbu"
+.continue END           ? F|empty(F|sysinfo(12)^ilviststart) & F|empty(F|sysinfo(12)^ilvplanstart)
+......
+.formula U|xttab        = "kobbu"  ? _F|empty(F|sysinfo(12)^ilviststart)
+.formula U|xttab        = "kpbbu"  ? _F|empty(F|sysinfo(12)^ilvplanstart)
+..
+...continue END           ? _F|defined(M|qdate)
+...continue END           ? F|empty(M|qdate)
+..
+..
+.formula U|xtout    = "tmp/XCLMON."+'U|xyear'+"."+'U|ximon'+".OUT"
+.formula U|xterrdat = "tmp/XCLMON."+'U|xyear'+"."+'U|ximon'+".ERR"
+.formula U|xtdat    = "tmp/XCLMON."+'U|xyear'+"."+'U|ximon'+".EDP"
+..
+.output NEW 'U|xtdat'
+.input DATEI.F
+..hier mit Serverflag arbeiten, damit man auch in die Zukunft fahren kann.
+#!database=124
+#!group=3
+#!action=new
+#!dontchange=-
+#!charset=eks
+#!recordidfld=nummer
+#!recordidfld=such
+#!firsttabfld=zeile
+#!UseRowID=1
+.input "owinstall/HEAD.EDP"
+nummer;such;zeile;'U|xttab';
+200;ABSCHL;='U|ximon';;
+.output
+..
+.input "owinstall/EDP.EXECUTE"
+..
+!END
+.continue

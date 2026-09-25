@@ -1,0 +1,91 @@
+..!interpreter english translate noabbrev englvar
+..*****************************************************************************
+.. FOP-Name       : S0X.GENERATE.ADDRESS.SX
+.. Autor          : dsch
+.. Verantwortlich : dsch
+.. Kontrolle      : uko
+.. Funktion       : Erstellt das EDP-Skript anhand des Maskenpuffers
+..                  fuer das Speichern einer Adresse bei der Sanktionslistenpruefung.
+.. Functionality  : Creates the edp script according the screen buffer in order
+..                  to store the address for SLP.
+..*****************************************************************************
+.set trans -
+..
+.type text   xtsystem    ? _F|defined(U|xtsystem)
+.type text   xtedpskript ? _F|defined(U|xtedpskript)
+.type text   xtedpout    ? _F|defined(U|xtedpout)
+.type text   xtedperr    ? _F|defined(U|xtedperr)
+.type bool   xberror     ? _F|defined(U|xberror)
+.type bool   xbdoadr1    ? _F|defined(U|xbdoadr1)
+.type bool   xbdoadr2    ? _F|defined(U|xbdoadr2)
+.type bool   xbcallsoap  ? _F|defined(U|xbcallsoap)
+.type text   xtdescr     ? _F|defined(U|xtdescr)
+.type text   xtbuname    ? _F|defined(U|xtbuname)
+.type text   xtbuvalue   ? _F|defined(U|xtbuvalue)
+..
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END ? _F|sysinfo(18)^CS
+.. ----------- ---------- ---------- -------------------------------------------
+..
+.formula U|xbdoadr1 = G|true ? F|defined(M|hashAddr)  & _F|empty(M|hashAddr)  & _F|empty(M|addr)
+.formula U|xbdoadr2 = G|true ? F|defined(M|hashAddr2)
+.continue SKIPADR2 ? _U|xbdoadr2
+.formula U|xbdoadr2 = G|false ? F|empty(M|hashAddr2) ; F|empty(M|addr2)
+!SKIPADR2
+.continue END ? _U|xbdoadr1 & _U|xbdoadr2
+..
+.select addresses 'M|hashAddr'   ? U|xbdoadr1
+.formula U|xbdoadr1 = _G|success ? U|xbdoadr1
+..
+.select addresses 'M|hashAddr2'  ? U|xbdoadr2
+.formula U|xbdoadr2 = _G|success ? U|xbdoadr2
+..
+.continue END ? _U|xbdoadr1 & _U|xbdoadr2
+..
+.. generate EDP-Script
+..
+.. if SOAP-Call is active, the object has to be stored before
+..
+.formula U|xbcallsoap = F|sysinfo(10)^CSSoapActive
+..
+.formula U|xtbuname  = "#<>#CSAddr" ? U|xbcallsoap
+.formula U|xtbuvalue = "#1#1"       ? U|xbcallsoap
+..
+.formula U|xtdescr = ""
+.formula U|xtdescr = M|descr ? F|defined(M|descr)
+..
+.file -tempname U|xtedpskript
+.output new 'U|xtedpskript'
+.input "DATEI.F"
+.set separator %
+..
+#!database=113:1
+#!action=new
+#!flddelimiter=#
+#!dontchange=~
+
+addr#street#zipCode#town#region#stateOfTaxOffice#swd#descr#load'U|xtbuname'
+?'M|addr'#'M|street'#'M|zipCode'#'M|town'#'M|region^id'#'M|stateOfTaxOffice^id'#'M|swd'#'U|xtdescr'#1'xtbuvalue'? U|xbdoadr1
+?'M|addr2'#'M|street2'#'M|zipCode2'#'M|town2'#'M|region2^id'#'M|stateOfTaxOffice2^id'#'M|swd'#'U|xtdescr'#1'xtbuvalue'? U|xbdoadr2
+
+.output
+.set separator
+..
+.. for debugging script
+.. .editing 'U|xtedpskript'
+.. .continue END
+..
+.file -tempname U|xtedpout
+.file -tempname U|xtedperr
+..
+.formula U|xtsystem = "edpimport.sh -P -c EKS -o VARLANG=E -I " + 'U|xtedpskript' + " >> " + 'U|xtedpout' + " 2>> " + 'U|xtedperr'
+.system 'U|xtsystem' password background
+.formula U|xberror = _G|success
+..
+.. show error messages
+.editing 'U|xtedperr'     ? U|xberror & _G|runByEDP
+.input -text 'U|xtedperr' ? U|xberror &  G|runByEDP
+..
+..*****************************************************************************
+!END
+.continue

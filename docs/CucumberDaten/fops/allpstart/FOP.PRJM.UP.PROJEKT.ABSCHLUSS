@@ -1,0 +1,897 @@
+..!interpreter english declaration noabbrev
+.. at 2017-08-17, 14:45
+.set trans -
+..========================================================================
+..==  Name              : FOP.PRJM.UP.PROJEKT.ABSCHLUSS
+..==  Pfad              : allpstart
+..==  Funktion          : Unterprogramm zum Abschluss des Projekts
+..==                      erwartet: xtprojekt   - Projekt welches abgeschlossen werden soll
+..==                                xbnurpruef  - wenn TRUE, wird niur die PrÅfung durchgefÅhrt - kein Abschluss
+..==                                xbkeinmenue - MenÅ im Fehlerfall wird nicht angezeigt
+..==                                xyprojstatk - neuer Status des Projekts
+..==
+..==                      zurÅck:   xbok       - TRUE wenn Abschluss bzw. PrÅfung erfolgreich
+..==
+..==  Erstellungsdatum  : 19.01.2010
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==
+..==  Besonderheiten    : IFOPs aus ProjectSuite Konfiguration werden nach Standard PrÅfung und nach dem Standard Abschluss ausgefÅhhrt
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"      ? _F|defined(U|xydbgrprojekt)
+.input "allpstart/TRANS.KONFIG.INI"     ? _F|defined(U|xydbgrtransdat)
+..====================================================
+.type text    xtsel             ? _F|defined(U|xtsel)
+.type text    xttitel           ? _F|defined(U|xttitel)
+.type text    xttext1           ? _F|defined(U|xttext1)
+.type text    xttmpdat          ? _F|defined(U|xttmpdat)
+.type text    xtprojekt         ? _F|defined(U|xtprojekt)
+.type text    xtpvorgang        ? _F|defined(U|xtpvorgang)
+.type text    xtaufgabe         ? _F|defined(U|xtaufgabe)
+.type integer xifehl            ? _F|defined(U|xifehl)
+.type integer xi1               ? _F|defined(U|xi1)
+.type bool    xbmehr            ? _F|defined(U|xbmehr)
+.type bool    xbpruefung        ? _F|defined(U|xbpruefung)
+.type bool    xbpvabschluss     ? _F|defined(U|xbpvabschluss)
+.type bool    xbok              ? _F|defined(U|xbok)
+.type bool    xbnurpruef        ? _F|defined(U|xbnurpruef)
+.type bool    xbkeinmenue       ? _F|defined(U|xbkeinmenue)
+.type bool    xbkeinhinw        ? _F|defined(U|xbkeinhinw)
+.type bool    xbopv             ? _F|defined(U|xbopv)
+.type bool    xbofv             ? _F|defined(U|xbofv)
+.type bool    xboba             ? _F|defined(U|xboba)
+.type bool    xboek             ? _F|defined(U|xboek)
+.type bool    xboekbv           ? _F|defined(U|xboekbv)
+.type bool    xboekuv           ? _F|defined(U|xboekuv)
+.type bool    xboeklv           ? _F|defined(U|xboeklv)
+.type bool    xboekan           ? _F|defined(U|xboekan)
+.type bool    xboekbe           ? _F|defined(U|xboekbe)
+.type bool    xboekls           ? _F|defined(U|xboekls)
+.type bool    xboekre           ? _F|defined(U|xboekre)
+.type bool    xbovk             ? _F|defined(U|xbovk)
+.type bool    xbovkch           ? _F|defined(U|xbovkch)
+.type bool    xbovkan           ? _F|defined(U|xbovkan)
+.type bool    xbovkau           ? _F|defined(U|xbovkau)
+.type bool    xbovkls           ? _F|defined(U|xbovkls)
+.type bool    xbovkre           ? _F|defined(U|xbovkre)
+.type bool    xbosvan           ? _F|defined(U|xbosvan)
+.type bool    xbosvau           ? _F|defined(U|xbosvau)
+.type bool    xbosvkv           ? _F|defined(U|xbosvkv)
+.type bool    xbosvra           ? _F|defined(U|xbosvra)
+.type bool    xboabrlm          ? _F|defined(U|xboabrlm)
+.type bool    xbofaklm          ? _F|defined(U|xbofaklm)
+.type bool    xbobulm           ? _F|defined(U|xbobulm)
+.type bool    xbova             ? _F|defined(U|xbova)
+.type bool    xbotproj          ? _F|defined(U|xbotproj)
+.type bool    xbotppos          ? _F|defined(U|xbotppos)
+.type bool    xbomatbu          ? _F|defined(U|xbomatbu)
+.type bool    xbotrans          ? _F|defined(U|xbotrans)
+.type bool    xbopt             ? _F|defined(U|xbopt)
+.type bool    xbwipab           ? _F|defined(U|xbwipab)
+.type bool    xbtobuffer        ? _F|defined(U|xbtobuffer)
+.type GD      xdabdat           ? _F|defined(U|xdabdat)
+.type GD      xdftdat           ? _F|defined(U|xdftdat)
+.type GD      xd1               ? _F|defined(U|xd1)
+.type P86:1    xpproject        ? _F|defined(U|xpproject)
+.type AZK28044 xyprojstatk      ? _F|defined(U|xyprojstatk)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- LM_abrechnungsrelevant -----
+.copy U|xbmehr = G|true
+.continue EL001 ? _(_(F|empty(1|ypvorgang^yvorpos)))
+.load 2 group "P3:2" '1|ypvorgang^yvorpos'
+.continue EL002 ? _(G|mehr)
+.copy U|xbmehr = G|false        ?  2|yprjmpnabrechrelev
+.load 2
+!EL002
+!EL001
+.continue EL003 ? _(F|sysinfo(18)^allpstd)
+.continue EL004 ? _((_(F|empty(1|ypvorgang^ytppos))) & (((_(U|xbmehr)) ; (_(F|empty(0|yteilprojektzu)))) ; (F|empty(1|ypvorgang^yvorpos))))
+.load 2 group 'U|xydbgrtpposition' '1|ypvorgang^ytppos'
+.continue EL005 ? _(G|mehr)
+.copy U|xbmehr = G|false        ?  2|ynabrechrelev
+.copy U|xbmehr = G|true         ? _2|ynabrechrelev
+.load 2
+!EL005
+!EL004
+!EL003
+.continue 'xprocst.xprocsp'
+!PROC002: ----- ProjektvorgaengePruefen -----
+.formula U|xtsel = "$,,yprojekt==" + 0|id + ";yistblatt==1;yablage==0;@filingmode=(Active)"
+.load 1 group 'U|xydbgrpvorgang' 'U|xtsel'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.formula U|xifehl = U|xifehl + 1
+.type text xtfpvorgang.xifehl           ? _F|defined(U|xtfpvorgang.xifehl)
+.formula U|xtfpvorgang.xifehl = 1|id
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                       ? _U|xbopv
+?offene ProjektvorgÑnge zum Projekt '0|such'            ? _U|xbopv
+'1|nummer ' '1|name                         ' '1|ypersonal   '' 1|ypvsollstd' Stunden
+.set TRANS -
+.copy U|xbopv = G|true
+.copy U|xbok  = G|false
+.load 1 continue
+.continue LOOP001
+!ELOP001: ==============================
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Farbe_Projektzentrale -----
+.continue EL006 ? _(F|defined(M|ybprjmzentrale))
+.colour -BACKGROUND "-1 -1 -1" yprojzabsopv     0       ? _U|xbopv
+.colour -BACKGROUND "255 0 0"  yprojzabsopv     0       ?  U|xbopv
+.colour -BACKGROUND "-1 -1 -1" yprojzabsoabrlm  0       ? _U|xboabrlm
+.colour -BACKGROUND "255 0 0"  yprojzabsoabrlm  0       ?  U|xboabrlm
+.colour -BACKGROUND "-1 -1 -1" yprojzabsofaklm  0       ? _U|xbofaklm
+.colour -BACKGROUND "255 0 0"  yprojzabsofaklm  0       ?  U|xbofaklm
+.colour -BACKGROUND "-1 -1 -1" yprojzabsobulm   0       ? _U|xbobulm
+.colour -BACKGROUND "255 0 0"  yprojzabsobulm   0       ?  U|xbobulm
+.colour -BACKGROUND "-1 -1 -1" yprojzabsotproj  0       ? _U|xbotproj
+.colour -BACKGROUND "255 0 0"  yprojzabsotproj  0       ?  U|xbotproj
+.colour -BACKGROUND "-1 -1 -1" yprojzabsotppos  0       ? _U|xbotppos
+.colour -BACKGROUND "255 0 0"  yprojzabsotppos  0       ?  U|xbotppos
+.colour -BACKGROUND "-1 -1 -1" yprojzabsovanf   0       ? _U|xbova
+.colour -BACKGROUND "255 0 0"  yprojzabsovanf   0       ?  U|xbova
+.colour -BACKGROUND "-1 -1 -1" yprojzabsomatbu  0       ? _U|xbomatbu
+.colour -BACKGROUND "255 0 0"  yprojzabsomatbu  0       ?  U|xbomatbu
+.colour -BACKGROUND "-1 -1 -1" yprojzabsotrans  0       ? _U|xbotrans
+.colour -BACKGROUND "255 0 0"  yprojzabsotrans  0       ?  U|xbotrans
+.colour -BACKGROUND "-1 -1 -1" yprojzabsofv     0       ? _U|xbofv
+.colour -BACKGROUND "255 0 0"  yprojzabsofv     0       ?  U|xbofv
+.colour -BACKGROUND "-1 -1 -1" yprojzabsoba     0       ? _U|xboba
+.colour -BACKGROUND "255 0 0"  yprojzabsoba     0       ?  U|xboba
+.colour -BACKGROUND "-1 -1 -1" yprojzabsekbvpos 0       ? _U|xboekbv
+.colour -BACKGROUND "255 0 0"  yprojzabsekbvpos 0       ?  U|xboekbv
+.colour -BACKGROUND "-1 -1 -1" yprojzabsekuvpos 0       ? _U|xboekuv
+.colour -BACKGROUND "255 0 0"  yprojzabsekuvpos 0       ?  U|xboekuv
+.colour -BACKGROUND "-1 -1 -1" yprojzabseklvpos 0       ? _U|xboeklv
+.colour -BACKGROUND "255 0 0"  yprojzabseklvpos 0       ?  U|xboeklv
+.colour -BACKGROUND "-1 -1 -1" yprojzabsekanpos 0       ? _U|xboekan
+.colour -BACKGROUND "255 0 0"  yprojzabsekanpos 0       ?  U|xboekan
+.colour -BACKGROUND "-1 -1 -1" yprojzabsekbepos 0       ? _U|xboekbe
+.colour -BACKGROUND "255 0 0"  yprojzabsekbepos 0       ?  U|xboekbe
+.colour -BACKGROUND "-1 -1 -1" yprojzabseklspos 0       ? _U|xboekls
+.colour -BACKGROUND "255 0 0"  yprojzabseklspos 0       ?  U|xboekls
+.colour -BACKGROUND "-1 -1 -1" yprojzabsekrepos 0       ? _U|xboekre
+.colour -BACKGROUND "255 0 0"  yprojzabsekrepos 0       ?  U|xboekre
+.colour -BACKGROUND "-1 -1 -1" yprojzabsvkanpos 0       ? _U|xbovkan
+.colour -BACKGROUND "255 0 0"  yprojzabsvkanpos 0       ?  U|xbovkan
+
+.colour -BACKGROUND "-1 -1 -1" yprojzabsvkchpos 0       ? _U|xbovkch
+.colour -BACKGROUND "255 0 0"  yprojzabsvkchpos 0       ?  U|xbovkch
+.colour -BACKGROUND "-1 -1 -1" yprojzabsvkaupos 0       ? _U|xbovkau
+.colour -BACKGROUND "255 0 0"  yprojzabsvkaupos 0       ?  U|xbovkau
+.colour -BACKGROUND "-1 -1 -1" yprojzabsvklspos 0       ? _U|xbovkls
+.colour -BACKGROUND "255 0 0"  yprojzabsvklspos 0       ?  U|xbovkls
+.colour -BACKGROUND "-1 -1 -1" yprojzabsvkrepos 0       ? _U|xbovkre
+.colour -BACKGROUND "255 0 0"  yprojzabsvkrepos 0       ?  U|xbovkre
+.colour -BACKGROUND "-1 -1 -1" yprojzabssvanpos 0       ? _U|xbosvan
+.colour -BACKGROUND "255 0 0"  yprojzabssvanpos 0       ?  U|xbosvan
+.colour -BACKGROUND "-1 -1 -1" yprojzabssvaupos 0       ? _U|xbosvau
+.colour -BACKGROUND "255 0 0"  yprojzabssvaupos 0       ?  U|xbosvau
+.colour -BACKGROUND "-1 -1 -1" yprojzabssvkvpos 0       ? _U|xbosvkv
+.colour -BACKGROUND "255 0 0"  yprojzabssvkvpos 0       ?  U|xbosvkv
+.colour -BACKGROUND "-1 -1 -1" yprojzabssvrapos 0       ? _U|xbosvra
+.colour -BACKGROUND "255 0 0"  yprojzabssvrapos 0       ?  U|xbosvra
+!EL006
+.continue 'xprocst.xprocsp'
+!PROC004: ----- Fehlerausgabe -----
+.continue EL007 ? _(((F|defined(M|ybuebersicht)) ; (F|defined(M|ybverwaltung))) & (U|xifehl > 0))
+.select screen header
+.select screen line
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.formula U|xi1 = 0
+!REPT001: ==============================
+.formula U|xi1 = U|xi1 + 1
+.continue EL008 ? _(F|defined(U|xtfpvorgang.xi1))
+.continue EL009 ? _(M|yobjekt^id = U|xtfpvorgang.xi1)
+.colour -BACKGROUND 'U|xtfarbefeab' yablage 'M|aktzeile'        ? F|defined(M|yablage)
+.colour -BACKGROUND 'U|xtfarbefeab' yobjekt 'M|aktzeile'        ? F|defined(M|yobjekt) & F|defined(M|ybverwaltung)
+.colour -BACKGROUND 'U|xtfarbefeab' ystatus 'M|aktzeile'        ? F|defined(M|ystatus)
+.formula U|xi1 = U|xifehl
+!EL009
+!EL008
+.continue REPT001 ? _(U|xi1 = U|xifehl)
+.select screen line
+.continue LOOP002
+!ELOP002: ==============================
+!EL007
+.continue EL010 ? _(_(U|xbkeinmenue))
+.set trans +
+.box Hinweis
+Das Projekt kann nicht abgeschlossen werden!
+
+Es existieren noch offene VorgÑnge,
+die nicht abgeschlossen werden kînnen.
+.set trans -
+!EL010
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue EL011 ? _(_(F|empty(U|xtprojekt)))
+.continue EL012 ? _(F|empty(U|xyprojstatk))
+.set TRANS +
+.box Hinweis
+Neuer Projektstatus wurde nicht an das Unterprogramm Åbergeben.
+Projekt kann nicht abgeschlossen werden.
+.set TRANS -
+.continue FI012
+!EL012
+.file -TEMPNAME U|xttmpdat
+.load 0 group 'U|xydbgrprojekt' 'U|xtprojekt'
+.continue EL013 ? _(G|mehr)
+.assign U|xpproject = 0|id
+.input "allppro/FOP.PRJM.UP.GETPERMISSIONS" ? _F|defined(U|xypermissions) & F|sysinfo(18)^allppro
+.input "allpstart/GET.SUBPROJECTS"
+.input "allpstart/FOP.PRJM.UP.PROJECTCLOSINGVARS"
+.copy U|xbok = G|true
+.continue EL014 ? _((F|sysinfo(18)^allppro) & (_(F|empty(F|rec(U|xystclosingvars, ypmkaberloeffnen)))) & (U|xyprojstatk = "FTAB") & ((0|ystatusk = "ABS") ; (0|ystatusk = "08") ; (0|yablage)))
+.copy U|xbok = F|defined(F|map(U|xypermissions, 'F|rec(U|xystclosingvars, ypmkaberloeffnen)^id'))
+!EL014
+.continue EL015 ? _(U|xbok)
+.continue EL016 ? _((0|yablage) & ((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")))
+.continue EL017 ? _(_(U|xbkeinhinw))
+.set trans +
+.formula U|xttitel = "Hinweis"
+.formula U|xttext1 = F|formatstr("Das Projekt {1} ist bereits abgeschlossen.", 0|such)
+.set trans -
+.box 'U|xttitel'
+'U|xttext1'
+!EL017
+.continue FI016
+!EL016
+.input DATEI.F
+.copy    U|xbok   = G|true
+.formula U|xifehl = 0
+.copy    U|xbopv    = G|false
+.copy    U|xboek    = G|false
+.copy    U|xboekan  = G|false
+.copy    U|xboekbe  = G|false
+.copy    U|xboekls  = G|false
+.copy    U|xboekre  = G|false
+.copy    U|xbovk    = G|false
+.copy    U|xbovkan  = G|false
+.copy    U|xbovkau  = G|false
+.copy    U|xbovkls  = G|false
+.copy    U|xbovkre  = G|false
+.copy    U|xboabrlm = G|false
+.copy    U|xbofaklm = G|false
+.copy    U|xbobulm  = G|false
+.copy    U|xbova    = G|false
+.copy    U|xbotproj = G|false
+.copy    U|xbotppos = G|false
+.copy    U|xbomatbu = G|false
+.copy    U|xbofv    = G|false
+.copy    U|xboba    = G|false
+.copy    U|xbotrans = G|false
+.copy    U|xbopt    = G|false
+.copy   U|xbpvabschluss = G|false
+.continue EL018 ? _(((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefpv))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefpv))))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC002
+!RET001
+.formula xprocsp = xprocsp - 1
+!EL018
+.continue EL019 ? _(((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefabrlm))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefabrlm))))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt==" + 0|id
+.continue EL020 ? _((_(5|ypmtpverrechnk = "STAT")) ; (F|empty(0|yteilprojektzu)))
+.formula U|xtsel = U|xtsel + ";ylsposid==`"
+.formula U|xtsel = U|xtsel + ";yreposid==`"
+.continue FI020
+!EL020
+.formula U|xtsel = U|xtsel + ";ytpverrechanfid==`"
+!FI020
+.formula U|xtsel = U|xtsel + ";ylsrelev=1;yarchiv=0;@filingmode=(Active)"
+.load 1 group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+.continue EL021 ? _(U|xbmehr)
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                               ? _U|xboabrlm
+?nicht abgerechnete Leistungsmeldungen zum Projekt '0|such'     ? _U|xboabrlm
+'1|nummer ' '1|name                         ' '1|ypersonal   '' 1|yarbzeit' Stunden
+.set TRANS -
+.copy U|xboabrlm = G|true
+.copy U|xbok     = G|false
+!EL021
+.load 1 continue
+.continue LOOP003
+!ELOP003: ==============================
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt==" + 0|id
+.continue EL022 ? _((_(5|ypmtpverrechnk = "STAT")) ; (F|empty(0|yteilprojektzu)))
+.formula U|xtsel = U|xtsel + ";ymzlsposid==`"
+.formula U|xtsel = U|xtsel + ";ymzreposid==`"
+.continue FI022
+!EL022
+.formula U|xtsel = U|xtsel + ";ymztpverrechanfid==`"
+!FI022
+.formula U|xtsel = U|xtsel + ";ymaschzeit<>0;ylsrelev=1;yarchiv=0;@filingmode=(Active)"
+.load 1 group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+.continue EL023 ? _(U|xbmehr)
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                               ? _U|xboabrlm
+?nicht abgerechnete Maschinenzeiten zum Projekt '0|such'        ? _U|xboabrlm
+'1|nummer ' '1|name                         ' '1|ypersonal   '' 1|yarbzeit' Stunden
+.set TRANS -
+.copy U|xboabrlm = G|true
+.copy U|xbok     = G|false
+!EL023
+.load 1 continue
+.continue LOOP004
+!ELOP004: ==============================
+!EL019
+.continue EL024 ? _((_(5|ypmtpverrechnk = "STAT")) ; (F|empty(0|yteilprojektzu)))
+.continue EL025 ? _(((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabprueffaklm))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabprueffaklm))))
+.formula U|xtsel = "$,,yprojekt==" + 0|id + ";yreposid==`;ylsrelev=1;yarchiv=0;@filingmode=(Active)"
+.load 1 group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC001
+!RET004
+.formula xprocsp = xprocsp - 1
+.continue EL026 ? _(U|xbmehr)
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                               ? _U|xbofaklm
+?nicht abgerechnete Leistungsmeldungen zum Projekt '0|such'     ? _U|xbofaklm
+'1|nummer ' '1|name                         ' '1|ypersonal   '' 1|yarbzeit' Stunden
+.set TRANS -
+.copy U|xbofaklm = G|true
+.copy U|xbok     = G|false
+!EL026
+.load 1 continue
+.continue LOOP005
+!ELOP005: ==============================
+.formula U|xtsel = "$,,yprojekt==" + 0|id + ";ymzreposid==`;ylsrelev=1;yarchiv=0;ymaschzeit<>0;@filingmode=(Active)"
+.load 1 group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP006: ==============================
+.continue ELOP006 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC001
+!RET005
+.formula xprocsp = xprocsp - 1
+.continue EL027 ? _(U|xbmehr)
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                               ? _U|xbofaklm
+?nicht abgerechnete Maschinenzeiten zum Projekt '0|such'        ? _U|xbofaklm
+'1|nummer ' '1|name                         ' '1|ypersonal   '' 1|yarbzeit' Stunden
+.set TRANS -
+.copy U|xbofaklm = G|true
+.copy U|xbok     = G|false
+!EL027
+.load 1 continue
+.continue LOOP006
+!ELOP006: ==============================
+!EL025
+!EL024
+.continue EL028 ? _(((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefbulm))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefbulm))))
+.formula U|xtsel = "$,,yprojekt==" + 0|id + ";ytransaktion==`;@filingmode=(Active)"
+.load 1 group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP007: ==============================
+.continue ELOP007 ? _(G|mehr)
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                       ? _U|xbobulm
+?ungebuchte Leistungsmeldungen zum Projekt '0|such'     ? _U|xbobulm
+'1|nummer ' '1|name                         ' '1|ypersonal   '' 1|yarbzeit' Stunden
+.set TRANS -
+.copy U|xbobulm = G|true
+.copy U|xbok  = G|false
+.load 1 continue
+.continue LOOP007
+!ELOP007: ==============================
+!EL028
+.continue EL029 ? _(F|sysinfo(18)^allpstd)
+.continue EL030 ? _(((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefvanf))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefvanf))))
+.formula U|xtsel = "$,,yhauptprojekt==" + 0|id + ";ytransaktion==`;@filingmode=(Active)"
+.load 1 group 'U|xydbgrtpverrechanf' 'U|xtsel'
+!LOOP008: ==============================
+.continue ELOP008 ? _(G|mehr)
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                               ? _U|xbova
+?ungebuchte Verrechnungsanforderung zum Projekt '0|such'        ? _U|xbova
+'1|nummer ' '1|name                         ' '1|ydatum'
+.set TRANS -
+.copy U|xbova = G|true
+.copy U|xbok  = G|false
+.load 1 continue
+.continue LOOP008
+!ELOP008: ==============================
+.formula U|xtsel = "$,,yteilprojekt==" + 0|id + ";ytransaktion==`;@filingmode=(Active)"
+.load 1 group 'U|xydbgrtpverrechanf' 'U|xtsel'
+!LOOP009: ==============================
+.continue ELOP009 ? _(G|mehr)
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                               ? _U|xbova
+?ungebuchte Verrechnungsanforderung zum Projekt '0|such'        ? _U|xbova
+'1|nummer ' '1|name                         ' '1|ydatum'
+.set TRANS -
+.copy U|xbova = G|true
+.copy U|xbok  = G|false
+.load 1 continue
+.continue LOOP009
+!ELOP009: ==============================
+!EL030
+!EL029
+.continue EL031 ? _(((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabprueftproj))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabprueftproj))))
+.formula U|xtsel = ""
+.formula U|xtsel = F|nextelem(F|map(U|xstsubprojects, ""), U|xtsel, G|true)
+!LOOP010: ==============================
+.continue ELOP010 ? _(_(F|empty(U|xtsel)))
+.load 1 add F|map(U|xstsubprojects, U|xtsel)
+.continue EL032 ? _(G|mehr)
+.continue EL033 ? _(((U|xyprojstatk = "FTAB") & (1|ystatusk   <> "FTAB")) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabprueftproj))))
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                       ? _U|xbotproj
+?nicht abgeschlossene Teilprojekte zum Projekt '0|such' ? _U|xbotproj
+'1|such' '1|name                                                          '
+.set TRANS -
+.copy U|xbotproj = G|true
+.copy U|xbok     = G|false
+!EL033
+!EL032
+.formula U|xtsel = F|nextelem(F|map(U|xstsubprojects, ""), U|xtsel, G|true)
+.continue LOOP010
+!ELOP010: ==============================
+!EL031
+.continue EL034 ? _(F|sysinfo(18)^allpstd)
+.continue EL035 ? _((_(F|empty(0|yteilprojektzu))) & (((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabprueftppos))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabprueftppos)))))
+.formula U|xtsel = "$,,yteilprojekt==" + 0|id + ";ytpverrechanf==`;yposstatus==`;@filingmode=(Active)"
+.load 1 group 'U|xydbgrtpposition' 'U|xtsel'
+!LOOP011: ==============================
+.continue ELOP011 ? _(G|mehr)
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                               ? _U|xbotppos
+?nicht abgeschlossene Teilprojektposition zum Projekt '0|such'  ? _U|xbotppos
+'1|nummer ' '1|name                                                          '
+.set TRANS -
+.copy U|xbotppos = G|true
+.copy U|xbok     = G|false
+.load 1 continue
+.continue LOOP011
+!ELOP011: ==============================
+!EL035
+!EL034
+.continue EL036 ? _(((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabprueftrans))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabprueftrans))))
+.formula U|xtsel = "$,,ytprojekt==" + 0|nummer + ";ybabl==(No);@rows=(Yes);@filingmode=(Active)"
+.load 1 group 'U|xydbgrtransdat' 'U|xtsel'
+!LOOP012: ==============================
+.continue ELOP012 ? _(G|mehr)
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                       ? _U|xbotrans
+?ungebuchte Buchungstransaktionen zum Projekt '0|such'  ? _U|xbotrans
+'1|nummer ' '1|name                                                          '
+.set TRANS -
+.copy U|xbotrans = G|true
+.copy U|xbok     = G|false
+.load 1 continue
+.continue LOOP012
+!ELOP012: ==============================
+.formula U|xtsel = "$,,ytprojekt==" + 0|id + ";ybabl==(No);@rows=(Yes);@filingmode=(Active)"
+.load 1 group 'U|xydbgrtransdat' 'U|xtsel'
+!LOOP013: ==============================
+.continue ELOP013 ? _(G|mehr)
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                       ? _U|xbotrans
+?ungebuchte Buchungstransaktionen zum Projekt '0|such'  ? _U|xbotrans
+'1|nummer ' '1|name                                                          '
+.set TRANS -
+.copy U|xbotrans = G|true
+.copy U|xbok     = G|false
+.load 1 continue
+.continue LOOP013
+!ELOP013: ==============================
+!EL036
+.continue EL037 ? _(((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefmatbu))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefmatbu))))
+.load 1 group 'U|xydbgrmatumbu' 'F|expr("$,,yvonprojekt==" + 0|id + ";ytransaktion==`;@filingmode=(Active)")'
+!LOOP014: ==============================
+.continue ELOP014 ? _(G|mehr)
+.output ADDEDTO 'U|xttmpdat'
+
+.set TRANS +
+?                                                               ? _U|xbomatbu
+?ungebuchte Materialumbuchungen zum Projekt '0|such'            ? _U|xbomatbu
+'1|nummer ' '1|name                                                          '
+.set TRANS -
+.copy U|xbomatbu = G|true
+.copy U|xbok     = G|false
+.load 1 continue
+.continue LOOP014
+!ELOP014: ==============================
+.load 1 group 'U|xydbgrmatumbu' 'F|expr("$,,ynachprojekt==" + 0|id + ";ytransaktion==`;@filingmode=(Active)")'
+!LOOP015: ==============================
+.continue ELOP015 ? _(G|mehr)
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                               ? _U|xbomatbu
+?ungebuchte Materialumbuchungen zum Projekt '0|such'            ? _U|xbomatbu
+'1|nummer ' '1|name                                                          '
+.set TRANS -
+.copy U|xbomatbu = G|true
+.copy U|xbok     = G|false
+.load 1 continue
+.continue LOOP015
+!ELOP015: ==============================
+!EL037
+.formula U|xtsel = "$,,projekt==" + 0|id + ";@filingmode=(Active)"
+.load 1 group "4:5" 'U|xtsel'
+!LOOP016: ==============================
+.continue ELOP016 ? _(G|mehr)
+.continue EL038 ? _((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabprueffv))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabprueffv)))) ; ((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefba))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefba)))) & (1|mfreig)))
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                                   ? _U|xbofv & _U|xboba
+?offene FertigungsvorschlÑge/betriebsauftrÑge zum Projekt '0|such'  ? _U|xbofv & _U|xboba
+'1|banummer ' '1|art          ' '    1|mge'
+.set TRANS -
+.copy U|xbok  = G|false
+.copy U|xbofv = G|true      ? _1|mfreig
+.copy U|xboba = G|true      ?  1|mfreig
+!EL038
+.load 1 continue
+.continue LOOP016
+!ELOP016: ==============================
+.formula U|xtsel = "$,,projekt==" + 0|id + ";@filingmode=(Active)"
+.load 1 group "4:2" 'U|xtsel'
+!LOOP017: ==============================
+.continue ELOP017 ? _(G|mehr)
+.continue EL039 ? _(((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefekbv))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefekbv)))) & (F|empty(1|kopf)) & (F|value(1|bsart, "AS79") = "(ExternalProcurement)")) ; ((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefekuv))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefekuv)))) & (F|empty(1|kopf)) & (F|value(1|bsart, "AS79") = "(Relocation)")) ; ((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefeklv))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefeklv)))) & (F|empty(1|kopf)) & (F|value(1|bsart, "AS79") = "(Subcontracting)")) ; ((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefekan))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefekan)))) & (1|kotyp = G|ANKO)) ; ((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefekbe))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefekbe)))) & (1|kotyp = G|ABKO)) ; ((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefekls))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefekls)))) & (1|kotyp = G|LIKO)) ; ((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefekre))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefekre)))) & (1|kotyp = G|REKO)))
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                               ? _U|xboek
+?offene EinkaufsvorgÑnge zum Projekt '0|such'   ? _U|xboek
+'1|kopf   ' '1|kopf^betreff                 ' '1|art          ' '    1|mge' '1|he'
+.set TRANS -
+.copy U|xboek = G|true
+.copy U|xbok  = G|false
+.copy U|xboekbv  = G|true   ? F|empty(1|kopf) & F|value(1|bsart, "AS79") = "(ExternalProcurement)"
+.copy U|xboekuv  = G|true   ? F|empty(1|kopf) & F|value(1|bsart, "AS79") = "(Relocation)"
+.copy U|xboeklv  = G|true   ? F|empty(1|kopf) & F|value(1|bsart, "AS79") = "(Subcontracting)"
+.copy U|xboekan  = G|true   ? 1|kotyp = G|ANKO &  F|empty(1|status)
+.copy U|xboekbe  = G|true   ? 1|kotyp = G|ABKO & (F|empty(1|status) ; (_1|lirelev & 1|remge > 0))
+.copy U|xboekls  = G|true   ? 1|kotyp = G|LIKO
+.copy U|xboekre  = G|true   ? 1|kotyp = G|REKO
+!EL039
+.load 1 continue
+.continue LOOP017
+!ELOP017: ==============================
+.formula U|xtsel = "$,,projekt==" + 0|id + ";@filingmode=(Active)"
+.load 1 group "3:2" 'U|xtsel'
+!LOOP018: ==============================
+.continue ELOP018 ? _(G|mehr)
+.continue EL040 ? _(((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefvkch))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefvkch)))) & (1|kotyp = G|CHKO)) ; ((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefvkan))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefvkan)))) & (1|kotyp = G|ANKO)) ; ((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefvkau))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefvkau)))) & (1|kotyp = G|ABKO)) ; ((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefvkls))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefvkls)))) & (1|kotyp = G|LIKO)) ; ((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefvkre))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefvkre)))) & (1|kotyp = G|REKO)) ; ((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefsvan))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefsvan)))) & (1|kotyp = G|SNKO)) ; ((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefsvau))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefsvau)))) & (1|kotyp = G|SBKO)) ; ((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefsvkv))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefsvkv)))) & (1|kotyp = G|KVKO)) ; ((((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefsvra))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefsvra)))) & (1|kotyp = G|SRKO)))
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                               ? _U|xbovk
+?offene VerkaufsvorgÑnge zum Projekt '0|such'   ? _U|xbovk
+'1|kopf   ' '1|kopf^betreff                 ' '1|art          ' '    1|mge' '1|he'
+.set TRANS -
+.copy U|xbovk = G|true
+.copy U|xbok  = G|false
+.copy U|xbovkch  = G|true    ? 1|kotyp = G|CHKO &  F|empty(1|status)
+.copy U|xbovkan  = G|true    ? 1|kotyp = G|ANKO &  F|empty(1|status)
+.copy U|xbovkau  = G|true    ? 1|kotyp = G|ABKO & (F|empty(1|status) ; (_1|lirelev & 1|remge > 0))
+.copy U|xbovkls  = G|true    ? 1|kotyp = G|LIKO
+.copy U|xbovkre  = G|true    ? 1|kotyp = G|REKO
+.copy U|xbosvan  = G|true    ? 1|kotyp = G|SNKO &  F|empty(1|status)
+.copy U|xbosvau  = G|true    ? 1|kotyp = G|SBKO & (F|empty(1|status) ; (_1|lirelev & 1|remge > 0))
+.copy U|xbosvkv  = G|true    ? 1|kotyp = G|KVKO
+.copy U|xbosvra  = G|true    ? 1|kotyp = G|SRKO
+!EL040
+.load 1 continue
+.continue LOOP018
+!ELOP018: ==============================
+.continue EL041 ? _(_(U|xbovkch))
+.load 1 group "3:30" 'F|expr("$,,yprjmproj==" + 0|id + ";@filingmode=(Active)")'
+.copy U|xbovkch  = G|true       ?  G|mehr
+!EL041
+.continue EL042 ? _(((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabprojteam))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabprojteam))))
+.formula U|xtsel = "$,,yprojekt==" + 0|id + ";yinaktiv==0;@filingmode=(Active)"
+.load 1 group 'U|xydbgrprojteam' 'U|xtsel'
+!LOOP019: ==============================
+.continue ELOP019 ? _((G|mehr) & (_(U|xbopt)))
+.formula U|xtsel = "$,,yprojteam==" + 1|id + ";yablage=0;@filingmode=(Active)"
+.load 2 group 'U|xydbgrpvorgang' 'U|xtsel'
+.continue EL043 ? _(G|mehr)
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                               ? _U|xbopt
+?Projektteams in offenen VorgÑngen zum Projekt '0|such'         ? _U|xbopt
+'1|nummer ' '1|name                                                          '
+.set TRANS -
+.copy U|xbopt    = G|true
+.copy U|xbok     = G|false
+!EL043
+.continue EL044 ? _(_(U|xbopt))
+.formula U|xtsel = "$,,yprojteam==" + 1|id + ";ystatusk<>07;ystatusk<>08;@filingmode=(Active)"
+.load 2 group 'U|xydbgraufgabe' 'U|xtsel'
+.continue EL045 ? _(G|mehr)
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+?                                                               ? _U|xbopt
+?Projektteams in offenen VorgÑngen zum Projekt '0|such'         ? _U|xbopt
+'1|nummer ' '1|name                                                          '
+.set TRANS -
+.copy U|xbopt    = G|true
+.copy U|xbok     = G|false
+!EL045
+!EL044
+.load 1 continue
+.continue LOOP019
+!ELOP019: ==============================
+!EL042
+.continue EL046 ? _((_(U|xbnurpruef)) & ((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08") ; ((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabwipliste))) ; ((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabwipnull)))))
+.copy U|xbwipab  = G|false
+.assign  U|xdabdat    = G|datum         ?  F|empty(U|xdabdat)
+.formula U|xd1 = 'U|xdabdat:8'<<6 + "01"
+.formula U|xd1 =  U|xd1 + 31
+.formula U|xd1 = 'U|xd1:8'<<6 + "01"
+.formula U|xd1 =  U|xd1 - 1
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt=="  + 0|id
+.formula U|xtsel = U|xtsel + ";ystichtag>=" + 'U|xd1'
+.formula U|xtsel = U|xtsel + ";yauposid==`"
+.formula U|xtsel = U|xtsel + ";ytpposid==`"
+.formula U|xtsel = U|xtsel + ";ybabgeschlossen==1"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 1 group 'U|xydbgrwipstat' 'U|xtsel'
+.continue EL047 ? _(G|mehr)
+.set TRANS +
+.box Fehler
+WiP in der Periode '1|ystichtag' oder in einer Folgeperiode fÅr das Projekt '0|such' bereits abgeschlossen.
+.set TRANS -
+.copy U|xbwipab  = G|true
+.copy U|xbok     = G|false
+!EL047
+!EL046
+.input 'F|foppath(F|rec(U|xystclosingvars, yifopprojabspruef))' ? F|fileexists(F|foppath(F|rec(U|xystclosingvars, yifopprojabspruef)))
+.continue EL048 ? _(_(U|xbwipab))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC003
+!RET006
+.formula xprocsp = xprocsp - 1
+.continue EL049 ? _(U|xbok)
+.continue EL050 ? _(_(U|xbnurpruef))
+.continue EL051 ? _((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08") ; (U|xyprojstatk = "FTAB"))
+.copy U|xbok = G|true
+.continue EL052 ? _((F|sysinfo(18)^allppro) & ((((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (_(F|empty(F|rec(U|xystclosingvars, ypmkaberlabschluss))))) ; ((U|xyprojstatk = "FTAB") & (_(F|empty(F|rec(U|xystclosingvars, ypmtaberlabschluss)))))))
+.copy U|xbok = G|false
+.copy U|xbok = G|true   ? F|defined(F|map(U|xypermissions, 'F|rec(U|xystclosingvars, ypmkaberlabschluss)^id')) & (U|xyprojstatk = "ABS" ; U|xyprojstatk = "08")
+.copy U|xbok = G|true   ? F|defined(F|map(U|xypermissions, 'F|rec(U|xystclosingvars, ypmtaberlabschluss)^id')) & (U|xyprojstatk = "FTAB")
+!EL052
+.continue FI051
+!EL051
+.copy U|xbok = G|true
+!FI051
+.continue EL053 ? _(U|xbok)
+.copy    U|xbok   = G|true
+.formula U|xifehl = 0
+.select lock nowait add 0|id
+.continue EL054 ? _(G|mehr)
+.continue EL055 ? _(G|gesperrt)
+.continue EL056 ? _(((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabpruefpv))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabpruefpv))))
+.select group 'U|xydbgrpvorgang' 'F|expr("$,,yprojekt==" + 0|id + ";@filingmode=(Active)")'
+!LOOP020: ==============================
+.continue ELOP020 ? _(G|mehr)
+.continue EL057 ? _(_(H|yablage))
+.formula U|xifehl = U|xifehl + 1
+.type text xtfpvorgang.xifehl    ? _F|defined(U|xtfpvorgang.xifehl)
+.formula xtfpvorgang.xifehl = H|id
+.output ADDEDTO 'U|xttmpdat'
+.set TRANS +
+Projektvorgang 'H|nummer' ist noch nicht abgeschlossen.
+.set TRANS -
+.copy U|xbok = G|false
+.formula U|xbok = G|false
+!EL057
+.select continue
+.continue LOOP020
+!ELOP020: ==============================
+!EL056
+.continue EL058 ? _(U|xbok)
+.continue EL059 ? _(((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabprojteam))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabprojteam))))
+.formula U|xtsel = "$,,yprojekt==" + 0|id + ";yinaktiv==0;@filingmode=(Active)"
+.load 1 group 'U|xydbgrprojteam' 'U|xtsel'
+!LOOP021: ==============================
+.continue ELOP021 ? _((G|mehr) & (U|xbok))
+.select lock add 1|id
+.continue EL060 ? _(G|mehr)
+.assign H|yinaktiv = G|true
+.rewrite
+.continue FI060
+!EL060
+.copy U|xbok   = G|false
+.set TRANS +
+.box Fehler
+Das Projektteam '1|such' kann nicht bearbeitet werden.
+.set TRANS -
+.copy U|xbok = G|false
+!FI060
+.load 1 continue
+.continue LOOP021
+!ELOP021: ==============================
+!EL059
+.continue EL061 ? _(U|xbok)
+.select lock add 0|id
+.continue EL062 ? _(G|mehr)
+.assign  U|xdftdat     = G|datum        ?  F|empty(U|xdftdat)
+.assign  U|xdabdat     = G|datum        ?  F|empty(U|xdabdat)
+.copy    H|yablage     = G|true         ?  U|xyprojstatk = "ABS" ;  U|xyprojstatk = "08"
+.copy    H|yablage     = G|false        ? _U|xyprojstatk = "ABS" & _U|xyprojstatk = "08"
+.formula H|yabldat     = U|xdabdat      ?  U|xyprojstatk = "ABS" ;  U|xyprojstatk = "08"
+.formula H|yftabdatum  = U|xdftdat      ?  U|xyprojstatk = "FTAB"
+.formula H|ydatftab    = G|datum        ?  U|xyprojstatk = "FTAB"
+.formula H|ybearbftab  = G|bzeichen     ?  U|xyprojstatk = "FTAB"
+.formula H|ydatkfmab   = G|datum        ?  U|xyprojstatk = "ABS" ;  U|xyprojstatk = "08"
+.formula H|ybearbkfmab = G|bzeichen     ?  U|xyprojstatk = "ABS" ;  U|xyprojstatk = "08"
+.formula H|ystatusk    = U|xyprojstatk
+.rewrite
+.load 0 add 0|id
+.continue EL063 ? _((0|ystatusk = "ABS") ; (0|ystatusk = "08") ; ((0|ystatusk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabwipliste))) ; ((0|ystatusk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabwipnull))))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt=="  + 0|id
+.formula U|xtsel = U|xtsel + ";ystichtag>=" + '0|yabldat:8'     ? 0|ystatusk = "ABS" ; 0|ystatusk = "08"
+.formula U|xtsel = U|xtsel + ";ystichtag>=" + '0|yftabdatum:8'  ? 0|ystatusk = "FTAB"
+.formula U|xtsel = U|xtsel + ";ybabgeschlossen=0"
+.load 9 group 'U|xydbgrwipstat' 'U|xtsel'
+!LOOP022: ==============================
+.continue ELOP022 ? _(G|mehr)
+.select lock add 9|id
+.delete                     ? G|mehr
+.load 9 continue
+.continue LOOP022
+!ELOP022: ==============================
+!EL063
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt=="     +  0|id
+.formula U|xtsel = U|xtsel + ";ybezugsdatum>=" + '0|yabldat:8'      ? 0|ystatusk = "ABS" ; 0|ystatusk = "08"
+.formula U|xtsel = U|xtsel + ";ybezugsdatum>=" + '0|yftabdatum:8'   ? 0|ystatusk = "FTAB"
+.load 9 group "151:1" 'U|xtsel'
+!LOOP023: ==============================
+.continue ELOP023 ? _(G|mehr)
+.select lock add 9|id
+.continue EL064 ? _(G|mehr)
+.copy H|ystatusk = 0|ystatusk
+.rewrite
+!EL064
+.load 9 continue
+.continue LOOP023
+!ELOP023: ==============================
+.continue EL065 ? _(F|sysinfo(18)^allppro)
+.continue EL066 ? _(((U|xyprojstatk = "FTAB") & (F|rec(U|xystclosingvars, ypmtabnachkalk))) ; (((U|xyprojstatk = "ABS") ; (U|xyprojstatk = "08")) & (F|rec(U|xystclosingvars, ypmkabnachkalk))))
+.copy U|xbtobuffer = G|false
+.continue EL067 ? _(F|defined(M|id))
+.copy U|xbtobuffer = G|true     ? M|id = 0|id & G|evtart = "maskpruef"
+!EL067
+.select -
+.input "allpstart/FOP.PRJM.SAVE.BUFFER"
+.input "java:de.alltrotec.ps.control.ProjectFinalCosting@ALLPS" writeToScreenBuffer=true                    ?  U|xbtobuffer
+.input "java:de.alltrotec.ps.control.ProjectFinalCosting@ALLPS" project='0|id' writeToScreenBuffer=false    ? _U|xbtobuffer
+.select -
+.input "allpstart/FOP.PRJM.LOAD.BUFFER"
+!EL066
+!EL065
+.select add 0|id
+.continue EL068 ? _(_(U|xbkeinhinw))
+.set TRANS +
+.box Hinweis
+Status "'H|ystatus'" im Projekt 'H|such' wurde gesetzt.
+.set TRANS -
+!EL068
+.continue FI062
+!EL062
+.copy U|xbok   = G|false
+.set TRANS +
+.box Fehler
+Das Projekt '0|such' kann nicht bearbeitet werden.
+.set TRANS -
+!FI062
+!EL061
+.continue FI058
+!EL058
+.continue EL069 ? _(_(U|xbkeinhinw))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC004
+!RET007
+.formula xprocsp = xprocsp - 1
+!EL069
+!FI058
+.continue FI055
+!EL055
+.copy U|xbmehr = G|false
+.copy U|xbok   = G|false
+.set TRANS +
+.box Fehler
+Das Projekt '0|such' kann nicht bearbeitet werden.
+
+'G|sperrtext                                                                  '
+.set TRANS -
+!FI055
+.continue FI054
+!EL054
+.copy U|xbok   = G|false
+.set TRANS +
+.box Fehler
+Das Projekt '0|such' kann nicht bearbeitet werden.
+.set TRANS -
+!FI054
+.input 'F|foppath(F|rec(U|xystclosingvars, yifopprojabsaktion))'    ? F|fileexists(F|foppath(F|rec(U|xystclosingvars, yifopprojabsaktion)))
+.continue FI053
+!EL053
+.continue EL070 ? _(_(U|xbkeinhinw))
+.set TRANS +
+.box Hinweis
+?Sie besitzen nicht die erforderlichen Rechte fÅr den fachtechnischen Projektabschluss. ? U|xyprojstatk = "FTAB"
+?Sie besitzen nicht die erforderlichen Rechte fÅr den kaufmÑnnischen Projektabschluss.  ? U|xyprojstatk = "ABS"
+?Sie besitzen nicht die erforderlichen Rechte Projekte zu stornieren.                   ? U|xyprojstatk = "08"
+.set TRANS -
+!EL070
+!FI053
+!EL050
+.continue FI049
+!EL049
+.continue EL071 ? _(_(U|xbkeinhinw))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC004
+!RET008
+.formula xprocsp = xprocsp - 1
+!EL071
+!FI049
+!EL048
+!FI016
+.continue FI015
+!EL015
+.set TRANS +
+.box Hinweis
+Sie besitzen nicht die erforderlichen Rechte den Status "'0|ystatus'" aufzuheben.
+.set TRANS -
+!FI015
+.continue FI013
+!EL013
+.set TRANS +
+.box Fehler
+Das Projekt 'U|xtprojekt' existiert nicht.
+.set TRANS -
+!FI013
+!FI012
+!EL011
+.continue

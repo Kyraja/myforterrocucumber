@@ -1,0 +1,114 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : DRUCKER.EV
+.. Autor          : fwester
+.. Verantwortlich : teamreport
+.. Kontrolle      : 
+.. Funktion       : Behandelt Feld- und Zeilenereignisse im Infosystem Drucker
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+.. Ablauf         : Zentrales Ereignis-EFOP im Infosystem Drucker
+..
+.. Functionality  : Handles item and row events of the infosystem Printers.
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+.. Program flow   : Central event EFOP of the infosystem Printers
+..*****************************************************************************
+.set trans -
+..
+..------------------------------- Header --------------------------------------
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL" & G|evtvar = "kaktiv"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL" & G|evtvar = "kinaktiv"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL" & G|evtvar = "keigene"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL" & G|evtvar = "kstandard"
+.continue OSINTEG ? G|evtartengl = "FIELD_FILL" & G|evtvar = "koseinbeziehen"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "kdruckertyp"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "kstandort"
+..--------------------------------- Table  -------------------------------------
+.continue REMOVE  ? G|evtartengl = "BUTTON_AFTER" & (G|evtvar = "tbuloeschenb" ; G|evtvar = "tbuloeschen")
+.continue DIALOG  ? G|evtartengl = "BUTTON_AFTER" & (G|evtvar = "tbueinausb" ; G|evtvar = "tbueinaus")
+..==============================================================================
+.continue END
+..
+!REMOVE: remove printer of this row
+.select writelock infrastructure 'M|tdrucker^id'
+.copy H|aktiv = G|FALSE
+.rewrite
+.continue DELROW ? _G|mehr
+.continue ERROR1 ? _G|gesperrt
+.delete
+..
+!DELROW: remove row
+.type text xtemposname
+.type text xtemposeinfysymbol
+.type integer xzeilennummer
+.formula U|xtemposname = M|tosname
+.formula U|xtemposeinfysymbol = M|tdrerzeugenz
+.formula U|xzeilennummer = M|aktzeile - 1
+.make screen line -O
+.select release
+.continue END ? U|xtemposname = ""
+.select screen line 'U|xzeilennummer'
+.make screen line +O
+.formula M|tosname = U|xtemposname
+.formula M|tdrerzeugenz = U|xtemposeinfysymbol
+.continue END
+..
+!DIALOG: change active flag to the opposite
+.select modificationlock infrastructure 'M|tdrucker^id'
+.continue ERROR2 ? _G|mehr
+.continue ERROR3 ? _G|gesperrt
+.copy H|aktiv = _M|taktiv
+.rewrite
+.continue UPDATE ? M|kaktiv & M|kinaktiv
+.make screen line -O
+.continue END
+..
+!UPDATE: update information in row
+.copy M|taktiv = H|aktiv
+.copy M|tbueinausz = M|aussymbol ?  H|aktiv
+.copy M|tbueinausz = M|einsymbol ? _H|aktiv
+.continue END
+..
+!OSINTEG: show os-printer
+.continue INTEGAUS ? M|koseinbeziehen
+.formula M|kaktiv    = G|TRUE
+.formula M|kinaktiv  = G|TRUE
+.formula M|keigene   = G|TRUE
+.formula M|kstandard = G|TRUE
+.protection kaktiv 0
+.protection kinaktiv 0
+.protection keigene 0
+.protection kstandard 0
+.continue CLRTAB
+..
+!INTEGAUS
+.protection -reset kaktiv 0
+.protection -reset kinaktiv 0
+.protection -reset keigene 0
+.protection -reset kstandard 0
+..
+!CLRTAB: clear table
+.make screen line -- ? M|tzeilen > 0
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1
+.error Das L”schen ist gescheitert, weil keine Schreibsperre erhalten wurde
+.end 1
+..
+!ERROR2
+.error Der Drucker 'M|tdrucker^such' wurde nicht gefunden
+.end 1
+..
+!ERROR3
+.error Das Žndern ist gescheitert, weil keine Žndernsperre erhalten wurde
+.end 1

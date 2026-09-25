@@ -1,0 +1,103 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDICENTER.TAB
+.. Autor          : mh/ok
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Zeilen-FOP fuer EDI-Zentrale
+.. Functionality  : Row efop for edi center
+...Includes       :
+..  include dfue/EDICENTER.TAB.VORGANG
+..  include dfue/EDICENTER.TAB.ZNACH
+..  include dfue/EDICENTER.TAB.COLOUR
+..  include dfue/EDICENTER.TAB.ICON
+..*****************************************************************************
+.set trans -
+..
+.. quick filter if only showing reference messages (transaction type 0 / search word R-*)
+.continue END     ? H|vorart = 0 & _H|such/"R-*"
+..
+.. Avoid complication with customer-data in edi message
+.type bool   xbidkundeab     ? _F|defined(T|xbidkundeab)
+.type bool   xbidkundesab    ? _F|defined(T|xbidkundesab)
+.type bool   xbidkunderab    ? _F|defined(T|xbidkunderab)
+.type text   xtext           ? _F|defined(U|xtext)
+..
+.make screen line +O
+.formula M|edinr      = H|id
+.copy M|tedinachraz = H|edinachraz
+.copy M|tabmodell = H|abmodell
+.copy M|tvabmodell = H|vabmodell
+.copy M|tzuoschema = H|schema
+.copy M|tprocobj = H|procobj
+.formula M|maxabrufmge = H|procobj^orig^maxabrufmge
+.assign M|zrahmenpos = H|procobj^orig
+.copy M|tversandabruf = H|versandabruf
+.copy M|tplanung = H|planung
+.copy M|tvkkopf = H|vkkopf
+.copy M|tvkabrufok = H|vkabrufok
+.copy M|tvabok = H|vabok
+.formula M|status     = H|status
+.formula M|fcode      = H|fcode
+.formula M|imex       = H|imex
+.formula M|erfassd    = H|erfass
+.formula M|erfzeit    = H|erfzeit
+.formula M|kuartnr    = H|kuartnr
+.assign M|artnr    = H|ideksart
+.formula M|namebspr   = M|artnr^sucherw
+.formula M|funktion   = H|funktion
+.assign M|tlaberr  = "$,,;@gruppe=0;nummer==" + 'H|ideksedier'          ? _F|empty(H|ideksedier)
+.formula M|labruf     = H|labruf
+.assign M|rahmen   = "$,,;@gruppe=1;@datenbank=3;nummer==" + 'H|ideksrah'   ?  H|such<>"EKLAB" & H|ideksrah <> ""
+.copy M|tbetreuerrahmen = M|rahmen^betreuer
+.formula M|zgltvon = M|zrahmenpos^zgltvon  ? _F|empty(M|zrahmenpos)
+.formula M|zgltbis = M|zrahmenpos^zgltbis  ? _F|empty(M|zrahmenpos)
+.formula M|efzahl     = H|einfzahl
+.assign M|tabbenr     = H|abbenr
+..
+.. Show customer / customer staff ref names
+.continue ECUST   ?  H|such= "EKLAB"
+.. Check, if customer could be a search word
+.formula T|xbidkundeab  = _(H|idkundeab<<1)/"(A-Z)"
+.formula T|xbidkundesab = _(H|idkundesab<<1)/"(A-Z)"
+.formula T|xbidkunderab = _(H|idkunderab<<1)/"(A-Z)"
+.assign M|idkundeab = H|idkundeab  ?  T|xbidkundeab
+.formula M|kunde = H|idkundeab
+.formula M|kunde = 'H|idkundeab' + ", W:" + 'H|werk' + ", A:" + 'H|ablstelle'  ? 'H|werk'<>"" ; 'H|ablstelle'<>""
+.assign M|idkundesab = H|idkundesab  ?  T|xbidkundesab
+.assign M|idkunderab = H|idkunderab  ?  T|xbidkunderab
+.continue ECUST  ?  F|empty(M|idkundesab)
+.formula M|kdname = M|idkundesab^such  ? M|idkundesab^gruppe=1
+.formula M|kdname = M|idkundesab^firma^such  ? M|idkundesab^gruppe=2
+!ECUST
+..
+.. Show error message from ftext1 in edi message
+.select from 'H|ftext' M|fctext^ ? _F|empty(H|ftext)
+!NFTEXT
+.continue EFTEXT ? _G|mehr ; F|empty(H|ftext)
+..
+.select from 'H|ftext' U|xtext^
+.continue EFTEXT ? F|length(M|fctext) + F|length(U|xtext) > 2997
+.formula M|fctext = M|fctext + ";" + U|xtext
+.continue NFTEXT
+..
+!EFTEXT
+..
+.. Status icon
+.input "dfue/EDICENTER.TAB.ICON"
+..
+.. Colour by message
+.input "dfue/EDICENTER.TAB.COLOUR"
+..
+.. Find transaction in abas ERP
+.input "dfue/EDICENTER.TAB.VORGANG"
+..
+.. Postprocesssing
+.input "dfue/EDICENTER.TAB.ZNACH"
+..
+.. Link Business App "Productfile"
+.formula M|turl = ""
+.formula M|turl = M|kurlleer + "&product=" + 'M|tartikel^id'  ? _F|empty(M|tartikel) & _F|empty(M|kurlleer)
+..*****************************************************************************
+!END
+.continue

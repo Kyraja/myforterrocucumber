@@ -1,0 +1,224 @@
+..!interpreter english declaration noabbrev
+.. at 2017-03-08, 09:10
+.set TRANS -
+..========================================================================
+..==  Name              : IS.PRJMSTDKONTROLLE.EV
+..==  Pfad              : allpstd
+..==  Funktion          : Events an PRJMSTDKONTROLLE
+..==  Erstellungsdatum  : 11.05.2011
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird ber EasyCase bearbeitet und mit easy2lg generiert!
+..==  Žnderungen auáerhalb von EasyCase werden nach der n„chsten Žnderung
+..==  im EasyCase wieder berschrieben und drfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF"
+..====================================================
+.type text    xtsys xtsel xtcmd xykoobjekt xtpind xtsplan
+.type integer ximonat xitag
+.type real    xrsz1 xrsz2 xrsz3 xrsz4 xrsz5 xrsz6 xrsz7
+.type GD      xdadatum xdedatum xdvon xdbis xdatum
+.type bool    xyberlaubt xbmehr xbok
+.type VP26    xpkalbezugsobj xpzuordkbo xpaktkbo
+.type P39:2   xplgruppe      xpzuordlg  xpaktlg
+.type integer xprocsp      ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Sollzeit_pro_Tag -----
+.formula U|xdvon = 'M|yjahr' + ("0" + 'U|ximonat')>>2 + "01"
+.formula U|xdbis =  U|xdvon + 31
+.formula U|xdbis = ('U|xdbis:8')<<6 + "01"
+.formula U|xdbis =  U|xdbis - 1
+!LOOP001: ==============================
+.continue ELOP001 ? _(U|xdvon <= U|xdbis)
+.formula U|xdatum            = U|xdvon & 0
+.formula U|xitag             = U|xdvon//7
+.formula M|ytsollstd.ximonat = M|ytsollstd.ximonat + U|xrsz.xitag       ? U|xdatum= U|xdvon
+.formula U|xdvon  = U|xdvon  + 1
+.continue LOOP001
+!ELOP001: ==============================
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskein")
+.input 'U|xtupprjmsel'
+.assign M|yjahr = 'F|year(G|datum)'
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "feldaus")
+.continue EL001 ? _(G|evtzeile = 0)
+.input 'U|xtupprjmsel'
+!EL001
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(G|evtart = "buttonvor")
+.continue BRK004 ? _(G|evtvar = "bstart")
+.continue EL002 ? _(_(F|empty(M|yjahr)))
+.make screen line --O
+.continue FI002
+!EL002
+.set TRANS +
+.box Hinweis
+Bitte zuerst das auszuwertende Jahr angeben.
+.set TRANS -
+.cursor yjahr 0
+.error
+.end 1
+!FI002
+.continue ESAC002
+!BRK004
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK003
+.continue BRK005 ? _(G|evtart = "buttonnach")
+.continue BRK006 ? _(G|evtvar = "bstart")
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"
+.formula U|xdadatum = 'M|yjahr' + "0101"
+.formula U|xdedatum = 'M|yjahr' + "1231"
+.input 'U|xtupkstarray'
+.formula U|xtindex = ""
+.formula U|xtindex = F|nextelem(U|xtkst, xtindex)
+!LOOP002: ==============================
+.continue ELOP002 ? _(_(F|empty(U|xtindex)))
+.continue EL003 ? _(_(F|empty(U|xtkst.xtindex)))
+.formula U|xtsel = "$,,kstelle==" + U|xtkst.xtindex + ";@filingmode=(Active)"
+.select group 'U|xydbgrpersonal' 'U|xtsel'
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.formula U|xtpind = H|nummer
+.type text xtpers.xtpind        ? _F|defined(U|xtpers.xtpind)
+.formula U|xtpers.xtpind = H|id
+.select continue
+.continue LOOP003
+!ELOP003: ==============================
+.continue EL004 ? _((M|ybtemppers) & (_(M|yballekst)))
+.formula U|xtsel = "$,,ykstelle==" + U|xtkst.xtindex + ";@filingmode=(Active)"
+.select group 'U|xydbgrkstellezuord' 'U|xtsel'
+!LOOP004: ==============================
+.continue ELOP004 ? _(G|mehr)
+.continue EL005 ? _(((H|yvon <= U|xdadatum) ; (F|empty(H|yvon))) & ((H|ybis >= U|xdedatum) ; (F|empty(H|ybis))))
+.formula U|xtpind = H|ypersonal^nummer
+.type text xtpers.xtpind        ? _F|defined(U|xtpers.xtpind)
+.formula U|xtpers.xtpind = H|ypersonal^id
+!EL005
+.select continue
+.continue LOOP004
+!ELOP004: ==============================
+!EL004
+!EL003
+.formula U|xtindex = F|nextelem(U|xtkst, xtindex)
+.continue LOOP002
+!ELOP002: ==============================
+.formula U|xtpind = ""
+.formula U|xtpind = F|nextelem(U|xtpers, xtpind)
+!LOOP005: ==============================
+.continue ELOP005 ? _(_(F|empty(U|xtpind)))
+.continue EL006 ? _(_(F|empty(U|xtpers.xtpind)))
+.copy U|xbmehr = G|false
+.formula U|xtsel = "$,,ypersonal==" + U|xtpers.xtpind + ";yadatum=" + U|xdadatum:8 + "!" + U|xdedatum:8 + ";@filingmode=(Active);@maxtreffer=1"
+.load 9 group 'U|xydbgrlnachweis' 'U|xtsel'
+.copy U|xbmehr = G|mehr
+.continue EL007 ? _(_(U|xbmehr))
+.continue EL008 ? _(F|sysinfo(10)^ykonfigprjm^ypmbpershistorie)
+.formula U|xtsel = "$,,yhistpersonal==" + U|xtpers.xtpind
+.formula U|xtsel = U|xtsel + ";yhistzeitstempel=" + U|xdadatum:8 + "!" + U|xdedatum:8
+.formula U|xtsel = U|xtsel + ";yprjminaktiv==(No);yprjmpplanrelev==(Yes)"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active);@maxtreffer=1"
+.load 9 group 'U|xydbgrpershistorie' 'U|xtsel'
+.continue EL009 ? _(G|mehr)
+.copy U|xbmehr = G|true
+.continue FI009
+!EL009
+.formula U|xtsel = "$,,yhistpersonal==" + U|xtpers.xtpind
+.formula U|xtsel = U|xtsel + ";yhistzeitstempel>=" + U|xdadatum:8
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active);@order=yhistzeitstempel;@maxtreffer=1"
+.load 9 group 'U|xydbgrpershistorie' 'U|xtsel'
+.continue EL010 ? _(G|mehr)
+.copy U|xbmehr = G|true ? _9|yprjminaktiv & 9|yprjmpplanrelev
+.continue FI010
+!EL010
+.load 9 group 'U|xydbgrpersonal' 'U|xtpers.xtpind'
+.continue EL011 ? _(G|mehr)
+.copy U|xbmehr = G|true ? _9|yprjminaktiv & 9|yprjmpplanrelev
+!EL011
+!FI010
+!FI009
+.continue FI008
+!EL008
+.load 9 group 'U|xydbgrpersonal' 'U|xtpers.xtpind'
+.continue EL012 ? _(G|mehr)
+.copy U|xbmehr = G|true ? _9|yprjminaktiv & 9|yprjmpplanrelev
+!EL012
+!FI008
+!EL007
+.continue EL013 ? _(U|xbmehr)
+.make screen line +O
+.assign M|ytpersonal = U|xtpers.xtpind
+.assign M|ytpersname = M|ytpersonal^namebspr
+.assign M|ytkstelle  = M|ytpersonal^kstelle^id
+.formula U|xtsel = "$,,ypersonal==" + U|xtpers.xtpind + ";yadatum=" + U|xdadatum:8 + "!" + U|xdedatum:8 + ";ytaetschl^yabwesend==0;@filingmode=(Active)"
+.select group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP006: ==============================
+.continue ELOP006 ? _(G|mehr)
+.formula U|ximonat = F|month(H|yadatum)
+.formula M|ytiststd.ximonat = M|ytiststd.ximonat + H|yarbzeit
+.copy U|xbmehr = G|true
+.select continue
+.continue LOOP006
+!ELOP006: ==============================
+.load 9 add M|ytpersonal
+.input "java:de.alltrotec.ps.control.StaffWorkDays@ALLPS"
+.formula U|xtindex = F|nextelem(U|xbwd, xtindex)
+!LOOP007: ==============================
+.continue ELOP007 ? _(_(F|empty(U|xtindex)))
+.continue EL014 ? _(U|xbwd.xtindex)
+.formula U|xdatum            = U|xtindex
+.formula U|ximonat           = F|month(U|xdatum)
+.formula M|ytsollstd.ximonat = M|ytsollstd.ximonat + U|xrtt.xtindex
+!EL014
+.formula U|xtindex = F|nextelem(U|xbwd, xtindex)
+.continue LOOP007
+!ELOP007: ==============================
+.formula U|ximonat = 1
+!LOOP008: ==============================
+.continue ELOP008 ? _(U|ximonat < 13)
+.formula M|ytdiffstd.U|ximonat = M|ytiststd.ximonat - M|ytsollstd.U|ximonat
+.formula U|ximonat = U|ximonat + 1
+.continue LOOP008
+!ELOP008: ==============================
+!EL013
+!EL006
+.formula U|xtpind = F|nextelem(U|xtpers, xtpind)
+.continue LOOP005
+!ELOP005: ==============================
+.continue ESAC003
+!BRK006
+.continue EL015 ? _(G|evtvar<<7 = "ytbudet")
+.formula U|ximonat  = 'G|evtvar'<<-7
+.formula U|xdadatum = 'M|yjahr' + ("0" + 'U|ximonat')>>2 + "01"
+.formula U|xdedatum =  U|xdadatum + 31
+.formula U|xdedatum =('U|xdedatum:8')<<6 + "01"
+.formula U|xdedatum =  U|xdedatum - 1
+.formula U|xtcmd = G|kkomname38 + " PRJMLM  "
+.formula U|xtcmd = U|xtcmd + "?ybprabgeschlossen=1"
+.formula U|xtcmd = U|xtcmd + "|ybaufparam=1"
+.formula U|xtcmd = U|xtcmd + "|yprojstatus="
+.formula U|xtcmd = U|xtcmd + "|ypersonal="    + M|ytpersonal^id
+.formula U|xtcmd = U|xtcmd + "|yvondatum="
+.formula U|xtcmd = U|xtcmd + "|ybisdatum="
+.formula U|xtcmd = U|xtcmd + "|ystdvondatum=" +'U|xdadatum:8'
+.formula U|xtcmd = U|xtcmd + "|ystdbisdatum=" +'U|xdedatum:8'
+.formula U|xtcmd = U|xtcmd + "|ybaufparam=0"
+.formula U|xtcmd = U|xtcmd + "|bstart="
+.command -PARALLEL 'U|xtcmd'
+!EL015
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC001
+!BRK005
+!ESAC001: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJMSTDKONTROLLE.EV")'   ? F|fileexists(F|foppath("IFOP.IS.PRJMSTDKONTROLLE.EV"))
+.continue

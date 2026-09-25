@@ -1,0 +1,69 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ATLASAUSFUHR.BSTART.BV
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Selektiert einen Vorgang
+.. Functionality  : Selects a transaction
+..  include     is/KOPFLEEREN
+..*****************************************************************************
+.set trans -
+..
+.. local fields
+.type VPK10  xvvorgang
+.type bool   xkbzollausbda
+.type bool   xkbzollausvor
+.type bool   xbzollpos
+..
+.. check required param
+.continue NOVORG  ?  F|empty(M|kvorgang)
+..
+.. initialize all fields
+.make screen line --
+.assign T|xvvorgang = M|kvorgang^id
+.formula   T|xkbzollausbda = M|kbzollausbda
+.formula   T|xkbzollausvor = M|kbzollausvor
+.input "is/KOPFLEEREN"
+.assign M|kvorgang = T|xvvorgang^id
+.formula M|kbzollausbda = T|xkbzollausbda
+.formula M|kbzollausvor = T|xkbzollausvor
+..
+.. read transaction
+.select sales 'T|xvvorgang^id'     ?  T|xvvorgang^dnr = 3
+.select purchasing 'T|xvvorgang^id'     ?  T|xvvorgang^dnr = 4
+.continue END     ? _T|mehr
+..
+.. report header
+.input 'M|bkopf'  ? _F|empty(M|bkopf)
+..
+.. table
+.formula T|xbzollpos = false
+!NROW
+.select line
+.continue EROW    ? _T|mehr
+.continue NZUS    ?  H|typ <> arpos
+.formula T|xbzollpos = false
+.continue NROW    ? _H|patlasrel
+.formula T|xbzollpos = true
+.input 'M|tab'    ? _F|empty(M|tab)
+.continue NROW
+!NZUS
+.. Zusatzpositionen als "Folge" von relevanten Positionen werden
+.. vorerst nicht ausgegeben (ggf. fÅr Unterlagen bzw. Vorpapiere)
+..ingabe 'M|tab'    ?  T|xbzollpos  & _F|empty(M|tab)
+.. ATLAS-relevante Zusatzpositionen werden ausgegeben
+.input 'M|tab'    ?  H|patlasrel  & _F|empty(M|tab)
+.continue NROW
+!EROW
+..
+.. report footer
+.input 'M|bfuss'  ? _F|empty(M|bfuss)
+..*****************************************************************************
+!END
+.continue
+..
+!NOVORG: missing required argument - transaction
+.error Bitte geben Sie einen Vorgang an!
+.cursor kvorgang 0
+.end 1

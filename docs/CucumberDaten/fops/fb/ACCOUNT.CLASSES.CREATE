@@ -1,0 +1,216 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ACCOUNT.CLASSES.CREATE
+.. Datum          : 04.06.07
+.. Version        : 1
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       :
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+..   Parameter    Bedeutung
+..   ---------------------------------------------------------
+..   xp...        ...
+..
+.. Ablauf         :
+..
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+..   Argument     meaning
+..   ---------------------------------------------------------
+..   xp...        ...
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+.type integer  xistartnum
+.type integer  xidepth
+.type text xtedp xtsys
+.type bool xbedp
+.type text xtswprefix
+.type text xtnameprefix
+..
+..*****************************************************************************
+.set trans -
+.formula U|xidepth = 2
+.formula U|xtnameprefix = "Kontenklasse"
+.formula U|xtswprefix = "KK"
+.formula U|xtedp      = "fb/ACCOUNT.CLASSES.EDP"
+.select accrange "$,;@sort=Nummer;@richtung=r"
+.formula U|xistartnum = 0 ? _G|mehr
+.. das faellt auf die Nase, wenn die Nummer nicht numerisch
+.. ist. Aber was sonst tun!?
+.assign U|xistartnum = H|nummer ? G|mehr
+.formula   U|xistartnum = U|xistartnum + 1
+.type integer  ximod
+.formula   U|xistartnum = U|xistartnum + 10000
+.formula   U|ximod      = U|xistartnum // 10000
+.formula   U|xistartnum = U|xistartnum - U|ximod
+..
+.continue MENU
+..
+..*****************************************************************************
+!MENU
+..*****************************************************************************
+.file -test 'U|xtedp'
+.formula U|xbedp = G|mehr
+.set trans +
+.menu Ausw„hlen
+-                                             - -
+EDP-Generierung mit Vorbelegungen starten     :                                           >>  .continue GENEDP
+Kontenklassentiefe (1 oder 2)                 : 'xidepth                               ' >> .continue SWLEVELS
+Identnummer fr Kontenbereich (numerisch!)    : 'xistartnum                             ' >>  .continue NUMAUS
+?Import starten mit                            : 'xtedp                                  ' >>  .continue RUNIMPORT ? U|xbedp
+Beenden                                                                                   >>  .continue END
+.set trans -
+.continue END
+..
+..*****************************************************************************
+!SWLEVELS: switch levels (depth) option (may be 1 or 2)
+..*****************************************************************************
+.formula U|xidepth = ((U|xidepth + 2) // 2) + 1
+.continue MENU
+..
+..*****************************************************************************
+!NUMAUS
+..*****************************************************************************
+.read "Identnummer fr Auswertung" U|xistartnum
+.continue MENU
+..
+..*****************************************************************************
+!RUNIMPORT
+..*****************************************************************************
+.formula U|xtsys = "edpimport.sh -P -I "+'U|xtedp'
+.system 'U|xtsys' password
+.continue SYSERR ? _G|mehr
+.. Erfolgsmeldung:
+.output terminal
+.set trans +
+Import von Datei 'U|xtedp' erfolgreich beendet.
+.set trans -
+.continue END
+..
+..*****************************************************************************
+!GENEDP
+..*****************************************************************************
+.output new 'U|xtedp'
+.input "DATEI.F"
+.set separator ~
+.type integer  xikk xikk2 xiidnum xis xie  ? _F|defined(U|xikk)
+.type text xtkk xtkks                  ? _F|defined(U|xtkk)
+.type text xts xte                     ? _F|defined(U|xts)
+.set trans +
+.formula U|xtkk = "Kontenklasse"
+.formula U|xtkks= "Kontenklassen"
+.set trans -
+..*****************************************************************************
+!G1
+..*****************************************************************************
+.formula U|xiidnum = U|xistartnum
+.formula U|xikk  = 0
+.formula U|xikk2 = 0
+#!database=68:1
+#!action=NEW
+#!charset=EKS
+nummer;such;name;autokbpf;konum
+..
+..*****************************************************************************
+!L1
+..*****************************************************************************
+.continue G2     ? U|xikk > 9
+.formula U|xiidnum = U|xistartnum + (U|xikk + 1) * 200
+.formula U|xiidnum = U|xiidnum + (U|xikk2 + 1) * 10 ? U|xidepth = 2
+.formula U|xis     = U|xikk * 10000
+.formula U|xis     = U|xis + U|xikk2 * 1000         ? U|xidepth = 2
+.formula U|xie     = U|xis  +  9999                 ? U|xidepth = 1
+.formula U|xie     = U|xis  +   999                 ? U|xidepth = 2
+.formula U|xts     = "00000" + 'U|xis'
+.formula U|xts     = U|xts >> 5
+.formula U|xte     = "00000" + 'U|xie'
+.formula U|xte     = U|xte >> 5
+..10010;KK00;Kontenklasse 00;true;00000!00999 bei T|xidepth = 2
+..10010;KK0;Kontenklasse 0;true;00000!09999 bei T|xidepth = 1
+?'U|xiidnum';'U|xtswprefix''U|xikk''U|xikk2';'U|xtkk' 'U|xikk''U|xikk2';true;'U|xts'!'U|xte' ? U|xidepth = 2
+?'U|xiidnum';'U|xtswprefix''U|xikk';'U|xtkk' 'U|xikk';true;'U|xts'!'U|xte' ? U|xidepth = 1
+.formula U|xikk2   = U|xikk2 + 1 ? U|xidepth = 2
+.formula U|xikk    = U|xikk  + 1 ? U|xikk2 > 9 ; U|xidepth = 1
+.formula U|xikk2   = 0           ? U|xikk2 > 9 & U|xidepth = 2
+.continue L1
+..
+..*****************************************************************************
+!G2
+..*****************************************************************************
+.formula U|xiidnum = U|xistartnum
+.formula U|xikk  = 0
+.formula U|xikk2 = 0
+#!database=68:1
+#!action=NEW
+#!charset=EKS
+nummer;such;name;autokbpf\
+kbereich
+.continue G4 ? U|xidepth = 1
+..
+..*****************************************************************************
+!L2
+..*****************************************************************************
+.continue G4 ? U|xikk  > 9
+.formula U|xiidnum = U|xistartnum + (U|xikk + 1) * 200
+'U|xiidnum';'U|xtswprefix''U|xikk';'U|xtkk' 'U|xikk';false\
+.formula U|xikk2 = -1
+..
+..*****************************************************************************
+!L3
+..*****************************************************************************
+.formula U|xikk2   = U|xikk2 + 1
+.formula U|xikk    = U|xikk  + 1 ? U|xikk2 > 9
+.continue L2        ? U|xikk2 > 9
+.formula U|xiidnum = U|xistartnum + (U|xikk + 1) * 200 + (U|xikk2 + 1) * 10
+?'U|xiidnum' \ ? U|xikk2 < 9
+?'U|xiidnum'   ? U|xikk2 = 9
+.continue L3
+..
+..*****************************************************************************
+!G4
+..*****************************************************************************
+.formula U|xikk  = 0
+'U|xistartnum';'U|xtswprefix';'U|xtkks';false\
+..
+..*****************************************************************************
+!L4
+..*****************************************************************************
+.continue GENEND ? U|xikk  > 9
+.formula U|xiidnum = U|xistartnum + (U|xikk + 1) * 200
+?'U|xiidnum' \ ? U|xikk < 9
+?'U|xiidnum'   ? U|xikk = 9
+.formula U|xikk = U|xikk + 1
+.continue L4
+..
+..*****************************************************************************
+!GENEND
+..*****************************************************************************
+.output terminal
+.set separator ;
+.continue MENU
+..
+..===========================================================================
+!SYSERR: Fehler bei Systemkommando xtsys
+..===========================================================================
+.output terminal
+.set trans +
+?Fehler bei Kommando: 'U|xtsys'
+.set trans -
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

@@ -1,0 +1,146 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LSS2.TAB
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Tabellen-FOP des Infosystems fb/LSS2
+.. Functionality  :
+..*****************************************************************************
+..
+.. include fb/LSS2.SUM
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.continue END ?  H|gv & F|value(M|berichtsart, "AS231") = "(BalanceSheet)"
+.continue END ? _H|gv & F|value(M|berichtsart, "AS231") = "(PLAccount)"
+..
+.. Zeitraum der 1. Periode ggf. wieder setzen
+.select year 'M|jahr' 'M|von' 'M|bis'
+..
+.. Das Konto wird nicht ausgegeben, wenn der Saldo gleich 0 ist und keine Bewegungen stattgefunden haben.
+.continue END ? H|asoll = 0 & H|ahaben = 0 & H|ssum = 0 & H|hsum = 0 & H|esoll = 0 & H|ehaben = 0 & M|nonull = G|true
+..
+.. Das Konto wird nicht ausgegeben, wenn es statistich ist und die Ausgabe statistischer Konen nicht aktiv ist
+.continue END ? _F|empty(H|stat) & _M|stat
+..
+.. Wenn das aktuelle Sachkonto kein Buchungskonto ist und kein Standardverdichtungskonto,
+.. dann wird es nicht ausgegeben. Der Kontenrahmen wird im FOP vom Startbutton geladen.
+.continue C2 ? H|bu
+.continue C2 ? H|id = 0|verb^id
+.continue C2 ? H|id = 0|ford^id
+.continue C2 ? H|id = 0|sverb^id
+.continue C2 ? H|id = 0|sford^id
+..
+.. Alternativ kann das Konto im Kontenbereich M|hbkb eingetragen sein, welches bedeutet, dass es
+.. wie ein Standardverdichtungskonto zu behandeln ist.
+.continue END     ?  F|empty(M|hbkb)
+.type ID5   xpac ? _F|defined(U|xpac)
+.type P68:1 xpar ? _F|defined(U|xpar)
+.copy U|xpac = H|id
+.copy U|xpar = M|hbkb
+.input "fb/IS.AC.IN.AR"
+.continue C2 ? U|xbresult
+.. else
+.continue END
+..
+!C2
+.formula U|xstufe = M|stufenvon
+!C3
+.formula U|xtvorkonto.U|xstufe = F|substr(F|tostring(H|nummer),1,U|xstufe)
+.formula U|xstufe = U|xstufe + 1
+.continue C3 ? U|xstufe <= M|stufenbis
+..
+.continue INSERT ? M|tzeilen = 0
+..
+.formula U|xstufe = M|stufenbis
+..*****************************************************************************
+!CHKGRP
+..*****************************************************************************
+.input "fb/LSS2.SUM" ? U|xtvorkonto.U|xstufe <> U|xtlvorkonto.U|xstufe
+.continue INSERT         ? U|xtvorkonto.U|xstufe  = U|xtlvorkonto.U|xstufe
+.formula U|xstufe = U|xstufe - 1
+.continue CHKGRP ? U|xstufe >= M|stufenvon
+.continue INSERT
+..
+..*****************************************************************************
+!INSERT
+..*****************************************************************************
+.make screen line +O
+.colour -background 'U|xabaswhite' 'M|aktzeile'
+.formula M|tkontenklass = F|eval("U|xtvorkonto" + F|tostring(M|stufenbis))
+.formula M|tkonto       = H|id
+.copy M|tgv        = H|gv
+.formula M|tbezeichnung = F|condexpr(F|empty(H|nameaspr), H|namebspr, H|nameaspr)
+..
+.formula M|tasoll    = H|asoll  - H|ahaben ? H|asoll  >= H|ahaben
+.formula M|tahaben   = H|ahaben - H|asoll  ? H|ahaben >  H|asoll
+.formula M|tvkzsoll  = H|ssum
+.formula M|tvkzhaben = H|hsum
+.formula M|tesoll    = H|esoll  - H|ehaben ? H|esoll  >= H|ehaben
+.formula M|tehaben   = H|ehaben - H|esoll  ? H|ehaben >  H|esoll
+..
+.formula M|asollsum    = M|asollsum  + M|tasoll
+.formula M|ahabensum   = M|ahabensum + M|tahaben
+.formula M|vkzsollsum  = M|vkzsollsum  + H|ssum
+.formula M|vkzhabensum = M|vkzhabensum + H|hsum
+.formula M|esollsum    = M|esollsum  + M|tesoll
+.formula M|ehabensum   = M|ehabensum + M|tehaben
+.continue BAL ? _M|tgv
+..
+!PL
+.formula M|guvs = M|guvs + M|tvkzsoll
+.formula M|guvh = M|guvh + M|tvkzhaben
+.continue C4
+..
+!BAL
+.formula M|bils = M|bils + M|tvkzsoll
+.formula M|bilh = M|bilh + M|tvkzhaben
+.continue C4
+..
+!C4
+.continue C5 ? _M|mitvorjahr
+.continue C5 ?  F|empty(M|jahr2) ; F|empty(M|von2) ; F|empty(M|bis2)
+.select year 'M|jahr2' 'M|von2' 'M|bis2'
+.formula M|tesoll2  = H|esoll  - H|ehaben ? H|esoll  >= H|ehaben
+.formula M|tehaben2 = H|ehaben - H|esoll  ? H|ehaben >  H|esoll
+.formula M|esollsum2  = M|esollsum2  + M|tesoll2
+.formula M|ehabensum2 = M|ehabensum2 + M|tehaben2
+.continue C5
+..
+!C5
+.continue C6 ? _M|mitgvkz
+.select year 'M|jahr' "1" 'M|bis'
+.formula M|tgssum = H|ssum
+.formula M|tghsum = H|hsum
+.formula M|ggvkzs = M|ggvkzs + M|tgssum
+.formula M|ggvkzh = M|ggvkzh + M|tghsum
+.continue C6
+..
+!C6
+.formula U|xstufe = M|stufenvon
+!L1
+.formula U|xranfsolsum.U|xstufe   = U|xranfsolsum.U|xstufe   + M|tasoll
+.formula U|xranfhabensum.U|xstufe = U|xranfhabensum.U|xstufe + M|tahaben
+.formula U|xrvkzssum.U|xstufe     = U|xrvkzssum.U|xstufe     + M|tvkzsoll
+.formula U|xrvkzhsum.U|xstufe     = U|xrvkzhsum.U|xstufe     + M|tvkzhaben
+.formula U|xrgssum.U|xstufe       = U|xrgssum.U|xstufe       + M|tgssum
+.formula U|xrghsum.U|xstufe       = U|xrghsum.U|xstufe       + M|tghsum
+.formula U|xrendsolsum.U|xstufe   = U|xrendsolsum.U|xstufe   + M|tesoll
+.formula U|xrendhabensum.U|xstufe = U|xrendhabensum.U|xstufe + M|tehaben
+.formula U|xrendsolsum2.U|xstufe  = U|xrendsolsum2.U|xstufe  + M|tesoll2
+.formula U|xrendhabensum2.U|xstufe= U|xrendhabensum2.U|xstufe+ M|tehaben2
+..
+.formula U|xtlvorkonto.U|xstufe   = U|xtvorkonto.U|xstufe
+..
+.formula U|xstufe = U|xstufe + 1
+.continue L1 ? U|xstufe <= M|stufenbis
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue
+

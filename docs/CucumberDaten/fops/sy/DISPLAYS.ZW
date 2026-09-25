@@ -1,0 +1,178 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name      : DISPLAYS.ZW
+.. Autor         : fwester
+.. Verantwortlich: fwester
+.. Kontrolle     : xg
+.. Funktion      : Kopiert die Daten aus der markierten Zeile in den Detailbereich
+.. im Kopf der Maske.
+.. Ablauf        : Zeile-wechseln-EFOP
+..
+.. Functionality : Copys data from the marked table row of the into the details
+.. area in the header of the mask.
+.. Program flow  : Changing row efop
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type integer xrowpos  ? _F|defined(U|xrowpos)
+.type text xmark       ? _F|defined(U|xmark)
+.type bool xsamelevel  ? _F|defined(U|xsamelevel)
+.type bool xsamemom    ? _F|defined(U|xsamemom)
+.type bool xsameroot   ? _F|defined(U|xsameroot)
+.type bool xclicked    ? _F|defined(U|xclicked)
+..
+.. Initializations
+.formula U|xrowpos = M|aktzeile
+.copy U|xclicked = G|evtzeile <> 0
+.continue CONTROL ? _U|xclicked
+.formula U|xrowpos = G|evtzeile
+.formula U|xrowpos = M|tzeilen ? G|evtzeile > M|tzeilen
+..
+.select screen line 'U|xrowpos'
+.continue FATAL ? _G|mehr
+.protection tbukill 'M|aktzeile'
+..
+!CONTROL: Setting control parameters
+.copy U|xsamelevel = M|stufe = M|tbaumstufe
+.copy U|xsamemom = M|motherrow = M|tmomofelem
+.copy U|xsameroot = M|rootrow = M|trootofelem
+.formula M|stufe = M|tbaumstufe
+.formula M|elementtype = M|typeofelem
+.formula M|motherrow = M|tmomofelem
+.formula M|rootrow = M|trootofelem
+.formula M|lineoffile = M|tlineoffile
+..
+.. Control details by current type of element
+.continue SCREEN ? M|typeofelem = M|screennode
+.continue USER ? M|typeofelem = M|usernode
+.continue PID ? M|typeofelem = M|pidleaf
+.continue FATAL
+..++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+!SCREEN: This will clear pid
+.formula U|xmark = "SCR1"
+.continue NOPID
+..
+!SCR1: This will clear user data
+.formula U|xmark = "SCR2"
+.continue NOUSER ? _M|userview
+..
+!SCR2: This will show screen
+.formula U|xmark = "SUMSCR"
+.continue SHOWSCR
+..
+!SUMSCR: This will sum elements of the knot downward
+.input 'M|sumchilds'
+.formula M|usersofscr = U|xsum2
+.formula M|usersofscr = 1 ? M|userview
+.formula M|pidsofscr = U|xsum3
+.continue EVTROW ? _M|userview
+.continue ROOT
+..++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+!USER: Add user details
+.formula U|xmark = "USR1"
+.continue NOPID
+..
+!USR1: This will clear screen data
+.formula U|xmark = "USR2"
+.continue NOSCR ? M|userview
+..
+!USR2: This will clear PID data
+.formula U|xmark = "SUMUSR"
+.continue SHOWUSR
+..
+!SUMUSR: This will sum elements of the knot downward
+.input 'M|sumchilds'
+.formula M|scrofuser = U|xsum2
+.formula M|scrofuser = 1 ? _M|userview
+.formula M|pidsofuser = U|xsum3
+.continue EVTROW ? M|userview
+.continue ROOT
+..++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+!PID: Add pid details
+.formula U|xmark = "MOM"
+.continue SHOWPID
+..
+!MOM: This will show mom of pid
+.continue EVTROW ? U|xclicked & U|xsamemom
+.select screen line 'M|motherrow'
+.continue FATAL ? _G|mehr
+.copy U|xsamemom = G|TRUE
+.formula M|stufe = M|tbaumstufe
+.continue USR2 ? M|typeofelem = M|usernode
+.continue SCR2
+..
+!ROOT: This will show root of pid
+.continue EVTROW ? U|xclicked & U|xsameroot
+.select screen line 'M|rootrow'
+.continue FATAL ? _G|mehr
+.copy U|xsameroot = G|TRUE
+.copy U|xclicked = G|TRUE
+.formula M|stufe = M|tbaumstufe
+.continue USR2 ? M|typeofelem = M|usernode
+.continue SCR2
+..++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+!SHOWSCR: Show screen data
+.formula M|screen = ( M|tscreen * "-#X" )
+.continue 'U|xmark'
+..
+!SHOWUSR: Show user data
+.formula M|client = M|tclient
+.formula M|usersymbol = M|tusersymbol
+.formula M|passwdref = ""
+.formula M|userref = ""
+.continue 'U|xmark' ? G|mandant <> M|client
+.load 0 company 'F|expr("$,,;bezeich==" + M|usersymbol + ";@gruppe=11")
+.continue 'U|xmark' ? _G|mehr
+.assign M|passwdref = 0|id
+.copy M|userref = 0|mitarb
+.continue 'U|xmark'
+..
+!SHOWPID: Show PID data
+.formula M|interface = M|tinterface
+.formula M|host = M|thost
+.formula M|location = M|tlocation
+.formula M|pid = M|tpid
+.formula M|callerno = M|tcallerno
+.copy M|dateofpid = M|tdateofpid
+.copy M|timeofpid = M|ttimeofpid
+.continue 'U|xmark'
+..
+!NOSCR: Clear screen data while user was clicked
+.formula M|screen = ""
+.formula M|usersofscr = 0
+.formula M|pidsofscr = 0
+.continue 'U|xmark'
+..
+!NOUSER: Clear user data while screen was clicked
+.formula M|client = ""
+.formula M|usersymbol = ""
+.formula M|userref = ""
+.formula M|scrofuser = 0
+.formula M|pidsofuser = 0
+.formula M|passwdref = ""
+.continue 'U|xmark'
+..
+!NOPID: Clear pid data
+.formula M|interface = ""
+.formula M|host = ""
+.formula M|location = ""
+.formula M|pid = ""
+.formula M|callerno = ""
+.formula M|dateofpid = ""
+.formula M|timeofpid = ""
+.continue 'U|xmark'
+..
+!EVTROW: load origin row while summation has changed row
+.select screen line 'U|xrowpos'
+.continue FATAL ? _G|mehr
+.formula M|stufe = M|tbaumstufe
+.continue END ? M|typeofelem <> M|pidleaf
+.protection -reset tbukill 'M|aktzeile'
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+!FATAL
+.error -number 1111
+.end 1

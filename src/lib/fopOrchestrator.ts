@@ -6,6 +6,10 @@ import { checkGuidelinesLocal } from './fopGuidelines';
 import { buildFopAnalystPrompt, buildFopGuidelinesPrompt, buildLanguageInstruction } from './fopAgentPrompt';
 import { traverseBottomUpLevels } from './fopTreeResolver';
 import { FopCache } from './fopCache';
+import type { WorkflowEmitter } from './workflowEmitter';
+import { NULL_EMITTER } from './workflowEmitter';
+import { getPhaseLabel } from './workflowLabels';
+import { chatCompletion } from './myforterroApi';
 
 export type AnalysisProgressCallback = (info: {
   current: number;
@@ -32,6 +36,8 @@ export interface OrchestratorOptions {
   guidelinesAgentId?: string;
   onProgress?: AnalysisProgressCallback;
   onAbort?: () => boolean;
+  /** Unified workflow timeline emitter. Defaults to a no-op. */
+  emitter?: WorkflowEmitter;
 }
 
 // Known mask → DB:Group mapping (from FOP reference)
@@ -104,19 +110,50 @@ export async function runFopAnalysis(opts: OrchestratorOptions): Promise<Orchest
     forceRefresh: opts.forceRefresh,
   });
   const { roots, varTables, lang, model, cache, forceRefresh = false } = opts;
+  const emitter = opts.emitter ?? NULL_EMITTER;
   const analysisCache = new Map<string, FopAnalysis>();
   const errors = new Map<string, string>();
   let totalAnalyzed = 0;
   let fromCache = 0;
 
+  const callChat = (
+    messages: { role: 'system' | 'user'; content: string }[],
+    details: string,
+  ): Promise<string> => chatCompletion(messages, model, 'agent-chat', details);
+
   // Collect all unique FOPs to analyze (bottom-up order)
   const levels = traverseBottomUpLevels(roots);
-  const allNodes: FopTreeNode[] = levels.flat();
+
+  // Dedupe nodes per level by fopFile.relativePath. buildFopTree produces one
+  // root node per FOP.txt binding, so a FOP bound to 20 events appears 20x as
+  // separate roots. Without this dedup each duplicate triggers its own AI call
+  // (analyst + guidelines) even though the prompt content is identical.
+  // Collect the entryPoint bindings of the discarded duplicates so they can
+  // still be surfaced in the prompt's ANBINDUNG section.
+  const extraEntryBindings = new Map<string, FopBinding[]>();
+  const dedupedLevels = levels.map(level => {
+    const seen = new Map<string, FopTreeNode>();
+    for (const node of level) {
+      const key = node.fopFile.relativePath;
+      if (!seen.has(key)) {
+        seen.set(key, node);
+        if (node.entryPoint) {
+          extraEntryBindings.set(key, [node.entryPoint]);
+        }
+      } else if (node.entryPoint) {
+        const list = extraEntryBindings.get(key) ?? [];
+        list.push(node.entryPoint);
+        extraEntryBindings.set(key, list);
+      }
+    }
+    return Array.from(seen.values());
+  });
+  const allNodes: FopTreeNode[] = dedupedLevels.flat();
   const total = allNodes.length;
 
   let current = 0;
 
-  for (const level of levels) {
+  for (const level of dedupedLevels) {
     // Check for abort
     if (opts.onAbort?.()) break;
 
@@ -128,6 +165,12 @@ export async function runFopAnalysis(opts: OrchestratorOptions): Promise<Orchest
       current++;
 
       opts.onProgress?.({ current, total, currentFop: fopPath, phase: 'parsing' });
+      emitter.emitLocal({
+        phase: 'fop-parsing',
+        label: getPhaseLabel('fop-parsing', lang),
+        summary: `${node.fopFile.filename} (${node.fopFile.rawLines.length} ${lang === 'de' ? 'Zeilen' : 'lines'})`,
+        itemKey: fopPath,
+      });
 
       try {
         // Check cache first
@@ -138,6 +181,12 @@ export async function runFopAnalysis(opts: OrchestratorOptions): Promise<Orchest
             console.log(`[runFopAnalysis] ${fopPath}: from cache`);
             analysisCache.set(fopPath, cached);
             fromCache++;
+            emitter.emitLocal({
+              phase: 'fop-cache-save',
+              label: lang === 'de' ? 'Aus Cache geladen' : 'Loaded from cache',
+              summary: `.fopanalyzer/${fopPath}`,
+              itemKey: fopPath,
+            });
             // Still report steps so the diagram shows data
             opts.onProgress?.({ current, total, currentFop: fopPath, phase: 'buffers',
               input: `${node.fopFile.bufferOperations.length} Buffer-Operationen (Cache)`,
@@ -174,26 +223,57 @@ export async function runFopAnalysis(opts: OrchestratorOptions): Promise<Orchest
           input: `${node.fopFile.bufferOperations.length} Buffer-Operationen`,
           output: bufferSummary || '(keine Buffer-Operationen)',
         });
+        emitter.emitLocal({
+          phase: 'fop-buffers',
+          label: getPhaseLabel('fop-buffers', lang),
+          summary: `${node.fopFile.bufferOperations.length} ${lang === 'de' ? 'Buffer-Operationen' : 'buffer operations'}`,
+          itemKey: fopPath,
+          outputText: bufferSummary || (lang === 'de' ? '(keine Buffer-Operationen)' : '(no buffer operations)'),
+        });
 
         const fieldResolutions = resolveAllFields(node.fopFile, varTables, tracker);
         const resolvedCount = fieldResolutions.filter(f => f.confidence !== 'unknown').length;
+        const fieldsOutput = `${resolvedCount} / ${fieldResolutions.length} ${lang === 'de' ? 'aufgelöst' : 'resolved'}\n\n` +
+          fieldResolutions.slice(0, 40).map(f => `${f.buffer}|${f.fieldName} → ${f.resolvedName} [${f.confidence}]`).join('\n');
         opts.onProgress?.({ current, total, currentFop: fopPath, phase: 'fields',
           input: `${fieldResolutions.length} Felder analysiert`,
-          output: `${resolvedCount} aufgelöst, ${fieldResolutions.length - resolvedCount} unbekannt\n` +
-            fieldResolutions.slice(0, 20).map(f => `${f.buffer}|${f.fieldName} → ${f.resolvedName} [${f.confidence}]`).join('\n'),
+          output: fieldsOutput,
+        });
+        emitter.emitLocal({
+          phase: 'fop-fields',
+          label: getPhaseLabel('fop-fields', lang),
+          summary: `${resolvedCount}/${fieldResolutions.length} ${lang === 'de' ? 'Felder aufgelöst' : 'fields resolved'}`,
+          itemKey: fopPath,
+          outputText: fieldsOutput,
         });
 
         const localGuidelines = checkGuidelinesLocal(node.fopFile);
+        const localFindingsText = localGuidelines.findings.length > 0
+          ? localGuidelines.findings.map(f => `[${f.severity}] ${f.rule}: ${f.message}`).join('\n')
+          : (lang === 'de' ? '(keine Findings)' : '(no findings)');
         opts.onProgress?.({ current, total, currentFop: fopPath, phase: 'local-check',
           input: `${node.fopFile.rawLines.length} Zeilen geprüft`,
-          output: localGuidelines.findings.length > 0
-            ? localGuidelines.findings.map(f => `[${f.severity}] ${f.rule}: ${f.message}`).join('\n')
-            : '(keine Findings)',
+          output: localFindingsText,
+        });
+        emitter.emitLocal({
+          phase: 'fop-local-check',
+          label: getPhaseLabel('fop-local-check', lang),
+          summary: `${localGuidelines.findings.length} ${lang === 'de' ? 'Findings' : 'findings'} · ${node.fopFile.rawLines.length} ${lang === 'de' ? 'Zeilen' : 'lines'}`,
+          itemKey: fopPath,
+          outputText: localFindingsText,
         });
 
-        // Collect ALL bindings for this FOP (from entry point + usage index)
+        // Collect ALL bindings for this FOP (from entry points of all deduped
+        // duplicate roots + usage index). When multiple FOP.txt rows target the
+        // same FOP we kept one node but recorded every duplicate's entryPoint
+        // in extraEntryBindings, so every binding still reaches the prompt.
         const fopBindings: FopBinding[] = [];
-        if (node.entryPoint) fopBindings.push(node.entryPoint);
+        const entryBindings = extraEntryBindings.get(fopPath) ?? (node.entryPoint ? [node.entryPoint] : []);
+        for (const entry of entryBindings) {
+          if (!fopBindings.some(b => b.event === entry.event && b.mask === entry.mask && b.field === entry.field && b.scope === entry.scope)) {
+            fopBindings.push(entry);
+          }
+        }
         const usage = opts.usageIndex?.get(fopPath);
         if (usage) {
           for (const chain of usage.usageChains) {
@@ -224,13 +304,23 @@ export async function runFopAnalysis(opts: OrchestratorOptions): Promise<Orchest
         if (opts.analystAgentId !== undefined) {
           opts.onProgress?.({ current, total, currentFop: fopPath, phase: 'analyzing', input: context });
           try {
-            const { chatCompletion } = await import('./myforterroApi');
             const systemPrompt = buildFopAnalystPrompt(lang) + buildLanguageInstruction(lang);
             const messages = [
               { role: 'system' as const, content: systemPrompt },
               { role: 'user' as const, content: context },
             ];
-            const response = await chatCompletion(messages, model);
+            const response = await emitter.emitAiCall(
+              {
+                phase: 'fop-analyst',
+                label: getPhaseLabel('fop-analyst', lang),
+                agent: 'fop-analyst',
+                systemPrompt,
+                userPrompt: context,
+                model,
+                itemKey: fopPath,
+              },
+              () => callChat(messages, `FOP-Analyst: ${fopPath}`),
+            );
             opts.onProgress?.({ current, total, currentFop: fopPath, phase: 'analyzing', input: context, output: response });
             const parsed = extractJson(response);
             if (parsed) {
@@ -249,13 +339,23 @@ export async function runFopAnalysis(opts: OrchestratorOptions): Promise<Orchest
           const guidelinesInput = node.fopFile.rawLines.join('\n');
           opts.onProgress?.({ current, total, currentFop: fopPath, phase: 'guidelines', input: guidelinesInput });
           try {
-            const { chatCompletion } = await import('./myforterroApi');
             const systemPrompt = buildFopGuidelinesPrompt(lang);
             const messages = [
               { role: 'system' as const, content: systemPrompt },
               { role: 'user' as const, content: guidelinesInput },
             ];
-            const response = await chatCompletion(messages, model);
+            const response = await emitter.emitAiCall(
+              {
+                phase: 'fop-guidelines',
+                label: getPhaseLabel('fop-guidelines', lang),
+                agent: 'fop-guidelines',
+                systemPrompt,
+                userPrompt: guidelinesInput,
+                model,
+                itemKey: fopPath,
+              },
+              () => callChat(messages, `FOP-Guidelines: ${fopPath}`),
+            );
             opts.onProgress?.({ current, total, currentFop: fopPath, phase: 'guidelines', input: guidelinesInput, output: response });
             const parsed = extractJson(response);
             if (parsed?.aiFindings) {
@@ -289,9 +389,23 @@ export async function runFopAnalysis(opts: OrchestratorOptions): Promise<Orchest
         analysisCache.set(fopPath, analysis);
         await cache.writeCache(analysis, model);
         totalAnalyzed++;
+        emitter.emitLocal({
+          phase: 'fop-cache-save',
+          label: getPhaseLabel('fop-cache-save', lang),
+          summary: `.fopanalyzer/${fopPath}`,
+          itemKey: fopPath,
+          outputText: `Score: ${score} · ${allFindings.length} findings · ${fieldResolutions.length} fields`,
+        });
 
       } catch (e) {
         errors.set(fopPath, String(e));
+        emitter.emitLocal({
+          phase: 'fop-cache-save',
+          label: lang === 'de' ? 'Fehler' : 'Error',
+          summary: String(e),
+          itemKey: fopPath,
+          inputText: String(e),
+        });
       }
     });
 
@@ -444,8 +558,9 @@ async function generateCucumberFromAnalysis(
     onTableIdStarted?: (request: string) => void;
     onPromptBuilt?: (gherkinRequest: string) => void;
     onDelta?: (text: string) => void;
+    emitter?: WorkflowEmitter;
   } | undefined,
-  isBindingsForFop: import('../lib/fopTxtParser').IsBinding[],
+  isBindingsForFop: import('../lib/isBindingsParser').IsBinding[],
   fop: FopFile,
   human: HumanDescription,
   technical: TechnicalDescription,
@@ -595,7 +710,10 @@ Do NOT create complex prerequisite chains. If test data is needed that cannot be
 
   if (testDepth === 'deep') {
     // ── Multi-round deep test: agent conversation with table back-and-forth ──
-    return await generateDeepTest(anforderungstext, fopGuid, fop, varTables, model, lang, callbacks);
+    return await generateDeepTest(anforderungstext, fopGuid, fop, varTables, model, lang, {
+      ...callbacks,
+      emitter: callbacks?.emitter,
+    });
   }
 
   // ── Quick test: single-shot via generatePackage ──
@@ -605,6 +723,9 @@ Do NOT create complex prerequisite chains. If test data is needed that cannot be
     text: anforderungstext,
     model,
     tables: varTables,
+    emitter: callbacks?.emitter,
+    lang,
+    itemKey: fop.filename,
     featureName: fop.filename,
     onTablesIdentified: callbacks?.onTablesIdentified,
     onTableIdStarted: callbacks?.onTableIdStarted,
@@ -614,8 +735,8 @@ Do NOT create complex prerequisite chains. If test data is needed that cannot be
 
   if (!result.feature || result.feature.scenarios.length === 0) return [];
 
-  if (!result.feature.tags.some(t => t === `@${fopGuid}`)) {
-    result.feature.tags = [`@${fopGuid}`, ...result.feature.tags];
+  if (!result.feature.tags.some(t => t === `@guid-${fopGuid}`)) {
+    result.feature.tags = [`@guid-${fopGuid}`, ...result.feature.tags];
   }
   result.feature.name = result.feature.name || fop.filename.replace(/\.[^.]+$/, '');
 
@@ -643,15 +764,19 @@ async function generateDeepTest(
     onRound?: (round: number, maxRounds: number, sent: string, received: string) => void;
     /** Max conversation rounds before forcing final output (default: 5) */
     maxRounds?: number;
+    /** Unified workflow-timeline emitter */
+    emitter?: WorkflowEmitter;
   },
 ): Promise<FeatureInput[]> {
   const { chatCompletion } = await import('./myforterroApi');
-  const { DEFAULT_SYSTEM_PROMPT, lookupRelevantTables, formatSingleTableContext, parseTableIdentificationResponse, tableDisplayName } = await import('./aiPrompt');
+  const { DEFAULT_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT_EN, lookupRelevantTables, formatSingleTableContext, parseTableIdentificationResponse, tableDisplayName } = await import('./aiPrompt');
   const { parseGherkin } = await import('./gherkinParser');
 
   const de = lang === 'de';
   const maxRounds = callbacks?.maxRounds ?? 5;
-  const systemPrompt = DEFAULT_SYSTEM_PROMPT;
+  const systemPrompt = de ? DEFAULT_SYSTEM_PROMPT : DEFAULT_SYSTEM_PROMPT_EN;
+  const emitter = callbacks?.emitter ?? NULL_EMITTER;
+  const itemKey = fop.filename;
 
   // Track which tables have been sent to avoid duplicates
   const sentTableRefs = new Set<string>();
@@ -676,7 +801,18 @@ Feature-GUID: ${fopGuid}`;
   try {
     callbacks?.onTableIdStarted?.(anforderungstext);
     const step1Messages = buildTableIdentificationMessages(anforderungstext);
-    const step1Response = await chatCompletion(step1Messages, model);
+    const step1Response = await emitter.emitAiCall(
+      {
+        phase: 'fop-cuc-table-id',
+        label: getPhaseLabel('fop-cuc-table-id', lang),
+        agent: 'fop-cucumber-table-id',
+        systemPrompt: step1Messages.find(m => m.role === 'system')?.content ?? '',
+        userPrompt: step1Messages.find(m => m.role === 'user')?.content ?? '',
+        model,
+        itemKey,
+      },
+      () => chatCompletion(step1Messages, model),
+    );
     const identified = parseTableIdentificationResponse(step1Response);
     initialTables = lookupRelevantTables(identified, varTables.filter(t => t.fields.length > 0));
     const tableNames = initialTables.map(t => `${tableDisplayName(t)} (${t.tableRef})`);
@@ -695,6 +831,13 @@ Feature-GUID: ${fopGuid}`;
     : `${anforderungstext}${deepInstruction}`;
 
   callbacks?.onPromptBuilt?.(firstMessage);
+  emitter.emitLocal({
+    phase: 'fop-cuc-build-prompt',
+    label: getPhaseLabel('fop-cuc-build-prompt', lang),
+    summary: `${firstMessage.length} ${lang === 'de' ? 'Zeichen' : 'chars'}`,
+    itemKey,
+    outputText: firstMessage,
+  });
 
   // Conversation loop
   const messages: { role: 'system' | 'user'; content: string }[] = [
@@ -708,7 +851,18 @@ Feature-GUID: ${fopGuid}`;
     const lastUserMsg = messages[messages.length - 1].content;
     console.log(`[DeepTest] Round ${round}/${maxRounds} | sending ${messages.length} messages | last user msg: ${lastUserMsg.slice(0, 150)}...`);
 
-    const response = await chatCompletion(messages, model);
+    const response = await emitter.emitAiCall(
+      {
+        phase: 'fop-cuc-deep-round',
+        label: `${getPhaseLabel('fop-cuc-deep-round', lang)} ${round}/${maxRounds}`,
+        agent: 'fop-cucumber-deep',
+        systemPrompt,
+        userPrompt: lastUserMsg,
+        model,
+        itemKey,
+      },
+      () => chatCompletion(messages, model),
+    );
     console.log(`[DeepTest] Round ${round} response (${response.length} chars): ${response.slice(0, 200)}...`);
     callbacks?.onRound?.(round, maxRounds, lastUserMsg, response);
 
@@ -719,8 +873,8 @@ Feature-GUID: ${fopGuid}`;
       try {
         const feature = parseGherkin(gherkinMatch[0]);
         feature.name = feature.name || fop.filename.replace(/\.[^.]+$/, '');
-        if (!feature.tags.some(t => t === `@${fopGuid}`)) {
-          feature.tags = [`@${fopGuid}`, ...feature.tags];
+        if (!feature.tags.some(t => t === `@guid-${fopGuid}`)) {
+          feature.tags = [`@guid-${fopGuid}`, ...feature.tags];
         }
         return [feature];
       } catch {
@@ -789,7 +943,18 @@ Feature-GUID: ${fopGuid}`;
     : 'Maximum rounds reached. Generate the Gherkin test NOW with the available fields. Reply ONLY with the Gherkin feature.';
   messages.push({ role: 'user', content: forceMsg });
 
-  const finalResponse = await chatCompletion(messages, model);
+  const finalResponse = await emitter.emitAiCall(
+    {
+      phase: 'fop-cuc-force-final',
+      label: getPhaseLabel('fop-cuc-force-final', lang),
+      agent: 'fop-cucumber-deep',
+      systemPrompt,
+      userPrompt: forceMsg,
+      model,
+      itemKey,
+    },
+    () => chatCompletion(messages, model),
+  );
   callbacks?.onRound?.(maxRounds + 1, maxRounds, forceMsg, finalResponse);
 
   const finalMatch = finalResponse.match(/Feature:[\s\S]*/i);
@@ -798,8 +963,8 @@ Feature-GUID: ${fopGuid}`;
   try {
     const feature = parseGherkin(finalMatch[0]);
     feature.name = feature.name || fop.filename.replace(/\.[^.]+$/, '');
-    if (!feature.tags.some(t => t === `@${fopGuid}`)) {
-      feature.tags = [`@${fopGuid}`, ...feature.tags];
+    if (!feature.tags.some(t => t === `@guid-${fopGuid}`)) {
+      feature.tags = [`@guid-${fopGuid}`, ...feature.tags];
     }
     return [feature];
   } catch {
@@ -824,8 +989,9 @@ export async function generateCucumberFromFopAnalysis(
     onTableIdStarted?: (request: string) => void;
     onPromptBuilt?: (gherkinRequest: string) => void;
     onDelta?: (text: string) => void;
+    emitter?: WorkflowEmitter;
   },
-  isBindings?: import('../lib/fopTxtParser').IsBinding[],
+  isBindings?: import('../lib/isBindingsParser').IsBinding[],
 ): Promise<FeatureInput[]> {
   // Collect FOP.txt bindings for this FOP
   const fopBindings = bindings.filter(b => {

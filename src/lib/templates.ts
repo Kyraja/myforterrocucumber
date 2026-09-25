@@ -153,6 +153,14 @@ export const STEP_BUILDING_BLOCKS: ScenarioTemplate[] = [
     ],
   },
   {
+    id: 'block_tippkommando',
+    label: 'Tippkommando ausführen', labelEn: 'Execute typed command',
+    steps: [
+      { keyword: 'Given', action: { type: 'editorOeffnenTipp', editorName: 'dispo', tipCommand: '(Scheduling)', arguments: '' } },
+      { keyword: 'And', action: { type: 'editorSchliessen' } },
+    ],
+  },
+  {
     id: 'block_editor_menue',
     label: 'Editor öffnen (Menü)', labelEn: 'Open editor (menu)',
     steps: [
@@ -364,17 +372,47 @@ export function loadCustomTemplates(): ScenarioTemplate[] {
  * @returns The newly created template object (with the generated id and label)
  */
 export function saveCustomTemplate(scenario: Scenario): ScenarioTemplate {
+  return saveOrUpdateCustomTemplate(scenario);
+}
+
+/**
+ * Saves a scenario as custom template and updates an existing custom template
+ * when `templateId` matches one of the persisted entries.
+ */
+export function saveOrUpdateCustomTemplate(
+  scenario: Scenario,
+  opts?: { templateId?: string; label?: string; lang?: 'de' | 'en' },
+): ScenarioTemplate {
   const existing = loadCustomTemplates();
+  const targetLang = opts?.lang ?? 'de';
+  const nextLabel = (opts?.label ?? scenario.name ?? 'Eigene Vorlage').trim() || 'Eigene Vorlage';
+  const nextSteps = scenario.steps.map((s) => ({
+    keyword: s.keyword,
+    action: JSON.parse(JSON.stringify(s.action)),
+  }));
+
+  const index = opts?.templateId ? existing.findIndex((t) => t.id === opts.templateId) : -1;
+  const previous = index >= 0 ? existing[index] : null;
+  const nextLabelDe = targetLang === 'de'
+    ? nextLabel
+    : (previous?.label?.trim() || nextLabel);
+  const nextLabelEn = targetLang === 'en'
+    ? nextLabel
+    : (previous?.labelEn?.trim() || undefined);
   const template: ScenarioTemplate = {
-    id: 'custom_' + crypto.randomUUID().slice(0, 8),
-    label: scenario.name || 'Eigene Vorlage',
+    id: index >= 0 ? existing[index].id : 'custom_' + crypto.randomUUID().slice(0, 8),
+    label: nextLabelDe,
+    labelEn: nextLabelEn,
     custom: true,
-    steps: scenario.steps.map((s) => ({
-      keyword: s.keyword,
-      action: JSON.parse(JSON.stringify(s.action)),
-    })),
+    steps: nextSteps,
   };
-  existing.push(template);
+
+  if (index >= 0) {
+    existing[index] = template;
+  } else {
+    existing.push(template);
+  }
+
   localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(existing));
   return template;
 }
@@ -383,6 +421,35 @@ export function removeCustomTemplate(id: string): void {
   const existing = loadCustomTemplates();
   const filtered = existing.filter((t) => t.id !== id);
   localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(filtered));
+}
+
+/**
+ * Reorder persisted custom templates by id.
+ *
+ * IDs not present in `orderedIds` keep their relative order and are appended.
+ */
+export function reorderCustomTemplates(orderedIds: string[]): ScenarioTemplate[] {
+  const existing = loadCustomTemplates();
+  if (existing.length <= 1) return existing;
+
+  const idToTemplate = new Map(existing.map((t) => [t.id, t]));
+  const used = new Set<string>();
+  const next: ScenarioTemplate[] = [];
+
+  for (const id of orderedIds) {
+    const template = idToTemplate.get(id);
+    if (!template || used.has(id)) continue;
+    used.add(id);
+    next.push(template);
+  }
+
+  for (const template of existing) {
+    if (used.has(template.id)) continue;
+    next.push(template);
+  }
+
+  localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(next));
+  return next;
 }
 
 /** All templates: building blocks + built-in scenarios + custom (used for drop lookup) */
@@ -401,8 +468,11 @@ export function getScenarioTemplates(): ScenarioTemplate[] {
  * Triggers a browser download of all custom templates as a JSON file.
  * Does nothing if no custom templates exist.
  */
-export function exportCustomTemplates(): void {
-  const templates = loadCustomTemplates();
+export function exportCustomTemplates(templateIds?: string[]): void {
+  const all = loadCustomTemplates();
+  const templates = templateIds && templateIds.length > 0
+    ? all.filter((t) => templateIds.includes(t.id))
+    : all;
   if (templates.length === 0) return;
   const json = JSON.stringify(templates, null, 2);
   const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
@@ -440,13 +510,15 @@ export function importCustomTemplates(json: string): number {
   const existingIds = new Set(existing.map((t) => t.id));
 
   for (const t of imported) {
-    // Assign new ID if collision with existing
-    if (existingIds.has(t.id)) {
-      t.id = 'custom_' + crypto.randomUUID().slice(0, 8);
+    // Never overwrite existing templates: imported entries are always appended.
+    // If the ID collides, assign a new ID and keep the imported order.
+    const nextTemplate = { ...t };
+    if (existingIds.has(nextTemplate.id)) {
+      nextTemplate.id = 'custom_' + crypto.randomUUID().slice(0, 8);
     }
-    t.custom = true;
-    existing.push(t);
-    existingIds.add(t.id);
+    nextTemplate.custom = true;
+    existing.push(nextTemplate);
+    existingIds.add(nextTemplate.id);
   }
 
   localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(existing));

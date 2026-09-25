@@ -1,0 +1,160 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : APLANIMPWERT.BSTART.BN
+.. Autor/Author   : axen
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       :
+.. Ablauf         :
+..
+.. Functionality  :
+.. Program flow   :
+...Includes       :
+.. include win/absatzplanung/PlanungsdatenImport.xlt
+..*****************************************************************************
+.set trans -
+..
+.type text x1                ? _F|defined(U|x1)
+.type text xterrstring       ? _F|defined(U|xterrstring)
+.type text xterrdat          ? _F|defined(U|xterrdat)
+.type text xtausgabe         ? _F|defined(U|xtausgabe)
+.type text xtedpimpstring    ? _F|defined(U|xtedpimpstring)
+.type text xttwertereihidold ? _F|defined(U|xttwertereihidold)
+.type integer  xttznold          ? _F|defined(U|xttznold)
+.type text xttbmgeold        ? _F|defined(U|xttbmgeold)
+.type text xtausgabestring   ? _F|defined(U|xtausgabestring)
+..
+.file -tempname U|xterrdat
+.continue STARTBV   ? G|evtartengl = "BUTTON_BEFORE"   & G|evtvar = "bstart"
+.continue STARTBN   ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "bstart"
+.continue IMPORT    ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "wertereihenimp"
+.continue KUMUL     ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "kumulieren"
+.continue LEEREN    ? G|evtartengl = "FIELD_EXIT"     & G|evtvar = "artikelbereich"
+.continue LEEREN    ? G|evtartengl = "FIELD_EXIT"     & G|evtvar = "kunde"
+.continue LEEREN    ? G|evtartengl = "FIELD_EXIT"     & G|evtvar = "lagergruppe"
+.continue LEEREN    ? G|evtartengl = "FIELD_EXIT"     & G|evtvar = "planungseinheit"
+.continue LEEREN    ? G|evtartengl = "FIELD_EXIT"     & G|evtvar = "personenkontenber"
+.continue
+..
+!STARTBV
+.make screen line --
+.formula M|select = "$,,@datenbank=121;@gruppe=1;@ablageart=(Active);@ordnung=eplan,artber;"
+.formula M|select = M|select + "eplan=" + 'M|planungseinheit^id' + ";"                          ? _F|empty(M|planungseinheit)
+.formula M|select = M|select + "artber=" + 'M|artikelbereich^id' + ";"                          ? _F|empty(M|artikelbereich)
+.formula M|select = M|select + "lgruppe=" + 'M|lagergruppe^id' + ";"                            ? _F|empty(M|lagergruppe)
+.formula M|select = M|select + "kunde=" + 'M|kunde^id' + ";"                                    ? _F|empty(M|kunde)
+.formula M|select = M|select + "pkober=" + 'M|personenkontenber^id' + ";"                       ? _F|empty(M|personenkontenber)
+.formula M|select = M|select + "typ=(PlannedData);"
+.set separator
+.continue ENDE
+..
+!STARTBN
+.select valuesequence 'M|select'
+..
+!LSLOOP
+.continue ENDE ? _G|mehr
+.input 'M|tab'      ? _F|empty(M|tab)
+.select valuesequence
+.continue LSLOOP
+.continue ENDE
+..
+!LEEREN
+.make screen line --
+.continue ENDE
+..
+!IMPORT
+.select screen header
+.continue ENDE              ? _G|mehr
+.continue FEHL02            ? M|tzeilen = 0
+..
+.set separator
+.file -tempname U|xtausgabe
+.output new 'U|xtausgabe'
+.input "DATEI.F"
+#!ACTION=UPDATE
+#!DATABASE=121
+#!GROUP=1
+#!LINESEPARATOR=#
+#!FLDDELIMITER=;
+#!CHARSET=ISO8859
+id;\
+zn;bmge;
+..
+!LOOP8
+.select screen line
+.continue LOOP8EX           ? _G|mehr
+.continue ERSTEAU           ? (F|empty(U|xttwertereihidold) & U|xttznold = 0)
+.. Id ausgeben fr erste Zeile einer neuen Wertereihe
+?'U|xttwertereihidold'\   ? _F|empty(U|xttwertereihidold)
+.. oder Zeilenangaben ausgeben
+.formula U|xtausgabestring = U|xtausgabestring + "\"   ? F|empty(M|twertereihid)
+?'U|xtausgabestring'                                  ? F|empty(U|xttwertereihidold)
+..
+!ERSTEAU: Zeilenangaben merken
+.formula U|xttwertereihidold = M|twertereihid
+.formula U|xttznold          = M|tzn
+.formula U|xttbmgeold        = M|tbmgeneu
+.formula U|xtausgabestring   = ""
+.continue LOOP8 ? U|xttznold = 0
+.formula U|xtausgabestring = 'U|xttznold ' + ";" + 'U|xttbmgeold' + ";"
+.continue LOOP8
+..
+!LOOP8EX: Letzte Zeile, nur dann ausgeben, wenn keine neue Wertereihe beginnt
+?'U|xtausgabestring'       ? F|empty(U|xttwertereihidold)
+..
+!NEXT
+.formula U|xtedpimpstring = "edpimport.sh -p " + 'G|einmalpw' + " -I " + 'U|xtausgabe' + " -T -o updatemode=strict -o LOCKBEHAVIOR=NOWAIT 2> " + U|xterrdat
+.system 'U|xtedpimpstring'
+.continue FEHL01             ? _G|mehr
+.continue ENDE
+..
+!KUMUL
+.select screen header
+.continue ENDE               ? _G|mehr
+.continue FEHL02             ? M|tzeilen = 0
+.select screen line
+..
+.continue LOOP               ? M|dazuaddieren = G|FALSE
+..
+!LOOPAD
+.continue ENDE               ? _G|mehr
+.formula M|tbmgeneu   = M|tbmge + M|tbmgelesen
+.formula M|twertneu   = M|tbmgeneu * M|tbpreis
+.select screen line
+.continue LOOPAD
+..
+!LOOP
+.continue ENDE               ? _G|mehr
+.formula M|tbmgeneu   = M|tbmgelesen
+.formula M|twertneu   = M|tbmgeneu * M|tbpreis
+.select screen line
+.continue LOOP
+..*****************************************************************************
+!ENDE
+.continue
+..*****************************************************************************
+..
+!FEHL01: Import of data failed!
+.select from 'U|xterrdat' U|x1 ^
+.set trans +
+.formula U|xterrstring = "Der Datenimport ist fehlgeschlagen. "
+.set trans -
+..
+!LOOP5
+.continue LOOP5EX ? _G|mehr
+.formula U|xterrstring = U|xterrstring + " ### " + U|x1
+.select from 'U|xterrdat' U|x1 ^
+.continue LOOP5
+..
+!LOOP5EX
+.error 'U|xterrstring'
+.output terminal
+.input 'U|xterrdat'
+.end 1
+
+!FEHL02: No import data!
+.set trans +
+.formula U|xterrstring = "Keine Importdaten vorhanden."
+.set trans -
+.error 'U|xterrstring'
+.end 1

@@ -1,0 +1,131 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : AUFGABEN.EV
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      : cl
+.. Funktion       : Behandelt die einfacheren Ereignisse.
+.. Functionality  : Handles simple events.
+..*****************************************************************************
+.set trans -
+..
+..------------------------------- Header --------------------------------------
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "ursache"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "partner"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "elem"
+.continue DOCUMNT ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "evvorgang"
+.continue BEARB   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "bearbeit"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "bestaet"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "keineeigenen"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "ablauf"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "ablaufzust"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "projekt"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "vonstartdatum"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "bisstartdatum"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "vonenddatum"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "bisenddatum"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "prio"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "status"
+.continue TEAM    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "team"
+.continue CLRTAB  ? G|evtartengl = "FIELD_FILL"   & G|evtvar = "intern"
+.continue NEWTASK ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "buneueaufgabe"
+..--------------------------------- Table  -------------------------------------
+.continue FORBID  ? G|evtartengl = "ROW_MOVED_BEFORE"
+.continue RELEASE ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "bfolge"
+.continue VIEWTSK ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "tbuzeigaufgabe"
+.continue BFINISH ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "tbuaufgabefertig"
+.continue BFINISH ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "tbuaufgabefertig2"
+.continue AFINISH ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "tbuaufgabefertig"
+.continue AFINISH ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "tbuaufgabefertig2"
+..==============================================================================
+.continue END
+..
+!BEARB: Operator has changed
+.assign M|team = "" ? _F|empty(M|bearbeit)
+.continue CLRTAB
+..
+!TEAM: Team has changed
+.assign M|bearbeit = "" ? _F|empty(M|team)
+.continue CLRTAB
+..
+!DOCUMNT: Document has changed
+.formula M|typa = M|evvorgang^typa
+.continue CLRTAB
+..
+!NEWTASK: Create a new task
+.continue ERROR1 ? _F|cmdpermitted(86, 14, ,6)
+.formula M|auswahl = "<(Transaction)><(New)>"
+.formula M|auswahl = M|auswahl + "," + M|vgrtxt + "?"
+.continue NEWEDIT ? F|empty(M|intern)
+.formula M|auswahl = M|auswahl + "intern=1" + "|"
+..
+!NEWEDIT: Set editor
+.continue NEWCONF ? F|empty(M|bearbeit)
+.formula M|auswahl = M|auswahl + "bearbeit=" + M|bearbeit^id + "|"
+..
+!NEWCONF: Set confirmer
+.continue NEWTRIG? F|empty(M|bestaet)
+.formula M|auswahl = M|auswahl + "bestaet=" + M|bestaet^id + "|"
+..
+!NEWTRIG: Set trigger
+.continue EXEC ? F|empty(M|ursache)
+.formula M|auswahl = M|auswahl + "ursache=" + M|ursache^id
+..
+!EXEC: Execute gui command
+.command -parallel 'M|auswahl'
+.continue END
+..
+!RELEASE: Release task by a copy and set trigger to this task
+.continue ERROR2 ? _F|cmdpermitted(86, 17, ,6)
+.formula M|auswahl = "<(Transaction)>" + M|taufgabe^id  + "<(Copy)>"
+.formula M|auswahl = M|auswahl + "?ursache=" + M|taufgabe^id
+.formula M|auswahl = M|auswahl + "|start=.|startzeit=."
+.formula M|auswahl = M|auswahl + "|end=|endzeit="
+.command -parallel 'M|auswahl'
+.continue END
+..
+!VIEWTSK: View task
+.type VP99 xxmyobject
+.assign U|xxmyobject = M|taufgabe
+.input "is/EXEC.COMMAND4REFERENCE"
+.continue END
+..
+!BFINISH: Before button confirm task
+.. als Vorschlag erst mal nicht als Aufrufparameter
+.continue ERROR3 ? F|empty(M|taufgabe)
+.formula M|auswahl = "<(Transaction)>" + M|taufgabe^id  + "<(Edit)>"
+.formula M|auswahl = M|auswahl + "?status=" +  F|value(M|tstatusneu,"AU101")
+.formula M|auswahl = M|auswahl + "|[pos]=0:status"
+.continue SUBEDIT ? G|evtvar = "tbuaufgabefertig2"
+.command -wait 'M|auswahl'
+.continue END
+..
+!SUBEDIT: Open dialog as subeditor
+.end 0 'M|auswahl'
+..
+!AFINISH: After button confirm task
+.make screen line -O ? M|taufgabe^ablagef
+.continue END
+..
+!FORBID: Action is not allowed
+.error
+.end 1
+..
+!CLRTAB: Clear table
+.input "is/TABLEEREN"
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1: Action not allowed
+.error -line 0 -field 'G|evtvar' -message Eine Aufgabe neu anzulegen ist dem Anwender nicht erlaubt.
+.end 1
+..
+!ERROR2: Action not allowed
+.error -line 'G|evtzeile' -field 'G|evtvar' -message Eine Aufgabe kopieren ist dem Anwender nicht erlaubt.
+.end 1
+..
+!ERROR3: Missing task
+.error -line 'G|evtzeile' -field M|taufgabe -message Es fehlt die Angabe der Aufgabe.
+.end 1

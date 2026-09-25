@@ -1,0 +1,160 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LPREISE.EV
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  : Central handling of field exit events.
+..*****************************************************************************
+.set trans -
+..
+..----------------------------------------------------------------------------
+.continue TYPE    ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="ktyp"
+.continue NOPART  ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="nurpartnerleer"
+.continue NOPROD  ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="nurartikelleer"
+.continue CLRTAB  ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="artpgvon"
+.continue CLRTAB  ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="artpgbis"
+.continue CLRTAB  ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="klpgvon"
+.continue CLRTAB  ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="klpgbis"
+.continue CLRTAB  ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="ksaktion"
+.continue CLRTAB  ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="kvon"
+.continue CLRTAB  ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="kbis"
+.continue CLRTAB  ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="kpos"
+.continue SELPART ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="selpartner"
+.continue PARTNER ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="partner"
+.continue EKVK    ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="ekvk"
+.continue SELART  ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="selartikel"
+.continue CLRTAB  ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="artikel"
+..----------------------------------------------------------------------------
+.continue END
+..
+!EKVK:
+.protection ktyp 0        ? _F|empty(M|ekvk)
+.protection -reset ktyp 0 ?  F|empty(M|ekvk)
+.copy M|ktypvk = G|true   ? F|equals(M|ekvk, "(Sales)")
+.copy M|ktypvk = G|false  ? F|equals(M|ekvk, "(Purchasing)")
+.continue CLRTAB
+..
+!TYPE: User has edit type
+.continue SALES ? F|equals(M|ktyp, "(SalesPriceList)") ; F|equals(M|ktyp, "(SalesDiscounts)")
+.continue PURCH ? F|equals(M|ktyp, "(PurchasingPriceList)") ; F|equals(M|ktyp, "(PurchasingDiscounts)")
+..
+!SALES: User chooses sales
+.copy M|ktypvk = G|true
+.copy M|ktyprabatt = F|equals(M|ktyp, "(SalesDiscounts)")
+.continue CLRTAB
+..
+!PURCH: User chooses purchasing
+.copy M|ktypvk = G|false
+.copy M|ktyprabatt = F|equals(M|ktyp, "(PurchasingDiscounts)")
+.continue CLRTAB
+..
+!NOPART: Select only price or discounts with no price or discount group for partners
+.continue ON01 ? M|nurpartnerleer
+.. Set off
+.protection -reset M|artpgvon 0
+.protection -reset M|artpgbis 0
+.protection -reset M|klpgvon 0
+.protection -reset M|klpgbis 0
+.continue CLRTAB
+..
+!ON01: Alternative was activated
+.continue OFF01 ? M|nurartikelleer
+.protection M|artpgvon 0
+.protection M|artpgbis 0
+.protection M|klpgvon 0
+.protection M|klpgbis 0
+.assign M|artpgvon = ""
+.assign M|artpgbis = ""
+.assign M|klpgvon = ""
+.assign M|klpgbis = ""
+.continue CLRTAB
+..
+!OFF01: Deactivate other
+.copy M|nurartikelleer = G|false
+.continue CLRTAB
+..
+!NOPROD: Select only price or discounts with no price or discount group for products
+.continue ON02 ? M|nurartikelleer
+.. Set off
+.protection -reset M|artpgvon 0
+.protection -reset M|artpgbis 0
+.protection -reset M|klpgvon 0
+.protection -reset M|klpgbis 0
+.continue CLRTAB
+..
+!ON02: Alternative was activated
+.continue OFF02 ? M|nurpartnerleer
+.protection M|artpgvon 0
+.protection M|artpgbis 0
+.protection M|klpgvon 0
+.protection M|klpgbis 0
+.assign M|artpgvon = ""
+.assign M|artpgbis = ""
+.assign M|klpgvon = ""
+.assign M|klpgbis = ""
+.continue CLRTAB
+..
+!OFF02: Deactivate other
+.copy M|nurpartnerleer = G|false
+.continue CLRTAB
+..
+!SELART: User clicks button to select a product
+.formula M|partner = ""      ? M|selartikel
+.copy M|selpartner = G|FALSE ? M|selartikel
+.continue SETROFF            ? M|selartikel
+.continue SETRON
+..
+!PARTNER: User edits partner
+.continue CLRTAB ? F|empty(M|partner)
+.continue CLRTAB ? M|partner^gruppe = 1 ; M|partner^gruppe = 6
+.assign M|partner = M|partner^firma
+.continue CLRTAB
+..
+!SELPART: User clicks button to select a partner
+.formula M|artikel = ""      ? M|selpartner
+.copy M|selartikel = G|FALSE ? M|selpartner
+.continue SETROFF            ? M|selpartner
+.continue SETRON
+..
+!SETROFF: User activates select a partner
+.protection M|artikel 0 ? G|evtvar ="selpartner"
+.protection M|partner 0 ? G|evtvar ="selartikel"
+.protection M|artpgvon 0
+.protection M|artpgbis 0
+.protection M|klpgvon 0
+.protection M|klpgbis 0
+.protection M|nurpartnerleer 0
+.protection M|nurartikelleer 0
+.assign M|artpgvon = ""
+.assign M|artpgbis = ""
+.assign M|klpgvon = ""
+.assign M|klpgbis = ""
+.copy M|nurpartnerleer = G|false
+.copy M|nurartikelleer = G|false
+.protection -reset M|partner 0 ? G|evtvar ="selpartner"
+.protection -reset M|artikel 0 ? G|evtvar ="selartikel"
+.continue CLRTAB
+..
+!SETRON: User deactivates select a partner
+.protection M|artikel 0 ? G|evtvar ="selpartner"
+.protection M|partner 0 ? G|evtvar ="selartikel"
+.protection -reset M|artpgvon 0
+.protection -reset M|artpgbis 0
+.protection -reset M|klpgvon 0
+.protection -reset M|klpgbis 0
+.protection -reset M|nurpartnerleer 0
+.protection -reset M|nurartikelleer 0
+.protection M|partner 0 ? G|evtvar ="selpartner"
+.protection M|artikel 0 ? G|evtvar ="selartikel"
+.assign M|partner = "" ? G|evtvar ="selpartner"
+.assign M|artikel = "" ? G|evtvar ="selartikel"
+.copy M|selartikel = G|FALSE ? M|selpartner
+.copy M|selpartner = G|FALSE ? M|selartikel
+.continue CLRTAB
+..
+!CLRTAB: Clear table
+.input "is/TABLEEREN"
+..*****************************************************************************
+!END
+.continue

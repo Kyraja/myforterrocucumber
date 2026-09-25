@@ -1,0 +1,113 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KDINFO.KNUMKUSA.FA
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Fuellt die Kunden- bzw. Lieferanteninfofelder.
+.. Ablauf         : Feldaustritts-EFOP
+..
+.. Functionality  : Fills customer or vendor data in the submask of the header.
+.. Program flow   : Field exit efop
+.. Includes       :
+.. include st/KDINFO.ME
+..*****************************************************************************
+.set trans -
+..
+.. Initializations
+.assign M|dn = "(Customer)" ? F|defined(M|kbkdinfo)
+.assign M|dn = "(Vendor)" ? F|defined(M|kblfinfo)
+.copy M|istsachkd = G|FALSE
+.input "st/KDINFO.ME"
+.continue PROTECT ? F|empty(M|knumkusa) ; _M|kbvorgaenge
+..
+.. Change of query condition possible
+.protection -reset kbeleg 0
+..
+!SET: Set general data of business partners
+.formula M|ktkontakt = M|knumkusa^kontakt
+.formula M|kderfass = M|knumkusa^erfass
+.formula M|ktkenn = M|knumkusa^kenn
+.formula M|ktbem = M|knumkusa^bem
+.copy M|kbetreuer = M|knumkusa^betreuer
+.continue STAFFER ? M|knumkusa^gruppe = 2 ; M|knumkusa^gruppe = 7
+..
+.. Set data of business partner who pays invoices
+.formula M|krsaldo = M|knumkusa^saldo
+.copy M|einwaehr = M|knumkusa^wakt
+.continue BALCURR ? M|krsaldo <> 0.0 & M|einwaehr^nummer <> M|auswaehr^nummer
+.continue CUSTOMER ? F|defined(M|kbkdinfo)
+.continue VOLORDS
+..
+!BALCURR: Change currency of balance
+.formula M|krsaldo = F|fxamount(M|auswaehr, M|krsaldo,,M|einwaehr,)
+.formula M|krsaldo = F|round(M|krsaldo, M|nachkomma)
+.continue CUSTOMER ? F|defined(M|kbkdinfo)
+.continue VOLORDS
+..
+!CUSTOMER: Partner is a customer
+.copy M|khaendl = M|knumkusa^haendl
+.copy M|kvertret = M|knumkusa^vertret
+.formula M|krlimit = M|knumkusa^limit
+.copy M|einwaehr = M|knumkusa^liland
+.continue LIMCURR ? M|krlimit <> 0.0 & M|einwaehr^nummer <> M|auswaehr^nummer
+.continue VOLORDS
+..
+!LIMCURR: Change currency of credit limit
+.formula M|krlimit = F|fxamount(M|auswaehr, M|krlimit,, M|einwaehr,)
+.formula M|krlimit = F|round(M|krlimit, M|nachkomma)
+.continue VOLORDS
+..
+!STAFFER: Partner is a staff reference -> use its company
+.copy M|istsachkd = G|TRUE
+..
+.. Set general data of company
+.copy M|knumsaku = M|knumkusa^firma
+.formula M|ktfkontakt = M|knumsaku^kontakt
+.formula M|kdferfass = M|knumsaku^erfass
+.formula M|ktfkenn = M|knumsaku^kenn
+.formula M|ktfbem = M|knumsaku^bem
+.copy M|kbetreuer2 = M|knumsaku^betreuer
+..
+.. Set data of business partner who pays invoices
+.formula M|krfsaldo = M|knumsaku^saldo
+.copy M|einwaehr = M|knumsaku^wakt
+.continue BALANCE ? M|krfsaldo <> 0.0 & M|einwaehr^nummer <> M|auswaehr^nummer
+.continue COMPANY ? F|defined(M|kbkdinfo)
+.continue VOLORDS
+..
+!BALANCE: Change currency of balance
+.formula M|krfsaldo = F|fxamount(M|auswaehr, M|krfsaldo,, M|einwaehr,)
+.continue COMPANY ? F|defined(M|kbkdinfo)
+.continue VOLORDS
+..
+!COMPANY: Partner is company of staff reference
+.copy M|kfhaendl = M|knumsaku^haendl
+.copy M|kfvertret = M|knumsaku^vertret
+.formula M|krflimit = M|knumsaku^limit
+.copy M|einwaehr = M|knumsaku^liland
+.continue LIMIT ? M|krflimit <> 0.0 & M|einwaehr^nummer <> M|auswaehr^nummer
+.continue VOLORDS
+..
+!LIMIT: Change currency of credit limit
+.formula M|krflimit = F|fxamount(M|auswaehr, M|krflimit,, M|einwaehr,)
+..
+!VOLORDS: Volume of sales or purchasing orders
+.continue REFSTAFF ? M|istsachkd
+..
+.formula M|krres = M|krlimit - M|krsaldo ? F|defined(M|kbkdinfo)
+.formula M|krres = M|krsaldo ? F|defined(M|kblfinfo)
+.continue END
+..
+!REFSTAFF: Staff reference
+.formula M|krfres = M|krflimit - M|krfsaldo ? F|defined(M|kbkdinfo)
+.formula M|krfres = M|krfsaldo ? F|defined(M|kblfinfo)
+.continue END
+..
+!PROTECT: Protect partner as partner who pays invoices
+.protection kbeleg 0
+.copy M|kbeleg = G|FALSE
+.continue SET
+..*****************************************************************************
+!END
+.continue

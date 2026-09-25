@@ -1,0 +1,1032 @@
+..!interpreter english
+..@@BEGINHEAD
+..========================================================================
+..==
+..==  Name              : FOP.ZEIGE.FAB
+..==
+..==  Pfad              : dfue
+..==
+..==  Funktion          : Zeigen Liefer-Info (Feinabruf) aus EDI-DB in 1. Freitext
+..==
+..==  Erstellungsdatum  : 14.08.2001
+..==
+..==  Autor             : Ozan Kesim
+..==  Verantwortlich    : mh
+..==  notwendige Pfade  : dfue
+..==
+..==  Menuepunkte       :
+..==
+..==  Maskenprioritaet
+..==  bei EFOP          :
+..==
+..==  Besonderheiten    :
+..==
+..========================================================================
+..@@ENDHEAD
+..
+.. variable definitions
+..@@BEGINVARDEFS
+..====================================================
+.set trans -
+..... procedure stack pointer .....
+.type integer   xprocsp xmenge xkorlabrmge xfz xkfz xormge
+..>> Ident-Nr Vorgang
+.type text       xideksvor
+..>> Name temporÑre Lader-Datei
+.type text       xntemp
+..>> SYS-Befehl
+.type text       xsybefehl xedinum
+..>> fÅr PrÅfung Fehler Datumsformat
+.type integer        xl xl1 xl2
+.type text       xArtVerarbAbr
+..>> Fehler Datumsformat
+.type bool       xFehlDatum
+..>> Mengeneinheit
+.type text       xhe
+..
+..**ok,21.06.2004 (Variablen xmgerest, xmgePosMax wurden definiert)
+.type real       xmgerest xmgePosMax
+..
+..====================================================
+..@@ENDVARDEFS
+..
+.. initialize procedure stack pointer
+.formula xprocsp = 0
+.. alle variablen mÅssen definiert sein, sonst bricht das programm ab
+.set demand -
+..
+.. ----------------------------------------
+.continue EPROCDEF
+.. procedure definitions
+.. EKSErzeugeTabellenZeilenF
+..
+!PROC001: ----- EKSErzeugeTabellenZeilenF -----
+..>> Erzeugen Tabellenzeilen im Lader fÅr Eintrag in Rahmenauftrag
+..>> aus aktuellem EDI-Datensatz
+..>>
+..>> Parameter:
+..>>
+..>> Ein: - aktuell geholter Datensatz ist EDI-Datensatz
+..>>      - Funktion einer Nachricht
+..>>        (EDIFACT-LAB / -FAB, "4": change, vorhandene Positionen Ñndern)
+..>>        (function aus EDI-Datensatz)
+..>>      - Anfang des Zeitraums fÅr Funktion einer Nachricht:
+..>>        "4" - change, vorhandene Positionen Ñndern (EDIFACT-LAB / -FAB)
+..>>        (anfstart aus EDI-Datensatz)
+..>>      - Ende des Zeitraums fÅr Funktion einer Nachricht:
+..>>        "4" - change, vorhandene Positionen Ñndern (EDIFACT-LAB / -FAB)
+..>>        (anfend aus EDI-Datensatz)
+..>>      - Art der Verarbeitung der Abrufe, wenn function = "4"
+..>>        (xArtVerarbAbr):
+..>>        - "0": alle Abrufe mit Termin vor anfstart
+..>>        - "1": alle Abrufe mit Termin zwischen anfstart und anfend
+..>>        - "2": alle Abrufe mit Termin nach anfend
+..>>
+..>> Aus: -
+..>>
+..>> Interne Variablen: - ...
+..>>
+..
+.. >> Erzeugen Tabellenzeilen
+..>> Merken Kopf-Variablen
+..>> Artikelnummer
+..**mh, 15.03.2007: T|ideksart und H|ideksart sind beides Textvariablen
+.. .fo xideksart = ideksart^num2
+.formula T|xideksart = H|ideksart
+..>> Datum Feinabruf
+.formula xlabrufd = labrufd
+..>> Eingangsfortschrittszahl
+.formula xeinfzahl = einfzahl
+..
+.select line
+..
+..>> selektive Verarbeitung der einzelnen Tabellenzeilen des EDI-Datensatzes
+..>> (Abruftermine des Feinabrufs, Zusatz-FAB-Informationen, Packmittel, Textdaten)
+..
+..
+!LOOP001: ==============================
+.continue ELOP001 ? _(mehr)
+..>> Positionstext leer
+.formula xptext = ""
+..
+..>> Verzweigung entsprechend Satzkennzeichen
+..
+..
+.. =====   CASE001   =====
+.continue BRK001 ? _(text1 = "821")
+.. >> 821, Abrufe
+.. >> Formatieren Parameter aus EDI-Datensatz
+..>> Ermitteln, ob korrektes Datums-Format des Inhaltes fÅr EDI-Kopfvariable
+.formula xl  = +'text4'
+..>> Ermitteln, ob LÑnge Datumsparameter gleich 8
+.formula xFehlDatum = xl <> 8
+..>> Test, ob LÑnge Datumsparameter gleich 8
+..
+..
+.continue EL001 ? _(_(xFehlDatum))
+.. IF001
+..>> Ermitteln, ob nur Ziffern
+.formula xFehlDatum = (text4 / " *( -/)*") ; (text4 / " *(:-~)*") ; (text4 / " *(Å-·)*")
+..>> Test, ob nur Ziffern
+..
+..
+.continue EL002 ? _(_(xFehlDatum))
+.. IF002
+..>> Ermitteln, ob:
+..>> - Jahr grî·er 1980
+..>> und
+..>> - Tag zwischen 01.01. und 31.12.
+..>> ("Restrisiko": ungÅltiger Monatstag)
+.formula xl1 = text4<<4
+.formula xl2 = text4>>4
+.formula xFehlDatum = _((xl1 > 1980) & (xl2 >= 101) & (xl2 <= 1231))
+..
+!EL002
+.. FI002
+..
+!EL001
+.. FI001
+..
+..>> Test, ob fehlerhaftes Format des Inhaltes fÅr EDI-Kopfvariable
+..
+..
+.continue EL003 ? _(xFehlDatum)
+.. IF003
+..>> Test, ob Korrektur Datumsparameter in DFUE.IMP.INI eingetragen
+..
+..
+.continue EL004 ? _(xAutoFehlDatumKorr <> "nein")
+.. IF004
+..>> Ersetzen fehlerhaftes Datum aus DFUE.IMP.INI
+.formula xtxttterm = xAutoFehlDatumKorr
+..
+.continue FI004
+!EL004
+..>> Setzen leeres Datum
+.formula xtxttterm = ""
+..
+!FI004
+..
+.continue FI003
+!EL003
+..>> öbernehmen Datum aus EDI-Datensatz
+.formula xtxttterm = (text4 >> "") << ""
+..
+!FI003
+..
+..>> Abrufdatum
+.formula xtterm = xtxttterm
+..>> Abrufmenge
+.formula xabrufmenge = (text5 >> "") << ""
+.formula xmenge = 'xabrufmenge'
+..>> Eintreffzeit
+.formula xzeintr = (text6 >> "") << ""
+..>> Bedarfsstatus
+.formula xbstat = (text7 >> "") << ""
+..
+.. >> Verrechnung Abrufe mit noch nicht beim Kunden gebuchten Lieferungen
+..>> (Eingangs- war kleiner als Lieferanten-Fortschrittszahl)
+..>> Test, ob noch offene Verrechnungsmenge
+..
+..
+.continue EL005 ? _(xkorlabrmge > 0)
+.. IF005
+..>> Test, ob Feinabrufmenge kleiner als offene Verrechnungsmenge
+..
+..
+.continue EL006 ? _(xmenge < xkorlabrmge)
+.. IF006
+..>> Abrufposition stornieren, Verrechnungsmenge korrigieren
+..>> Verrechnungsmenge korrigieren
+.formula xkorlabrmge = xkorlabrmge - xmenge
+..>> Originalmenge
+.formula xormge = xmenge
+..>> Abrufmenge 0
+.formula xmenge = 0
+..
+.continue FI006
+!EL006
+..>> Abrufmenge korrigieren, Verrechngsmenge korrigieren
+..>> Test, ob Positionstext nicht leer
+..
+..
+.continue EL007 ? _(xptext <> "")
+.. IF007
+..>> Zeilevorschub anhÑngen
+.formula xptext = xptext + ";"
+..
+!EL007
+.. FI007
+..
+..>> an Positionstext anhÑngen
+.set trans +
+.formula xptext = xptext + "FZ-Differenz -> Menge reduziert um;" + 'xkorlabrmge'
+.set trans -
+..>> Originalmenge
+.formula xormge = xmenge
+..>> Abrufmenge reduzieren
+.formula xmenge = xmenge - xkorlabrmge
+..>> Verrechnungsmenge 0
+.formula xkorlabrmge = 0
+..
+!FI006
+..
+.continue FI005
+!EL005
+.formula xormge = xmenge
+..
+!FI005
+..
+..>> Test, ob nach evtl. erfolgter Verrechnung noch Abrufmenge vorhanden
+..
+.. Ausgabe Feinabruf-Info auf TMP-Datei
+..>> Ausgabe Feinabruf-Informationen an temporÑre Datei fÅr Sortierung
+.output addedto 'xtmpname1'
+.... Artikel-Identnummer Termin Eintreffzeit Bedarfsstatus Menge Fortschrittszahl
+'xideksart'#'xtterm:8'#'xzeintr'#'xbstat'#'xmenge'#'xeinfzahl'#'xptext'#'xormge'#
+..
+.continue ESAC001
+!BRK001
+..>> sonst, (vorerst) nix zu tun
+..>> 000, 700, 800, 820, 822, 823, 824, 900
+..
+!ESAC001: =====   ENDCASE   =====
+..
+.select line
+..
+.continue LOOP001
+!ELOP001: ==============================
+..
+.continue 'xprocst.xprocsp'
+..
+.. Prozedur: EKSSummiereOffeneLieferungen
+..
+!PROC002: ----- EKSSummiereOffeneLieferungen -----
+..>> Summieren offene Liefermengen des Rahmen-Artikels eines -Rahmens
+..>> aus aus allen Lieferscheinen ab dem beim Kunden gebuchten
+..>> Lieferschein
+..>> Eintrag der Lieferscheine an 1. Freitext des EDI-Datensatzes
+..>>
+..>> Parameter:
+..>>
+..>> Ein: - Identnummer des Lieferscheines (xleinlief)
+..>>      - Datum des Lieferscheins (xleinlida)
+..>>      - Identnummer des Rahmenauftrags (xideksrah)
+..>>      - Identnummer der Rahmen-Artikels (xideksart)
+..>>      - Kundenartikelnummer (xkuartnr)
+..>>      - GTIN-Artikelnummer (xgtin)
+..>>      - Identnummer des EDI-Datensatzes (xedinum)
+..>>
+..>> Aus: - Erfolg Operation (xprocreturn)
+..>>      - Summe der Liefermengen des Rahmenartikels (xkorlabrmge)
+..>>
+..>> Interne Variablen: - xistzeile1
+..>>                    - xistsatz2
+..>>                    - xfobefehl
+..>>                    - xsybefehl
+..>>
+..
+..>> Erfolg der Operation
+.formula xprocreturn = false
+..>> Korrektur neuer Feinabruf bei "Verrechnung" von beim Kunden
+..>> noch nicht gebuchten Lieferscheinen zu Rahmenauftrag
+.formula xkorlabrmge = 0
+..
+.. >> Addieren Liefermengen Rahmen-Artikel aller Lieferscheine zu -Rahmen
+.. >> Holen Lieferscheine ab Nummer und Datum aus DFUE-Auftrag
+..!! Identnummer Rahmenauftrag wegen mîglichen Sammel-Lieferscheinen Åber verschiedene RahmenauftrÑge nicht verwenden,
+..!! Identifikation Åber Positionen der Lieferscheine vornehmen (zrahmen, interne und Kunden-Artikelnummer) !!!
+..
+.formula xvksuchschluessel1 = xSELVKRLAId + ",num3=" + xleinlief + "!;vom=" + 'xleinlida' + "!;ktyp=4;@ordnung=nummer"
+.select sales 'xvksuchschluessel1'
+..
+..
+.continue EL008 ? _(mehr)
+.. IF008
+.continue FI008
+!EL008
+.formula xvksuchschluessel1 = "$,,;@gruppe=1;@ablageart=(2);ktyp=4;nummer=" + xleinlief + "!;vom=" + 'xleinlida' + "!"
+.select sales 'xvksuchschluessel1'
+..
+!FI008
+..
+.formula xistsatz1 = mehr
+..
+..
+!LOOP002: ==============================
+.continue ELOP002 ? _(xistsatz1)
+..>> Test, ob:
+..>> - nÑchster Lieferschein ab Nummer und Datum aus DFUE-Auftrag und
+..>> - nicht letzter beim Kunden eingegangener Lieferschein
+..>>   (Selektionsergebnis beginnt nicht mit Identnummer von xleinlief !!!)
+..>> - Åbertragener Lieferschein
+..>>   (fÅr Verarbeitung Feinabrufe bei nicht Åbertragenen Lieferscheinen erforderlich)
+..
+..
+.continue EL009 ? _((xistsatz1) & ('num' <> 'xleinlief') & (_(aeob)))
+.. IF009
+..>> Initialisieren Schalter fÅr Erkennung abgeglichener Lieferschein
+.formula xistsatz2 = false
+..
+..
+!REPT001: ==============================
+.select line
+..
+.formula xistzeile1 = mehr
+..
+..>> Test, ob: - Tabellenzeile des aktuellen Lieferscheins und
+..>>           - Artikel-Position
+..
+..
+.continue EL010 ? _(xistzeile1)
+.. IF010
+..
+.continue EL011 ? _(typ = arpos)
+.. IF011
+.add zrahmen
+..
+..>> Test Lieferschein-Position, ob zu Rahmenauftrag
+..
+..
+.continue EL012 ? _((mehr) & (d|num = xideksrah))
+.. IF012
+.add
+..
+.add art
+..
+..>> Test Rahmenauftrags-Position, ob Kunden-Artikel-Position
+..
+..
+.continue EL013 ? _((mehr) & (d|num = xideksart) & (((((xkuartnr >> "") << "") <> "") & (xkuartnr = d|kuartnr)) ; ((((xgtin >> "") << "") <> "") & (xgtin = d|gtin))))
+.. IF013
+..>> Erhîhen Korrektur neuer Feinabruf aus Lieferschein-Position
+.formula xkorlabrmge = xkorlabrmge + h|mge
+..
+..>> Setzen Schalter fÅr Erkennung abgeglichener Lieferschein
+.formula xistsatz2 = true
+..
+.formula xprocreturn = true
+..
+!EL013
+.. FI013
+..
+!EL012
+.. FI012
+..
+.add
+..
+!EL011
+.. FI011
+..
+!EL010
+.. FI010
+..
+.continue REPT001 ? _(_(xistzeile1))
+..
+.select header
+..
+!EL009
+.. FI009
+..
+.select sales
+..
+.formula xistsatz1 = mehr
+..
+.continue LOOP002
+!ELOP002: ==============================
+..
+.continue 'xprocst.xprocsp'
+..
+.. Prozedur: EKSHoleRahmenLS
+..
+!PROC003: ----- EKSHoleRahmenLS -----
+..>> Ermitteln (Lieferanten-)Fortschrittszahl der letzten Tabellenposition
+..>> des Rahmen-Artikels eines Lieferscheines eines Rahmenauftrages
+..>>
+..>> Parameter:
+..>>
+..>> Ein: - Identnummer des Lieferscheines (xleinlief)
+..>>      - Identnummer der Rahmen-Artikels (xideksart)
+..>>      - Identnummer der Rahmenauftrags (xideksrah)
+..>>      - Kundenartikelnummer (xkuartnr)
+..>>      - GTIN-Artikelnummer (xgtin)
+..>>
+..>> Aus: - Erfolg Operation (xprocreturn)
+..>>      - (Lieferanten-)Fortschrittszahl (xfzahlls)
+..>>
+..>> Interne Variablen: - xistzeile1
+..>>
+..
+..>> Erfolg der Operation
+.formula xprocreturn = false
+..
+.. >> Ermitteln Fortschrittszahl des beim Kunden gebuchten Lieferscheins
+..>> zuerst in Ablage
+.formula xvksuchschluessel1 = "+" + xleinlief + "!" + xleinlief
+.select sales 'xvksuchschluessel1'
+..
+..>> Test, ob Lieferschein nicht vorhanden
+..
+..
+.continue EL014 ? _(_(mehr))
+.. IF014
+.formula xvksuchschluessel1 = xleinlief
+.select sales 'xvksuchschluessel1'
+..
+!EL014
+.. FI014
+..
+..
+.continue EL015 ? _(mehr)
+.. IF015
+..>> Initialisieren Fortschrittszahl des beim Kunden gebuchten Lieferscheins
+.formula xfzahlls = -1
+..
+..
+!REPT002: ==============================
+.select line
+..
+.formula xistzeile1 = mehr
+..
+..
+.continue EL016 ? _(xistzeile1)
+.. IF016
+..
+.continue EL017 ? _((typ = arpos) & (mge <> 0))
+.. IF017
+.add zrahmen
+..
+..>> Test Rahmen-Position, ob zu Rahmenauftrag
+..
+..
+.continue EL018 ? _((mehr) & (d|num = xideksrah))
+.. IF018
+.add
+..
+.add art
+..
+..>> Test Rahmenauftrags-Position, ob Kunden-Artikel-Position
+..
+..
+.continue EL019 ? _((mehr) & (d|num = xideksart) & (((((xkuartnr >> "") << "") <> "") & (xkuartnr = d|kuartnr)) ; ((((xgtin >> "") << "") <> "") & (xgtin = d|gtin))))
+.. IF019
+..>> Merken Fortschrittszahl der aktuellen Lieferscheinposition
+.formula xfzahlls = h|fzahl
+..
+.formula xprocreturn = true
+..
+!EL019
+.. FI019
+..
+!EL018
+.. FI018
+..
+.add
+..
+!EL017
+.. FI017
+..
+!EL016
+.. FI016
+..
+.continue REPT002 ? _(_(xistzeile1))
+..
+!EL015
+.. FI015
+..
+.continue 'xprocst.xprocsp'
+..
+.. Prozedur: PrÅfeFzahlDiff
+..
+!PROC004: ----- PrÅfeFzahlDiff -----
+..
+.continue EL020 ? _(mehr)
+.. IF020
+..
+.continue EL021 ? _(xlfzahl=lfzahl)
+.. IF021
+.input -text 'ftext' ? _F|empty(ftext)
+..
+.continue FI021
+!EL021
+.formula xeinfzahl = einfzahl
+.formula xkorfzahl = korfzahl
+.formula xmmvvl = such << 4
+..
+.. ob (xeinfzahl + xkorfzahl) < xmge
+..**ok,18.07.2002 (Definition der Dateinamen hierher umgelagert)
+..
+.formula xnlader = xmmvvl + "." + 'xedinum'
+.output new 'xnlader'
+.length 1
+.right 299
+.tablerecord
+..
+..>> Initialisierung temporÑre Datei fÅr Sortierung Feinabrufe aus Rahmen und EDI-Datensatz
+.formula xtmpname1 = xmmvvl + "LS." + 'xedinum'
+.output new 'xtmpname1'
+..
+..
+.continue EL022 ? _((xeinfzahl + xkorfzahl) < xlfzahl)
+.. IF022
+..**ok,18.07.2002 (Definition der Dateinamen von hier umgelagert)
+..
+..>> Test, ob:
+..>> - öberprÅfung Lieferscheine
+..>> und
+..>> - Eingangs-Fortschrittszahl grî·er 0
+..>>   bei gleich 0 ist (wahrscheinlich) noch kein Lieferschein
+..>>   beim Kunden gebucht, kann folglich auch nicht verrechnet
+..>>   werden
+..
+..
+.continue EL023 ? _((xTestLSwennFZDiffF) & (xeinfzahl  > 0))
+.. IF023
+.. >> PrÅfen, ob beim Kunden nicht gebuchter LS vorhanden
+..>> (alle beim Kunden ausstehende Lieferungen, welche bereits offenen oder
+..>> Åbertragen Lieferschein im EKS besitzen)
+..
+.. >> Holen Lieferschein mit Nummer und Datum
+..!! Identnummer Rahmenauftrag wegen mîglichen Sammel-Lieferscheinen Åber verschiedene RahmenauftrÑge nicht verwenden,
+..!! Identifikation Åber Nummer und Datum des Lieferscheins mÅ·te eindeutig sein !!!
+..
+.formula U|xvksuchschluessel1 = F|formatstr("$,,;@gruppe=1;ktyp=4;@ablageart=(Lebendig);@ordnung=nummer;nummer={1};vom={2}", xleinlief, xleinlida)
+.select sales 'xvksuchschluessel1'
+..
+..
+.continue EL024 ? _(mehr)
+.. IF024
+.continue FI024
+!EL024
+.formula U|xvksuchschluessel1 = F|formatstr("$,,;@gruppe=1;ktyp=4;@ablageart=(Beides);@ordnung=nummer;nummer={1};vom={2}", xleinlief, xleinlida)
+.select sales 'xvksuchschluessel1'
+..
+!FI024
+..
+..>> Test, ob erster gefundener Lieferschein gleich beim Kunden gebuchtem:
+..
+..
+.continue EL025 ? _(mehr)
+.. IF025
+..>> Ermitteln (L-Fzahl der letzten Tabellenposition des LS
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC003
+!RET001
+.formula xprocsp = xprocsp - 1
+..
+..>> Test, ob der beim Kunden gebuchte LS Position
+..>> mit Kundenartikel enthÑlt
+..
+.. Test von beim Kunden gebuchte LS Position
+..
+.continue EL026 ? _(xprocreturn)
+.. IF026
+..>> Test, ob (Eingangs-)Fortschrittzahl mit der des beim Kunden gebuchten
+..>> Lieferscheins Åbereinstimmt
+..
+..
+.continue EL027 ? _(xeinfzahl = xfzahlls)
+.. IF027
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC002
+!RET002
+.formula xprocsp = xprocsp - 1
+..
+..>> Test, ob Summieren Liefermengen nach leztem LS beim Kunden
+..
+.. Fehlercode 21
+..
+.continue EL028 ? _(_(xprocreturn))
+.. IF028
+..>> Merken, da· nicht "abgleichbare" Differenz der Fortschrittszahlen
+.formula xisterrfzahl = true
+..
+.select lock edifact 'xedinum'
+.formula status = 4
+..>> 21 -> wegen fehlerhaftem Auftrag zu Rahmenauftrag abgebrochen
+..>>       (EFZ < LFZ, Lieferschein Nr. vorhanden, mit LFZ = EFZ,
+..>>       kein Abgleich LFZ und Abrufpositionen mîglich)
+.formula fcode = 21
+.rewrite
+..
+..>> EDI-Identnummer des EDI-Datensatzes
+.formula xedinumactinnachr1 = xedinum
+..
+!EL028
+.. FI028
+..
+.continue FI027
+!EL027
+.. Fehlercode 20
+..>> Merken, da· nicht "abgleichbare" Differenz der Fortschrittszahlen
+.formula xisterrfzahl = true
+..
+.select lock edifact 'xedinum'
+.formula status = 4
+..>> 20 -> wegen fehlerhaftem Auftrag zu Rahmenauftrag abgebrochen
+..>>       (EFZ < LFZ, Lieferschein Nr. vorhanden, mit LFZ <> EFZ,
+..>>       kein Abgleich LFZ und Abrufpositionen mîglich)
+.formula fcode = 20
+.rewrite
+..
+..>> EDI-Identnummer des EDI-Datensatzes
+.formula xedinumactinnachr1 = xedinum
+..
+!FI027
+..
+.continue FI026
+!EL026
+.. Fehlercode 19
+..>> Merken, da· nicht "abgleichbare" Differenz der Fzahlen
+.formula xisterrfzahl = true
+..
+.select lock edifact 'xedinum'
+.formula status = 4
+..>> 19 -> wegen fehlerhaftem AU zu Rahmenauftrag abgebrochen
+..>> (EFZ < LFZ, LS-Nr. ohne Tabellenzeile fÅr Kundenartikel)
+.formula fcode = 19
+.rewrite
+..
+..>> EDI-Identnummer des EDI-Datensatzes
+.formula xedinumactinnachr1 = xedinum
+..
+!FI026
+..
+.continue FI025
+!EL025
+..>> Merken, da· nicht "abgleichbare" Differenz der FZahl
+.formula xisterrfzahl = true
+..
+.select lock edifact 'xedinum'
+.formula status = 4
+..>> 18 -> wegen fehlerhaftem AU zu Rahmenauftrag abgebrochen
+..>> (EFZ < LFZ, Lieferschein Nr. mit LFZ = EFZ nicht vorh.)
+.formula fcode = 18
+.rewrite
+..
+..>> EDI-Identnummer des EDI-Datensatzes
+.formula xedinumactinnachr1 = xedinum
+..
+!FI025
+..
+.continue FI023
+!EL023
+.. Merken der Differenz
+..>> Korrektur neuer Lieferabruf bei "Verrechnung" von beim Kunden
+..>> noch nicht gebuchten Lieferscheinen zu Rahmenauftrag
+.formula xkorlabrmge = xlfzahl - (xeinfzahl + xkorfzahl)
+..
+!FI023
+..
+.continue FI022
+!EL022
+.. xkorlabrmge = 0
+..>> "Nullung" Variable fÅr Verrechnung beim Kunden nicht gebuchter LS
+..>>  Korrektur neuer Feinabruf bei "Verrechnung" von beim Kunden
+..>> noch nicht gebuchten Lieferscheinen zu Rahmenauftrag
+.formula xkorlabrmge = 0
+..
+!FI022
+..
+.select edifact 'xedinum'
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+..
+.. >> Ausgabe Feinabrufpositionen in die Freitext 1 im EDI-Datensatz
+.output addedto 'xnlader'
+.length 1
+.right 299
+.tablerecord
+..
+..>> Sortieren temporÑre Datei fÅr Feinabrufe aus Rahmen und EDI-Datensatz
+.formula xtmpname2 = xmmvvl + "LSN." + 'xedinum'
+.formula xsybefehl = "sort " + xtmpname1 + " > " + xtmpname2 + " ; mv " + xtmpname2 + " " + xtmpname1
+.system 'xsybefehl'
+..
+..>> Initialisieren Anzahl der Tabellenzeilen fÅr Feinabrufe im Rahmen
+.formula xzaehl2 = 1
+..
+.select from
+..
+.set separator ~
+..
+.set trans +
+                     LIEFER-INFORMATION
+                     ==================
+ Aktuellster Feinabruf im EDI-Datensatz 'xedinum' vom 'erfass'
+ FAB-Nr: 'labruf       ' FAB-Datum: 'labrufd'
+ Eingangs-Fzahl: ' einf'
+ Liefer-Fzahl:   ' xkfz' LFZ-Datum: 'xdlfzahl ' LFZ-Zeit: 'xzlfzahl'
+ Artikel: 'xideksart   ' Rahmen:    'xrahnum  ' Lzt-Auftrag:'xlztabruf'
+
+  Termin FAB-Menge Einh. Zu liefern E.Zeit B.Status
+-------- --------- ----- ---------- ------ --------
+.set trans -
+..
+..
+!REPT003: ==============================
+..>> Holen Zeile aus temporÑrer Datei fÅr Feinabrufe aus Rahmen und EDI-Datensatz
+..>> Artikel-Identnummer Termin Eintreffzeit Bedarfsstatus Menge Fortschrittszahl
+..**ok,18.07.2002 (xeinfzahl --> xefzahl)
+.select from 'xtmpname1' xideksart # xtterm # xzeintr # xbstat # xmenge # xefzahl # xptext # xormge #
+..
+..
+.continue EL029 ? _(mehr)
+.. IF029
+.. >> Testergebnis positiv: Ausgabe neue Feinabruf-Tabellenzeile(n) an TMP-File
+..>> Merken gesamte Abrufmenge
+.formula xmgesave = xmenge
+..
+..>> Initialisierung: Rest gleich Abrufmenge
+.formula xmgerest = xmenge
+..
+..
+!REPT004: ==============================
+..>> Test, ob Abrufmenge der Position grî·er als Maximum
+..
+..
+.continue EL030 ? _(xmgerest > xmgePosMax)
+.. IF030
+..>> Abrufmenge der Position wird Maximum
+.formula xmenge = xmgePosMax
+..
+.continue FI030
+!EL030
+..>> Abrufmenge wird Rest
+.formula xmenge = xmgerest
+..
+!FI030
+..
+..>> Korrigieren Rest
+.formula xmgerest = xmgerest - xmenge
+..
+..>> Positionsnummer "nnnnnF" (VDA- / EDIFACT-"F"einabruf)
+.formula xfobefehl = (("00000" + 'xzaehl2') >> 5) + "F"
+.formula xzeintr = (xzeintr >> "") << ""
+.formula xzeintr = (xzeintr << 2) + ":" + (xzeintr >> 2)
+.formula xbstat = (xbstat >> "") << ""
+.formula xbstat = xbstat >> 1
+..
+.formula xart = xideksart
+..**ok,18.07.2002 (xeinfzahl --> xefzahl)
+.formula xfz = xefzahl
+..**mh, 15.03.2007: xtt zu xdt umgenannt, Abgrenzung zu xtterm da noabbrev nicht aktiv ist
+.type date xdt
+..**ok,21.06.2004 (unten statt .fo --> .zuweisen)
+.assign T|xdt = T|xtterm
+.formula xze = xzeintr
+.formula xbs = xbstat
+..
+?'xdt   ' ' xormge' 'xhe ' ' xmenge' ' xze'   'xbs'                       ? xmenge = xmgesave
+.set trans +
+?'xdt   ' ' xormge' 'xhe ' ' xmenge' ' xze'   'xbs' 'xmgesave' gesplittet ? xmenge <> xmgesave
+.set trans -
+..>> Inkrementieren ZÑhler Feinabrufe
+.formula xzaehl2 = xzaehl2 + 1
+..
+.continue REPT004 ? _(xmgerest <= 0)
+..
+..>> ZurÅckholen gesamte Abrufmenge
+.formula xmenge = xmgesave
+..
+!EL029
+.. FI029
+..
+.continue REPT003 ? _(_(mehr))
+..
+.set separator ;
+..
+..>> Initialisierung temporÑre Protokoll-Datei fÅr Postprozessing Feinabrufe
+..>> Name der Ergebnis- / Fehler-Protokoll-Datei Postprozessing Feinabrufe
+.formula xnpprotokollf = "XIAV.IVF." + 'xedinum'
+..
+.output new WERF.WEG
+.output addedto 'xnlader'
+.length 1
+.right 299
+.tablerecord
+..
+.output new WERF.WEG
+..
+..>> Setzen Bearbeitungsstatus in AbhÑngigkeit von FZ-Differenz
+..
+.select lock edifact 'xedinum'
+.formula status = 0
+.formula fcode = 0
+..
+.formula ftext = xnlader
+.formula lfzahl     = xlfzahl
+.formula dlfzahl    = xdlfzahl
+.formula zlfzahl    = xzlfzahl
+..
+.rewrite
+..
+..>> EDI-Identnummer des EDI-Datensatzes
+.formula xedinumactinnachr1 = xedinum
+..
+.select edifact 'xedinum'
+..
+.output terminal
+.input BILD.F
+.input 'ftext' ? ftext<>""
+..
+!FI021
+..
+.continue FI020
+!EL020
+.box Meldung
+EDI-Datensatz 'xedinum' nicht mehr vorhanden!
+..
+!FI020
+..
+.continue 'xprocst.xprocsp'
+..
+!EPROCDEF: ----- end procedure definitions -----
+.. ----------------------------------------
+..
+.input "dfue/DFUE.IMP.INI"
+..
+..**ok,29.08.2002 (unten evtobjekt vom "Angebot" als "Rahmenauftrag" geÑndert)
+..
+..
+.. =====   CASE002   =====
+.continue BRK002 ? _(evtobjekt = "Rahmenauftrag")
+.. wenn Rahmenauftrag
+..**ok,29.08.2002 (jetzt statt ptext neue Standardvariable "fabediid" verwendet)
+.. .fo xedinum  = ptext << ";"
+.formula xedinum  = M|fabediid
+.formula xlfzahl  = M|fzahl
+.formula xkfz     = M|fzahl
+.formula xdlfzahl = datum
+.formula xzlfzahl = zeit
+.formula xrahnum  = kopf
+..**ok,29.08.2002 (jetzt statt ptext neue Standardvariable "lztau" verwendet)
+.. .fo xlztabruf= ((ptext>>";")>>";")<<" "
+.formula xlztabruf= M|lztau
+..
+..>> Initialisierung: keine Mengeneinheit
+.formula xhe = ""
+..
+..>> Merken Mengeneinheit
+.formula xhe = 'he'
+..
+..
+.continue EL031 ? _(xedinum<>"")
+.. IF031
+..
+.continue EL032 ? _(xedinum="0")
+.. IF032
+.. kein FAB
+.box Meldung
+Kein Feinabruf vorhanden!
+..
+.continue FI032
+!EL032
+.select edifact 'xedinum'
+..
+..
+.continue EL033 ? _(mehr)
+.. IF033
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC004
+!RET004
+.formula xprocsp = xprocsp - 1
+..
+.continue FI033
+!EL033
+.box Meldung
+EDI-Datensatz 'xedinum' nicht mehr vorhanden!
+..
+!FI033
+..
+!FI032
+..
+.continue FI031
+!EL031
+.box Meldung
+Kein Feinabruf vorhanden!
+..
+!FI031
+..
+.continue ESAC002
+!BRK002
+.. wenn Auftrag/Lieferschein
+..**ok,13.09.2001 (weil die Feinabrufbutton nur in der Tabelle, rahmen --> zrahmen)
+.formula xrahmen = zrahmen
+..
+..
+.continue EL034 ? _(typ=arpos)
+.. IF034
+.formula xart = art
+.formula xmehr = false
+..
+.continue FI034
+!EL034
+.box Meldung
+Kein Feinabruf vorhanden!
+.end
+..
+!FI034
+..
+..
+.continue EL035 ? _((xrahmen<>"") & (xart<>""))
+.. IF035
+.. >> Holen Rahmenauftrag
+..>> Holen Rahmenauftrag
+.formula xvksuchschluessel1 = "$,,;@gruppe=2;ablagef=no;@ablageart=(1);kotyp=(BlanketOrder);kopf =" + xrahmen + ";artikel=" + xart
+.select sales 'xvksuchschluessel1'
+..
+..
+.continue EL036 ? _(mehr)
+.. IF036
+..**ok,29.08.2002 (statt ptext "fabediid")
+.. .fo xedinum  = ptext << ";"
+.formula xedinum  = H|fabediid
+.formula xlfzahl  = H|fzahl
+.formula xkfz     = H|fzahl
+.formula xdlfzahl = datum
+.formula xzlfzahl = zeit
+.formula xrahnum  = kopf
+..**ok,29.08.2002 (statt ptext "lztau")
+.. .fo xlztabruf= ((ptext>>";")>>";")<<" "
+.formula xlztabruf= H|lztau
+..
+..>> Initialisierung: keine Mengeneinheit
+.formula xhe = ""
+..
+..>> Merken Mengeneinheit
+.formula xhe = 'he'
+..
+!EL036
+.. FI036
+..
+..
+.continue EL037 ? _(xedinum<>"")
+.. IF037
+..
+.continue EL038 ? _(xedinum="0")
+.. IF038
+.. kein FAB
+.box Meldung
+Kein Feinabruf vorhanden!
+..
+.continue FI038
+!EL038
+.select edifact 'xedinum'
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC004
+!RET005
+.formula xprocsp = xprocsp - 1
+..
+!FI038
+..
+.continue FI037
+!EL037
+.box Meldung
+Kein Feinabruf vorhanden!
+..
+!FI037
+..
+.continue FI035
+!EL035
+..
+.continue EL039 ? _(xrahmen="")
+.. IF039
+.box Meldung
+Kein Rahmenauftrag eingetragen!
+..
+.continue FI039
+!EL039
+.box Meldung
+Kein Artikel eingetragen!
+..
+!FI039
+..
+!FI035
+..
+!ESAC002: =====   ENDCASE   =====
+..
+.end
+..
+..>> Initialisierung temporÑre Datei fÅr Sortierung Feinabrufe aus Rahmen und EDI-Datensatz
+.formula xtmpname1 = xmmvvl + "LS." + 'xedinum'
+.output new 'xtmpname1'
+..
+.formula xsybefehl = "rm -f " + xtmpname1 + " 1> ${DEVNULL:-/dev/null} 2>&1"
+.system 'xsybefehl' background
+..

@@ -1,0 +1,103 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICEPROCESS.OBJSUCHE.RESTELLER.FO
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text xbankverb ? _F|defined(U|xbankverb)
+.type text xtext     ? _F|defined(U|xtext)
+..
+.formula M|button8 = M|gruenz
+..<META M|='ev/ELINVOICEPROCESS'>
+..
+.continue END ? F|empty(M|SellerTradePartySpecifiedTaxRegistration)
+..
+.. Aufruf: ev/ELINVOICEPROCESS.OBJSUCHE.VP5.BUSINESSPARTNER.FO
+.type text searchfop ? _F|defined(U|searchfop)
+.formula U|searchfop = "ev/ELINVOICEPROCESS.OBJSUCHE.VP5.BUSINESSPARTNER.FO"
+..
+.. Parameter-Felder 
+.type text xsuchsteunr ? _F|defined(U|xsuchsteunr)
+.type text xsuchustid  ? _F|defined(U|xsuchustid)
+.type text xsuchgln    ? _F|defined(U|xsuchgln)
+..
+.. Ergaenzende Parameter um Kunden/Lieferanten NICHT zu durchzsuchen
+.. Hier: Kundenstamm nicht durchsuchen
+.type bool xskippLIEF  ? _F|defined(U|xskippLIEF)
+.type bool xskippKUN   ? _F|defined(U|xskippKUN)
+.copy U|xskippKUN = G|true
+..
+.. Ergebnis-Felder
+.type VP5 xgefundenVP5  ? _F|defined(U|xgefundenVP5)
+.type text xtsuchfehler ? _F|defined(U|xtsuchfehler)
+..
+.formula U|xsuchsteunr = M|SellerTradePartySpecifiedTaxRegistration
+.formula U|xsuchustid = M|SellerTradePartySpecifiedTaxRegistration
+.formula U|xsuchgln = ""
+..
+.input 'U|searchfop'
+.println 'U|xtsuchfehler' ? _F|empty(U|xtsuchfehler)
+.colour -background 'U|xabasyellow' kobverb                                  ? F|empty(M|PayeePartyCreditorFinancialAccountIBANID)
+.colour -background 'U|xabasyellow' PayeePartyCreditorFinancialAccountIBANID ? F|empty(M|PayeePartyCreditorFinancialAccountIBANID)
+.continue ERROR ? F|empty(U|xgefundenVP5)
+.assign M|resteller = U|xgefundenVP5
+.assign M|rechnung = M|resteller^rechnung
+.copy M|bbiban = G|FALSE
+.continue END           ? F|empty(M|PayeePartyCreditorFinancialAccountIBANID)
+.formula M|PayeePartyCreditorFinancialAccountIBANID = 'F|trim(M|PayeePartyCreditorFinancialAccountIBANID)'
+.formula M|PayeePartyCreditorFinancialAccountIBANID = 'F|regreplaceall(M|PayeePartyCreditorFinancialAccountIBANID, " ", "")'
+.formula M|reiban = 'F|trim(M|resteller^biban)'
+.formula M|reiban = 'F|regreplaceall(M|reiban, " ", "")'
+.copy M|bbiban = G|TRUE ? 'M|reiban' = 'M|PayeePartyCreditorFinancialAccountIBANID' & _F|empty(M|PayeePartyCreditorFinancialAccountIBANID)
+.protection kobverb ? _F|empty(M|PayeePartyCreditorFinancialAccountIBANID)
+.protection kobverb ?  F|empty(M|resteller)
+.protection -reset kobverb ? _F|empty(M|resteller)
+.assign M|kobverb = M|resteller^bverb ?  M|bbiban & 'M|reiban' = 'M|PayeePartyCreditorFinancialAccountIBANID'
+.colour -background -1 -1 -1 bbiban   ?  M|bbiban & _F|empty(M|kobverb)
+.protection kobverb                   ?  M|bbiban & _F|empty(M|kobverb)
+.continue END                         ?  M|bbiban & _F|empty(M|kobverb)
+.. Resteller kînnte weitere Bankverbindungen besitzen
+.formula U|xbankverb = "$,,konto="+'M|resteller^id'
+.load 9 bankdata 'U|xbankverb'
+.continue TRBANK
+..
+!BANKDATA
+.load 9 bankdata 
+..
+!TRBANK
+.continue ERROR1   ? _G|mehr
+.continue BANKDATA ? 'F|regreplaceall(9|iban, " ", "")' <> 'M|PayeePartyCreditorFinancialAccountIBANID'
+.copy M|bbiban = G|TRUE
+.assign M|kobverb = 9|id
+.formula M|reiban = 'F|regreplaceall(9|iban, " ", "")'
+.colour -background -1 -1 -1 bbiban  ? _F|empty(M|kobverb)
+.continue END
+..
+..*****************************************************************************
+!END
+.colour -background 'U|xabasyellow' bbiban    ? _M|bbiban
+.formula M|button8 = M|rotz                   ? _M|bbiban & _M|SpecifiedTradePaymentMeans = 59
+.continue
+..
+!ERROR
+.formula U|xtext = F|formatstr("Zu {1} konnte der Rechnungssteller nicht ermittelt werden.", 'M|SellerTradePartySpecifiedTaxRegistration')
+.formula M|fctext = 'M|fctext' + ";" + 'U|xtext'
+.colour -background 'U|xabasyellow' resteller 
+.formula M|button8 = M|rotz
+.colour -background 'U|xabasyellow' lieferant ? F|empty(M|lieferant)
+.formula M|button0 = M|rotz
+.println 'U|xtsuchfehler' ? _F|empty(U|xtsuchfehler)
+.continue
+..
+!ERROR1: keine passende Bankverbindung
+.. prÅfen, ob die Zahlungsart Lastschrift oder SEPA-LAstschrift ist
+.continue END ? 'M|SpecifiedTradePaymentMeans' = "49" ; 'M|SpecifiedTradePaymentMeans' = "59"
+.formula U|xtext = F|formatstr("Es konnte keine passende Bankverbindung zu IBAN {1} gefunden werden.", 'M|PayeePartyCreditorFinancialAccountIBANID')
+.formula M|fctext = 'M|fctext' + ";" + 'U|xtext' 
+.colour -background 'U|xabasyellow' kobverb
+.colour -background 'U|xabasyellow' bbiban
+.formula M|button8 = M|rotz
+.continue

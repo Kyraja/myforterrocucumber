@@ -20,8 +20,9 @@ interface FileTreeItemProps {
   activeFilePath: string | null;
   activeScenarioPath: string | null;
   selectedFolderPath: string | null;
+  selectedFilePaths: Set<string>;
   dragOverPath: string | null;
-  onSelect: (path: string) => void;
+  onSelect: (path: string, event: React.MouseEvent) => void;
   onToggle: (path: string) => void;
   onSelectFolder: (path: string) => void;
   onSelectScenario: (filePath: string, scenarioId: string) => void;
@@ -39,6 +40,7 @@ export function FileTreeItem({
   activeFilePath,
   activeScenarioPath,
   selectedFolderPath,
+  selectedFilePaths,
   dragOverPath,
   onSelect,
   onToggle,
@@ -54,25 +56,28 @@ export function FileTreeItem({
   const hasChildren = node.children.length > 0;
   const isActive = (node.type === 'file' && node.path === activeFilePath)
     || (node.type === 'scenario' && node.path === activeScenarioPath);
+  const isFileSelected = node.type === 'file' && selectedFilePaths.has(node.path);
   const isFolderSelected = node.type === 'folder' && node.path === selectedFolderPath;
   const isDragOver = node.type === 'folder' && node.path === dragOverPath;
   const hasError = errorPaths.has(node.path);
 
-  const handleClick = useCallback(() => {
+  const handleClick = useCallback((event: React.MouseEvent) => {
     if (node.type === 'folder') {
       onSelectFolder(node.path);
       onToggle(node.path);
     } else if (node.type === 'file') {
-      onSelect(node.path);
-      // Also expand to show scenarios
-      if (!node.expanded && hasChildren) {
+      const isActiveFile = node.path === activeFilePath;
+      const hasModifier = event.shiftKey || event.ctrlKey || event.metaKey;
+      if (isActiveFile && node.expanded && hasChildren && !hasModifier) {
         onToggle(node.path);
+      } else {
+        onSelect(node.path, event);
       }
     } else if (node.type === 'scenario') {
       const filePath = node.path.split('#')[0];
       onSelectScenario(filePath, node.scenarioId ?? '');
     }
-  }, [node, onSelect, onToggle, onSelectScenario, hasChildren]);
+  }, [node, onSelect, onSelectFolder, onToggle, onSelectScenario, hasChildren, activeFilePath]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -129,6 +134,9 @@ export function FileTreeItem({
 
   // Item class
   let itemClass = isActive || isFolderSelected ? styles.treeItemActive : styles.treeItem;
+  if (!isActive && isFileSelected) {
+    itemClass = `${styles.treeItem} ${styles.treeItemSelected}`;
+  }
   if (isDragOver) {
     itemClass = `${itemClass} ${styles.treeItemDragOver}`;
   }
@@ -161,6 +169,7 @@ export function FileTreeItem({
           activeFilePath={activeFilePath}
           activeScenarioPath={activeScenarioPath}
           selectedFolderPath={selectedFolderPath}
+          selectedFilePaths={selectedFilePaths}
           dragOverPath={dragOverPath}
           onSelect={onSelect}
           onToggle={onToggle}

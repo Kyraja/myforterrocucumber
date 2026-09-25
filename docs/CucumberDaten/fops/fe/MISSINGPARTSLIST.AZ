@@ -1,0 +1,154 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : MISSINGPARTSLIST.AZ
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Infosystem, Liste der Fehlteile
+..                  Tabellenzeigfop
+.. Ablauf         :
+.. Includes       :
+.. include is/PRUEFEVERFUEG
+..
+..*****************************************************************************
+.set trans -
+.type VPK2 xidverfueg    ? _F|defined(U|xidverfueg)
+.type GD   xwunschtermin ? _F|defined(U|xwunschtermin)
+.type integer xzn         ? _F|defined(U|xzn)
+.type bool    xdel        ? _F|defined(U|xdel)
+.type bool xbclose   ? _F|defined(U|xbcolse)
+..
+.copy U|xbclose = G|FALSE
+.continue             ? _M|kenn2/"*/+-/*"
+.continue CLOSE       ?  M|kenn2 = "-"
+.formula U|xzn   = M|zn
+.formula M|kenn2 = "-"
+.formula M|kenn  = "icon:folder_opened"
+.. lade FV
+.select purchasing 'M|vorgang^id'
+.assign M|art = H|art
+.copy M|stl = G|TRUE ? M|art^ozeilen > 0
+..
+.. lade Reservierung / select Reservations
+.select add H|eres
+.continue                     ? _G|mehr
+..
+!ZEILE
+.. no operation if start up quantity and number is null or provided parts
+.. keinen Arbeitsgang ausgeben, wenn Anfahrmenge und Anzahl null sind oder Beistellteile
+.continue HZ ? (H|amge = 0 & H|anzahl = 0) ; H|lfbeist
+.. nicht relevante Reservierungen Åberspringen
+.continue HZ ? _H|relevant
+.continue HZ ? H|elem^gruppe <> 1
+..
+.make screen line +O
+.colour -background 'M|farbe1' 'M|aktzeile'
+.assign M|art     = H|elem
+.copy M|stl = G|TRUE ? M|art^ozeilen > 0
+.continue ELART3                       ? H|elart = 3
+.continue ICON
+..
+!ELART3
+.assign M|abtlg  = H|mgr
+.continue ICON
+..
+!ICON
+.assign M|lgruppe = H|lgruppe
+.assign M|vorgang = H|id
+.formula M|tbetreuer = ""
+.formula M|kenn2     = "O"
+..
+.formula M|engmatz = ""
+.formula M|engmatz = M|prverfuegz ? F|equals(H|dispoa, "(EmptyEntry)") ; F|equals(H|dispoa, "(RemainingQuantitiesRelated)") ; F|equals(H|dispoa, "(RemainingQuantityRelatedNone)") ; F|equals(H|dispoa, "(MinimumStockLevelRelated)") ; F|equals(H|dispoa, "(EmptyNone)") ;  F|equals(H|dispoa, "(MinimumStockLevelRelatedNone)")
+.assign U|xidverfueg     = M|vorgang^id
+.. FrÅhester End-Termin aus FV
+.formula U|xwunschtermin = 'H|fterm'
+.. Endtermin aus FV
+.formula U|xwunschtermin = 'M|vorgang^wtterm'  ?  F|empty(U|xwunschtermin)
+.. VerfÅgbarkeitstermin aus Maske
+.formula U|xwunschtermin = M|wterm             ? _F|empty(M|wterm)
+.formula U|xwunschtermin = G|datum             ? 'U|xwunschtermin:8' < 'G|datum:8'
+.input "is/PRUEFEVERFUEG"
+.assign M|gesmge      = U|xgesmge
+.assign M|geseinheit  = U|xgeseinheit
+.assign M|kterm       = U|xkterm
+.assign M|wunsch      = U|xwunschtermin
+.continue VERFUEG   ? _U|xtableempty
+.set trans +
+.formula M|hinweis = "VerfÅgbarkeitsprÅfung fÅr noch nicht eingeplante Bedarfe nicht mîglich."
+.set trans -
+.formula M|vaufzu    = "" 
+.formula M|ofmge     = U|xofmge
+.formula M|fehlmge   = 0
+.formula M|engmatz   = "icon:date_disabled"
+.continue HZ
+..
+!VERFUEG
+.formula M|verfuegmge = U|xverfuegmge
+.formula M|vplgmge    = U|xvplgmge
+.formula M|vpbsmge    = U|xvpbsmge
+.formula M|ofmge      = U|xofmge
+.formula M|hinweis = ""
+.formula M|fehlmge    = M|verfuegmge - M|ofmge
+.formula M|engmatz   = "icon:box_red"   ? (M|vplgmge + M|vpbsmge) < M|ofmge
+.formula M|vaufzu    = "icon:plus" 
+..
+!HZ
+.select line
+.continue HZE          ? _G|mehr
+.continue ZEILE
+..
+!HZE
+.select add
+.continue END
+..
+!CLOSE
+.copy U|xbclose = G|TRUE
+.continue END          ? M|kenn2 <> "-"
+.formula M|kenn2 = "+"
+.formula M|kenn  = "icon:folder_closed"
+..
+!HMZ
+.select screen line
+..
+!HMZ2
+.continue END  ? _G|mehr
+.continue END  ? M|kenn2<>"O"
+..
+.make screen line -O
+.continue HMZ2
+..
+!END: Farben aktualisieren
+.select screen header
+..
+!HMZ3
+.select screen line
+.continue DEL  ? _G|mehr  & M|nurfehlmge & _U|xbclose
+.continue ENDE ? _G|mehr
+.colour -background 'M|farbe1' 'M|aktzeile' ? _M|nurfehlmge ; U|xbclose
+.colour -background 'M|farbe2' 'M|aktzeile' ?  M|kenn2/"O*" & (_M|nurfehlmge ; U|xbclose)
+.formula M|linie = 1
+.formula M|linie = 0                        ?  M|kenn2/"O*"
+.continue HMZ3
+..
+!DEL
+.copy U|xdel = G|FALSE
+..
+!DELSELSCREEN
+.continue ENDE         ? U|xzn > M|tzeilen
+.select screen line 'U|xzn'
+.continue ENDE         ? _G|mehr
+.continue ENDE         ?  M|kenn  = "icon:folder_closed"
+.copy U|xdel = G|FALSE
+.copy U|xdel = G|TRUE  ? M|fehlmge = 0 & F|empty(M|aufzu) & M|nurfehlmge
+.make screen line -    ? U|xdel
+.colour -background 'M|farbe1' 'M|aktzeile'
+.colour -background 'M|farbe2' 'M|aktzeile'       ?  M|kenn2/"O*"
+.formula M|linie = 1
+.formula M|linie = 0                              ?  M|kenn2/"O*"
+.continue DELSELSCREEN ? U|xdel
+.formula U|xzn = U|xzn + 1
+.continue DELSELSCREEN
+..
+!ENDE
+.continue

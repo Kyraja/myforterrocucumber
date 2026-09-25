@@ -1,0 +1,376 @@
+..!interpreter english
+..@@BEGINHEAD
+..========================================================================
+..==
+..==  Name              : EDI.EDI2VKEDL36UP1
+..==
+..==  Pfad              : dfue
+..==
+..==  Funktion          : EDL-Meldungen Abgangsmeldung/Entnahmeninfo
+..==
+..==  Erstellungsdatum  : 17.12.2003
+..==
+..==  Autor             : abas Software© AG, Ozan Kesim
+..==  Verantwortlicher  : mh
+..==  notwendige Pfade  : dfue, dfue1, dfue2, tmp
+..==
+..==  Menuepunkte       :
+..==
+..==  Maskenprioritaet
+..==  bei EFOP          :
+..==
+..==  Besonderheiten    : Unterprogram von EDI.EDI2VKEDL36
+..==
+..==  Aenderungshistorie:
+..==
+..#KOR#EDI-MODUL#DATUM#ŽNDERUNGS-INDEX#Mitarbeiterkrzel#
+..#KOR#EDL#17.12.2003#0#ok#
+..========================================================================
+..@@ENDHEAD
+..
+.input ARB
+..
+.. Variablendefinition
+..@@BEGINVARDEFS
+..====================================================
+.set trans -
+..>> Variablendefinition
+..>>
+..
+.. alle variablen mssen definiert sein, sonst bricht das programm ab
+.set demand -
+..
+.. ----------------------------------------
+.continue EPROCDEF
+.. procedure definitions
+!EPROCDEF: ----- end procedure definitions -----
+.. ----------------------------------------
+..
+.. Abschlieáende Aktionen
+.. (wenn kein PAC1 vorhanden, kein Packmittel entnehmen)
+.. (wenn kein PAC1 vorhanden, dann Sonderbehandlung)
+..
+..
+.continue EL001 ? _(xistpac1 = false)
+.. IF001
+.. wenn kein PAC1 vorhanden
+..
+.continue EL002 ? _(xbfehler = false)
+.. IF002
+.output addedto 'xnlader'
+.input DATEI.F
+..**ok,28.07.2003 (jetzt auch xladerpos geprft)
+..
+..
+.continue EL003 ? _((xladerkopf) & (xladerpos))
+.. IF003
+..**ok,22.07.2003 (jetzt xPackEntAuto aus der Datei "EDL.PACK")
+..**ok,22.07.2003 (EDL.PACK im Kunden-EDI-Info bei EDL als Internes Programm einzutragen)
+..
+.. Prfen ob die Datei existiert
+.formula U|xintedi  = F|foppath(U|xintedi)
+.input 'U|xintedi' ? _F|empty(U|xintedi)
+..
+..
+.continue EL004 ? _(xPackEntAuto)
+.. IF004
+.. LADERZEILEN: Entnahmemenge berechnen
+.. ----------------------------------------
+.reserve
+.formula T|xtsel = "$,,;ktyp=4;@ablageart=(2);@gruppe=1;nummer=" + T|xursplsnr
+.select sales 'T|xtsel' ? _F|empty(xursplsnr)
+..
+..
+.continue EL005 ? _(mehr)
+.. IF005
+.select line
+..
+..
+.continue EL006 ? _(mehr)
+.. IF006
+.. Packmittel-Entnahmemengen berechnen und schreiben
+.output addedto 'xnlader'
+.input DATEI.F
+..
+`
+..
+..
+!LOOP001: ==============================
+.continue ELOP001 ? _(mehr)
+..
+.continue EL007 ? _(typ = arpos)
+.. IF007
+..**ok,22.07.2003 (unten mit UND-Verknpfung mge > 0)
+..
+..
+.continue EL008 ? _((art^packmit = true) & (mge > 0))
+.. IF008
+.formula xpaideksart = art^num2
+..
+.formula xi = 0
+.formula xi = xi +1
+.formula xy = xart.xi
+..
+.. Packmittel-Entnahmemengen berechnen
+..
+.continue EL009 ? _(((xresum.xy > 0) ; (xresum.xy = 0)) & ('xy' <> "") & (fmenge > 0) & (xresum.xpaideksart > 0))
+.. IF009
+.type real4 xpaentmge.xpaideksart ? _defined(xpaentmge.xpaideksart)
+.type bool  xrest.xpaideksart     ? _defined(xrest.xpaideksart)
+..
+..
+.continue EL010 ? _(xpaentmge.xpaideksart = 0)
+.. IF010
+..**ok,30.07.2003 (untere Block wurde ge„ndert)
+..
+.formula xpaentmge = xsum.xy / fmenge
+..
+.formula xpaentmge.xpaideksart = xpaentmge
+.formula xfmenge.xpaideksart = fmenge
+..
+.continue FI010
+!EL010
+..
+.continue EL011 ? _((xpaentmge.xpaideksart > 0) & (xfmenge.xpaideksart > 0) & (xrest.xpaideksart = true))
+.. IF011
+.formula xtex1 = 'xpaentmge.xpaideksart' >> "."
+.formula xtex1 = "0." + xtex1
+.formula xreal = 'xtex1'
+.formula xerg  = xfmenge.xpaideksart * xreal
+.formula xpaentmge = xerg / fmenge
+..
+.continue FI011
+!EL011
+.formula xpaentmge = 0
+..
+!FI011
+..
+!FI010
+..
+..OKTEST
+..aus bild
+..'xpaentmge' = ('xresum.xy' / 'fmenge') - ('xusum.xpaideksart' - 'xresum.xpaideksart')
+..'xpaentmge' =  'xsum.xy' / 'fmenge'
+...ein
+..
+.formula xipaentmge = 'xpaentmge'<<"."
+..
+..
+.continue EL012 ? _(xpaentmge = 0)
+.. IF012
+.. <#>      `art 'xpaideksart'
+`mge 0
+..
+.continue FI012
+!EL012
+..
+.continue EL013 ? _(xpaentmge < 1)
+.. IF013
+.. <#>      `art 'xpaideksart'
+`mge 0
+..
+.continue FI013
+!EL013
+..
+.continue EL014 ? _(((xpaentmge > 1) ; (xpaentmge = 1)) & (_(xipaentmge > mge)))
+.. IF014
+.. <#>      `art 'xpaideksart'
+.formula xtext = 'xpaentmge' << "."
+`mge 'xtext'
+..
+.formula xzeilmge = mge * fmenge
+.formula xrest.xy = true ? xsum.xy + xgsum.xy > xzeilmge
+..
+.continue FI014
+!EL014
+.. <#>      `art 'xpaideksart'
+`mge 0
+..
+!FI014
+..
+!FI013
+..
+!FI012
+..
+.continue FI009
+!EL009
+.. <#>      `art 'xpaideksart'
+`mge 0
+..
+!FI009
+..
+<C+>
+..
+!EL008
+.. FI008
+..
+!EL007
+.. FI007
+..
+<C+>
+.select line
+..
+.continue LOOP001
+!ELOP001: ==============================
+..
+!EL006
+.. FI006
+..
+!EL005
+.. FI005
+..
+.select
+.. ----------------------------------------
+..
+..**ok,01.08.2003 (Alles initialisieren ist NEU)
+..
+.. ALLES INITIALISIEREN
+.. ----------------------------------------
+.reserve
+.formula T|xtsel = "$,,;ktyp=4;@ablageart=(2);@gruppe=1;nummer=" + T|xursplsnr
+.select sales 'T|xtsel' ? _F|empty(T|xursplsnr)
+..
+..
+.continue EL015 ? _(mehr)
+.. IF015
+.select line
+..
+..
+.continue EL016 ? _(mehr)
+.. IF016
+.. Packmittel-Entnahmemengen berechnen und schreiben
+..
+!LOOP002: ==============================
+.continue ELOP002 ? _(mehr)
+..
+.continue EL017 ? _(typ = arpos)
+.. IF017
+..
+.continue EL018 ? _((art^packmit = true) & (mge > 0))
+.. IF018
+.formula xpaideksart = art^num2
+..
+.formula xi = 0
+.formula xi = xi +1
+.formula xy = xart.xi
+..
+.type real4 xpaentmge.xpaideksart ? _defined(xpaentmge.xpaideksart)
+.type bool  xrest.xpaideksart     ? _defined(xrest.xpaideksart)
+..
+.formula xpaentmge.xpaideksart = 0
+.formula xrest.xpaideksart     = false
+..
+.formula xrest.xy = false
+..
+!EL018
+.. FI018
+..
+!EL017
+.. FI017
+..
+.select line
+..
+.continue LOOP002
+!ELOP002: ==============================
+..
+!EL016
+.. FI016
+..
+!EL015
+.. FI015
+..
+.select
+.. ----------------------------------------
+..
+.continue FI004
+!EL004
+.. LADERZEILEN: Entnahmemenge auf 0 setzen
+.. ----------------------------------------
+.reserve
+.formula T|xtsel = "$,,;ktyp=4;@ablageart=(2);@gruppe=1;nummer=" + T|xursplsnr
+.select sales 'T|xtsel' ? _F|empty(T|xursplsnr)
+..
+..
+.continue EL019 ? _(mehr)
+.. IF019
+.select line
+..
+..
+.continue EL020 ? _(mehr)
+.. IF020
+.. Alle Packmittel-Liefermengen auf 0 setzen
+.output addedto 'xnlader'
+.input DATEI.F
+..
+`
+..
+..
+!LOOP003: ==============================
+.continue ELOP003 ? _(mehr)
+..
+.continue EL021 ? _(typ = arpos)
+.. IF021
+..
+.continue EL022 ? _(art^packmit = true)
+.. IF022
+.. <#>      `art 'xpaideksart'
+`mge 0
+..
+!EL022
+.. FI022
+..
+!EL021
+.. FI021
+..
+<C+>
+.select line
+..
+.continue LOOP003
+!ELOP003: ==============================
+..
+!EL020
+.. FI020
+..
+!EL019
+.. FI019
+..
+.select
+.. ----------------------------------------
+..
+!FI004
+..
+!EL003
+.. FI003
+..
+!EL002
+.. FI002
+..
+!EL001
+.. FI001
+..
+.. LADER-Datei-ENDE
+..
+..
+.continue EL023 ? _(xbfehler = false)
+.. IF023
+.output addedto 'xnlader'
+.input DATEI.F
+..**ok,28.07.2003 (jetzt auch xladerpos geprft)
+..
+..
+.continue EL024 ? _((xladerkopf) & (xladerpos))
+.. IF024
+.. LADERZEILEN
+..>> Abschlieáen Lader-Abschnitt neue ABAS-Lieferschein
+..>> fertig
+<fertig>
+<abbruch>
+..
+!EL024
+.. FI024
+..
+!EL023
+.. FI023
+..
+.continue
+..

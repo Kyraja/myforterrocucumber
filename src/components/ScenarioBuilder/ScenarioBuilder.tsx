@@ -53,6 +53,30 @@ function currentTableRefAt(steps: Step[], index: number): string | undefined {
 }
 
 /**
+ * Collect all editor names opened by earlier steps in the same scenario.
+ * Used to populate the "Quell-Editor" dropdown for follow-up steps
+ * (`for record from editor "..."`).
+ *
+ * Skips empty names and deduplicates while preserving first-seen order.
+ */
+function priorEditorNamesAt(steps: Step[], index: number): string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  for (let i = 0; i < index; i++) {
+    const a = steps[i].action;
+    if (
+      (a.type === 'editorOeffnen' || a.type === 'editorOeffnenSuche' || a.type === 'editorOeffnenMenue')
+      && a.editorName.trim()
+      && !seen.has(a.editorName)
+    ) {
+      seen.add(a.editorName);
+      names.push(a.editorName);
+    }
+  }
+  return names;
+}
+
+/**
  * Renders the scenario header (name input, remove button), optional comment
  * textarea, the list of {@link StepRow} elements with drag handles, a terminal
  * drop zone, and an "Add step" button.
@@ -251,6 +275,7 @@ export function ScenarioBuilder({
               onDuplicate={() => duplicateStep(i)}
               tables={tables}
               currentTableRef={currentTableRefAt(scenario.steps, i)}
+              priorEditorNames={priorEditorNamesAt(scenario.steps, i)}
               createdRecords={createdRecords}
             />
           </div>

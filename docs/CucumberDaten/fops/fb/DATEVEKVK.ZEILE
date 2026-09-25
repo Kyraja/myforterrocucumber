@@ -1,0 +1,96 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : DATEVEKVK.ZEILE
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Setzen aller von den ERP-Daten abgeleiteten weiteren
+..                  Zeilenfelder.
+.. Functionality  :
+..*****************************************************************************
+..
+.. include fb/DATEVFBBW.ZEILE
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.copy M|twaehr         = M|trechnung^land
+.. KOST 1 = Kostenstelle
+.formula   M|tkost1         = M|terpkstelle^nummer ? M|terpkstelle^gruppe=2
+.. KOST 2 = Kostentraeger
+.formula   M|tkost2         = M|terpkstelle^nummer ? M|terpkstelle^gruppe=4
+.formula   M|tkurs          = M|trechnung^kurs
+.assign M|terpkonto      = M|trechnung^kl2
+.end 1 ? _G|mehr
+.assign M|tustid         = F|REGREPLACEALL(F|TOUPPER(M|trechnung^ustid), "[^A-Z0-9]", "")
+.end 1 ? _G|mehr
+.copy M|tdatum         = M|trechnung^budat
+.formula M|tsteuerfrei    = F|condexpr('M|trechnung^ustart(L=":")' = "(TaxfreeNoTaxLines)" ; 'M|trechnung^ustart(L=":")' = "(TaxFreeWithTaxLines)" ; 'M|trechnung^ustart(L=":")' = "(NonTaxable)" , G|true, G|false)
+.formula M|tsteuerfrei    = M|tsteuerfrei ; F|condexpr('M|trechnung^ustart(L=":")' = "(TaxRelevant)" & F|empty(M|trechnung^vrgstrgl^ustartsp), G|true, G|false)
+.copy M|tbrutto        = M|trechnung^brutto
+.copy M|tlaart         = M|trechnung^laart
+.copy M|tstlaart         = M|trechnung^stlaart
+.formula   M|tbeleg1        = 'M|trechnung^datevbel'       ? _F|empty(M|trechnung^datevbel)
+.formula   M|tbeleg2        = 'M|trechnung^zbed^datevzbed' ? _F|empty(M|trechnung^zbed^datevzbed)
+.. Buchungstext
+.formula   M|ttext          = "RG " ? M|trechnung^buart = 0
+.formula   M|ttext          = "GS " ? M|trechnung^buart > 0 & M|trechnung^dnr = 3
+.formula   M|ttext          = "BG " ? M|trechnung^buart > 0 & M|trechnung^dnr = 4
+.formula   M|ttext          = M|ttext + 'M|trechnung^nummer' + " "
+.formula   M|ttext          = M|ttext + "Kunde"     ? M|terpkonto^dnr = 0
+.formula   M|ttext          = M|ttext + "Lieferant" ? M|terpkonto^dnr = 1
+.formula   M|ttext          = M|ttext + " " + 'M|terpkonto^nummer'
+.copy M|tbasiswaehr    = M|expwaehr
+..
+.. Umrechnung in Buchungswaehrung iwbu
+.formula   U|xrhilf = M|trechnung^kurs
+.formula   M|tbasiswaehrbetr = M|tbruttoumsatz / U|xrhilf
+.. Umrechnung von iwbu nach DATEV Basiswaehrung
+.formula   M|tbasiswaehrbetr = F|fxamount(M|tbasiswaehr, M|tbasiswaehrbetr, M|tdatum, M|trechnung^iwbu)
+.formula   M|tkursgenau = M|trechnung^kurs * F|fxrate(M|tbasiswaehr, M|tdatum, M|trechnung^iwbu)
+.formula   M|tkurs      = F|condexpr(M|tbasiswaehrbetr<>0, M|tbruttoumsatz/M|tbasiswaehrbetr, M|tkursgenau)
+.formula   M|tbasiswaehrbetr = M|tbruttoumsatz / M|tkurs ? M|gerundkurs
+..
+.. Rundungsdifferenz aufgrund max. Genauigkeit des Kurses in der Schnittstelle
+.. Wenn der Betrag in der Basiswaehrung null ist, dann ist auch der Kurs null (s.o.).
+.formula   M|trunddiff  = F|condexpr(M|tbasiswaehrbetr = 0, M|tbruttoumsatz, M|tbruttoumsatz - M|tbasiswaehrbetr * M|tkurs)
+..
+.input "fb/DATEVFBBW.ZEILE"
+..
+.. Zusaetzlich benoetigte Informationen zum DATEV-Gegenkonto beschaffen
+.. 1. Buchungsschluessel (Steuer- und Berichtigungsschluessel)
+.. 2. DATEV-Konten
+.. 3. Automatikeigenschaft
+..
+.continue AUTO ? M|tgegenauto
+.formula   M|tbuschluessel = 'M|terpsts^dvustsi' ? M|trechnung^dnr = 3 & (_M|tsteuerfrei ; (M|terpsts^id =  M|stsnull^id))
+.formula   M|tbuschluessel = 'M|terpsts^dvustsa' ? M|trechnung^dnr = 3 &   M|tsteuerfrei & (M|terpsts^id <> M|stsnull^id) & (M|tlaartn <> 69)
+.formula   M|tbuschluessel = 'M|terpsts^dvustse' ? M|trechnung^dnr = 3 &   M|tsteuerfrei & (M|terpsts^id <> M|stsnull^id) & (M|tlaartn  = 69)
+.formula   M|tbuschluessel = 'M|terpsts^dvvstsi' ? M|trechnung^dnr = 4 & (_M|tsteuerfrei ; (M|terpsts^id =  M|stsnull^id))
+.formula   M|tbuschluessel = 'M|terpsts^dvvstsa' ? M|trechnung^dnr = 4 &   M|tsteuerfrei & (M|terpsts^id <> M|stsnull^id) & (M|tlaartn <> 69)
+.formula   M|tbuschluessel = 'M|terpsts^dvvstse' ? M|trechnung^dnr = 4 &   M|tsteuerfrei & (M|terpsts^id <> M|stsnull^id) & (M|tlaartn  = 69)
+..
+..*****************************************************************************
+!AUTO
+..*****************************************************************************
+.. leider sind die Buchungsschluessel als IP2 definiert
+.formula M|tbuschluessel = "" ?  M|tbuschluessel = "0"
+.continue CHK01
+..
+..*****************************************************************************
+!CHK01
+..*****************************************************************************
+.continue END ? _F|empty(M|terpsts)
+.formula M|tdatstatusz = G|icoerror
+.formula M|tdatfehler = M|tdatfehler + ";" ? _F|empty(M|tdatfehler)
+.set trans +
+.formula M|tdatfehler = M|tdatfehler + "Keinen SteuerschlÅssel gefunden."
+.set trans -
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.input 'U|xtowzeilefop' ? _F|empty(U|xtowzeilefop)
+.continue

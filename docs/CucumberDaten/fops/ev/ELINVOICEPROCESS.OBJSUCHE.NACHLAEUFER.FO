@@ -1,0 +1,171 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICEPROCESS.OBJSUCHE.NACHLAEUFER.FO
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text xsel    ? _F|defined(U|xsel)
+.type text xmerkbe ? _F|defined(U|xmerkbe)
+.type text xmerkls ? _F|defined(U|xmerkls)
+.. 
+..<META M|='ev/ELINVOICEPROCESS'>
+..
+.formula M|button2 = M|gruenz
+.continue NOZBED ? F|empty(M|SpecifiedTradePaymentTerms)
+.assign M|button7 = M|orangez      ? F|empty(M|zbed)
+.assign M|zbed = M|edipartner^zbed ? F|empty(M|zbed)
+..
+!NOZBED
+.continue SUMMELS ?  G|evtartengl = "BUTTON_AFTER" &  G|evtvar = "kbuallesklappen" & M|sumnettobestellung = 0.0 & M|sumnettoliefer = 0.0 
+..
+!SUMMEN: Netto-Summen fÅr Lieferscheine und Bestellungen erstellen
+.select screen header
+.protection DeliveryDateTime 0
+.colour -background -1 -1 -1  DeliveryDateTime
+.continue START ? _M|bewlei
+.input "is/ABASFARBEN.DEF"
+.protection -reset DeliveryDateTime 0
+.colour -background 'U|xabasyellow' DeliveryDateTime ? F|empty(DeliveryDateTime)
+..
+!START
+.formula U|xmerkls = ""
+.formula U|xmerkbe = ""
+..
+!SELSUMMEN
+.select screen line
+.continue KOPF       ? _G|mehr
+.continue SELSUMMEN  ? M|zeilentyp <> 0
+.continue SELSUMMEN  ? M|bmehrerelief & M|sumnettoliefer <> 0
+.formula U|xmerkls = M|DeliveryNoteIssuerAssignedID ? M|zn = 1
+.formula U|xmerkbe = M|BuyerOrderIssuerAssignedID   ? M|zn = 1
+.formula M|sumnettobestellung = M|tbestellung^sumnetto                        ? M|zn = 1
+.formula M|sumnettobestellung = M|bestellung^sumnetto                         ? M|zn = 1 & F|empty(M|sumnettobestellung)
+.formula M|sumnettobestellung = M|sumnettobestellung + M|tbestellung^sumnetto ? M|zn > 1 & U|xmerkbe <> M|BuyerOrderIssuerAssignedID
+.formula M|sumnettoliefer     = M|lskopfid^sumnetto                           ? M|zn = 1
+.formula M|sumnettoliefer     = M|liefek^sumnetto                             ? M|zn = 1 & F|empty(M|sumnettoliefer)
+.formula M|sumnettoliefer     = M|sumnettoliefer + M|lskopfid^sumnetto        ? M|zn > 1 &  U|xmerkls <> M|DeliveryNoteIssuerAssignedID
+.formula U|xmerkls = M|DeliveryNoteIssuerAssignedID ? M|zn > 1 & U|xmerkls <> M|DeliveryNoteIssuerAssignedID
+.formula U|xmerkbe = M|BuyerOrderIssuerAssignedID   ? M|zn > 1 & U|xmerkbe <> M|BuyerOrderIssuerAssignedID
+.continue SELSUMMEN
+..
+!KOPF
+.formula M|abwbestellung = M|TaxBasisTotalAmount - M|sumnettobestellung  ? M|sumnettobestellung <> 0.0
+.formula M|abwlieferschein = M|TaxBasisTotalAmount - M|sumnettoliefer    ? M|sumnettoliefer <> 0.0
+.formula M|button2 = M|orangez  ? M|abwbestellung <> 0.0
+..
+.protection bwerteausrechnung 0  ? _(M|bausls ; M|bausbe)
+.continue END     ? M|bausrlsre
+.continue END     ? M|bausls & F|empty(M|bestellung) & _M|bmehrerelief
+.continue REAUSBE ? M|bausbe
+.continue REAUSLS ? M|bausls
+.continue REBELEG ? M|bbeleganfuegen
+.continue RENEU   ? M|breneu
+.continue NOBOOL  
+..
+!REAUSBE: PrÅfen ob LS in allen Zeilen leer und alle BE identisch, dann korrekt, ansonsten zu REAUSLS oder REBELEG
+.formula U|xmerkbe = ""
+.select screen header 
+.copy M|bbeleganfuegen = G|FALSE
+..
+!SELBELINE
+.select screen line
+.continue END       ? _G|mehr
+.protection ljtext1 'M|aktzeile'  ? M|zeilentyp <> 0
+.continue SELBELINE               ? M|zeilentyp <> 0
+.. Zusatzpositionen haben keinen Bezug zur Bestellung
+.continue SELBELINE               ? F|empty(M|BuyerOrderIssuerAssignedID)
+.formula U|xmerkbe = M|BuyerOrderIssuerAssignedID ? M|zn = 1
+.continue SELBELINE ? U|xmerkbe =  M|BuyerOrderIssuerAssignedID
+.copy M|bausbe = G|FALSE
+.copy M|bbeleganfuegen = G|TRUE
+.formula M|vorgang = ""
+.continue END
+..
+!REAUSLS: PrÅfen, ob alle LS in allen Zeilen identischen, sonst zu REBELEG
+.continue END ? _F|empty(M|vorgang)
+.formula U|xmerkls = ""
+.select screen header
+..
+!SELLSLINE
+.select screen line
+.continue END                      ? _G|mehr
+.protection ljtext1 'M|aktzeile'   ? M|zeilentyp <> 0
+.continue SELLSLINE                ? M|zeilentyp <> 0
+.continue SELLSLINE                ? F|empty(M|DeliveryNoteIssuerAssignedID)
+.formula U|xmerkls = M|DeliveryNoteIssuerAssignedID ? M|zn = 1
+.continue SELLSLINE ? U|xmerkls = M|DeliveryNoteIssuerAssignedID & _F|empty(U|xmerkls)
+.copy M|bausls = G|FALSE
+.copy M|bbeleganfuegen = G|TRUE
+.formula M|vorgang = ""
+.continue REBELEG 
+..
+!REBELEG: prÅfen, ob ich hier korrekt bin
+.select screen header
+..
+!SELREBELEG
+.select screen line
+.continue END                     ? _G|mehr
+.protection ljtext1 'M|aktzeile'  ?  M|zeilentyp = 0
+.protection ljtext1 'M|aktzeile'  ? F|protected(M|tauswahl, M|aktzeile)
+.continue SELREBELEG 
+..
+!RENEU: PrÅfen, ob alle BE und alle LS leer, ansonsten zu REBELEG
+.select screen header
+..
+!SELRENEU
+.select screen line
+.continue END                    ? _G|mehr
+.protection ljtext1 'M|aktzeile' ? M|zeilentyp <> 0
+.continue SELRENEU
+..
+!NOBOOL
+.continue NEU ? F|empty(M|bestellung) & F|empty(M|liefek) & _M|bmehrerelief
+.copy M|bbeleganfuegen = G|TRUE
+.continue END
+..
+!NEU
+.copy M|breneu = G|TRUE
+.continue END 
+..
+!SUMMELS
+.continue END ? M|bmehrerelief & M|sumnettoliefer <> 0.0
+.select screen header
+.formula U|xmerkls = ""
+..
+!SUMSELLS
+.select screen line
+.continue ABW        ? _G|mehr
+.continue SUMSELLS   ?  M|zeilentyp <> 4
+.continue SUMSELLS   ?  F|empty(M|lskopfid)
+.formula M|sumnettoliefer = M|lskopfid^sumnetto                      ? F|empty(U|xmerkls)
+.formula M|sumnettoliefer = M|sumnettoliefer + M|lskopfid^sumnetto   ? _F|empty(U|xmerkls) & U|xmerkls <> M|lskopfid
+.formula U|xmerkls = M|lskopfid                                      ? U|xmerkls <> M|lskopfid
+.continue SUMSELLS
+..
+!ABW
+.formula M|abwlieferschein = M|TaxBasisTotalAmount - M|sumnettoliefer    ? M|sumnettoliefer <> 0.0
+.formula M|button2 = M|orangez  ? M|abwlieferschein <> 0.0
+.continue END
+..
+!END: ZusÑtzlich in RE Åbernehmen
+.select screen header
+.continue FINAL ? _G|mehr
+..
+!ZUSAETZLICH
+.select screen line
+.continue FINAL ? _G|mehr
+.protection bzusatz  'M|aktzeile' ? M|zeilentyp = 4
+.protection bzusatz  'M|aktzeile' ? M|zeilentyp = 1
+.protection bzusatz  'M|aktzeile' ? M|artikel^gruppe = 1
+.protection bzusatz  'M|aktzeile' ? M|artikel^gruppe = 4 & M|bausls & M|abwlieferschein <> 0
+.protection bzusatz  'M|aktzeile' ? M|artikel^gruppe = 4 & M|bausbe & M|abwbestellung <> 0
+.protection konto 'M|aktzeile'   ? F|protected(M|bzusatz, M|aktzeile)
+.protection kstelle 'M|aktzeile' ? F|protected(M|bzusatz, M|aktzeile)
+.continue ZUSAETZLICH
+..
+.. ***************************************************************************
+!FINAL
+.continue 

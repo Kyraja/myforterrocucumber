@@ -3,6 +3,7 @@ import type { FeatureInput, TableDef } from '../types/gherkin';
 import { isLoggedIn, TokenLimitError } from '../lib/myforterroApi';
 import type { AiPromptRating } from '../lib/aiPrompt';
 import { generatePackage } from '../lib/generatePackage';
+import type { WorkflowEmitter } from '../lib/workflowEmitter';
 
 export type GenerationStep = 'idle' | 'identifying-tables' | 'generating-gherkin';
 
@@ -26,10 +27,14 @@ interface UseAiGenerationResult {
   generate: (
     text: string, model: string, agentId: string, testUser?: string,
     tables?: TableDef[], featureName?: string,
+    learningHints?: string,
     onDelta?: (text: string) => void,
     onTablesIdentified?: (info: { path: 'local'|'ki'; tables: string[]; fieldCount: number }) => void,
     forcedRelevantTables?: TableDef[],
     onRound?: (round: number, maxRounds: number, sent: string, received: string) => void,
+    emitter?: WorkflowEmitter,
+    lang?: 'de' | 'en',
+    rootHandle?: FileSystemDirectoryHandle | null,
   ) => Promise<GenerateResult | null>;
 }
 
@@ -46,10 +51,14 @@ export function useAiGeneration(): UseAiGenerationResult {
     testUser?: string,
     tables?: TableDef[],
     featureName?: string,
+    learningHints?: string,
     onDelta?: (text: string) => void,
     onTablesIdentified?: (info: { path: 'local'|'ki'; tables: string[]; fieldCount: number }) => void,
     forcedRelevantTables?: TableDef[],
     onRound?: (round: number, maxRounds: number, sent: string, received: string) => void,
+    emitter?: WorkflowEmitter,
+    lang: 'de' | 'en' = 'de',
+    rootHandle?: FileSystemDirectoryHandle | null,
   ): Promise<GenerateResult | null> => {
     if (!isLoggedIn()) {
       setError('Nicht eingeloggt. Bitte zuerst anmelden.');
@@ -68,6 +77,7 @@ export function useAiGeneration(): UseAiGenerationResult {
       const { getTestDepth } = await import('../lib/settings');
       const result = await generatePackage({
         text,
+        learningHints,
         model,
         tables: tables ?? [],
         testUser,
@@ -79,6 +89,10 @@ export function useAiGeneration(): UseAiGenerationResult {
         testDepth: getTestDepth(),
         maxRounds: (await import('../lib/settings')).getDeepTestMaxRounds(),
         onRound,
+        emitter,
+        lang,
+        itemKey: featureName,
+        rootHandle: rootHandle ?? null,
       });
 
       setGenerationStep('generating-gherkin');

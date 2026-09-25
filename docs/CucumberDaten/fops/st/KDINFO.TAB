@@ -1,0 +1,129 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KDINFO.TAB
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Mehrphasiger Tabellenzeige-FOP von Kunden/Lieferanteninfozentrale
+..                  Abhaengig von der Holstufe wird unterschiedliche Funktionalitaet
+..                  ausgefuehrt:
+..                  2-8   -> Belege aus Verkauf/Einkauf
+..                  9     -> Speditionsauftraege aus Verkauf
+..                  10    -> Projekte
+..                  11    -> Aktionen anzeigen
+..                  12-14 -> Servicebelege im Verkauf
+..                  15    -> Servicereservierung
+.. Ablauf         : Tabellen-EFOP
+..
+.. Functionality  : Polyphased table EFOP of the customer and vendor information center.
+..                  Depending on the level of query a different functionality will be executed.
+..                  2-8   -> sales or purchase documents
+..                  9     -> shipping orders
+..                  10    -> projects
+..                  11    -> activities
+..                  12-14 -> service offer
+..                  15    -> service reservation
+.. Program flow   : Table efop
+..*****************************************************************************
+.set trans -
+..
+.. Get the correct handling depending on the level of query
+.continue OFFVOR ? M|stufe >= 2 & M|stufe <= 8
+.continue SPEDAU ? M|stufe = 9
+.continue PROJ   ? M|stufe = 10
+.continue AKT    ? M|stufe = 11
+.continue OFFVOR ? M|stufe = 12 ; M|stufe = 13 ; M|stufe = 14
+.continue SERRES ? M|stufe = 15
+.formula M|stufe = 0
+.continue END
+..
+!OFFVOR: Sales/purchase and service documents
+.make screen line +O
+.formula M|objektnum = H|id
+.formula M|tsuch = H|such
+.formula M|tschlag = H|schlag
+.formula M|tvortyp = H|typa
+.formula M|tvortyp = H|vorganga ? H|typ = REKO
+.formula M|tvortyp = H|lsart    ? H|typ = LIKO
+.formula M|tvortyp = M|shopcart ? H|ktyp = G|WAKO & H|vsperre
+.formula M|tvortyp = M|tvortyp + ", " + M|filed ? _F|empty(H|ablagen)
+.formula M|terfass = H|erfass
+.continue MORE ? _F|defined(M|kbkdinfo)
+.formula M|twahrsch = H|wahrsch
+.copy M|tablehngrund = H|ablehngrund
+..
+!MORE
+.continue OPERATOR ? _F|empty(M|altbzeichen) & H|aezeich = M|altbzeichen
+..
+!NEWOP1: Get reference to new operator
+.formula M|altbzeichen = H|zeich
+.assign M|tmppassdef = "$,,;gruppe==11;bezeich==" + H|aezeich + ";mitarb<>`;@datenbank=12:11;@ablageart=(Active)"
+.continue OPERATOR
+..
+!SPEDAU: Shipping orders
+.make screen line +O
+.formula M|objektnum = H|id
+.formula M|tsuch = H|such
+.formula M|tschlag = H|schlag
+.formula M|tvortyp = M|dn
+.formula M|tvortyp = M|tvortyp + ", " + M|filed ? _F|empty(H|ablagen)
+.formula M|terfass = H|erfass
+.continue OPERATOR ? _F|empty(M|altbzeichen) & H|zeich = M|altbzeichen
+..
+!NEWOP2: Get reference to new operator
+.formula M|altbzeichen = H|zeich
+.assign M|tmppassdef = "$,,;gruppe==11;bezeich==" + H|zeich + ";mitarb<>`;@datenbank=12:11;@ablageart=(Active)"
+..
+!OPERATOR
+.copy M|tmitarb = M|tmppassdef^mitarb
+.continue END
+..
+!PROJ: Projects
+.make screen line +O
+.formula M|objektnum = H|id
+.formula M|tsuch = H|such
+.formula M|tschlag = H|schlag
+.formula M|tvortyp = M|dn
+.formula M|tvortyp = M|project + ", " + H|status
+.formula M|terfass = H|start
+.copy M|tmitarb = H|bearbeit ? H|status <> M|confirmed & H|status <> M|done
+.copy M|tmitarb = H|bestaet  ? H|status = M|confirmed ; H|status = M|done
+..
+.. Notify
+.colour -background 'M|notifycolor' 'M|aktzeile' ? _F|empty(H|end) & H|end < G|datum
+.continue END
+..
+!AKT: activities
+.. get user, certifier and processor for activity
+.load 2 add M|kvertg
+.load 0 add H|bestaet
+.load 1 add H|bearbeit
+..
+.. next record if user is not responsible
+.continue END ? 1|id <> 2|id & 0|id <> 2|id
+.continue END ? _(H|status = M|done ; H|status = M|confirmed) & 1|id <> 2|id
+.continue END ?  (H|status = M|done ; H|status = M|confirmed) & 0|id <> 2|id
+..
+.make screen line +O
+.formula M|objektnum = H|id
+.formula M|tsuch = H|such
+.formula M|tschlag = H|schlag
+.formula M|tvortyp = M|action + ", " + H|status
+.formula M|terfass = H|start
+.copy M|tmitarb = H|bearbeit ? H|status <> M|confirmed & H|status <> M|done
+.copy M|tmitarb = H|bestaet  ? H|status = M|confirmed ; H|status = M|done
+..
+.. Notify
+.colour -background 'M|notifycolor' 'M|aktzeile' ? _F|empty(H|end) & H|end < G|datum
+.continue END
+..
+!SERRES: service reservation
+.make screen line +O
+.formula M|objektnum = H|id
+.formula M|tsuch = H|such
+.formula M|terfass = H|erfass
+.formula M|tvortyp = 'H|resart'
+.copy M|tmitarb = H|techniker^mitarb
+..*****************************************************************************
+!END
+.continue

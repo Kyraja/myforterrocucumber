@@ -1,0 +1,301 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LJ.TAB
+.. Autor          : doe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Erzeugt eine Tabellenzeile im Lagerbewegungsjournal
+..                  Ladepuffer 2 -> zugehîrige Bewertung, falls vorhanden
+.. Ablauf         : Tabellenzeige-EFOP
+..
+.. Umlagerungen bei;
+.. 77;Kommissionslieferschein Einkauf;M;(77);PickingQtyPackingSlipP;(PickingQtyPackingSlipP);
+.. 78;Kommissionslieferschein Verkauf;N;(78);PickingQtyPackingSlipS;(PickingQtyPackingSlipS);
+.. 101;Storno-Kommissionslieferschein Einkauf;e;(101);CancelationCommissionPackingSlipPurchasing;(CancelationCommissionPackingSlipPurchasing);
+.. 102;Storno-Kommissionslieferschein Verkauf;f;(102);CancelationCommissionPackingSlipSales;(CancelationCommissionPackingSlipSales);
+.. 75;Umlagerungsvorschlag;K;(75);RelocationSuggestion;(RelocationSuggestion);
+.. 66;Umlagerungslieferschein Einkauf;B;(66);RelocationPackingSlipPurchasing;(RelocationPackingSlipPurchasing);
+.. 88;Umlagerungsrechnung Einkauf;X;(88);RelocationInvoicePurchasing;(RelocationInvoicePurchasing);
+.. 99;Storno-Umlagerungslieferschein Einkauf;c;(99);CancelationRelocationPackingSlipPurchasing;(CancelationRelocationPackingSlipPurchasing);
+.. 72;Manuelle Umbuchung;H;(72);ManualTransfer;(ManualTransfer);
+.. 111;Storno manuelle Umbuchung;o;(111);CancelationManualTransfer;(CancelationManualTransfer);
+.. 85;Bestandsumbuchung;U;(85);StockTransfer;(StockTransfer);
+.. 100;Storno-Umlagerungsrechnung Einkauf;d;(100);CancelationRelocationInvoicePurchasing;(CancelationRelocationInvoicePurchasing);
+.. 61;BehÑlterlagerbuchung;=;ContainerStockAdjustment;(ContainerStockAdjustment)
+..
+..*****************************************************************************
+.set trans -
+..
+.type ID2:1     xtart      ? _F|defined(U|xtart)
+.type ID5:2.4.8.9 xtkst      ? _F|defined(U|xtkst)
+.type VID17     xtkl       ? _F|defined(U|xtkl)
+.type ID38      xtvplatz   ? _F|defined(U|xtvplatz)
+.type ID38      xtnplatz   ? _F|defined(U|xtnplatz)
+.type ID39:2    xtvlgruppe ? _F|defined(U|xtvlgruppe)
+.type ID39:2    xtnlgruppe ? _F|defined(U|xtnlgruppe)
+.type realx     xgmge      ? _F|defined(U|xgmge)
+.type text      xselect    ? _F|defined(U|xselect)
+..
+.. LJ-EintrÑge mit det. Buchungsursache Bewertungsmengenkorrektur Åberspringen
+.continue END ? _M|bewertmgekorr & H|bewmgekorrektur
+.continue NOUMLAG   ? _F|empty(M|kdetursache) & _F|empty(M|kursache)
+.copy M|binumlag = G|FALSE
+.copy M|binumlag = G|TRUE ? F|equals(H|detursache, "(PickingQtyPackingSlipP)") ; F|equals(H|detursache, "(PickingQtyPackingSlipS)")
+.copy M|binumlag = G|TRUE ? F|equals(H|detursache, "(CancelationCommissionPackingSlipPurchasing)") ; F|equals(H|detursache, "(CancelationCommissionPackingSlipSales)")
+.copy M|binumlag = G|TRUE ? F|equals(H|detursache, "(RelocationSuggestion)") ; F|equals(H|detursache, "(RelocationPackingSlipPurchasing)")
+.copy M|binumlag = G|TRUE ? F|equals(H|detursache, "(RelocationInvoicePurchasing)"); F|equals(H|detursache, "(CancelationRelocationPackingSlipPurchasing)")
+.copy M|binumlag = G|TRUE ? F|equals(H|detursache, "(CancelationManualTransfer)") ; F|equals(H|detursache, "(StockTransfer)")
+.copy M|binumlag = G|TRUE ? F|equals(H|detursache, "(CancelationRelocationInvoicePurchasing)") ; F|equals(H|detursache, "(ManualTransfer)")
+.copy M|binumlag = G|TRUE ? F|equals(H|detursache, "(ContainerStockAdjustment)") 
+..
+.continue END ? M|binumlag & _M|umlag & (M|abgang ; M|zugang)
+..
+.. Keine Umlagerung, Bool ist aber gesetzt
+.continue END ? M|umlag & _M|binumlag
+..
+!NOUMLAG 
+.. LagerjournaleintrÑge mit buart = 10 nur anzeigen, wenn im Kopf per
+.. "Materialflusshinweis anzeigen" gesetzt
+.continue END     ? H|buart = 10 & _M|bmatfluss
+.. Altdaten mit detursache = leer nicht berÅcksichtigen au·er buart = 4
+.continue END     ? F|empty(H|detursache) & M|umlag & H|buart <> 4 & _H|ekumlag
+.continue PLATZ   ? _F|empty(M|lplatz)
+.continue TAUSGABE
+..
+!PLATZ
+.continue TAUSGABE ? M|lplatz^id = H|platz^id ; M|lplatz^id = H|platz2^id
+.continue END
+..
+!TAUSGABE: Diverse Kopf-Werte aus Journal merken
+.copy U|xtart = H|art
+.copy U|xtkl = H|kl
+.copy U|xtkst = H|kstelle
+.copy U|xtvplatz = H|platz
+.copy U|xtvlgruppe = H|platz^lgruppe
+.copy U|xtnplatz = H|platz2
+.copy U|xtnlgruppe = H|platz2^lgruppe
+.continue END ? _F|empty(M|klgruppe) & M|klgruppe^id <> U|xtvlgruppe & M|klgruppe^id <> U|xtnlgruppe
+.continue END ? _F|empty(M|basisartikel) & 'M|basisartikel^id' <> 'H|artikel^basisartikel^id'
+..
+!AUSGABE
+.make screen line +O
+.copy M|budat = H|budat
+.copy M|leidat = H|leidat
+.copy M|art = U|xtart
+.assign M|tbasisartikel = M|art^basisartikel
+.copy M|kdli = U|xtkl
+.assign M|verw = H|verw
+.assign M|verw2 = H|verw2
+.assign M|verwla = H|verwla
+.assign M|projekt = H|projekt
+.assign M|projekt2 = H|projekt2
+.copy M|projektla = H|projektla
+.copy M|behaelter = H|behaelter
+.copy M|fert  = H|fert
+.copy M|vplatz = U|xtvplatz
+.copy M|vlgruppe = U|xtvlgruppe
+.copy M|nplatz = U|xtnplatz
+.assign M|nlgruppe = U|xtnlgruppe
+.copy M|tkstelle = U|xtkst
+.formula M|tbeleg = H|such << -1
+.copy M|vom = H|vom
+.formula M|mpr = H|mpr
+.formula M|mpra = H|mpra
+.formula M|epr = H|epr ? _(H|epr<0)
+.formula M|bestand = H|bestand
+.formula M|bestand2 = H|bestand2
+.formula M|artbest = H|artbest
+.assign M|lagbest = H|lagbest
+.assign M|lagbest2 = H|lagbest2
+.copy M|mgeinbest = H|mgeinbest
+.copy M|ursache = H|ursache
+.copy M|detursache = H|detursache
+.copy M|stornodet = F|isreversalcause(H|detursache)
+.copy M|bewdat = H|bewdat
+.assign M|bunrue = H|bunrue
+.assign M|bunr = H|bunr
+.copy M|fidat = H|fidat
+.copy M|fidatue = H|fidatue
+.formula M|zuord = H|zuord
+.copy M|bewart = H|bewart
+.formula M|bewverf = H|bewverf
+.copy M|koreso = H|koreso
+.copy M|koreha = H|koreha
+.copy M|wgruppe = H|wgruppe
+.copy M|pgruppe = H|pgruppe
+.copy M|beist = H|lbeist
+.formula M|beibetr = H|lbeibetr
+.formula M|bewpr = H|bewpr
+.copy M|bsres = H|bsres
+.copy M|planrel = H|planrel
+.copy M|vkzakt = H|vkzakt
+.copy M|rueckorig = H|rueckorig
+.formula M|rueckmge = H|rueckmge
+.formula M|restmge = H|restmge
+.copy M|storniert = H|storniert
+.copy M|stornolj = H|stornolj
+.copy M|rueckbew = H|rueckbew
+..
+.continue QTYUNIT ? _M|bewmge2le
+.copy M|mei = H|le
+.continue STOUNIT
+..
+!QTYUNIT: Show moved things in quantity unit
+.copy M|mei = H|me
+..
+!STOUNIT: Storage unit
+.copy M|lei = H|le
+.copy M|leimei = H|leme
+.assign M|leimei = 1.0 ? F|empty(M|leimei)
+.continue CALCQTY ? F|empty(H|gmge)
+.formula U|xgmge = H|gmge
+..
+!SETQTY
+.copy M|iwbu = H|iwbu
+.formula M|erbtext1 = H|erbtext1
+.formula M|bzeich = H|zeich
+.assign M|verweis = H|id
+.copy M|vorgang  = H|vorgang
+..
+.. undefiniert
+.continue END        ? H|buart=0
+.continue BZUGANG    ? H|buart=1
+.continue BABGANG    ? H|buart=2
+.continue BKORREKTUR ? H|buart=3
+.continue BUMLAGER   ? H|buart=4
+.continue BDURCHGANG ? H|buart=5
+.. Lagereinheit geÑndert
+.continue END        ? H|buart=7
+.continue BEINSTAND  ? H|buart=6
+.continue BINVENTUR  ? H|buart=8
+.. Lieferant in Charge geÑndert
+.continue END        ? H|buart=9
+.continue CONSEQU    ? H|buart=10
+.continue BEWERT     ? H|buart=11
+.continue END
+..
+!CALCQTY: If booked quantity is eempty, we have to calculate a rounded quantity
+.formula U|xgmge = (H|mge / M|leimei):3
+.continue SETQTY
+..
+!BEWERT
+.set trans +
+.formula M|buart = "Bewertungsart fÅr den Lagerabgang LIFO oder FIFO nicht Ñnderbar."
+.set trans -
+.continue CHARGE
+..
+!BZUGANG
+.set trans +
+.formula M|buart = "Zugang"
+.set trans -
+.formula M|mge = H|mge
+.formula M|zmge = H|mge
+.copy M|nplatz = U|xtvplatz
+.copy M|nlgruppe = U|xtvlgruppe
+.assign M|vplatz = ""
+.assign M|vlgruppe = ""
+.continue CHARGE ? M|bewmge2le
+.formula M|zmge = U|xgmge
+.continue CHARGE
+..
+!BABGANG
+.set trans +
+.formula M|buart = "Abgang"
+.set trans -
+.formula M|mge = H|mge
+.formula M|amge = H|mge
+.assign M|nplatz = ""
+.assign M|nlgruppe = ""
+.continue CHARGE ? M|bewmge2le
+.formula M|amge = U|xgmge
+.continue CHARGE
+..
+!BKORREKTUR
+.set trans +
+.formula M|buart = "Korrektur"
+.set trans -
+.formula M|kmge = H|mge
+.formula M|mge = H|mge
+.assign M|nplatz = ""
+.assign M|nlgruppe = ""
+.continue CHARGE ? M|bewmge2le
+.formula M|kmge = U|xgmge
+.continue CHARGE
+..
+!BUMLAGER
+.set trans +
+.formula M|buart = "Umlagern"
+.set trans -
+.formula M|amge = H|mge
+.formula M|zmge = H|mge
+.formula M|mge = H|mge
+.continue CHARGE ? M|bewmge2le
+.formula M|amge = U|xgmge
+.formula M|zmge = U|xgmge
+.continue CHARGE
+..
+!BDURCHGANG
+.set trans +
+.formula M|buart = "Durchgang"
+.set trans -
+.formula M|zmge = H|mge
+.formula M|amge = H|mge
+.formula M|mge = H|mge
+.formula M|epr = 0.00
+.formula M|mpr = 0.00
+.formula M|mpra = 0.00
+.continue CHARGE ? M|bewmge2le
+.formula M|zmge = U|xgmge
+.formula M|amge = U|xgmge
+.continue CHARGE
+..
+!BEINSTAND
+.set trans +
+.formula M|buart = "Mischpreis"
+.set trans -
+.formula M|zmge = H|mge
+.formula M|mge = H|mge
+.assign M|vplatz = ""
+.assign M|vlgruppe = ""
+.copy M|nplatz = U|xtvplatz
+.copy M|nlgruppe = U|xtvlgruppe
+.continue CHARGE ? M|bewmge2le
+.formula M|zmge = U|xgmge
+.continue CHARGE
+..
+!BINVENTUR
+.set trans +
+.formula M|buart = "Info"
+.formula M|buart = "Anfang"  ? H|verw2 = "INV-ANF"
+.formula M|buart = "Ende"    ? H|verw2 = "INV-ENDE"
+.formula M|buart = "Abbruch" ? H|verw2 = "INV-ABBR"
+.set trans -
+.assign M|nplatz = ""
+.continue CHARGE
+..
+!CONSEQU: Consumption sequence procedure
+.set trans +
+.formula M|buart = "énderung des Verbrauchsfolgeverfahrens"
+.set trans -
+.continue CHARGE
+..
+!CHARGE
+.select line  ? H|aktzeile = 0
+.continue END ? H|aktzeile = 0 & _G|mehr
+..
+.copy M|vcharge = H|vcharge
+.formula M|tvcharge = H|tvcharge
+.copy M|chvsperr = H|chvsperr
+.formula M|chvstatus = H|chvstatus
+.copy M|chvverfall = H|chvverfall
+.formula M|erbvchtxt = H|erbvchtxt
+..
+.copy M|ncharge = H|ncharge
+.formula M|tncharge = H|tncharge
+.copy M|chnsperr = H|chnsperr
+.formula M|chnstatus = H|chnstatus
+.copy M|chnverfall = H|chnverfall
+.formula M|erbnchtxt = H|erbnchtxt
+..*****************************************************************************
+!END
+.continue

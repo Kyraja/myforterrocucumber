@@ -1,0 +1,138 @@
+..!interpreter english translate
+..
+..  Name           : VRLE
+..  Verantwortlich : as
+..  Verantwortlich : mibr
+..  Anpassung      : cl: 02.01.01 Euroumrechnung berarbeitet (Rundungsfehler)
+..
+..  Unterprogramm von vk/SRV
+..
+.. **************************************************************************************************************************
+.set trans -
+.end .  ?  txname / "*VRLE"
+.set background +
+.output terminal
+.input "ARB"
+.type real xmge xge xsu xvpr xpwert r
+.type realx xrxkurs
+.type text xtw:4 xanum xrnum xkund xident xhe
+.type text xwmerk xtarnu xlnum xtland
+.type text x1art x2art
+.type date xdleer
+.type text xxwaehr xiwbu xy
+..          Die Variable `auswaehr` beinhaltet die aktuelle Ausgabewaehrung
+.formula xxwaehr=auswaehr
+..
+.set trans +
+?Rechnungslistenausdruck ? eurokurs = 0.00
+.continue MEN2             ? eurokurs = 0.00
+..
+!MEN1:
+.menu Rechnungslistenausdruck >>
+Ausgabe                           >>
+Ausgabew„hrung,  z.Zt. 'xxwaehr ' >> .continue AWAEHR
+Zurck                            >> .continue
+..
+.continue         ? F|empty(G|menue)
+!MEN2:
+..
+.input DRUCKER
+.input BLANKOB.F
+.page 1
+.up
+'Mandant           '                 Rechnungsliste aus Vorschlagsliste ' vrnum'                   '  datum'     Seite ' sei'
+'txname '                            ===========================================
+
+ Re.-Nr.   Ls/Au-Nr.  Kunde  Artikel                                  Menge    HE       E.-Preis   Rab.         G.-Preis
+---------------------------------------------------------------------------------------------------------------------------
+..ende obenpuffer
+.down
+                                                                                                                 -------
+                                                                                           Zwischensumme   '        xsu' 'xxwaehr '
+
+.set trans -
+.. ende untenpuffer
+.formula xtarnu=""
+!M1
+.select from 'xnum' xanum ^
+.continue ENDE ? _mehr
+.continue M1 ? _xanum/"#*" ; xanum/"*##*"
+.continue M1 ? xanum="#"
+.formula xanum = xanum>>"#"
+.formula xrnum = xanum>>" "
+.formula xanum = xanum<<" "
+.continue M1 ? xanum=""
+.continue M1 ? xrnum=xtarnu
+.formula xtarnu=xrnum
+.formula xwmerk=""
+.select sales 'xrnum'
+.continue M1 ? _mehr
+.add kunde
+.formula xkund=name
+.add
+.formula xiwbu   = iwbu
+.formula xrxkurs  = kurs
+.formula xtland  = land
+!M2
+.select line
+.continue M1 ? _mehr
+.formula xanum=ptext >> "L " << " " ? typ = trpos & ptext/"*L*"
+.continue M2 ? typ<>arpos
+.formula r=proz
+.add art
+.formula xident=ident
+..      x1art = 1.Zeile der vbez, immer in H”he der ident
+.formula x1art = vbez<<";"
+.formula x2art = vbez>>";"
+.formula xhe=""
+.formula xhe=vhe ? gruppe = 1
+.add
+..
+.continue A60 ? eurokurs <> 0
+.formula xpwert = pwert / xrxkurs
+..
+.continue A65 ? eurokurs = 0
+..
+!A60: Umrechnung, falls eurokurs <> 0
+.continue A61 ? xxwaehr<>xtland
+.formula xpwert = pwert
+.continue A65
+!A61: xxwaehr<>xtland
+.continue A62 ? xxwaehr<>xiwbu
+.formula xpwert = pwert/xrxkurs
+.continue A65
+!A62: xxwaehr<>xiwbu
+.continue A63 ? xxwaehr<>ainland
+.formula xpwert = pwert * eurokurs / xrxkurs
+.continue A65
+!A63: xxwaehr<>ainland
+.formula xpwert = pwert / eurokurs / xrxkurs
+!A65
+..
+.formula xsu    = xsu + xpwert
+..
+..Re.-Nr.   Ls/Au-Nr.  Kunde  Artikel               Menge  HE     E.-Preis   Rab.  G.-Preis
+?'xrnum ' 'xanum ' 'xkund                                                    ' ? xwmerk<>xrnum ; xanum<>xlnum
+             'xident        ' 'x1art                               ' '    mge' 'xhe ' '   preis' 'xtland'' 0r''     xpwert' 'xxwaehr '
+?                              'x2art                               '                                   (='      pwert' 'xtland')  ? xxwaehr<>xtland
+?                              'x2art                               '                                                           ? xxwaehr =xtland
+.formula xlnum=xanum
+.formula xwmerk=xrnum
+.continue M2
+!ENDE
+.down
+.set trans +
+..
+                                                                                                           ----------------
+                                                                                                Endsumme '        xsu' 'xxwaehr '
+.set trans -
+.output terminal ...
+.set background -
+.formula geraet=""
+.continue
+..
+!AWAEHR: EURO: xxwaehr = gew„hlte W„hrung
+.input IWAEHRWAHL
+..
+.continue MEN1
+

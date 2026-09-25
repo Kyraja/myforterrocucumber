@@ -1,0 +1,98 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : JSADMIN.EV
+.. Autor          : male
+.. Verantwortlich : TEAMcustom
+.. Funktion       : Allgemeines Event-FOP des Infosystems sy/JSADMIN
+.. Functionality  : Common event FOP of the Infosystem sy/JSADMIN
+..
+.. include sy/JSADMIN.SETOWN
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.type bool xmehr
+.type text xtmp1 xerr xtconfigparam
+.type integer xdat1
+.file -tempname U|xtmp1
+.file -tempname U|xerr
+..
+.formula U|xtconfigparam = F|condexpr(F|empty(M|jsownconfig), "", F|formatstr("-c {1}", M|jsownconfig^jsname))
+..
+.continue START    ? G|evtvar = "bstart"      & G|evtartengl = "BUTTON_AFTER"
+.continue RESCAN   ? G|evtvar = "brescan"     & G|evtartengl = "BUTTON_AFTER"
+.continue END      ? G|evtzeile = 0
+.continue REDEPLOY ? G|evtvar = "tbredeploy"  & G|evtartengl = "BUTTON_AFTER"
+.continue UNDEPLOY ? G|evtvar = "tbundeploy"  & G|evtartengl = "BUTTON_AFTER"
+.continue END
+..
+..*****************************************************************************
+!START
+..*****************************************************************************
+.input "sy/JSADMIN.SETOWN"
+.continue LOAD
+..
+..*****************************************************************************
+!LOAD
+..*****************************************************************************
+.make screen line --
+.type text xnotused xdeploytime
+.type GD19 xdatehack
+.system 'F|formatstr("jfopserver_cmds.sh -l {1} -D# > {2}", U|xtconfigparam, U|xtmp1)' background
+.continue END ? _G|mehr
+.file -open U|xdat1 'U|xtmp1'
+!L2
+.make screen line +O
+.file -read U|xdat1 M|tactive # M|tname # M|trevision # M|tusers # M|tsrcdir # M|tdeploydir # U|xdeploytime # U|xnotused^
+.continue FIN2 ? _G|mehr
+.formula U|xdeploytime = F|regreplace(U|xdeploytime, "[T]", " ")
+.formula U|xdeploytime = F|regreplace(U|xdeploytime, "([.][0-9]+)?[Z]$", "")
+.formula U|xdeploytime = F|regreplaceall(U|xdeploytime, "[^0-9]", "")
+.formula U|xdatehack = U|xdeploytime
+.formula M|tdeploytime = 'U|xdatehack'
+.continue L2
+!FIN2
+.file -close U|xdat1
+.make screen line -O
+.continue END
+..
+..*****************************************************************************
+!RESCAN
+..*****************************************************************************
+.system 'F|formatstr("jfopserver_cmds.sh -s {1} > {2} 2>&1", U|xtconfigparam, U|xerr)' background
+.continue ERR01 ? _G|mehr
+.continue LOAD
+..
+..*****************************************************************************
+!REDEPLOY
+..*****************************************************************************
+.system 'F|formatstr("jfopserver_cmds.sh -r -a {1} {2} > {3} 2>&1", M|tname, U|xtconfigparam, U|xerr)' background
+.continue ERR01 ? _G|mehr
+.continue LOAD
+..
+..*****************************************************************************
+!UNDEPLOY
+..*****************************************************************************
+.system 'F|formatstr("jfopserver_cmds.sh -u -a {1} {2} > {3} 2>&1", M|tname, U|xtconfigparam, U|xerr)' background
+.continue ERR01 ? _G|mehr
+.continue LOAD
+..
+..*****************************************************************************
+!ERR01
+..*****************************************************************************
+.error Beim Ausfhren des Kommandos ist ein Fehler aufgetreten.
+.input -text 'U|xerr' ? _F|empty(U|xerr) & F|filesize(F|tostring(U|xerr)) > 0
+.end 1
+..
+..*****************************************************************************
+!ERR02
+..*****************************************************************************
+.error Diese Serverinstanz ist nicht erreichbar oder existiert nicht mehr.
+.end 1
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue
+

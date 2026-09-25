@@ -1,0 +1,234 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : CCBIL.EV
+.. Autor          : md
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Corridor Controlling Bilanz allgemeines Event-FOP
+.. Program flow   :
+...Includes       :
+.. include fb/CCBILGUV.COLORS
+..*****************************************************************************
+.set trans -
+..
+.type text xtsel     ? _F|defined(U|xtsel)
+.type text xtrgb     ? _F|defined(U|xtrgb)
+.type text xttitle   ? _F|defined(U|xttitle)
+.type text xt2       ? _F|defined(U|xt2)
+.type integer xiz    ? _F|defined(U|xiz)
+.type integer xiw    ? _F|defined(U|xiw)
+.type real xrbetr    ? _F|defined(U|xrbetr)
+.type real xrmin     ? _F|defined(U|xrmin)
+.type real xrmax     ? _F|defined(U|xrmax)
+.type date xdvgl     ? _F|defined(U|xdvgl)
+..
+..-----------------------------------------------------------------------------
+.. Header
+..-----------------------------------------------------------------------------
+.continue FKOBER  ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "fkober"
+.continue DOSTART ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+..-----------------------------------------------------------------------------
+.. Table
+..-----------------------------------------------------------------------------
+.continue BUCHART ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bchart"
+.continue ACTUAL  ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bist"
+.continue BASE    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bbasis"
+.continue BEST    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bbc"
+.continue POSSIBL ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bpc"
+.continue BREAKEV ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bbe"
+.continue WORST   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bwc"
+.continue END
+..*****************************************************************************
+!FKOBER: Formular eingetragen -> Werte initialisieren
+..*****************************************************************************
+.formula M|buwaehr = ""
+.formula M|iagj = ""
+.formula M|iegj = ""
+.formula M|bagj = ""
+.formula M|begj = ""
+.formula M|pagj = ""
+.formula M|pegj = ""
+.assign M|ierfass = ""
+.assign M|iebu = ""
+.assign M|berfass = ""
+.assign M|bebu = ""
+..
+.chart -init
+.chart -show chart1 0
+.input "is/TABLEEREN"
+..
+.select add M|fkober
+.continue END ? _G|mehr
+.copy M|buwaehr = H|waehr
+.copy M|bukreis = H|bukreis
+.formula M|iagj = H|iagj
+.formula M|iegj = H|iegj
+.formula M|bagj = H|bagj
+.formula M|begj = H|begj
+.formula M|pagj = H|pagj
+.formula M|pegj = H|pegj
+.formula M|ierfass = H|ierfass
+.formula M|iebu = H|iebu
+.formula M|berfass = H|berfass
+.formula M|bebu = H|bebu
+..*****************************************************************************
+!INSROW: Insert mask row
+..*****************************************************************************
+.select line
+.continue END ? _G|mehr
+.continue INSROW ? F|empty(H|kbereich)
+.make screen line +O
+.assign M|kober = H|kbereich
+.continue INSROW
+..*****************************************************************************
+!BUCHART: Table button view chart was clicked
+..*****************************************************************************
+.select screen line 'G|evtzeile'
+.continue END ? _G|mehr
+.continue VALID
+..*****************************************************************************
+!DOSTART: Start button was clicked view chart of 1st row
+..*****************************************************************************
+.continue ERROR01 ? F|empty(M|fkober)
+.select screen header
+.select screen line
+.continue END ? _G|mehr
+..*****************************************************************************
+!VALID: Validate inputs
+..*****************************************************************************
+.continue ERROR02 ? F|empty(M|iegj)
+.continue ERROR03 ? F|empty(M|kober)
+..
+.. Initialize
+.input "fb/CCBILGUV.COLORS"
+..
+.select year 'M|iegj' 1-12
+.formula U|xdvgl = G|edatum
+..
+.. Counter curves
+.formula U|xiw = 0
+.. Counter values
+.formula U|xiz = 0
+..
+.formula U|xttitle = 'M|tbez'
+.formula U|xttitle = 'M|tbez' >> " " ? 'M|tbez'/"(09)*"
+.set trans +
+.formula U|xttitle = U|xttitle + " kumuliert"
+.set trans -
+.chart -INIT
+.chart -PARAM -CHARTTYPE LINES
+.chart -PARAM -TITLECHART 'U|xttitle'
+.formula U|xrmin = 999999999999
+.formula U|xrmax = -999999999999
+..*****************************************************************************
+!CURVES: Check and iterate counter curves
+..*****************************************************************************
+.formula U|xiw = U|xiw + 1
+.continue END ?  U|xiw > 6
+.continue CURVES ? _M|anz.U|xiw
+..
+.. Set curve name using curve number
+.assign M|datenart = "(BestCase)"      ? U|xiw = 1
+.assign M|datenart = "(PossibleCase)"  ? U|xiw = 2
+.assign M|datenart = "(BreakEvenCase)" ? U|xiw = 3
+.assign M|datenart = "(WorstCase)"     ? U|xiw = 4
+.assign M|datenart = "(Base)"          ? U|xiw = 5
+.assign M|datenart = "(Actual)"        ? U|xiw = 6
+..
+.set trans +
+.formula U|xt2 = "Plan" + " " + 'M|datenart'
+.set trans -
+.formula U|xt2 = 'M|datenart' ? U|xiw = 6 ; U|xiw = 5
+.formula U|xtsel ="$,,@gruppe=1;gruppe=1;kbfsn=" + M|fkober^id + ";kbsn=" + M|kober^id + ";dart=" + 'F|value(M|datenart, "AS92")'
+.formula U|xtsel = U|xtsel + ";bukreis=" + 'M|bukreis^id' ? +'M|bukreis' > 0
+.select fcosteval 'U|xtsel'
+.continue CURVES ? _G|mehr
+..
+.formula U|xttitle = U|xt2 + " " + 'F|condexpr(U|xiw < 5, M|pagj, F|condexpr(U|xiw=5, M|bagj, M|iagj))' + "-" + 'F|condexpr(U|xiw < 5, M|pegj, F|condexpr(U|xiw=5, M|begj, M|iegj))'
+.formula U|xtrgb = U|xtfh1 ? F|equals(M|datenart, "(BestCase)")
+.formula U|xtrgb = U|xtfh2 ? F|equals(M|datenart, "(PossibleCase)")
+.formula U|xtrgb = U|xtfh3 ? F|equals(M|datenart, "(BreakEvenCase)")
+.formula U|xtrgb = U|xtfh4 ? F|equals(M|datenart, "(WorstCase)")
+.formula U|xtrgb = U|xtfh5 ? F|equals(M|datenart, "(Base)")
+.formula U|xtrgb = U|xtfh6 ? F|equals(M|datenart, "(Actual)")
+.chart -STARTVALUES 'U|xttitle' -ID 'U|xttitle' -RGBCOLOR 'U|xtrgb' -POINTMARKER CIRCLE -LINEWIDTH 1
+.chart -PARAM -MARKERX "Anfangssaldo;Mon-1;Mon-2;Mon-3;Mon-4;Mon-5;Mon-6;Mon-7;Mon-8;Mon-9;Mon-10;Mon-11;Mon-12"
+.chart -PARAM -2LEVELSX
+.formula U|xiz = 0
+..*****************************************************************************
+!VALUES
+..*****************************************************************************
+.formula U|xtrgb = ""
+.formula U|xiz = U|xiz + 1
+.formula U|xrbetr = H|jbetr.U|xiz
+.chart -VALUE 'H|vortrag' ?  U|xiz = 1
+.chart -VALUE 'U|xrbetr' ? _U|xiw = 6
+.chart -VALUE 'U|xrbetr' ?  U|xiw = 6 &  U|xiz < G|gmonat
+.chart -VALUE 'U|xrbetr' ?  U|xiw = 6 & (U|xiz >= G|gmonat & U|xdvgl < G|datum)
+.formula U|xrmin = H|vortrag ? U|xiw = 1 & U|xiz = 1
+.formula U|xrmax = H|vortrag ? U|xiw = 1 & U|xiz = 1
+.formula U|xrmin = U|xrbetr ? U|xrbetr < U|xrmin
+.formula U|xrmax = U|xrbetr ? U|xrbetr > U|xrmax
+.continue VALUES ? U|xiz < 12
+.continue CURVES ? U|xiw < 6
+.formula U|xrmin = (((U|xrmin / 50000):0) - 5) * 50000
+.formula U|xrmax = (((U|xrmax / 50000):0) + 5) * 50000
+.chart -PARAM -MINMAXY 'U|xrmin' 'U|xrmax'
+.chart -SHOW chart1 0
+.continue END
+..*****************************************************************************
+!BEST: Best case
+..*****************************************************************************
+.assign M|datenart = "(BestCase)"
+.continue VIEWOBJ
+..*****************************************************************************
+!POSSIBL: Possible case
+..*****************************************************************************
+.assign M|datenart = "(PossibleCase)"
+.continue VIEWOBJ
+..*****************************************************************************
+!BREAKEV: Break even
+..*****************************************************************************
+.assign M|datenart = "(BreakEvenCase)"
+.continue VIEWOBJ
+..*****************************************************************************
+!WORST: Worst case
+..*****************************************************************************
+.assign M|datenart = "(WorstCase)"
+.continue VIEWOBJ
+..*****************************************************************************
+!BASE: Base case
+..*****************************************************************************
+.assign M|datenart = "(Base)"
+.continue VIEWOBJ
+..*****************************************************************************
+!ACTUAL: Actual case
+..*****************************************************************************
+.assign M|datenart = "(Actual)"
+..*****************************************************************************
+!VIEWOBJ: View object
+..*****************************************************************************
+.formula U|xtsel = "$,,@gruppe=1;gruppe=1;kbfsn=" + M|fkober^id + ";kbsn=" + M|kober^id + ";dart=" + 'F|value(M|datenart, "AS92")'
+.formula U|xtsel = U|xtsel + ";bukreis=" + 'M|bukreis^id' ? +'M|bukreis' > 0
+.select fcosteval 'U|xtsel'
+.continue END ? _G|mehr
+..
+.type VP99 xxmyobject
+.assign U|xxmyobject = H|id
+.input "is/EXEC.COMMAND4REFERENCE"
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR01: Missing input!
+.error -line 0 -field M|fkober -message Bitte Kontenbereichsformular eingeben.
+.end 1
+..
+!ERROR02: Missing data!
+.error -line 0 -field M|iegj -message Bitte im angegebenen Kontenbereichsformular die GeschÑftsjahre fÅr die Istdaten eintragen.
+.end 1
+..
+!ERROR03: Missing data!
+.error -line M|aktzeile -field M|kober -message Der Kontenbereich fehlt.
+.end 1

@@ -1,0 +1,440 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LIQPLANDETAILS.EV
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Allgemeines Event-FOP
+.. Functionality  : Common event FOP
+.. include fb/CASHMGMT.MESSAGES
+.. include fb/CASHMGMT.MESSAGES.DEF
+.. include fb/LIQPLANDETAILS.INIT
+.. include fb/LIQPLANDETAILS.SCRCTX
+.. include fb/LIQPLANDETAILS.DATE2PERIOD
+.. include fb/CASHMGMT.SELECT
+..*****************************************************************************
+..
+.set trans -
+..
+.. init messages
+.input "fb/CASHMGMT.MESSAGES.DEF"
+.input "fb/CASHMGMT.MESSAGES"
+..
+.continue SHOWDOC  ? G|evtvar = "tbelzeigen"  & G|evtartengl = "BUTTON_AFTER"
+..
+.continue PRESTART ? G|evtvar = "bstart"      & G|evtartengl = "BUTTON_BEFORE"
+.continue DATPARAM ? G|evtvar = "datenparam"  & G|evtartengl = "FIELD_VALIDATION"
+.continue CHKPER   ? G|evtvar = "periodevon"  & G|evtartengl = "FIELD_VALIDATION"
+.continue CHKPER   ? G|evtvar = "periodebis"  & G|evtartengl = "FIELD_VALIDATION"
+.continue PTYPE    ? G|evtvar = "zeiteinheit" & G|evtartengl = "FIELD_VALIDATION"
+.continue CHKSTART ? G|evtvar = "stichtag"    & G|evtartengl = "FIELD_VALIDATION"
+.continue BELEG    ? G|evtvar = "beleg"       & G|evtartengl = "FIELD_VALIDATION"
+.continue END      ? G|evtartengl = "FIELD_VALIDATION"
+..
+.formula M|summe = 0
+.input "is/TABLEEREN"
+..
+.continue START    ? G|evtvar = "bstart"      & G|evtartengl = "BUTTON_AFTER"
+.continue DATNAME  ? G|evtvar = "datenparam"  & G|evtartengl = "FIELD_EXIT"
+.continue PERIODFR ? G|evtvar = "periodevon"  & G|evtartengl = "FIELD_EXIT"
+.continue PERIODTO ? G|evtvar = "periodebis"  & G|evtartengl = "FIELD_EXIT"
+.continue PERIODS  ? G|evtvar = "kzyklus"     & G|evtartengl = "FIELD_EXIT"
+.continue PERIODS  ? G|evtvar = "zeiteinheit" & G|evtartengl = "FIELD_EXIT"
+.continue PERIODS  ? G|evtvar = "stichtag"    & G|evtartengl = "FIELD_EXIT"
+.continue INITDATA ? G|evtvar = "position"    & G|evtartengl = "FIELD_EXIT"
+.continue INITDATA ? G|evtvar = "ekvk"        & G|evtartengl = "FIELD_EXIT"
+.continue DOCSET   ? G|evtvar = "beleg"       & G|evtartengl = "FIELD_EXIT"
+.continue CATEVAL  ? G|evtvar = "kategorieauswert" & G|evtartengl = "FIELD_EXIT"
+.continue END
+..
+..*****************************************************************************
+!BELEG
+..*****************************************************************************
+.continue ERR12     ? M|beleg^dnr = 0 ; M|beleg^dnr = 1
+.continue END 
+..
+..*****************************************************************************
+!CATEVAL
+..*****************************************************************************
+.formula M|datenparam = ""
+.continue DATNAME
+..
+..*****************************************************************************
+!DOCSET
+..*****************************************************************************
+.formula M|datenparam = ""
+.continue INITDATA ? F|empty(M|beleg)
+.formula M|ekvk = ""
+.formula M|position = ""
+.formula M|ekvk     = "(Sales)" ? M|beleg^dnr = 3
+.formula M|ekvk     = "(Purchasing)" ? M|beleg^dnr = 4
+.formula M|position = "(OutstandingItems)" ? M|beleg^dnr = 100
+.continue INITDATA
+..
+..*****************************************************************************
+!INITDATA
+..*****************************************************************************
+.input "fb/LIQPLANDETAILS.SCRCTX"
+.continue DATNAME
+..
+..*****************************************************************************
+!CHKPER
+..*****************************************************************************
+.continue ERR09 ? M|.G|evtvar < 0 ; M|.G|evtvar > M|maxper
+.continue END
+..
+..*****************************************************************************
+!CHKSTART
+..*****************************************************************************
+.continue ERR06 ? M|stichtag < G|datum
+.continue END
+..
+..*****************************************************************************
+!PRESTART
+..*****************************************************************************
+.continue ERR05 ?  M|periodebis < M|periodevon
+.continue ERR06 ?  M|stichtag < G|datum
+.continue ERR11 ?  F|empty(M|planszenario)
+.continue ERR12 ? _F|empty(M|beleg) & (M|beleg^dnr = 0 ; M|beleg^dnr = 1)
+.continue GENDATA ? F|empty(M|datenparam) ; _F|fileexists(M|datenparam)
+.continue END
+..
+..*****************************************************************************
+!PTYPE
+..*****************************************************************************
+.continue END ? 'M|.G|evtvar(L=":")' = "(Day)"
+.continue END ? 'M|.G|evtvar(L=":")' = "(Week)"
+.continue END ? 'M|.G|evtvar(L=":")' = "(Month)"
+.continue END ? 'M|.G|evtvar(L=":")' = "(Quarter)"
+.continue END ? 'M|.G|evtvar(L=":")' = "(Year)"
+.continue ERR07
+..
+..*****************************************************************************
+!PERIODS: Set periods
+..*****************************************************************************
+.formula M|zefaktor = F|condexpr(F|empty(M|kzyklus), 1, M|kzyklus^zefaktor)
+.copy M|zeiteinheit = M|kzyklus^zeiteinheit ? G|evtvar = "kzyklus" & _F|empty(M|kzyklus)
+.input "fb/LIQPLANDETAILS.INIT"
+.continue END
+..
+..*****************************************************************************
+!PERIODFR
+..*****************************************************************************
+.continue ERR05 ? M|periodevon > M|maxper
+.copy M|periodebis = M|periodevon ? M|periodebis < M|periodevon
+.copy M|perstart = M|perstart.M|periodevon
+.copy M|perend = M|perend.M|periodebis
+.continue END
+..
+..*****************************************************************************
+!PERIODTO
+..*****************************************************************************
+.continue ERR05 ? M|periodebis > M|maxper
+.continue ERR05 ? M|periodebis < M|periodevon
+.copy M|perstart = M|perstart.M|periodevon
+.copy M|perend = M|perend.M|periodebis
+.continue END
+..
+..*****************************************************************************
+!DATPARAM
+..*****************************************************************************
+.continue END   ?  F|empty(M|datenparam)
+.continue ERR03 ? _F|fileexists(M|datenparam)
+.continue END
+..
+..*****************************************************************************
+!DATNAME
+..*****************************************************************************
+.formula M|datenparam = "" ? _F|fileexists(M|datenparam)
+.continue END   ?  F|empty(M|datenparam)
+.system 'F|formatstr("rm -f {1}; ln -f {2} {1}", M|daten, M|datenparam)' background
+.end 1 ? _G|mehr
+.continue END
+..
+..*****************************************************************************
+!GENDATA
+..*****************************************************************************
+.type text xtinitfop
+.formula U|xtinitfop = "fb/LIQPLANDETAILS.INIT"
+.type bool xbselobcash
+.type bool xbseloi
+.type bool xbsellioek
+.type bool xbselreoek
+.type bool xbselliovk
+.type bool xbselreovk
+.type bool xbselbvor
+.type bool xbsellfvor
+.type bool xbselvat
+.type bool xbselppay
+.type bool xbselcredit
+.copy U|xbselobcash = F|empty(M|position) ; M|positions = "(LiquidAssetsOpeningBalance)"
+.copy U|xbseloi     = F|empty(M|position) ; M|positions = "(OutstandingItems)"
+.copy U|xbsellioek  = (F|empty(M|position) ; M|positions = "(OutstandingDeliveries)" ; M|positions = "(AmountOfVATPayableFromOutstandingItems)") & (F|empty(M|ekvk) ; F|equals(M|ekvk, "(Purchasing)"))
+.copy U|xbselliovk  = (F|empty(M|position) ; M|positions = "(OutstandingDeliveries)" ; M|positions = "(AmountOfVATPayableFromOutstandingItems)") & (F|empty(M|ekvk) ; F|equals(M|ekvk, "(Sales)"))
+.copy U|xbselreoek  = (F|empty(M|position) ; M|positions = "(OutstandingInvoices)" ; M|positions = "(AmountOfVATPayableFromOutstandingItems)") & (F|empty(M|ekvk) ; F|equals(M|ekvk, "(Purchasing)"))
+.copy U|xbselreovk  = (F|empty(M|position) ; M|positions = "(OutstandingInvoices)" ; M|positions = "(AmountOfVATPayableFromOutstandingItems)") & (F|empty(M|ekvk) ; F|equals(M|ekvk, "(Sales)"))
+.copy U|xbselbvor   = F|empty(M|position) ; M|positions = "(PurchaseOrderSuggestions)" & F|equals(M|ekvk, "(Purchasing)")
+.copy U|xbsellfvor  = F|empty(M|position) ; M|positions = "(SubcontractingSuggestions)" & F|equals(M|ekvk, "(Purchasing)")
+.copy U|xbselvat    = F|empty(M|position) ; M|positions = "(PostedAmountOfVATPayable)"
+.copy U|xbselppay   = F|empty(M|position) ; (M|positions = "(OtherIncomingPayments)" ; M|positions = "(OtherOutgoingPayments)")
+.copy U|xbselcredit = F|empty(M|position) ; (M|positions = "(PercentCommitmentFee)" ; M|positions = "(PercentInterestOnAvailment)")
+.input "fb/CASHMGMT.SELECT"
+.continue END ? _F|empty(M|ekvk) ; _F|empty(M|position)
+.. all data generated
+.continue ALLDATA
+..
+..*****************************************************************************
+!ALLDATA
+..*****************************************************************************
+.formula M|datenparam = "" ? _F|fileexists(M|datenparam)
+.continue END   ?  F|empty(M|datenparam)
+.file -screen -tempname M|datenparam -suffix "liq/ALLDATA"
+.system 'F|formatstr("mv {1} {2}", M|daten, M|datenparam)' background
+.continue ERR08 ? _G|mehr
+.continue DATNAME
+..
+..*****************************************************************************
+!START
+..*****************************************************************************
+.continue ERR01 ?  F|empty(M|daten)
+.continue ERR02 ? _F|fileexists(M|daten)
+.continue ERR05 ? M|periodebis < M|periodevon
+.continue ERR06 ? M|stichtag < G|datum
+.continue ERR11 ?  F|empty(M|planszenario)
+.continue ERR12 ? _F|empty(M|beleg) & (M|beleg^dnr = 0 ; M|beleg^dnr = 1)
+..
+.input "fb/LIQPLANDETAILS.SCRCTX"
+.continue FILTER ? _F|empty(M|position) ; _F|empty(M|ekvk) ; _F|empty(M|kategorie)
+..
+.system 'F|formatstr("rm -f {2}; cp -f {1} {2}", M|daten, M|datengefiltert)' background
+.continue ERR02 ? _G|mehr
+.continue START2
+..
+..*****************************************************************************
+!FILTER
+..*****************************************************************************
+.type text xt
+.formula U|xt = G|apostroph + "^"
+.formula U|xt = U|xt + "[ ]*\(" + F|regreplaceall(F|tostring(M|positions), "[()]", "") + "\)[ ]*" ? _F|empty(M|position)
+.formula U|xt = U|xt + ".*"                    ?  F|empty(M|position)
+.formula U|xt = U|xt + "#"
+.. intercompany
+.formula U|xt = U|xt + "[ ]*["
+.formula U|xt = U|xt + "01" ? F|empty(M|intercompany)
+.formula U|xt = U|xt + "1"  ? F|equals(M|intercompany, "(OnlyIntercompanyProcesses)")
+.formula U|xt = U|xt + "0"  ? F|equals(M|intercompany, "(NoIntercompanyProcesses)")
+.formula U|xt = U|xt + "][ ]*#"
+.. category
+.continue ALLCATS ? _M|kategorieauswert
+.continue ALLCATS ?  M|allekategorien
+.formula U|xt = U|xt + "[ ]*\(" + F|regreplaceall(F|tostring(M|kategories), "[()]", "") + "\)[ ]*"
+.continue EKVK
+!ALLCATS
+.formula U|xt = U|xt + ".*"
+!EKVK
+.formula U|xt = U|xt + "#"
+.formula U|xt = U|xt + "[ ]*\(" + F|regreplaceall(F|tostring(F|value(M|ekvk, "AS7")), "[()]", "") + "\)[ ]*" ? _F|empty(M|ekvk)
+.formula U|xt = U|xt + ".*"                    ?  F|empty(M|ekvk)
+.formula U|xt = U|xt + "#" + G|apostroph
+.system 'F|formatstr("rm -f {1}; egrep {2} {3} > {1}", M|datengefiltert, U|xt, M|daten)' background
+.. exit code is != 0 if no matching data was found => do not check "G|mehr"
+.continue ERR02 ? _F|fileexists(M|datengefiltert)
+.continue START2
+..
+..*****************************************************************************
+!START2
+..*****************************************************************************
+.type integer  xiperiod
+.type text xdummy
+.type bool xbmehr
+.type R    xrvalue xrdiscount xrsum
+.type text xetposition
+.type AZS20302 xcategory
+.type B1   xbintercompany
+..
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+.make screen line +O
+.. Beleg-ID # Beleg-DNR # Beleg-Gruppe # Konto-ID # Konto-DNR # Konto-Gruppe # Betrag # Termin # Belegdatum # ZBedingung # Skontosatz # Skonto #
+.select from 'M|datengefiltert' U|xetposition # U|xbintercompany # U|xcategory # M|tekvk # U|xiperiod # U|xrvalue # M|tbeleg # U|xdummy # U|xdummy # M|tkonto # U|xdummy # U|xdummy # M|tterm # M|tbeldat # M|tzbed # M|tskontosatz # U|xrdiscount #
+.copy U|xbmehr = G|mehr
+.continue REMOVE ? _U|xbmehr
+.. remove row if no valid value for enumeration
+.continue REMOVE ? _F|isvalue(U|xetposition, F|typeof(M|tposition))
+.assign M|tposition = 'U|xetposition'
+.continue REMOVE ? _G|mehr
+.continue REMOVE ? M|tekvk<>M|ekvk & _F|empty(M|ekvk)
+.continue REMOVE ? M|tposition^id<>M|position^id & _F|empty(M|position)
+.input "fb/LIQPLANDETAILS.DATE2PERIOD"
+.continue REMOVE ? _U|xbfound
+.continue REMOVE ?  M|tperiode < M|periodevon ; M|tperiode > M|periodebis
+.continue REMOVE ? U|xrvalue = 0
+.continue TAB
+..
+..*****************************************************************************
+!TAB
+..*****************************************************************************
+.input 'M|tab'
+.continue LOOP
+..
+..*****************************************************************************
+!REMOVE
+..*****************************************************************************
+.make screen line -O
+.continue LOOP ? U|xbmehr
+.continue SETSUM
+..
+..*****************************************************************************
+!SETSUM
+..*****************************************************************************
+.formula M|summe = U|xrsum
+.continue END
+..
+..*****************************************************************************
+!SHOWDOC
+..*****************************************************************************
+.continue END ? F|empty(M|tbeleg)
+.continue TAXDOC ? M|tbeleg^dnr = 54 & M|tbeleg^gruppe = 4
+.command -parallel 'M|tbeleg^id'
+.continue END
+..*****************************************************************************
+!TAXDOC
+..*****************************************************************************
+.input "fb/CASHMGMT.IS.COMMON.INIT0"
+.input "fb/CASHMGMT.INIT.TAX.PERIODS"
+.formula U|xi = 0
+!LOOP2
+.continue ELOOP2 ? U|xi > U|ximaxtaxperiod
+.continue NEXT2  ? _F|defined(U|xdvatterm.xi)
+.continue ELOOP2 ? U|xdvatterm.xi = M|tterm
+!NEXT2
+.formula U|xi = U|xi + 1
+.continue LOOP2
+!ELOOP2
+.type text xtcommand
+.type integer xirowpos
+.formula U|xirowpos = F|condexpr(U|xpzahllastposzeile > 0, U|xpzahllastposzeile, "")
+.load 7
+.formula U|xtcommand = 'M|tbeleg^id'
+.formula U|xtcommand = U|xtcommand + "<(Edit)>"
+.formula U|xtcommand = U|xtcommand + "? zeitraum=" + 'F|condexpr(F|empty(U|xustvazeitraum), F|tovalue("(Monthly)", "AU60"), U|xustvazeitraum)'
+.formula U|xtcommand = U|xtcommand + "|ganjahr=" + 'F|getfy(U|xdvatstart.U|xi)'
+.formula U|xtcommand = U|xtcommand + "|ganmon=" + 'F|getfm(U|xdvatstart.U|xi)'
+.formula U|xtcommand = U|xtcommand + "|gendjahr=" + 'F|getfy(U|xdvatend.U|xi)'
+.formula U|xtcommand = U|xtcommand + "|gendmon=" + 'F|getfm(U|xdvatend.U|xi)'
+.formula U|xtcommand = U|xtcommand + "|berech="
+.formula U|xtcommand = U|xtcommand + "|[pos]=" + 'U|xirowpos' + ":stbetrag"
+.command -parallel 'U|xtcommand'
+.continue END
+..
+..*****************************************************************************
+!ERR01
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.formula U|xmsgno = 1
+.formula U|xmsgpcnt = 0
+.continue END
+..
+..*****************************************************************************
+!ERR02
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.formula U|xmsgno = 2
+.formula U|xmsgpcnt = 1
+.formula U|xmsgparam1 = 'M|daten'
+.continue END
+..
+..*****************************************************************************
+!ERR03
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.formula U|xmsgno = 2
+.formula U|xmsgpcnt = 1
+.formula U|xmsgparam1 = 'M|datenparam'
+.continue END
+..
+..*****************************************************************************
+!ERR04
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.formula U|xmsgno = 4
+.formula U|xmsgpcnt = 1
+.formula U|xmsgparam1 = 'M|daten'
+.continue END
+..
+..*****************************************************************************
+!ERR05
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.formula U|xmsgno = 5
+.formula U|xmsgpcnt = 0
+.continue END
+..
+..*****************************************************************************
+!ERR06
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.formula U|xmsgno = 6
+.formula U|xmsgpcnt = 0
+.continue END
+..
+..*****************************************************************************
+!ERR07
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.formula U|xmsgno = 7
+.formula U|xmsgpcnt = 0
+.continue END
+..
+..*****************************************************************************
+!ERR08
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.formula U|xmsgno = 8
+.formula U|xmsgpcnt = 2
+.formula U|xmsgparam1 = 'M|daten'
+.formula U|xmsgparam2 = 'M|datenparam'
+.continue END
+..
+..*****************************************************************************
+!ERR09
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.formula U|xmsgno = 9
+.formula U|xmsgpcnt = 2
+.formula U|xmsgparam1 = "0"
+.formula U|xmsgparam2 = 'M|maxper'
+.continue END
+..
+..*****************************************************************************
+!ERR10
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.formula U|xmsgno = 11
+.formula U|xmsgpcnt = 1
+.formula U|xmsgparam1 = 'M|.G|evtvar'
+.continue END
+..
+..*****************************************************************************
+!ERR11
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.formula U|xmsgno = 3
+.formula U|xmsgpcnt = 0
+.continue END
+..
+..*****************************************************************************
+!ERR12
+..*****************************************************************************
+.copy U|xerrmsg = G|TRUE
+.formula U|xmsgno = 7
+.formula U|xmsgpcnt = 0
+.formula M|beleg = ""
+.continue END 
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.input "fb/CASHMGMT.MESSAGES"
+.continue

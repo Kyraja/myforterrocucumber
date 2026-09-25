@@ -1,0 +1,734 @@
+..!interpreter english
+..@@BEGINHEAD
+..========================================================================
+..==
+..==  Name              : EDI.EDI2VKEDL
+..==
+..==  Pfad              : dfue
+..==
+..==  Funktion          : EDL-Meldungen aus EDI-Datenbank
+..==                      in Meldungen bzw. Funktionen umsetzen
+..==
+..==  Erstellungsdatum  : 01.11.2002
+..==
+..==  Autor             : Ozan Kesim
+..==  Verantwortlicher  : mh
+..==
+..==  Menuepunkte       :
+..==
+..==  Maskenprioritaet
+..==  bei EFOP          :
+..==
+..==  Besonderheiten    :
+..==
+..==  Aenderungshistorie:
+..==
+..#KOR#EDI-MODUL#DATUM#éNDERUNGS-INDEX#MitarbeiterkÅrzel#
+..#KOR#EDL#01.11.2002#0#ok#
+..#KOR#EDL#12.11.2002#1#ok#
+..#KOR#EDL#28.01.2003#2#ok#
+..#KOR#EDL#30.01.2003#3#ok# (Fehlercode --> 99)
+..#KOR#EDL#31.01.2003#4#ok# (Fehlercode > 19 und < 8 gespeichert)
+..#KOR#EDL#03.02.2003#5#ok#
+..#KOR#EDL#06.02.2003#6#ok# (Fehlercode 2-4 --> 36-38)
+..#KOR#EDL#07.02.2003#7#ok# Fcode 17 entfernt
+..#KOR#EDL#10.02.2003#8#ok# Prozedur "EDISchreibeProtokoll" wurde entfernt
+..#KOR#EDL#11.06.2003#9#ok#
+..#KOR#EDL#16.06.2003#10#ok#
+..#KOR#EDL#24.07.2003#11#ok#
+..#KOR#EDL#11.08.2003#12#ok#
+..#KOR#EDL#23.04.2004#13#ok#
+..#KOR#EDL#04.08.2008#14#ok# (Spooler abgeschafft)
+..========================================================================
+..@@ENDHEAD
+..
+.input ARB
+..
+.. Variablendefinition
+..@@BEGINVARDEFS
+..====================================================
+.set trans -
+..>> variablendefinition
+..>>
+..
+.type text  xintedi xextedi
+..
+.type text  xPostBetreff
+.type text  xPostEmpf
+.type text  xPostFtext
+.type text  xPostStichw1
+.type text  xPostStichw2
+.type text  xPostStichw3
+.type text  xPostStichw4
+.type text  xdPARAM
+.type text  xtxt1 xtxt2
+..
+.type bool  xbfehler
+.type text  xdfehler
+..>> Funktion der Nachricht
+.type text xfunktion
+..>> Abladestelle
+.type text       xablstelle
+..>> Anschrift Versand:
+..>> Name
+.type text       xavans
+.type text       xavans1
+.type text       xavans2
+.type text       xavans3
+..>> Stra·e
+.type text       xavstr
+..>> Land
+.type text       xavlakenn
+..>> Postleitzahl
+.type text       xavplz
+..>> Ort
+.type text       xavnort
+..>> EDI-Identnummer des aktuellen EDI-Datensatzes
+.type text       xedinumneu
+..>> temp. EDI-Identnummer 1
+.type text       xedinumactinnachr1
+..>> 1. SuchschlÅssel EDI
+.type text       xedisuchschluessel1
+..>> Identnummer des Lieferanten beim Kunden
+.type text       xidabkunde
+..>> Identnummer des abas Artikels
+.type text       xideksart
+..>> Identnummer der abas Vorgangs
+.type text       xideksvor
+..>> 1. temporÑre Integer-Variable
+.type integer    xinteger1
+..>> Schalter, ob aktiver Lader
+.type bool       xistaktlader
+..>> Schalter, ob EDIFACT-ORDER fÅr Kunden aktiviert
+.type bool       xediaktiv
+..>> Schalter, ob EDIFACT-ORDER fÅr Kunden automatisch
+.type bool       xediauto
+..>> Schalter, ob EDIFACT-ORDER fÅr Kunden manuell
+.type bool       xedimanu
+..>> 1. Schalter, ob nach Holen Satz vorhanden
+.type bool       xistsatz1
+..>> 2. Schalter, ob nach Holen Satz vorhanden
+.type bool       xistsatz2
+..>> 3. Schalter, ob nach Holen Satz vorhanden
+.type bool       xistsatz3
+..>> 1. Schalter, ob nach Holen Tabellenzeile vorhanden
+.type bool       xistzeile1
+..>> 2. Schalter, ob nach Holen Tabellenzeile vorhanden
+.type bool       xistzeile2
+..>> Lagerort Kunde
+.type text       xkdelager
+..>> 1. SuchschlÅssel KD
+.type text       xkdsuchschluessel1
+..>> Zeichen des Kunden aus EDIFACT-ORDER
+.type text       xkdzeich
+..>> KontierungsschlÅssel
+.type text       xkontschl
+..>> Kundenartikelnummer
+.type text       xkuartnr
+..>> Kunden-GTIN-Nr.
+.type text       xkugtinnr
+..>> EDIFACT-ORDER-Datum neu
+.type GD         xlabrufd
+..
+..**ok,14.04.2008 (Spooler abgeschafft: xladstatus1, xladstatus)
+..
+..>> Land
+.type text       xland
+..>> Lieferschein-Nr. letzter Eingang
+.type text       xleinlief
+..>> LS-Datum letzter Eingang
+.type GD         xleinlida
+..>> GewÅnschtes Lieferdatum
+.type date      xliefdg
+..>> GewÅnschte Lieferwoche
+.type week      xliefwg
+..>> Lieferdatum von
+.type date      xliefdv
+..>> Lieferdatum bis
+.type date      xliefdb
+..>> Schalter, ob in Prozedur .merke lifo
+.type integer    xmerklifo
+..>> Materialfreigabe
+.type integer    xmfgfzahl
+..>> Abrufmenge
+..**ok,11.08.2003 (xmge von real --> R6.3 umdefiniert)
+.type R6.3       xmge
+.. Aktuelle Tabellenzeile im EDI-Datensatz
+.type text       xaktzeile
+.. Aktuelle Satzart im EDI-Datensatz
+.type text       xaktsatz
+..>> Abrufmenge gesamt
+.type integer    xmgegesamt
+..>> Name Lader-Datei
+.type text       xnlader
+..>> Positionsnummer
+.type text       xpnum
+..>> abas Post-Betreff
+.type text       xPostBetreff
+..>> abas Post-Freitext-Datei
+.type text       xPostFtext
+..>> abas Post-Stichworte
+.type text       xPostStichw1
+.type text       xPostStichw2
+.type text       xPostStichw3
+.type text       xPostStichw4
+..>> Abruf-Positionstext
+.type text       xptext
+..>> Abrufdatum Woche
+.type week      xterm
+..>> 1. SuchschlÅssel Artikel
+.type text       xtesuchschluessel1
+..>> Abrufdatum Tag
+.type date      xtterm
+..>> Abrufdatum Wochentag
+.type integer    xttermwt
+..>> Versandart
+.type text       xvart
+..>> Verbrauchsstelle
+.type text       xvbrstelle
+..>> 1. SuchschlÅssel VK
+.type text       xvksuchschluessel1
+..>> Werk
+.type text       xwerk
+..>> 1. SchleifenzÑhler
+.type integer    xzaehl1
+..>> 2. SchleifenzÑhler
+.type integer    xzaehl2
+..>> 3. SchleifenzÑhler
+.type integer    xzaehl3
+..... procedure stack pointer .....
+.type integer   xprocsp
+..
+.. include dfue/EDIIMPPROCESS.MODULSPERRE
+.type text xmmvvl ? _F|defined(U|xvvvvl)
+.type integer xaktion ? _F|defined(U|xaktion)
+.type bool xprocreturn ? _F|defined(U|xprocreturn)
+..
+..====================================================
+..@@ENDVARDEFS
+..
+.. initialize procedure stack pointer
+.formula xprocsp = 0
+.. alle variablen mÅssen definiert sein, sonst bricht das programm ab
+.set demand -
+..
+.. ----------------------------------------
+.continue EPROCDEF
+.. procedure definitions
+.. Prozedur: EDISchreibeProtokoll
+..
+!PROC001: ----- EDISchreibeProtokoll -----
+..>> AnhÑngen von Informationen an Fehlerprotokoll bei Fehlern bzgl. der
+..>> Verarbeitung von EKS-EDI-DatensÑtzen
+..>>
+..>> Parameter:
+..>>
+..>> Ein: - Name der Ergebnisprotokoll-Datei (xneprotokollerw)
+..>>      - Name der Fehlerprotokoll-Datei (xnfprotokollerw)
+..>>      - EKS-EDI-Identnummer des EKS-EDI-Datensatzes (xedinumactinnachr1)
+..>>      - Beschreibungen der Fehlercodes (xedireffcod<i>)
+..>>
+..>> Aus: - Erfolg Operation (xprocreturn)
+..>>      - globaler Schalter, ob Protokoll erweitert (xistfproterw)
+..>>
+..>> Interne Variablen: - xfobefehl
+..>>
+..
+..>> Erfolg der Operation
+.formula xprocreturn = true
+..
+.. >> Erweitern Protokoll-Datei
+.select edifact 'xedinumactinnachr1'
+..
+.. >> Protokollzeile
+....      Datum_Zeit     EDI-Nr    Vorgang  Vo Kunde    Fehl       Bemerkung
+....    # 29.04.98_21:29 15        400005   3           52 ausgehende VK-RE 400005
+....      29.04.98_21:29 16        400006   3  70001       ausgehende VK-RE 400006
+.set separator=^
+.formula xfobefehl = (('datum' + "_" + 'zeit' + "              ") << 14) + " "
+.formula xfobefehl = xfobefehl + ((num + "         ") << 9) + " "
+.formula xfobefehl = xfobefehl + ((ideksvor + "        ") << 8) + " "
+.formula xfobefehl = xfobefehl + (('vorart' + "  ") << 2) + " "
+.formula xfobefehl = xfobefehl + ((idkundeab + "        ") << 8) + " "
+..
+..
+.continue EL001 ? _(fcode = 0)
+.. IF001
+..
+.continue EL002 ? _((status = 5) ; (status = 6))
+.. IF002
+....                                 gespoolt      (e -> eingegegangen)
+....                                 |             (v -> verarbeitet)
+....                                 |
+.formula xfobefehl = "  " + xfobefehl + " s " + (name << ";") + ((name >> ";") >> "")
+..
+.continue FI002
+!EL002
+..
+.continue EL003 ? _(0|status = 10)
+.. IF003
+....                                 verarbeitet   (e -> eingegegangen)
+....                                 |             (s -> gespoolt)
+....                                 |
+.formula xfobefehl = "  " + xfobefehl + " v " + (name << ";") + ((name >> ";") >> "")
+..
+.continue FI003
+!EL003
+....                                 eingegegangen (s -> gespoolt)
+....                                 |             (v -> verarbeitet)
+....                                 |
+.formula xfobefehl = "  " + xfobefehl + " e " + (name << ";") + ((name >> ";") >> "")
+..
+!FI003
+..
+!FI002
+..
+.output addedto 'xneprotokollerw'
+.length 1
+.right 80
+.tablerecord
+..
+.continue FI001
+!EL001
+.formula xfobefehl = "# " + xfobefehl + (('fcode' + "  ") << 2) + " " + 'xedireffcod.fcode'
+..
+.formula xistfproterw = true
+..
+.output addedto 'xnfprotokollerw'
+.length 1
+.right 80
+.tablerecord
+..
+!FI001
+..
+'xfobefehl'
+.set
+..
+.output new WERF.WEG
+..
+.continue 'xprocst.xprocsp'
+..
+.. Prozedur: VervollstÑndigeEDIInfos
+..
+!PROC002: ----- VervollstaendigeEDIInfos -----
+..>> VervollstÑndigen der Kunden-Informationen des EDI-Datensatzes
+..>> bzgl. EDL-Meldung
+..>> Parameter:
+..>> Ein:
+..>> Aus: - Erfolg Operation (xprocreturn)
+..>> Interne Variablen: - xkdsuchschluessel1
+..>>                    - xvksuchschluessel1
+..>>                    - xistsatz3
+..>>                    - xistzeile1
+..>>                    - xedistatus
+..>>                    - xedifcode
+..>>                    - xedifcodemax
+..>>                    - xideksart
+..>>                    - xkuartnr
+..>>                    - xwerk
+..>>                    - xablstelle
+..>>                    - xverwschl
+..>>                    - xidabkunde
+..>>                    - xidkundeab
+..
+..>> Init RÅckgabewerte: ein Erfolg der Operation
+.formula xprocreturn = false
+..
+.. >> VervollstÑndigen der Status/Fehlercode-Informationen des EDI-Datensatzes bzgl. EDL-Meldung
+..>> PrÅfen und Speichern der Partner-Informationen aus dem EDI-Datensatz
+.input "PRUEF.PARTNERINFO"
+..
+..
+.continue EL004 ? _(xedifcode = 0)
+.. IF004
+.. >> Speichern Status in abas EDI-Datensatz
+.select lock edifact 'xedinumactinnachr1'
+..
+.set trans +
+.formula name = "eingehende EDL-Meldung"
+.set trans -
+.formula xedistatus = 3
+.formula status = xedistatus
+.formula xedifcode = 0
+.formula fcode = xedifcode
+..
+.rewrite
+..
+.formula xprocreturn = true
+..
+.continue FI004
+!EL004
+.. >> Speichern Fehler-Status und Fehlercode in abas EDI-Datensatz
+.select lock edifact 'xedinumactinnachr1'
+..
+.set trans +
+.formula name = "eingehende EDL-Meldung"
+.set trans -
+.formula xedistatus = 4
+.formula status = xedistatus
+.formula fcode = xedifcode
+..
+.. Die Fehlerprotokoll in T1 geschrieben
+.formula ftext = xdfehler
+..
+.rewrite
+..
+.formula xprocreturn = false
+..
+!FI004
+..
+.continue 'xprocst.xprocsp'
+..
+.. Prozedur: FEHLER
+..
+!PROC003: ----- FEHLER -----
+.formula xbfehler = true
+..
+.output addedto 'xdfehler'
+.input DATEI.F
+?'xtxt2     ' 'xtxt1' ? +xtxt2 > 0 ; +xtxt1 > 0
+.output
+..
+.continue 'xprocst.xprocsp'
+..
+!EPROCDEF: ----- end procedure definitions -----
+.. ----------------------------------------
+..
+.. Modulsperre setzen
+.formula U|xmmvvl = "VKEDL"
+.formula U|xaktion = 1
+.input "EDIIMPPROCESS.MODULSPERRE"
+..
+..
+.continue EL005 ? _(xprocreturn)
+.. IF005
+..die parameterdatei
+..**ok,28.01.2003 (xarb wurde entfernt)
+.formula xdPARAM = "dfue/DFUE.IMP.INI"
+.input 'xdPARAM'
+..
+.. >> Start der Funktion
+..>> Merken DFUE-Programm und -Unterprogramm
+..>> Name des DFUE-Unterprogramms
+.formula xdfueuprog = tname
+..
+..  VervollstÑndigen der Informationen des abas Kunden fÅr alle neuen EDL-Meldung-EDI-DatensÑtze
+.. Holen alle neuen, nicht weiterverarbeiteten EDI-DatensÑtze (VorgÑnge)
+.formula xedisuchschluessel1 = "$,,;@ordnung=nummer;@gruppe=0;@ablage=(1);@zeilen=(0);imex=IM;fcode=0;status=2;vorart=" + xvorart
+.select edifact 'xedisuchschluessel1'
+..
+..>> Merken, ob nicht weiterverarbeiteten EDI-Datensatz (Vorgang) gefunden
+.formula xistsatz1 = mehr
+..
+..
+!LOOP001: ==============================
+.continue ELOP001 ? _(xistsatz1)
+..>> Merken neuen abas Edi-Datensatz
+.formula xedinumneu = num
+..
+.. Fehlerdatei
+.. Fehlermeldungsdatei, die als Freitext T1 geschrieben wird
+..**ok,28.01.2003 (xarb wurde entfernt)
+.formula xdfehler = "X.ERR." + xedinumneu + ".TMP"
+.output new 'xdfehler'
+.input DATEI.F
+.set trans +
+EDI-Datensatz: 'xedinumneu'
+
+Satzart, Zeile, Fehlerbeschreibung
+--------------------------------------------------------------------------------------------------------
+.set trans -
+.output terminal
+..
+..>> Setzen Parameter fÅr Prozedur
+.formula xedinumactinnachr1 = num
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC002
+!RET001
+.formula xprocsp = xprocsp - 1
+..
+.. Holen alle nicht weiterverarbeiteten EDI-DatensÑtze (VorgÑnge), wenn vorhanden
+.formula xedisuchschluessel1 = "$,,;@ordnung=nummer;@gruppe=0;@ablage=(1);@zeilen=(0);;imex=IM;fcode=0;status=2;vorart=" + xvorart
+.select edifact 'xedisuchschluessel1'
+..
+..>> Merken, ob nicht weiterverarbeiteten EDI-Datensatz (Vorgang) gefunden
+.formula xistsatz1 = mehr
+..
+.continue LOOP001
+!ELOP001: ==============================
+..
+.. >> Verarbeiten alle neuen, nicht weiterverarbeiteten EDI-DatensÑtze (VorgÑnge)
+.. >> Holen alle neuen, nicht weiterverarbeiteten EDI-DatensÑtze (VorgÑnge)
+..>> idkundeab=" + xidkundeabe + ";fcode=0;status=3
+.formula xedisuchschluessel1 = "$,,;@ordnung=nummer;@gruppe=0;@ablage=(1);@zeilen=(0);imex=IM;fcode=0;status=3;vorart=" + xvorart + ";idkundeab=" + xidkundeabe
+.select edifact 'xedisuchschluessel1'
+..
+.formula xistsatz1 = mehr
+..
+..
+!LOOP002: ==============================
+.continue ELOP002 ? _(xistsatz1)
+..>> Merken neuen abas Edi-Datensatz
+.formula xedinumneu = num
+..
+.. Fehlerdatei
+.. Fehlermeldungsdatei, die als Freitext T1 geschrieben wird
+..**ok,28.01.2003 (xarb wurde entfernt)
+.formula xdfehler = "X.ERR." + xedinumneu + ".TMP"
+.output new 'xdfehler'
+.input DATEI.F
+.set trans +
+EDI-Datensatz: 'xedinumneu'
+
+Satzart, Zeile, Fehlerbeschreibung
+--------------------------------------------------------------------------------------------------------
+.set trans -
+.output terminal
+..
+..**ok,28.01.2003 (untere Prozedur VervollstaendigeEDIInfos hier NEU)
+..
+..>> Setzen Parameter fÅr Prozedur
+.formula xedinumactinnachr1 = num
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC002
+!RET002
+.formula xprocsp = xprocsp - 1
+..
+..>> Holen neuen abas Edi-Datensatz
+.select edifact 'xedinumneu'
+..
+..**ok,31.01.2003 (Programmteil fÅr "Ermitteln EDI-Info-Eintrag" wurde entfernt)
+..**ok,31.01.2003 (es wird im Prozedur "VervollstaendigeEDIInfos" vorgenommen)
+..
+..>> Test, ob: EDI-EDL fÅr Kunde aktiviert ist und
+..>>   - ein Kunde mit der automatischen Verarbeitung von EDI-EDL-Meldungen oder
+..>>   - aktuelle Identnummer des Lieferanten bei Kunde mit gewÑhlter Åbereinstimmt
+..
+..
+.continue EL006 ? _((xediaktiv) & (((xidkundeabe = "") & (xmenu=1) & (xedimanu)) ; ((xidkundeabe = "") & (xmenu=2) & (xediauto)) ; ((xidkundeabe = "") & (xediauto)) ; ((xidkundeabe = "") & (xmenu=3) & ((xediauto) ; (xedimanu))) ; (xidkundeabe = idkundeab)))
+.. IF006
+.. >> Verarbeitung
+..>> Test, ob EDI-EDL
+..
+..**ok,11.06.2003 (statt nachrtyp="VKEDL" jetzt vorart=27)
+..
+..
+.continue EL007 ? _(vorart = 27)
+.. IF007
+..
+.. =====   CASE001   =====
+.continue BRK001 ? _(funktion = "30")
+.. Eingangsmeldung:  EDL --> Lieferant
+.. Eingangsmeldung:  EDL --> Lieferant
+..
+..**ok,11.06.2003 (jetzt statt Fehler "38" Meldungen gedruckt)
+..
+..
+.continue EL008 ? _(xEDLDrucker <> "")
+.. IF008
+.output 'xEDLDrucker'
+.input BLANKOB.F
+.input "DRUCK.EDL"
+..
+!EL008
+.. FI008
+..
+.select lock edifact 'xedinumneu'
+.formula status = 0
+.formula fcode  = 0
+.rewrite
+..
+.formula xedistatus = 0
+.formula xedifcode = 0
+..
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(funktion = "32")
+.. Transportschaden/Differenz: EDL --> Lieferant
+.. Transportschaden/Differenz
+..
+..**ok,23.04.2004 (jetzt statt Fehler "38" Meldungen gedruckt)
+..
+..
+.continue EL009 ? _(xEDLDrucker <> "")
+.. IF009
+.output 'xEDLDrucker'
+.input BLANKOB.F
+.input "DRUCK.EDL"
+..
+!EL009
+.. FI009
+..
+.select lock edifact 'xedinumneu'
+.formula status = 0
+.formula fcode  = 0
+.rewrite
+..
+.formula xedistatus = 0
+.formula xedifcode = 0
+..
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(funktion = "33")
+.. RÅcksendung: EDL --> Lieferant
+..**ok,23.04.2004 (jetzt statt Fehler "38" LS mit Minus-Menge angelegt)
+..
+.. Unterprogramm "EDI.EDI2VKEDL33"
+.input "EDI.EDI2VKEDL33"
+..
+.continue ESAC001
+!BRK003
+.continue BRK004 ? _(funktion = "35")
+.. Bestandsmeldung: EDL --> Lieferant
+..**ok,11.06.2003 (jetzt statt Fehler "38" Meldungen gedruckt)
+..
+..
+.continue EL010 ? _(xEDLDrucker <> "")
+.. IF010
+.output 'xEDLDrucker'
+.input BLANKOB.F
+.input "DRUCK.EDL"
+..
+!EL010
+.. FI010
+..
+.select lock edifact 'xedinumneu'
+.formula status = 0
+.formula fcode  = 0
+.rewrite
+..
+.formula xedistatus = 0
+.formula xedifcode = 0
+..
+.continue ESAC001
+!BRK004
+.continue BRK005 ? _(funktion = "36")
+.. Abgangsmeldung/Entnahme-Info: EDL --> Lieferant
+.. Unterprogramm "EDI.EDI2VKEDL36"
+.input "EDI.EDI2VKEDL36"
+..
+..**ok,12.11.2002 (der Programmblock "Testergebnis positiv: Erzeugen und Starten des Laders fÅr EDL-Meldung" entfernt")
+..
+.continue ESAC001
+!BRK005
+.. FEHLER
+.select lock edifact 'xedinumneu'
+..>> 4 -> EDI-Nachricht wurde nicht vearbeitet
+.formula status = 4
+..>> 37 -> Funktion ist unbekannt
+.formula fcode = 37
+..>> Speichern neuen abas Edi-Datensatz
+.rewrite
+..
+.formula xedistatus = 4
+.formula xedifcode = 37
+..
+!ESAC001: =====   ENDCASE   =====
+..
+.continue FI007
+!EL007
+.. FEHLER
+.select lock edifact 'xedinumneu'
+..>> 4 -> EDI-Nachricht wurde nicht vearbeitet
+.formula status = 4
+..>> 36 -> Nachrichtentyp ist unbekannt
+.formula fcode = 36
+..>> Speichern neuen abas Edi-Datensatz
+.rewrite
+..
+.formula xedistatus = 4
+.formula xedifcode = 36
+..
+!FI007
+..
+..  Holen alle neuen, nicht weiterverarbeiteten EDI-DatensÑtze
+.formula xedisuchschluessel1 = "$,,;@ordnung=nummer;@gruppe=0;@ablage=(1);@zeilen=(0);imex=IM;fcode=0;status=3;vorart=" + xvorart + ";idkundeab=" + xidkundeabe
+.select edifact 'xedisuchschluessel1'
+..
+.continue FI006
+!EL006
+..  Holen alle neuen, nicht weiterverarbeiteten EDI-DatensÑtze ab aktuellem
+.formula xedisuchschluessel1 = "$,,;@ordnung=nummer;@gruppe=0;@ablage=(1);@zeilen=(0);imex=IM;fcode=0;status=3;vorart=" + xvorart + ";nummer=" + xedinumneu + "!;idkundeab=" + xidkundeabe
+.select edifact 'xedisuchschluessel1'
+..
+..
+.continue EL011 ? _(mehr)
+.. IF011
+..>> Holen nÑchsten neuen, nicht weiterverarb. EDI-Datensatz
+.select edifact
+..
+!EL011
+.. FI011
+..
+!FI006
+..
+..>> Merken, ob nicht weiterverarbeiteten EDI-Datensatz (Vorgang) gefunden
+.formula xistsatz1 = mehr
+..
+.continue LOOP002
+!ELOP002: ==============================
+..
+.. >> Aktualisieren Status in EDI-DatensÑtzen fcode=0;status=5!10
+..>> Warten auf Ende aller aktiven Lader-Batch-LG's
+..>> Initialisieren Laufvariable Anzahl Tests auf aktiven Lader fÅr EDI-EDL-Meldungen
+.formula xzaehl1 = 0
+..
+.. .. Holen alle EDI-DatensÑtze fÅr aktive Lader EDI-EDL-Meldungen
+.formula xedisuchschluessel1 = "$,,;@ordnung=nummer;@gruppe=0;@ablage=(1);@zeilen=(0);imex=IM;fcode=0;status=5!10;vorart=" + xvorart
+.load 0 edifact 'xedisuchschluessel1'
+..
+..**ok,14.04.2008 (wegen der Abschaffung des Spooler untere Block wurde geÑndert)
+..
+.formula xistaktlader = mehr
+..
+..
+!LOOP003: ==============================
+.continue ELOP003 ? _(xistaktlader)
+..>> Merken EDI-Datensatz
+.formula xedinumactinnachr1 = 0|nummer
+..
+..
+.. =====   CASE002   =====
+.continue BRK006 ? _(0|status = 10)
+.output terminal
+Komplettieren abas Objekte zu EDI-EDL-Meldungen <'xedinumactinnachr1'>, bitte warten ...
+..
+..>> Setzen Unterprogrammname
+.formula xdfueuprog = xduladpostvkedl
+.formula xdfueuprog = xdfueuprog >$ "/" ? xdfueuprog / "*\/*"
+..
+.input 'xduladpostvkedl'
+..
+.continue ESAC002
+!BRK006
+!ESAC002: =====   ENDCASE   =====
+..
+..>> nÑchsten aktiven Lader fÅr EDI-EDL-Meldungen
+.load 0 edifact
+..
+.formula xistaktlader = mehr
+..
+.continue LOOP003
+!ELOP003: ==============================
+..
+.. Modulsperre freigeben
+.formula U|xmmvvl = "VKEDL"
+.formula U|xaktion = 2
+.input "EDIIMPPROCESS.MODULSPERRE"
+..
+.continue FI005
+!EL005
+.. Fehlermeldung: Keine Sperre erhalten
+.error Die EDI-Verarbeitung ist gesperrt.
+.end 1
+..
+!FI005
+..
+.continue
+..

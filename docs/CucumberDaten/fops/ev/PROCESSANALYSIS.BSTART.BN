@@ -1,0 +1,94 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PROCESSANALYSIS.BSTART.BN
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Datenbeschaffung
+.. Ablauf         : Button-nach-EFOP
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type bool xbvorgda xbpos
+.type text xtid xtpid xtsel xtrid xtdat
+.type integer  xizeile xitstufe
+..
+.. Initializing
+.atext -language 'G|lsprache' U|xtdat 660 Verkauf
+.atext -language 'G|lsprache' U|xtdat 661 Einkauf ? M|vorgang^dnr = 4
+.formula M|stufe = 0
+.formula M|sumbestellung = 0
+.formula M|sumlieferschein = 0
+.formula M|sumrechnung = 0
+.formula M|sumrueckls = 0
+.formula M|sumgutschrift = 0
+.formula M|sumkundenls = 0
+.formula M|sumkonto = 0
+..
+.. Clear table
+.make screen line -- ? M|tzeilen > 0
+..
+.. Query database
+.select object 'M|select'
+.continue END ? _G|mehr
+.formula U|xtid = M|select
+.continue ITEM ? H|gruppe = 2
+..
+!NEXT0: If legal show all items of the document in table
+.select line
+.formula M|stufe = M|stufe + 1 ? _G|mehr
+.continue FORW  ? _G|mehr
+.continue NEXT0 ? H|typ <> G|ARPOS & H|typ <> G|ZUPOS
+.input 'M|tab'
+.continue NEXT0
+..
+!ITEM: If legal show item in table
+.continue ERROR02 ? H|typ <> G|ARPOS & H|typ <> G|ZUPOS
+.input 'M|tab'
+.formula M|stufe = M|stufe + 1
+.continue FORW 
+..
+!FORW: Tracking of items
+.select screen header
+..
+!NEXT2: If legal read next row in table of mask buffer
+.select screen line
+.continue END   ? _G|mehr
+.continue NEXT2 ? F|empty(M|artikel) ; F|empty(M|tvorp) ; _M|tbvverfolg
+..
+.. Deactivate backtracking in row
+.copy M|tbvverfolg = G|FALSE
+.assign U|xitstufe = M|tstufe
+.continue ERROR03 ? _G|mehr
+.formula U|xtsel = "$,,;@gruppe=2;orig=" + M|tvorp^id + ";art=" + M|artikel^id + ";@ablageart=(Both)"
+.select 'U|xtdat' 'U|xtsel'
+..
+!NEXT3: Is loaded original item legal?
+.continue FORW    ? _G|mehr
+.continue FIGNORE ? F|empty(H|kopf)
+.formula U|xtid = H|kopf^id
+..
+.. Save and show item
+.formula U|xtpid = H|id
+.formula M|stufe = U|xitstufe + 1
+.input 'M|tab'
+..
+!FIGNORE
+.select 'U|xtdat'
+.continue NEXT3
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR01
+.error -message Der Vorg„nger wurde nicht gefunden!
+.end 1
+..
+!ERROR02
+.error -message Die Positionsart 'H|typa' ist nicht erlaubt!
+.end 1
+..
+!ERROR03
+.error -message Zuweisung gescheitert!
+.end 1

@@ -1,0 +1,137 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PLANNEDINVOICES.TAB
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type ARTR52000 xsuminlgebucht  ? _F|defined(U|xsuminlgebucht)
+.type ARTR52000 xsuminlbezahlt  ? _F|defined(U|xsuminlbezahlt)
+.type realx     xramount        ? _F|defined(U|xramount)
+.type realx     xrkurs          ? _F|defined(U|xrkurs)
+.type realx     xiwbuamount     ? _F|defined(U|xiwbuamount)
+.type RP7.6     xrate           ? _F|defined(U|xrate)
+.type IP1       xrundung        ? _F|defined(U|xrundung)
+.type text      xstrgl          ? _F|defined(U|xstrgl)
+..
+.continue END  ? _F|empty(U|xvid) & '9|kopf^evvorgang^id' <> 'M|kauftrag^id' & M|verkauf & _F|empty(M|kauftrag)
+.continue END  ? _F|empty(U|xvid) & '9|kopf^evvorgang^id' <> 'M|serauftrag^id' & M|verkauf & _F|empty(M|serauftrag)
+.continue END  ? _F|empty(U|xvid) & '9|kopf^evvorgang^id' <> 'M|repauf^id' & M|verkauf & _F|empty(M|repauf)
+.continue END  ? _F|empty(U|xeid) & '9|kopf^evvorgang^id' <> 'M|kbestellung^id' & M|einkauf
+.continue LINE ? M|bgeplant &  F|empty(9|faktico) &  F|empty(9|gebuchtico) &  F|empty(9|bezahltico)
+.continue LINE ? M|bfakt    & _F|empty(9|faktico) &  F|empty(9|gebuchtico) &  F|empty(9|bezahltico)                      
+.continue LINE ? M|bgebucht & _F|empty(9|faktico) & _F|empty(9|gebuchtico) &  F|empty(9|bezahltico)
+.continue LINE ? M|bbezahlt & _F|empty(9|faktico) & _F|empty(9|gebuchtico) & _F|empty(9|bezahltico)
+.continue END
+..
+!LINE
+.make screen line +o
+..'M|zn' evpos^id: '9|evpos^id'
+.assign U|xrkurs      = 9|evvorgang^kurs
+.formula U|xrundung   = G|inland^nkst
+.formula U|xrate      = F|fxrate(G|inland,9|evvorgang^budat,9|waehr)
+.copy M|inlwaehr      = G|inland
+.copy M|brutto        = 9|evvorgang^brutto
+.assign M|auftrag     = 9|evvorgang
+.formula M|icon = M|iconauf ? 9|evvorgang^typ = 3
+.formula M|icon = M|iconser ? 9|evvorgang^typ = 34
+.formula M|icon = M|iconrep ? 9|evvorgang^typ = 35
+.assign M|tkunde      = 9|evvorgang^kunde
+.assign M|bestellung  = 9|evvorgang
+.assign M|trechart    = 9|reart
+.assign M|tlief       = 9|evvorgang^lief
+.formula M|tfrbez     = 9|evvorgang^lief^frbez        ? 9|evvorgang^lief^gruppe = 1
+.formula M|tfrbez     = 9|evvorgang^lief^firma^frbez  ? 9|evvorgang^lief^gruppe = 2
+.formula M|strgl      = 9|evpos^strgl^id
+.formula M|psteuer    = 9|evpos^psteuer
+.formula M|status     = 9|evpos^status
+.continue RECH ? F|empty(M|strgl)
+.. korrekte Zeile der Steuerregel finden
+.formula U|xstrgl = "$,,kopf^id=" + M|strgl^id +";gvon<=" + 'M|bestellung^budat' + ";gbis>=" + 'M|bestellung^budat' +";@gruppe=15"
+.load 1 taxcode 'U|xstrgl'
+.continue ERROR1 ? _G|mehr
+.formula M|psatz      = 1|psatz
+!RECH
+.formula M|anzpwert   = 9|anzpwert                   ? _M|brutto
+.formula M|branzpwert = ""                           ? _M|brutto & F|equals(9|reart, "(Invoice)")
+.formula M|branzpwert = 9|anzpwert*(1+M|psatz/100)   ? _M|brutto & F|equals(9|reart, "(Downpayment)")
+.formula M|anzpwert   = 9|anzpwert/(1+M|psatz/100)   ?  M|brutto & F|equals(9|reart, "(Downpayment)")
+.formula M|anzpwert   = ""                           ?  M|brutto & F|equals(9|reart, "(Invoice)")
+.formula M|branzpwert = 9|anzpwert                   ?  M|brutto 
+.formula M|planredat  = 9|planredat
+.formula M|tterm      = 9|tterm
+.copy M|zwaehr        = 9|waehr
+.assign M|zbed        = 9|zbed
+.assign M|evpos       = 9|evpos
+.formula M|posfaktura = 9|evpos^fktaplanpos^id
+.formula M|posfaktura = 9|id                             ?  F|empty(M|posfaktura)
+.formula M|fakt       = 9|sumfakturiert                  ? _M|brutto
+.formula M|brfakt     = ""                               ? _M|brutto & F|equals(9|reart, "(Invoice)")
+.formula M|brfakt     = 9|sumfakturiert*(1+M|psatz/100)  ? _M|brutto & F|equals(9|reart, "(Downpayment)")
+.formula M|fakt       = 9|sumfakturiert/(1+M|psatz/100)  ?  M|brutto & F|equals(9|reart, "(Downpayment)")
+.formula M|fakt       = ""                               ?  M|brutto & F|equals(9|reart, "(Invoice)")
+.formula M|brfakt     = 9|sumfakturiert                  ?  M|brutto
+.formula M|inlfakt    = M|fakt           ? 9|waehr = G|inland
+.continue GEBUCHT                        ? 9|waehr = G|inland
+.assign U|xramount    = M|fakt
+.assign U|xiwbuamount = U|xramount / U|xrkurs
+.assign U|xramount    = U|xiwbuamount
+.assign U|xramount    = F|round(U|xrate*U|xiwbuamount,U|xrundung)
+.formula M|inlfakt    = U|xramount
+..
+!GEBUCHT
+.formula M|gebucht    = 9|sumgebucht                    ? _M|brutto
+.formula M|brgebucht  = ""                              ? _M|brutto & F|equals(9|reart, "(Invoice)")
+.formula M|brgebucht  = 9|sumgebucht*(1+M|psatz/100)    ? _M|brutto & F|equals(9|reart, "(Downpayment)")
+.formula M|gebucht    = 9|sumgebucht/(1+M|psatz/100)    ?  M|brutto & F|equals(9|reart, "(Downpayment)")
+.formula M|gebucht    = ""                              ?  M|brutto & F|equals(9|reart, "(Invoice)")
+.formula M|brgebucht  = 9|sumgebucht                    ?  M|brutto
+.formula M|inlgebucht = M|gebucht        ? 9|waehr = G|inland
+.continue BEZAHLT                        ? 9|waehr = G|inland
+.. Umrechnung
+.assign U|xramount    = M|gebucht
+.assign U|xiwbuamount = U|xramount / U|xrkurs
+.assign U|xramount    = U|xiwbuamount 
+.assign U|xramount    = F|round(U|xrate*U|xiwbuamount,U|xrundung)
+.formula M|inlgebucht = U|xramount
+..
+!BEZAHLT
+.formula M|bezahlt    = 9|sumbezahlt                 ? _M|brutto
+.formula M|brbezahlt  = ""                           ? _M|brutto & F|equals(9|reart, "(Invoice)")
+.formula M|brbezahlt  = 9|sumbezahlt*(1+M|psatz/100) ? _M|brutto & F|equals(9|reart, "(Downpayment)")
+.formula M|bezahlt    = 9|sumbezahlt/(1+M|psatz/100) ?  M|brutto & F|equals(9|reart, "(Downpayment)")
+.formula M|bezahlt    = ""                           ?  M|brutto & F|equals(9|reart, "(Invoice)")
+.formula M|brbezahlt  = 9|sumbezahlt                 ?  M|brutto
+.formula M|inlbezahlt = M|bezahlt        ? 9|waehr = G|inland
+.continue ICONS                          ? 9|waehr = G|inland
+.. Umrechnung
+.assign U|xramount    = M|bezahlt
+.assign U|xiwbuamount = U|xramount / U|xrkurs
+.assign U|xramount    = U|xiwbuamount
+.assign U|xramount    = F|round(U|xrate*U|xiwbuamount,U|xrundung)
+.formula M|inlbezahlt = U|xramount
+..
+!ICONS: Icons
+.copy M|faktz    = 9|faktico
+.copy M|gebuchtz = 9|gebuchtico
+.copy M|bezahltz = 9|bezahltico
+..
+.formula M|anzahlfakturiert = 9|anzahlfakturiert
+.formula M|anzahlgebucht    = 9|anzahlgebucht
+.formula M|anzahlbezahlt    = 9|anzahlbezahlt
+..
+.formula U|xanzrech = U|xanzrech + 1 ? F|equals(M|trechart, "(Invoice)")
+.formula U|xanzanz  = U|xanzanz  + 1 ? F|equals(M|trechart, "(Downpayment)")
+..
+.formula U|xsuminlgebucht = U|xsuminlgebucht + M|inlgebucht
+.formula U|xsuminlbezahlt = U|xsuminlbezahlt + M|inlbezahlt
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR1
+.error Keinen Steuersatz gefunden
+.end 1

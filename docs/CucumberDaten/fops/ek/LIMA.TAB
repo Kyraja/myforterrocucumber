@@ -1,0 +1,130 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : LIMA.TAB
+.. Datum/Date     : 09.01.06
+.. Version        : 2006
+.. Autor/Author   : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       :
+.. Ablauf         : Liefermahnung fÅr einen Lieferanten
+..*****************************************************************************
+.set trans -
+.type text xas        ? _F|defined(U|xas)
+.type integer  xiend      ? _F|defined(U|xiend)
+.type GD2  xdate      ? _F|defined(U|xdate)
+..
+.continue              ? H|typ <> G|abko
+.continue              ? H|lief^id <> M|lief^id
+..
+!LIEF
+.continue ERROR        ? F|empty(M|lief) & _F|defined(U|xberst)
+..
+.load 1 supplier 'M|lief'
+.continue ERROR1       ? _G|mehr
+.continue              ? H|limahnsperre & M|mahnung
+.continue              ? H|limahnsperre & M|erinnern & M|ermahnsperr
+.formula M|ukdnr    = ""
+..
+.load 4 add 1|firma          ?  1|gruppe <> 1
+.formula M|ukdnr    = 4|frbez  ?  1|gruppe <> 1
+.formula M|ukdnr    = 1|frbez  ?  1|gruppe = 1
+.formula M|ans      = 1|ans
+.formula M|str      = 1|str
+.formula M|plz      = 1|plz
+.formula M|nort     = 1|nort
+.formula M|lakenn   = 1|lakenn
+.formula M|fax      = 1|fax
+.formula M|fax2     = 1|fax2
+.assign M|staat  = 1|staat
+.assign M|region = 1|region
+..
+!ALLE: individuelles FOP
+.input "ek/LIMA.TEXTE"
+..
+.formula U|xiend = 1
+.formula M|text1 = U|xtext1
+.formula M|text2 = U|xtext2
+.formula M|text3 = U|xtext3
+..
+!ZEILE
+.select line
+.continue ENDE          ? _G|mehr
+.continue ABMAHN        ? M|abmahn
+.continue ERINNERN      ? M|erinnern
+.continue ZEILE         ? H|tterm < M|madatum & _F|empty(M|madatum)
+.continue ZEILE         ? H|tterm > M|medatum
+.continue ZEILE         ? (H|limge-H|lifrg):3<=0.0
+.continue LADEARTIKEL
+..
+!ABMAHN
+.continue ZEILE         ? _F|empty(H|abnrpo)
+.continue ZEILE         ? (H|limge-H|lifrg):3<=0.0
+.continue LADEARTIKEL   ? F|empty(M|liefadatum) & F|empty(M|liefedatum)
+.continue ZEILE         ? F|empty(H|tterm) & M|btterm
+.continue ZEILE         ? F|empty(H|vom) & M|bvom
+.continue ZEILE         ? ('H|tterm:8' < 'M|liefadatum:8') & _F|empty(M|liefadatum) & M|btterm
+.continue ZEILE         ? ('H|tterm:8' > 'M|liefedatum:8') & _F|empty(M|liefedatum) & M|btterm
+.continue ZEILE         ? ('H|vom:8' < 'M|liefadatum:8') & _F|empty(M|liefadatum) & M|bvom
+.continue ZEILE         ? ('H|vom:8' > 'M|liefedatum:8') & _F|empty(M|liefedatum) & M|bvom
+.continue LADEARTIKEL
+..
+!ERINNERN
+.continue ZEILE         ? H|tterm < M|eadatum
+.continue ZEILE         ? H|tterm > M|eedatum & _F|empty(M|eedatum)
+.continue ZEILE         ? (H|limge-H|lifrg):3<=0.0
+..
+!LADEARTIKEL
+.load 3 add H|art
+..
+.make screen line +O
+.assign M|vorgang       = H|kopf
+.assign M|vorgang2      = H|kopf
+.copy M|tlimahnsperre = H|limahnsperre
+.formula M|pos             = H|pnum
+.formula M|heinheit        = 'H|he(L=P|spr)'
+.formula M|mge             = H|mge
+.formula M|bstnr           = H|bstnr
+.assign M|artikel       = 3|id
+.formula M|artbez          = '3|ebez.P|ksi'
+.formula M|artbez          = '3|name.P|ksi'      ? F|empty(M|artbez)
+.formula M|artbez          = 3|sucherw           ? F|empty(M|artbez)
+.formula M|abnrpo          = H|abnrpo
+.formula M|offen           = H|limge-H|lifrg
+.formula M|term            = H|term
+.formula M|term2           = H|tterm
+.formula M|vom             = H|vom
+.formula M|ttermin         = 'H|wtterm(L=P|spr)'
+.assign M|projekt          = H|projekt
+.formula M|iend            = 0
+.formula U|xiend           = M|iend
+..
+!HIER: individuelles Zeilen-FOP
+.input "ek/LIMA.ZEILE"
+.continue ZEILE
+..
+..*****************************************************************************
+!ENDE: letzte Zeile
+.continue END ? U|xiend = 1
+.make screen line +O
+.formula M|iend = 1
+..
+!END: individuelles Ende-FOP
+.input "ek/LIMA.ENDE"
+.continue
+..
+!ERROR
+.error -line 0 -field M|lief -message Bitte Lieferant eintragen.
+.end 1
+..
+!ERROR1
+.error -line 0 -field M|lief -message Lieferant 'M|lief' nicht vorhanden.
+.end 1
+..
+!AUSGABE
+.error -message Es sind keine Lieferungen bis zum 'M|medatum' fÑllig.   ? M|mahnung & 'M|madatum' = 'M|medatum'
+.error -message Es sind keine Lieferungen zwischen dem 'M|madatum' und dem 'M|medatum' fÑllig.  ? M|mahnung & 'M|madatum' <> 'M|medatum'
+.error -message Es sind keine Lieferungen bis zum 'M|eedatum' fÑllig.   ? M|erinnern & _F|empty(M|eedatum)
+.error -message Es sind keine Lieferungen zwischen dem 'M|eadatum' und dem 'M|eedatum' fÑllig.  ? M|erinnern & 'M|eadatum' <> 'M|eedatum'
+.error -message Es sind keine Lieferungen nach dem 'M|eadatum' fÑllig.  ? M|erinnern & F|empty(M|eedatum)
+.end 1

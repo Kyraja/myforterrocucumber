@@ -1,0 +1,227 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDILSUEB.KBUBUCHEN.BN
+.. Autor          : tg/mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Button "Buchen" (ueb)
+.. Functionality  : Button "post"
+..
+.. include is/COPY.FREETEXT
+..
+..*****************************************************************************
+.set trans -
+..
+.type text xtcmd        ? _F|defined(U|xtcmd)
+.type DVM2 origftext    ? _F|defined(U|origftext)
+.type DVM2 copyftext    ? _F|defined(U|copyftext)
+.type text xtsystem
+.type text xtbuchenedp
+.type text xtbuchenerr
+.type text xterr
+.type text xtbuchenout
+.type bool xbfehler
+.type integer  xzn
+..
+.. assign temporary files
+.file -tempname U|xtbuchenedp
+.file -tempname U|xtbuchenout
+.file -tempname U|xtbuchenerr
+.file -tempname U|xterr
+..
+.. Verify savings flag in blanket order row
+.type text xtsel
+.type bool xbsavings
+..
+.. Savings complication: delivery notes contains rows which
+.. link to different blanket orders!
+.type bool xbeinrahmen
+..
+.. Read all rows, check if a row can be added to the edp script
+.. * Only one row in IS for a delivery note must trigger adding
+..   The whole delivery note is posted with one call!
+..   Additional rows is IS for the same delivery note are
+..   skipped.
+.. * Check if a delivery note has been locked orhas been posted
+..   by someone else: Must not add locked or posted delivery notes
+..   to script.
+..
+.select screen header
+..
+!NEXT
+.select screen line
+.continue SHOW    ? _G|mehr
+.continue NEXT    ?  F|empty(M|tvorgang)
+.continue NEXT    ?  M|boolueb
+.select nowait lock sales 'M|tvorgang^id'
+.formula M|showicon = "icon:stop"
+.continue NICHTGESPERRT ? G|gesperrt
+..
+.output new 'U|xterr'
+.input "DATEI.F"
+Datensatz belegt
+.output
+..
+.. Hinweistext fllen
+.protection -reset hinweis 'M|aktzeile'
+.formula U|origftext = ""
+.formula U|copyftext = ""
+.assign U|origftext = "U|xterr"
+.assign U|copyftext = "M|hinweis"
+.input "is/COPY.FREETEXT"
+.protection hinweis 'M|aktzeile'
+..
+.continue NEXT 
+..
+!NICHTGESPERRT
+.continue BOOK    ?  H|uebertr
+.. already got booked while waiting ...
+.copy M|boolueb = G|TRUE
+.formula M|showicon = G|icoukrit
+.select -
+.continue NEXT
+..
+!BOOK
+.select -
+..
+.. read transaction with all rows
+.select sales 'M|tvorgang^id'
+.continue NEXT    ? _G|mehr
+.select line
+.continue NEXT    ? _G|mehr
+.formula U|xzn = 0
+..
+.. create edp script
+.output new 'U|xtbuchenedp'
+.input "DATEI.F"
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+
+# update delivery note
+# - toggle fixed price to trigger price finding
+# - use button ueb to post delivery note
+
+#!database=3
+#!group=23
+#!action=update
+#!dontchange=~
+
+nummer\
+    zn;fixpwert;fixpwert;preis;0:ueb
+
+'M|tvorgang^id'\
+!EDPROW
+.formula U|xzn = U|xzn + 1
+.formula U|xtsel = "$,,;@gruppe=2;kopf=" + H|zrahmen^id + ";artex=" + H|artex^id + ";kotyp=(BlanketOrder);kunde=" + H|zrahmen^kunde^id
+.formula U|xtsel = U|xtsel + ";kovom=" + H|zrahmen^vom:8
+.copy U|xbsavings = G|FALSE
+.copy U|xbeinrahmen = G|TRUE
+.load 1 nolock sales 'U|xtsel' ? _F|empty(H|zrahmen)
+.formula U|xbsavings = 1|savings       ? _F|empty(H|zrahmen) & G|mehr
+..
+.. Complication: collective delivery notes
+..  If a delivery note refers to differnt blanket orders, calculating
+..  prices with regular price finding has troubles, as the customer price group
+..  may only be entered once into the delivery note's header.
+..  In the past we assumed vda style processes (order, delivery, invoice)
+..  with a single product!
+..  As a workaround the price is calculated here, and is added to the
+..  delivery note's and is fixed.
+..
+.continue ESAMMEL  ? _U|xbsavings
+.input "is/PREISAUSKUNFT"     ? _F|defined(U|xpakl)
+.assign U|xpakl = H|kunde^id
+.assign U|xpaklprg = H|zrahmen^nummer
+.assign U|xpaartikel = H|artikel^id
+.assign U|xpamge = H|mge
+.assign U|xpaland = H|kopf^land^id
+.assign U|xpamge = 1.0        ? F|empty(U|xpamge)
+.assign U|xpakonddat = G|datum
+.assign U|xpaignrahmen = G|FALSE
+.input "is/PREISAUSKUNFT"
+!ESAMMEL
+..
+.load 1
+?    'U|xzn';~;1;'U|xpapreis';~\    ?                U|xbsavings
+?    'U|xzn';~;~;~;~\               ?               _U|xbsavings
+.select line
+.continue EDPROW  ?  G|mehr
+    0;~;~;~;1
+
+.. --- --- --- --- --- --- --- --- --- --- --- --- --- --- ---
+.output
+.select -
+..
+.formula M|hinweis = ""
+.formula U|xtsystem = "edpimport.sh -P -c EKS -I " + 'U|xtbuchenedp' + " >> " + 'U|xtbuchenout' + " 2>> " + 'U|xtbuchenerr'
+.system 'U|xtsystem' password background
+...continue ERRSHOW ? _G|mehr
+.continue OK ? G|mehr
+.formula U|xtcmd = "sed " + 'G|apostroph' + "s/^.*): //" + 'G|apostroph' + " " +'U|xtbuchenerr' +" >" + 'U|xterr'
+.system 'U|xtcmd' background
+.continue ERROR1 ? _G|mehr
+..
+.. Hinweistext fllen
+.protection -reset hinweis 'M|aktzeile'
+.formula U|origftext = ""
+.formula U|copyftext = ""
+.assign U|origftext = "U|xterr"
+.assign U|copyftext = "M|hinweis"
+.input "is/COPY.FREETEXT"
+.protection hinweis 'M|aktzeile'
+..
+.formula U|xtcmd = "rm -rf " +'U|xtbuchenerr' 
+.system 'U|xtcmd' background
+.continue ERROR2 ? _G|mehr
+.file -tempname U|xtbuchenout
+.continue NEXT
+..
+!OK
+.copy M|boolueb = G|TRUE
+.formula M|showicon = G|icoukrit
+.continue NEXT
+..
+!ERRSHOW: update infosytem with new data from delivery notes
+.copy U|xbfehler = G|TRUEe
+..
+!SHOW
+.select screen header
+..
+!NEXTR: update next result row
+.select screen line
+.continue ERROR   ? _G|mehr  &  U|xbfehler
+.continue END     ? _G|mehr
+.continue NEXTR   ?  M|boolueb
+.continue NEXTR   ?  F|empty(M|tlsid)
+.load 1 sales 'M|tlsid^id'
+.continue NEXTR   ? _G|mehr
+.copy M|boolueb = G|TRUE                 ? _1|kopf^uebertr
+.formula M|showicon = G|icoukrit         ? _1|kopf^uebertr
+.formula M|tapreis  = 1|preis
+.continue NEXTR
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR
+.type text xrow
+.type text xerror
+.type text xdeliverynote
+.formula U|xerror = ""
+.formula U|xdeliverynote = ""
+.formula U|xdeliverynote = 1|kopf^nummer ? F|defined(1|kopf^nummer)
+!NERRTXT
+.select from 'U|xtbuchenerr' xrow^
+.continue EERRTXT ? _G|mehr
+.formula U|xerror = U|xerror + 'U|xrow' >> "): " + ", "
+.continue NERRTXT
+!EERRTXT
+.error Fehler beim Buchen des Lieferscheins 'U|xdeliverynote': 'U|xerror'
+.end 1
+..
+!ERROR1
+.error sed-Aufruf gescheitert!
+.end 1
+..
+!ERROR1
+.error L”schen gescheitert!
+.end 1

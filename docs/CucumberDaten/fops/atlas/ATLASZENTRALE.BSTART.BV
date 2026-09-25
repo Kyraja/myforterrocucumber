@@ -1,0 +1,83 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ATLASZENTRALE.BSTART.BV
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Selektion in Einkauf und Verkauf, um ATLAS-relevante
+..                  Vorg„nge zu finden.
+.. Functionality  : Query in Purchasing and Sales-DB to find transactions
+..                  for ATLAS.
+..*****************************************************************************
+.set trans -
+..
+.. basic query, pick sales/purchasing later
+.type text   xtselInfosystem
+.type GD     xgd
+..
+.. translate
+.type text   xAusland
+.set trans +
+.formula T|xAusland = "Ausland"
+.set trans -
+..
+.. check if date range was entered properly
+.continue START   ?  F|empty(M|kdatumvon) ; F|empty(M|kdatumbis)
+.continue START   ? 'M|kdatumbis:8' >= 'M|kdatumvon:8'
+.formula U|xgd = M|kdatumbis
+.formula M|kdatumbis = M|kdatumvon
+.formula M|kdatumvon = U|xgd
+..
+..
+!START: clear table
+.make screen line --
+..
+.. query
+.formula T|xtselInfosystem = "$,,;laart=" + T|xAusland
+.. may only register for atlas, if already transfered (uebertr=0)
+.. for "preview" look at transactions that still have to be transfered (uebertr=1, also must not be filed)
+.formula T|xtselInfosystem = T|xtselInfosystem + ";uebertr=0"                    ? _M|kbvorschau
+.formula T|xtselInfosystem = T|xtselInfosystem + ";uebertr=1;ablagef=0"          ?  M|kbvorschau
+.. restrict by ktyp: LIKO, REKO
+.formula T|xtselInfosystem = T|xtselInfosystem + ";ktyp="   + 'liko'             ?  M|kbliefer & _M|kbrechnung
+.formula T|xtselInfosystem = T|xtselInfosystem + ";ktyp="   + 'reko'             ? _M|kbliefer &  M|kbrechnung
+.. restrict by date (vom)
+.formula T|xtselInfosystem = T|xtselInfosystem + ";vom=" + 'M|kdatumvon:8' + "!"  + 'M|kdatumbis:8'     ? _F|empty(M|kdatumvon) ; _F|empty(M|kdatumbis)
+.. additional selection arguments
+.formula T|xtselInfosystem = T|xtselInfosystem + ";vstaat=" + 'M|kvstaat^id'     ? _F|empty(M|kvstaat)
+.formula T|xtselInfosystem = T|xtselInfosystem + ";kunde="  + 'M|kkl^id'         ? _F|empty(M|kkl) & M|kkl^dnr = 0
+.formula T|xtselInfosystem = T|xtselInfosystem + ";lief="   + 'M|kkl^id'         ? _F|empty(M|kkl) & M|kkl^dnr = 1
+..
+..
+!VERK: sales
+.continue VEND    ? _M|kbverkauf  &  M|kbeinkauf
+.continue VEND    ? _F|empty(M|kkl) &  M|kkl^dnr <> 0
+.formula M|select = T|xtselInfosystem + ";@datenbank=3:1;@ablage=(3);@zeilen=(0)"
+.select sales 'M|select'
+.continue VEND    ? _T|mehr
+!VSHOW
+.continue VNEXT   ?  H|ktyp <> liko  &  H|ktyp <> reko
+.input 'M|tab'
+!VNEXT
+.select sales
+.continue VEND    ? _T|mehr
+.continue VSHOW
+!VEND
+..
+!EINK: purchasing
+.continue EEND    ?  M|kbverkauf  & _M|kbeinkauf
+.continue EEND    ? _F|empty(M|kkl) &  M|kkl^dnr <> 1
+.formula M|select = T|xtselInfosystem + ";@datenbank=4:1;@ablageart=(3);@zeilen=(0)"
+.select purchasing 'M|select'
+.continue EEND    ? _T|mehr
+!ESHOW
+.continue ENEXT   ?  H|ktyp <> liko  &  H|ktyp <> reko
+.input 'M|tab'
+!ENEXT
+.select purchasing
+.continue EEND    ?  _T|mehr
+.continue ESHOW
+!EEND
+..*****************************************************************************
+!END
+.continue

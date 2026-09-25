@@ -1,0 +1,136 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : FLEXQTY.EV
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  :
+...Include        : 
+.. include fe/FLEXQTY.AZ
+..*****************************************************************************
+.set trans -
+.. benannte Art ??
+.type M6.2      xrgrenze       ? _F|defined(U|xrgrenze)
+.type text      xtsel          ? _F|defined(U|xtsel)
+.type text      xtersteras     ? _F|defined(U|xtersteras)
+.type text      xtletzteras    ? _F|defined(U|xtletzteras)
+.type ARTR51001 xmerk          ? _F|defined(U|xmerk)  
+.type integer   xznr           ? _F|defined(U|xznr)
+.type bool      xbzuwenig      ? _F|defined(U|xbzuwenig)
+.type ARTR51001 xmgeneu        ? _F|defined(U|xmgeneu)
+.type ARTR51001 xmgegrenze     ? _F|defined(U|xmgegrenze)
+.type integer   xmerkausschuss ? _F|defined(U|xmerkausschuss)
+..
+.copy U|xbzuwenig = G|FALSE
+..
+.. Feldaustritt: mgeneu
+.continue FEHLER     ? M|tba^nrm > 0
+.continue FEHLER1    ? M|mgeneu < 0 
+.continue END        ? M|mgeneu = 0 & M|mgesetzen = M|icon4
+.continue GLEICH     ? M|mgeneu = M|tba^mge
+.continue HOCH       ? M|mgeneu > M|tba^mge
+.continue RUNTER     ? M|mgeneu < M|tba^mge
+.continue END
+..
+!GLEICH: Menge wurde nicht verÑndert
+.formula M|splitt    = G|FALSE
+.formula M|mgesetzen = ""
+.formula M|ausschuss = ""
+.formula M|demontage = ""
+.formula M|bemerkung = ""
+.continue END
+..
+!RUNTER: Menge soll reduziert werden
+.formula M|mgesetzen = ""
+.formula M|ausschuss = ""
+.formula M|demontage = ""
+.formula M|bemerkung = ""
+..Vergleich zwischen Produktionsmenge und offene Menge
+.continue GRGUTGM   ? M|prodmge = M|ofmge 
+.continue GRXXXXX   ? M|prodmge <> M|ofmge
+..
+!GRGUTGM: Grenze gut gemeldet
+.. in diesem Fall gab es noch keine RÅckmeldung auf BA/letzten AG.
+.. Gutmengen auf davorliegende ArbeitsgÑnge geben die Grenze vor
+.formula U|xrgrenze = M|mgegrenze
+.continue PRUEF
+.. 
+!GRXXXXX: hier gibt es RÅckmeldungen auf den BA/letzten AG 
+.formula U|xrgrenze = M|mgegrenze
+.continue PRUEF
+..
+!PRUEF
+.continue ZUWENIG  ? M|mgeneu < U|xrgrenze
+.formula M|mgesetzen = M|icon4
+.formula M|splitt    = G|FALSE
+.formula M|bemerkung = ""
+.continue ATTENTION
+..
+!ZUWENIG
+.copy U|xbzuwenig = G|TRUE
+.continue ATTENTION 
+..
+!ATTENTION: Aufklappen und Selektion Åber Arbeitscheine
+.formula U|xznr = M|zn + 1
+.formula M|merkmgeneu = M|mgeneu
+.formula M|merkmgegrenze = M|mgegrenze
+.formula U|xmgegrenze = M|merkmgegrenze
+.formula U|xmgeneu = M|merkmgeneu
+.input "fe/FLEXQTY.AZ"
+..
+.formula U|xtersteras = H|nummer + "001"
+.formula U|xtletzteras = H|nummer + "999"
+.formula U|xtsel = "$,,nummer="+'U|xtersteras'+"!"+'U|xtletzteras'+";gruppe=1;@ablage=(Active);rgutmge=;@ordnung=rgutmge;@richtung=rÅckwÑrts"
+.load 1 workorder 'U|xtsel'
+.continue END ? _G|mehr
+.formula U|xmerk = 1|rgutmge + 1|rverlust
+..
+!SELZEILE: Tabelle durchlaufen, dann Icon setzen
+.select screen line 'U|xznr'
+.continue END ? _G|mehr
+.continue END ? _F|empty(M|aufzu)
+..
+!FAHNE
+.formula M|iconz  = ""
+.formula M|iconz  = M|icon1 ? (M|rueckmge + M|verlustmge) = U|xmerk & _F|empty(M|rueckmge)
+.formula M|merkmgeneu = U|xmgeneu
+.formula M|merkmgegrenze = U|xmgegrenze
+.continue ZAEHL ? _U|xbzuwenig
+.formula M|ausschuss = M|icon7 ? M|zn = U|xmerkausschuss + 1 & F|empty(M|iconz)
+.continue ZAEHL ? F|empty(M|iconz)
+.copy U|xmerkausschuss = M|zn
+.formula M|demontage = M|icon6
+...formula M|ausschuss = M|icon7
+.formula M|splitt    = G|FALSE
+.formula M|bemerkung = ""
+..
+!ZAEHL
+.formula U|xznr = U|xznr + 1
+.continue END ? U|xznr > M|tzeilen
+.continue SELZEILE
+..
+!HOCH:  Menge soll erhîhrt werden
+.formula M|mgesetzen = ""
+.formula M|ausschuss = ""
+.formula M|demontage = ""
+.formula M|bemerkung = ""
+.formula M|mgesetzen = M|icon3
+.formula M|splitt    = G|TRUE        
+.formula M|bemerkung = ""
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+!FEHLER
+.set trans +
+.formula M|bemerkung = "Es gibt noch eine ungebuchte RÅckmeldung." ? M|tba^nrm = 1
+.formula M|bemerkung = "Es gibt noch ungebuchte RÅckmeldungen." ? M|tba^nrm > 1
+.set trans -
+.continue END
+..
+!FEHLER1
+.error Es darf keine negative Menge eingegeben werden.
+.formula M|mgeneu = M|tba^mge
+.end 1

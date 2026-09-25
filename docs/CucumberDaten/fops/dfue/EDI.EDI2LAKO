@@ -1,0 +1,61 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDI.EDI2LAKO
+.. Autor          : dsch
+.. Verantwortlich : dsch
+.. Kontrolle      : mh
+.. Funktion       : Ladungstraegerkontoauszug-Verarbeitung, Objektsuche
+.. Functionality  : Called from Infosystem EDIIMPVER -> FOP EDIIMPVER.VERARBEITEN
+..
+..*****************************************************************************
+.set trans -
+.set demand -
+..
+.. Query load carrier with status 2 (new)
+.type text xtseledineu ? _F|defined(U|xtseledineu)
+..
+.. Call partner identifaction
+.type text xtpartnerid ? _F|defined(U|xtpartnerid)
+..
+.. Avoid processing same edi message twice
+.type text xedinumneu  ? _F|defined(U|xedinumneu)
+.type P53  xvedi       ? _F|defined(U|xvedi)
+..
+.. Read import parameters
+.input "dfue/DFUE.IMP.INI"
+..
+.formula U|xtseledineu = 'F|formatstr("$,,;@gruppe=0;imex=IM;fcode=0;status=2;edinachr==2114;@ordnung=nummer")'
+..
+!NEXTEDI
+.select nolock edifact 'U|xtseledineu'
+.continue PROCESS ? _G|mehr
+.formula U|xedinumneu = H|nummer
+.assign U|xvedi = H|id
+..
+.. OBJECTSEARCH
+.. Important: edi message is in buffer H, edi message is not locked before object search
+.input "EDI.DO.OSEARCH.INIT"
+..
+.. The sender is defined in record type UNBI
+..
+.input "EDI.DO.OSEARCH.LAKO.CUSTOMERS" ? F|empty(H|fcode)
+..
+.. The customer ist defined for each position in record type BUY1
+.. In order to find the product, the customer must be find for each position
+..
+.input "EDI.DO.OSEARCH.LAKO.PRODUCTS"  ? F|empty(H|fcode)
+..
+.input "EDI.DO.OSEARCH.FINISH"         ? F|empty(H|fcode)
+.. Release lock on edi message!
+.select -
+..
+.continue NEXTEDI
+..
+!PROCESS
+.output terminal
+.input "EDI.EDI2LAKOUP1"
+.continue END
+..
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,315 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : fe/SCANORDERTIME.FA
+.. Author         : tiwe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  : Feldaustritt fÅr Mitarbeiter und Arbeitsschein
+..
+.. Puffers
+..      9| offene Auftragszeiten
+..      8| Arbeitsschein
+..      7| geschlossene Auftragszeiten die noch gebucht werden mÅssen
+..      H| AFL
+..
+.. Meta
+.. <META M| = 'fe/SCANORDERTIME'> 
+..*****************************************************************************
+.set trans -
+..
+.type text xtsel        ? _F|defined(U|xtsel)
+.type bool xbfehlmge    ? _F|defined(U|xbfehlmge)
+.type ARTR51000 xrazmge ? _F|defined(U|xrazmge) 
+.type text      xtas    ? _F|defined(U|xtas) 
+..
+.continue MITARB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "mitarb"
+.continue ASNR    ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "asnr"
+.continue ENDE
+..
+!ASNR: Feldaustritt Arbeitsscheinnummer
+.formula M|bdestatus = ""
+.formula M|bdetext = ""
+.continue ERR06 ? F|empty(M|mitarb)
+.continue ERR07 ? F|empty(M|mitarb^splan)
+.continue ERR08 ? F|equals(M|mitarb^lohn,"0")
+.continue ERR05 ? F|empty(M|asnr)
+.formula U|xtsel = "$,,nummer="+'M|asnr'+";art=;mgr=;@ablageart=(Active);@gruppe=1"
+.. Arbeitsschein dazu laden
+.load 8 workorder nolock 'U|xtsel'
+.continue ERR03 ? _G|mehr
+.continue ERR09 ? 8|elanzahl = 0 & 8|amge = 0
+.. hat der Mitarbeiter bereits einen offene Auftragszeit
+.formula U|xtsel = "$,,offen=true;asnr="+'M|asnr'+";ma="+'M|mitarb^id'+";fertstatus=;"
+.load 9 pdc 'U|xtsel'
+.continue ERR04 ? G|mehr
+.. hier ist Anstemplung mîglich
+.select screen header
+.select screen line
+.continue NEUZEIL ? _G|mehr
+..
+!TABLOOP: es darf nur immer eine Neuanstemplung in der Tabelle stehen
+.make screen line -o ?  M|neu
+.continue NEUZEIL    ? M|aktzeile = 0
+.select screen line  ? _M|neu
+.continue TABLOOP    ? G|mehr 
+..
+!NEUZEIL
+.select screen header
+.make screen line +o
+.. Daten aus Arbeitsschein
+.formula M|taschein    = 8|id
+.assign M|tartikel     = 8|artikel
+.assign M|tbasisartikel = M|tartikel^basisartikel
+.formula M|ttextstatus = 8|fertstatus
+.formula M|tagbez      = 8|ag^namebspr
+.formula M|tindex      = M|tartikel^index
+.formula M|tzeich      = M|tartikel^zeichn     
+.copy M|rmimdialog     = 8|ag^rmimdialog    
+.formula M|tmgr        = 8|mgr   
+.formula M|tstartdat   = 8|tsterm
+.formula M|tendedat    = 8|tterm
+.. ist der AS der letzte AG?
+..
+.formula U|xtas      = 8|snba^pba
+.copy M|letzterag    = G|TRUE   ? U|xtas = M|taschein
+.. und bucht dieser den Zugang des Fertigprodukts
+.copy M|zugangfp     = G|TRUE   ? M|letzterag  & F|empty(8|snba^eres)
+.. Materialentnahme setzen
+.formula M|fbuz        = M|leg13
+.copy M|neu            = G|TRUE
+.formula M|taflptext   = 8|lres^ptext 
+.formula M|thinweis    = M|leg16                  ? _F|empty(M|taflptext)
+.formula M|thinweis    = M|leg16                  ? _F|empty(M|taflptext)
+.. Fertigungsdokumente erst ab 2019r4
+.formula M|tfertdoku   = 8|lres^fertdoku
+.formula M|tfertdok    = M|leg15                  ? _F|empty(M|tfertdoku) 
+.. Mengen
+.formula M|tgesamtmge  = 8|lres^mge
+.formula M|tsollmge    = 8|mge
+..
+.. offene Menge berechnen:  Sollmenge aus Arbeitsschein - Menge in ungebuchten AZ
+.formula U|xrazmge = 0
+.formula U|xtsel = "$,,uebertr=(Yes);asnr="+'8|nummer'+";istmge=;anfzeit=;endzeit="
+.load 7 pdc 'U|xtsel'
+..
+!AZC2LP
+.continue NOAZ2 ? _G|mehr
+.formula U|xrazmge = U|xrazmge + 7|istmge
+.load 7 pdc
+.continue AZC2LP
+..
+!NOAZ2
+.formula M|tofmge = M|tsollmge - U|xrazmge
+..
+.. Status aktualisieren
+.input "fe/WORKLIST.STATUS"
+..
+.. Status-Feld setzen
+.. grÅne Flagge: Arbeitsschein kann begonnen werden
+.formula M|tstatus = M|leg1
+.continue NOPBA2 ? F|empty(8|pba)
+.. gelbe Flagge: Vorgangerarbeitschein noch in Bearbeitung
+.formula M|tstatus = M|leg2     ? 8|pba^status <> "*"
+..
+!NOPBA2: prÅfen auf fehlende Teile
+.select object nolock '8|lres^id'
+...load 2 object nolock '1|lres^id' 
+..
+!NXTAFL
+.continue FERTIG2  ? _G|mehr
+.continue FERTIG2  ?  F|empty(H|ppos)
+.select object nolock 'H|ppos^id'
+.. elart = 1: Artikel 
+.reserve
+.copy U|xbfehlmge = G|FALSE
+.input "fe/WORKLIST.AVAILABILITY"       ? H|elart = 1
+.select
+.. elart = 3: Arbeitsschein
+.formula M|tstatus = M|leg3 ? U|xbfehlmge
+.continue FERTIG2           ? U|xbfehlmge
+.continue FERTIG2           ? H|elart = 3
+.continue NXTAFL
+..
+!FERTIG2: Fortschritt berechnen
+.input "fe/WORKLIST.CUMQUAN"
+..
+.make screen line +o
+.formula M|tagbez      = "---"
+.formula M|tindex      = "---"
+.formula M|tzeich      = "---"
+.formula M|ttextstatus = "---"
+.copy M|neu            = G|TRUE
+.protection ugrund 'M|aktzeile'
+.continue ENDE
+..
+!MITARB: Feldaustritt Mitarbeiter
+.continue ERR01 ? M|mitarb^lohn = 0
+.continue ERR02 ? M|mitarb^splan = ""
+.formula M|bdestatus = ""
+.formula M|bdetext   = ""
+.formula M|asnr      = ""
+.. Tabellenzeilen leeren
+.select screen header
+.select screen line
+.make screen line --
+.. Anzeigen der offenen Arbeitsschein
+.formula U|xtsel = "$,,offen=true;asnr=;ma="+'M|mitarb^id'+";fertstatus=;"
+.load 9 pdc 'U|xtsel'
+.continue NOAZ  ? _G|mehr
+..
+!AZLOOP: Sonderfall: BA wurde storniert, es gibt aber noch eine Auftragszeit
+.. dann kein AS mehr vorhanden, die Auftragszeit hat eine gesetzte Sperre.
+.continue NOAS ? 9|sperre
+.make screen line +
+.. laufende AZs hier auflisten
+.copy M|neu          = G|FALSE
+.formula M|aznr      = 9|id
+.formula M|tanfdat   = 9|anfdat
+.formula M|tanfzeit  = 9|anfzeit
+.. Arbeitsscheindaten dazu laden
+.formula U|xtsel = "$,,nummer="+'9|asnr'+";art=;mgr=;@ablageart=(Active);@gruppe=1"
+.. Arbeitsschein dazu laden
+.load 8 workorder nolock 'U|xtsel'
+.formula M|taschein    = 8|id
+.assign M|tartikel     = 8|artikel
+.assign M|tbasisartikel = M|tartikel^basisartikel
+.formula M|ttextstatus = 8|fertstatus
+.formula M|tagbez      = 8|ag^namebspr
+.formula M|tindex      = M|tartikel^index
+.formula M|tzeich      = M|tartikel^zeichn
+.formula M|taflptext   = 8|lres^ptext 
+.formula M|thinweis    = M|leg16                  ? _F|empty(M|taflptext)
+.formula M|rmimdialog  = 8|ag^rmimdialog   
+.formula M|tmgr        = 8|mgr
+.formula M|tstartdat   = 8|tsterm
+.formula M|tendedat    = 8|tterm
+.formula U|xtas        = 8|snba^pba
+.copy M|letzterag      = G|TRUE   ? U|xtas = M|taschein
+.. und bucht dieser den Zugang des Fertigprodukts
+.copy M|zugangfp      =  G|TRUE   ? M|letzterag & F|empty(8|snba^eres)
+.. Fertigungsdokumente erst ab 2019r4
+.formula M|tfertdoku   = 8|lres^fertdoku
+.formula M|tfertdok    = M|leg15                  ? _F|empty(M|tfertdoku)
+.formula M|tgesamtmge  =  8|lres^mge
+.formula M|tsollmge    =  8|mge
+..
+.. offene Menge berechnen:  Sollmenge aus Arbeitsschein - Menge in ungebuchten AZ
+.formula U|xrazmge = 0
+.formula U|xtsel = "$,,uebertr=(Yes);asnr="+'8|nummer'+";istmge=;anfzeit=;endzeit="
+.load 7 pdc 'U|xtsel'
+..
+!AZC3LP
+.continue NOAZ3 ? _G|mehr
+.formula U|xrazmge = U|xrazmge + 7|istmge
+.load 7 pdc
+.continue AZC3LP
+..
+!NOAZ3
+.formula M|tofmge = M|tsollmge - U|xrazmge
+..
+.. grÅne Flagge: Arbeitsschein kann begonnen werden
+.formula M|tstatus = M|leg1
+.continue NOPBA ? F|empty(8|pba)
+.. gelbe Flagge: Vorgangerarbeitschein noch in Bearbeitung
+.formula M|tstatus = M|leg2     ? 8|pba^status <> "*"
+..
+!NOPBA: prÅfen auf fehlende Teile
+.select object nolock '8|lres^id'
+...load 2 object nolock '1|lres^id' 
+..
+!NEXTAFL
+.continue FERTIG1  ? _G|mehr
+.continue FERTIG1  ?  F|empty(H|ppos)
+.select object nolock 'H|ppos^id'
+.. elart = 1: Artikel 
+.reserve
+.copy U|xbfehlmge = G|FALSE
+.input "fe/WORKLIST.AVAILABILITY"       ? H|elart = 1
+.select
+.. elart = 3: Arbeitsschein
+.formula M|tstatus = M|leg3 ? U|xbfehlmge
+.continue FERTIG1               ? U|xbfehlmge
+.continue FERTIG1                ? H|elart = 3
+.continue NEXTAFL
+..
+!FERTIG1: Fortschritt berechnen
+.input "fe/WORKLIST.CUMQUAN"
+.. Icons fÅr offene AZ setzen
+.input "fe/WORKLIST.STATUS"
+.. Materialentnahme setzen
+.formula M|fbuz = M|leg13
+..
+!NOAS
+.load 9 pdc
+.continue AZLOOP ? G|mehr
+..
+!NOAZ: Cursor auf den Arbeitsschein
+.cursor asnr 0
+.continue ENDE
+..
+.. Fehlerhandling
+!ERR01: kein Lohngruppe
+.formula M|bdestatus = M|leg9
+.set trans +
+.formula M|bdetext = "Mitarbeiter hat keine Lohngruppe"
+.set trans -
+.continue ENDE
+..
+!ERR02: kein Schichtplan
+.formula M|bdestatus = M|leg9
+.set trans +
+.formula M|bdetext = "Mitarbeiter hat keinen Schichtplan"
+.set trans -
+.continue ENDE
+..
+!ERR03: kein Arbeitschein
+.formula M|bdestatus = M|leg9
+.set trans +
+.formula M|bdetext = "Arbeitsschein " + 'M|asnr' + " nicht gefunden"
+.set trans -
+.continue ENDE
+..
+!ERR04: MA hat noch offene Auftragszeit
+.formula M|bdestatus = M|leg9
+.set trans +
+.formula M|bdetext = "Mitarbeiter ist auf diesen Arbeitsschein angemeldet."
+.set trans -
+.continue ENDE
+..
+!ERR05: Arbeitsscheinnummer mit leer verlassen / Tabellenzeilen leeren
+.select screen header
+.select screen line
+.make screen line --
+.continue ENDE
+..
+!ERR06: Mitarbeiter eingeben
+.formula M|bdestatus = M|leg9
+.set trans +
+.formula M|bdetext = "Mitarbeiter eingeben"
+.set trans -
+.cursor mitarb
+.continue ENDE
+!ERR07: Mitarbeiter hat keinen Schichtplan
+.formula M|bdestatus = M|leg9
+.set trans +
+.formula M|bdetext = "Mitarbeiter hat keinen Schichtplan"
+.set trans -
+.input "is/TABLEEREN"
+.continue ENDE
+!ERR08: Mitarbeiter hat keine Lohngruppe
+.formula M|bdestatus = M|leg9
+.set trans +
+.formula M|bdetext = "Mitarbeiter hat keine Lohngruppe"
+.set trans -
+.input "is/TABLEEREN"
+.continue ENDE
+!ERR09: Arbeitsschein mit Menge 0 und Anfahrmenge 0
+.formula M|bdestatus = M|leg9
+.set trans +
+.formula M|bdetext = F|formatstr("Buchung auf den Arbeitsschein {1} nicht mîglich", 'M|asnr')
+.set trans -
+.formula M|asnr = ""
+.input "is/TABLEEREN"
+.continue ENDE
+!ENDE: Programmende
+.continue

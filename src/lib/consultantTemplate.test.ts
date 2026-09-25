@@ -283,6 +283,11 @@ describe('parseActionFromText', () => {
     expect(parseActionFromText('Schließen')).toMatchObject({ type: 'editorSchliessen' });
   });
 
+  it('parses English subeditor close/save phrases as separate actions', () => {
+    expect(parseActionFromText('I close the current subeditor to switch back to the parent editor')).toMatchObject({ type: 'subeditorSchliessen' });
+    expect(parseActionFromText('I save the current subeditor to switch back to the parent editor')).toMatchObject({ type: 'subeditorSpeichern' });
+  });
+
   it('parses "Fehlermeldung X erscheint"', () => {
     expect(parseActionFromText('Fehlermeldung EX-KATEGORIE erscheint')).toMatchObject({
       type: 'exceptionSpeichern', exceptionId: 'EX-KATEGORIE',

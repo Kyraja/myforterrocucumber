@@ -1,0 +1,84 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : APLANROLL.PLAN
+.. Author         : foe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  :
+..*****************************************************************************
+..
+..*****************************************************************************
+.set trans -
+.type ARTR51200 xistmge   ? _F|defined(U|xistmge)
+.type integer xi          ? _F|defined(U|xi)
+.type GD      xanfdat     ? _F|defined(U|xanfdat)
+.type GD      xenddat     ? _F|defined(U|xenddat)
+.type GD      xenddatz    ? _F|defined(U|xenddatz)
+.type text    xsel        ? _F|defined(U|xsel)
+..
+.formula U|xistmge      = 0.0
+.formula U|xi           = 1
+.formula U|xanfdat      = M|kadatum
+.formula U|xenddat      = M|kedatum
+.. Erste Zeile holen
+.select screen line 'U|xi'
+.assign  U|xenddatz     = M|tbis
+..
+.. Artikel laden
+.formula U|xsel = "$,,id="+M|kart^id+";@gruppe=1"
+.select parts  'U|xsel'
+.. Lagergruppe berÅcksichtigen wenn <> interne Lagergruppe!
+.select parts specific 'M|klgruppe' ? M|klgruppe^id <> F|sysinfo(10)^intlgruppe^id
+..
+!PLANKARTE
+.select planchart
+.continue SCHREIBEN  ? _G|mehr
+.continue PLANKARTE  ? H|dnr <> 4 ; H|typ <> G|RESERV
+.continue PLANKARTE  ? H|vor^dnr = 3 & _H|vor^planrel
+.continue PLANKARTE  ? H|tterm < U|xanfdat
+.. Alle limgen <= 0.0 ueberspringen. Ausnahme: Zugang aus Koppelproduktion
+.continue PLANKARTE  ? H|limge = 0.0 ; (H|limge < 0.0 & (H|mge >= 0.0 ; H|typ <> G|RESERV))
+.continue NEXT       ? F|empty(U|xenddatz) ; H|tterm <= U|xenddatz
+..
+!SCHREIBEN
+.continue ENDSCHR   ? U|xistmge = 0 & _M|kumuliert
+.. Istwerte
+.formula M|treservmge = U|xistmge
+.formula M|tistmge    = M|tljmge + M|treservmge
+.formula M|tistwert   = U|xistmge * U|xplanpreis
+.formula U|xistmge    = 0.0
+..
+.formula U|xistkrmge  = U|xistkrmge + M|treservmge ? M|kumuliert
+.formula U|xistkmge   = U|xistkmge + M|tistmge     ? M|kumuliert
+.formula U|xistkwert  = U|xistkwert + M|tistwert   ? M|kumuliert
+.formula M|treservmge = U|xistkrmge                ? M|kumuliert
+.formula M|tistmge    = U|xistkmge                 ? M|kumuliert
+.formula M|tistwert   = U|xistkwert                ? M|kumuliert
+..
+!ENDSCHR
+.formula M|tmengeproz = 0
+.formula M|tmengeproz = 100                            ? M|tmge =  0 & M|tistmge > 0
+.formula M|twertproz  = 0
+.formula M|twertproz  = 100                            ? M|twert = 0 & M|tistwert > 0
+.formula M|tmengeproz = (M|tistmge*100/M|tmge)-100     ? M|tmge  <> 0
+.formula M|twertproz  = (M|tistwert*100/M|twert)-100   ? M|twert <> 0
+..
+.formula U|xigerade   = M|aktzeile/2
+.formula U|xigerade   = U|xigerade*2 - M|aktzeile
+..
+.continue ENDEPLAN   ? _G|mehr
+..
+!NZEILE
+.. NÑchste Zeile
+.formula U|xi           = U|xi + 1
+.select screen line 'U|xi'
+.assign  U|xenddatz     = M|tbis
+.assign  U|xenddatz     = ""    ? U|xi = M|tzeilen
+.continue SCHREIBEN ? _F|empty(U|xenddatz) & H|tterm > U|xenddatz
+..
+!NEXT
+.formula U|xistmge      = U|xistmge + H|limge
+.continue PLANKARTE
+..
+!ENDEPLAN
+.continue

@@ -1,0 +1,120 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SPED.GEWICHT
+.. Datum          : 04.12.2007
+.. Version        : 2008r1n00
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Ermittelt Gewichte fÅr Speditionsauftrag bzw. Lieferscheine.
+..                  Versucht bei Aufruf aus SPEDWHG die Gewichte im
+..                  Speditionsauftrag zu "fixieren".
+..                  Ab 2009r4 kommen die Gewichte direkt aus den Kernfeldern.
+..
+.. Functionality  : Gets weight for shipping order and/or delivery notes.
+..                  Attempts to update weights in shipping order, if called
+..                  from SPEDWHG.  <-- DOES NOT HAPPEN ANYMORE! mh, 26.05.2010
+..                  Since 2009r4 weights are taken from database fields.
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+..   Argument     meaning
+..   ---------------------------------------------------------
+..   xvsped       shipping order
+..   xvls         delivery note
+..
+..   Wichtig:     If only a delivery order is passed as an argument,
+..                only the weight for this one delivery note is calculated.
+..
+..   Returnvalue  meaning
+..   ---------------------------------------------------------
+..   xrsumbrutto  gross weight
+..   xrsumnetto   net weigth
+..   xrsumtara    packing item weight
+..   xianzpackst  packet count
+..
+.. Program flow   : May be called from anywhere.
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+..  possible args
+.type P55    xvsped              ? _F|defined(U|xvsped)
+.type P3     xvls                ? _F|defined(U|xvls)
+..
+..  internal use
+.type text   xtmarke             ? _F|defined(U|xtmarke)
+.type P3     xvlspack            ? _F|defined(U|xvlspack)
+.type bool   xblspackausfuehren  ? _F|defined(U|xblspackausfuehren)
+.type text   xtsel               ? _F|defined(U|xtsel)
+..
+..  return values
+.type R9.6   xrsumbrutto         ? _F|defined(U|xrsumbrutto)
+.type R9.6   xrsumnetto          ? _F|defined(U|xrsumnetto)
+.type R9.6   xrsumtara           ? _F|defined(U|xrsumtara)
+.type integer    xianzpackst         ? _F|defined(U|xianzpackst)
+..
+..
+.. initialize
+.formula U|xrsumbrutto = 0.0
+.formula U|xrsumnetto  = 0.0
+.formula U|xrsumtara   = 0.0
+.formula U|xianzpackst = 0
+..
+..
+.. event evaluation
+.. ----------- ----- Kopfteil ------ -------------------------------------------
+.continue END     ?  F|empty(U|xvsped)  &  F|empty(U|xvls)
+.continue LIEF    ?  F|empty(U|xvsped)
+.continue SPED
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+..
+..
+!LIEF: single delivery note
+..
+..  get weight of this delivery note
+..  return values
+.formula U|xrsumbrutto = U|xvls^bruttogew
+.formula U|xrsumnetto  = U|xvls^nettogew
+.formula U|xrsumtara   = U|xrsumbrutto - U|xrsumnetto
+.formula U|xianzpackst = U|xvls^pmmge
+.continue END
+..
+..*****************************************************************************
+..
+..
+!SPED: whole shipping order with all its delivery notes
+..
+..  1. shipping order without delivery note
+..  2. weights from shipping order skip fields
+..  3. infosystem SPEDWHG: update shipping order
+..     set shipping order as "printed"  !!!
+..
+..
+..  manual weights fromshipping order
+.formula U|xrsumbrutto = U|xvsped^gewbrutto
+.formula U|xrsumnetto  = U|xvsped^gewnetto
+.formula U|xrsumtara   = U|xrsumbrutto - U|xrsumnetto
+.formula U|xianzpackst = U|xvsped^anzpackst
+..
+..
+..  weights from shipping order skip fields
+.continue ENDSKIP ? _F|empty(U|xrsumbrutto)
+.formula U|xrsumbrutto = U|xvsped^bruttogew
+.formula U|xrsumnetto  = U|xvsped^nettogew
+.formula U|xrsumtara   = U|xrsumbrutto - U|xrsumnetto
+!ENDSKIP
+.formula U|xianzpackst = U|xvsped^anzpackstls    ?  F|empty(U|xianzpackst)
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERRSPED
+.error Die Gewichte konnten nicht in den Speditionsauftrag eingetragen werden.
+.end 1

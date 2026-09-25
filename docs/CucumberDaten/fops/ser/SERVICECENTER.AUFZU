@@ -1,0 +1,329 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SERVICECENTER.AUFZU
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       :
+.. Functionality  :
+..
+.. include ser/SERVICECENTER.BN
+.. include ser/NOFOLGE
+..*****************************************************************************
+..
+.set trans -
+.type integer  xtstufe     ? _F|defined(U|xtstufe)
+.type integer  xistufe     ? _F|defined(U|xistufe)
+.type I5       xzn         ? _F|defined(U|xzn)
+.type integer  xtyp        ? _F|defined(U|xtyp)
+.type integer  xi          ? _F|defined(U|xi)
+.type text     xselect     ? _F|defined(U|xselect)
+.type integer  xtzeilen    ? _F|defined(U|xtzeilen)
+.type integer  xaktzeile   ? _F|defined(U|xaktzeile)
+.type integer  xitzeile    ? _F|defined(U|xitzeile)
+.type bool     xberst      ? _F|defined(U|xberst)
+.type A162     xetyp       ? _F|defined(U|xetyp)
+.type A163     xvtyp       ? _F|defined(U|xvtyp)
+.type ID3      xkopf3      ? _F|defined(U|xkopf3)
+.type ID4      xkopf4      ? _F|defined(U|xkopf4)
+..
+.. initialisieren
+.copy U|xberst = G|TRUE
+..
+.continue ERROR1 ? M|tzeilen = 0
+..
+.input "ser/NOFOLGE"
+..
+.. Tabelle
+.formula U|xistufe = M|tbaumstufe
+.continue KNOTEN   ? M|topen = M|iopen & G|evtvar = "topen"
+.continue CLOSE    ? M|topen = M|open  & G|evtvar = "topen"
+..
+!KNOTEN
+.continue OPEN
+..
+!SHISTORY
+.continue END   ?  F|empty(M|topen)
+.continue END   ?  M|topen = M|open
+.continue SOPEN
+..
+!SOPEN: Serviceanfrage ”ffnen
+.formula U|xaktzeile = M|zn
+.formula M|topen = M|open
+.continue SSELECT
+..
+!SSELECT
+.load 9 object 'M|ttrans^id'
+.continue SEND       ? _G|mehr
+.formula M|tbaumstufe = U|xistufe
+.formula U|xitzeile = 1
+.formula U|xtzeilen = 9|tzeilen
+..
+!SZEILE
+.load 9 line
+.continue SEND       ? _G|mehr
+.continue SZEILE     ?  9|zn = 1 & _U|xberst
+.continue LADEZEILE  ?  9|zn = U|xitzeile & U|xitzeile <= U|xtzeilen
+.continue SZEILE
+..
+!LADEZEILE
+.copy U|xberst = G|FALSE
+.select sales '9|kostenv^id'
+.continue SERAU      ? _G|mehr
+.make screen line +O
+.formula M|tbaumstufe =  U|xistufe + 1
+.. Serviceangebot
+.assign M|sumnetto    = H|sumnetto
+.assign M|sumnettoinl = H|sumnettoinl
+.assign M|tvorgwaehr  = H|land
+.assign M|tauswaehr   = M|inlwaehr
+.formula M|tsymbvorgw = H|land^symbol
+.copy M|tursache      = H|serurs
+.formula M|vorgstatus = H|repstatus ? H|typ = 35 ; H|typ = 37
+.formula M|vorgstatus = H|serstatus ? H|typ = 33 ; H|typ = 34
+..
+.protection brerelease 'M|aktzeile'
+..
+.formula M|ttyp2      = M|typ2a  ? _H|ablagef
+.formula M|ttyp2      = M|typ2b  ?  H|ablagef
+.formula U|xvtyp      = "(ServiceQuotation)"
+.formula M|vorgart    = U|xvtyp
+.formula M|ttrans     = H|id
+.assign M|seranf      = H|seranf ? F|defined(H|seranf)
+.formula M|ttyp       = H|typa
+.formula M|ttyp       = H|vorganga ? H|typ = REKO
+.formula M|ttyp       = H|lsart    ? H|typ = LIKO
+.formula M|tdate      = H|vom
+.assign M|tkunde      = H|kunde
+.assign M|tbetreuer   = H|betreuer
+.formula M|tfrzeich   = H|frzeich
+.formula M|topen      = M|iopen
+.formula M|tpost      = M|view
+.formula M|tpost      = M|edit           ? _H|ablagef & _F|empty(M|ttyp1)
+.formula M|tpost      = M|post           ?  H|uebertr
+.formula M|trelease   = M|release        ? _H|ablagef
+.formula M|trelease   = ""                      ?  H|typ = 5
+.formula M|trelease   = ""                      ?  H|typ = 4  & _H|faktura
+.formula M|tdetail    = M|detail1 
+..
+!ANGEBOT
+.formula U|xaktzeile = M|aktzeile
+.formula U|xistufe = M|tbaumstufe    ? M|topen = M|iopen & M|tbaumstufe < M|anzstufen & G|evtvar="bstart"
+.input "ser/SERVICECENTER.AUFZU"  ? M|topen = M|iopen & M|tbaumstufe < M|anzstufen & G|evtvar="bstart"
+.continue SERAU                       ? M|aktzeile = U|xaktzeile
+.continue ANGEBOT                     ? M|topen = M|iopen & M|tbaumstufe < M|anzstufen & G|evtvar="bstart"
+.continue SERAU
+..
+!SERAU
+.select sales '9|serau^id'
+.continue REPAU      ? _G|mehr
+..
+!ZEILESERAU
+.select line
+.continue KOPFSERAU  ? _G|mehr
+.continue ZEILESERAU ?  F|empty(H|orig)
+.continue REPAU      ? _F|empty(H|orig)
+..
+!KOPFSERAU
+.select header
+.make screen line +O
+.formula M|tbaumstufe = 1
+.. Serviceauftrag
+.copy M|tursache = H|serurs
+.formula M|vorgstatus = H|repstatus ? H|typ = 35 ; H|typ = 37
+.formula M|vorgstatus = H|serstatus ? H|typ = 33 ; H|typ = 34
+.formula M|ttyp3      = M|typ2a  ? _H|ablagef
+.formula M|ttyp3      = M|typ2b  ?  H|ablagef
+.formula U|xvtyp      = "(ServiceOrder)"
+.formula M|vorgart    = U|xvtyp
+.formula M|tdate      = H|vom
+.assign M|tkunde      = H|kunde
+.assign M|tbetreuer   = H|betreuer
+.formula M|tfrzeich   = H|frzeich
+.formula M|ttrans     = H|id
+.assign M|seranf      = H|seranf ? F|defined(H|seranf)
+.formula M|ttyp       = H|typa
+.formula M|topen      = M|iopen
+.formula M|tpost      = M|view
+.formula M|tpost      = M|edit       ? _H|ablagef & _F|empty(M|ttyp1)
+.formula M|tpost      = M|post       ?  H|uebertr
+.formula M|trelease   = M|release    ? _H|ablagef
+.formula M|trelease   = ""                      ?  H|typ = 5
+.formula M|trelease   = ""                      ?  H|typ = 4  & _H|faktura
+.formula M|tdetail    = M|detail1 
+.formula U|xistufe    = M|tbaumstufe ? M|topen = M|iopen & M|tbaumstufe < M|anzstufen & G|evtvar="bstart"
+.input "ser/SERVICECENTER.AUFZU"  ? M|topen = M|iopen & M|tbaumstufe < M|anzstufen & G|evtvar="bstart"
+.continue REPAU
+..
+!REPAU
+.select sales '9|repau^id'
+.continue EINKAUF               ? _G|mehr
+.make screen line +O
+.formula M|tbaumstufe = 1
+.. Reaparaturauftrag
+.assign M|sumnetto    = H|sumnetto
+.assign M|sumnettoinl = H|sumnettoinl
+.assign M|tvorgwaehr  = H|land
+.assign M|tauswaehr   = M|inlwaehr
+.formula M|tsymbvorgw = H|land^symbol
+.copy M|tursache      = H|serurs
+.formula M|vorgstatus = H|repstatus ? H|typ = 35 ; H|typ = 37
+.formula M|vorgstatus = H|serstatus ? H|typ = 33 ; H|typ = 34
+.formula M|ttrans     = H|id
+.assign M|seranf      = H|seranf ? F|defined(H|seranf)
+.formula M|ttyp       = H|typa
+.formula M|ttyp6      = M|typ2a  ?  _H|ablagef
+.formula M|ttyp6      = M|typ2b  ?   H|ablagef
+.formula U|xvtyp      = "(RepairOrder)"
+.formula M|vorgart    = U|xvtyp
+.formula M|tdate      = H|vom
+.assign M|tkunde      = H|kunde^id
+.assign M|tbetreuer   = H|betreuer
+.formula M|tfrzeich   = H|frzeich
+.formula M|topen      = M|iopen
+.formula M|tpost      = M|view
+.formula M|tpost      = M|edit       ? _H|ablagef  & _F|empty(M|ttyp1)
+.formula M|tpost      = M|post       ?  H|uebertr
+.formula M|trelease   = M|release    ? _H|ablagef
+.formula M|trelease   = ""           ? _H|ablagef & _F|empty(M|ttyp6)
+.formula M|trelease   = ""                      ?  H|typ = 5
+.formula M|trelease   = ""                      ?  H|typ = 4  & _H|faktura
+.formula M|tdetail    = M|detail1 
+.formula U|xistufe    = M|tbaumstufe ? M|topen = M|iopen & M|tbaumstufe < M|anzstufen & G|evtvar="bstart"
+.input "ser/SERVICECENTER.AUFZU"     ? M|topen = M|iopen & M|tbaumstufe < M|anzstufen & G|evtvar="bstart"
+.continue EINKAUF
+..
+!EINKAUF
+.select purchasing '9|bextdl^id'
+.continue IZEILE                ? _G|mehr
+.make screen line +O
+.formula M|tbaumstufe = 1
+.formula M|ttrans     = H|id
+.assign M|seranf      = H|seranf ? F|defined(H|seranf)
+.formula M|ttyp       = H|typa
+.. Bestellung
+.formula M|ttyp8      = M|typ2a                 ?  H|typ = 3 & _H|ablagef
+.formula M|ttyp8      = M|typ2b                 ?  H|typ = 3 &  H|ablagef
+.formula U|xetyp      = "(PurchaseOrder)"       ?  H|typ = 3
+.. EK-LS
+.formula M|ttyp9      = M|typ2a                 ?  H|typ = 4 & _H|ablagef
+.formula M|ttyp9      = M|typ2b                 ?  H|typ = 4 &  H|ablagef
+.formula U|xetyp      = "(PackingSlip)"         ?  H|typ = 4
+.. EK-RE
+.formula M|ttyp10     = M|typ2a                 ?  H|typ = 5 & _H|ablagef
+.formula M|ttyp10     = M|typ2b                 ?  H|typ = 5 &  H|ablagef
+.formula U|xetyp      = "(Invoice)"             ?  H|typ = 5
+.formula M|topen      = M|iopen
+.formula M|tpost      = M|view
+.formula M|tpost      = M|edit       ? _H|ablagef  & _F|empty(M|ttyp1)
+.formula M|tpost      = M|post       ?  H|uebertr
+.formula M|trelease   = M|release    ? _H|ablagef
+.formula M|trelease   = ""                      ?  H|typ = 5
+.formula M|trelease   = ""                      ?  H|typ = 4  & _H|faktura
+.formula M|tdetail    = M|detail1
+.formula M|vorgart    = U|xetyp
+..
+.formula U|xistufe = M|tbaumstufe    ? M|topen = M|iopen & M|tbaumstufe < M|anzstufen & G|evtvar="bstart"
+.input "ser/SERVICECENTER.AUFZU"  ? M|topen = M|iopen & M|tbaumstufe < M|anzstufen & G|evtvar="bstart"
+..
+!IZEILE
+.formula U|xitzeile = U|xitzeile + 1
+.continue SZEILE
+..
+!OPEN: Vorgang aus Tabelle merken und ”ffnen
+.continue SHISTORY ? M|ttrans^dnr = 122
+.formula U|xkopf3 = M|ttrans^id  ? M|ttrans^dnr = 3
+.formula U|xkopf4 = M|ttrans^id  ? M|ttrans^dnr = 4
+.formula U|xzn   = M|zn
+.. Ordner erst mal zu
+.formula M|topen = M|iopen
+..
+!SELECT
+...formula M|select = "$,,;okopf^typa=;kopf^nummer=;kopf^typa="
+.formula M|select = "$,,"
+.formula M|select = M|select + ";okopf="+M|ttrans^id+"
+.formula M|select = M|select + ";orig<>`"
+.formula M|select = M|select + ";kopf^frzeich/" + M|frzeich      ? _F|empty(M|frzeich)
+.formula M|select = M|select + ";kopf^betreuer=" + M|betreuer^id ? _F|empty(M|betreuer)
+.formula M|select = M|select + ";@ordnung=kopf;@gruppe=2;@ablageart=(Both)"
+..
+.select sales 'M|select'                ?  M|ttrans^dnr = 3
+.select purchasing 'M|select'                ?  M|ttrans^dnr = 4
+.formula M|topen = ""                    ? _G|mehr
+.continue END                             ? _G|mehr
+.formula M|topen = ""
+.formula M|topen = "icon:folder_opened"  ? _M|ttrans^typ = 5
+.continue ZEILE
+..
+!ZEILE
+.formula U|xtyp  = M|ttrans^typ
+..
+.load 7 sales 'H|kopf^id'             ?  M|ttrans^dnr = 3
+.load 7 purchasing 'H|kopf^id'             ?  M|ttrans^dnr = 4
+.continue END                             ? _G|mehr
+.continue HOLE                            ?  U|xkopf4 = 7|id & M|ttrans^dnr = 4
+.continue HOLE                            ?  U|xkopf3 = 7|id & M|ttrans^dnr = 3
+.input "ser/SERVICECENTER.BN"
+.formula U|xzn =  U|xzn + 1              ?  U|xistufe > M|anzstufen & G|evtvar="bstart"
+.continue MASKE                           ?  U|xistufe > M|anzstufen & G|evtvar="bstart"
+.formula U|xkopf3 = M|ttrans^id          ?  M|ttrans^dnr = 3
+.formula U|xkopf4 = M|ttrans^id          ?  M|ttrans^dnr = 4
+..
+!HOLE
+.select sales                           ?  M|ttrans^dnr = 3
+.select purchasing                           ?  M|ttrans^dnr = 4
+.continue END                             ? _G|mehr
+.formula M|topen = M|iopen
+.formula M|topen = ""                    ?  M|ttrans^typ = 5
+.continue ZEILE                          ?  M|ttrans^typ = 5
+.. Ordner entfernen wenn nicht mehr
+.formula M|select = "$,,;okopf^typa=;@gruppe=2;okopf="+M|ttrans^id+";kopf^typa=;kopf^nummer=;orig<>`;@ablageart=(Both);@ordnung=kopf"
+.load 1 sales 'M|select'                ?  M|ttrans^dnr = 3
+.load 2 purchasing 'M|select'           ?  M|ttrans^dnr = 4
+.formula M|topen = ""                   ? _G|mehr
+.continue ZEILE
+..
+!CLOSE
+.formula U|xtstufe = M|tbaumstufe
+.formula M|topen = M|iopen    ? _M|ttrans^typ = 5
+.select screen line
+.continue END                             ? _G|mehr
+..
+!SINGLEDEL
+.continue END                             ?  M|tbaumstufe <= U|xtstufe ; M|tbaumstufe = 0
+.make screen line -O
+.continue SINGLEDEL
+..
+!MASKE
+.select screen header
+.formula U|xtzeilen = M|tzeilen
+.continue END                             ? _G|mehr
+..
+!HOLMASKE: nochmal alle durchlaufen fr "icon:folder_closed"
+.continue END                             ?  U|xtzeilen < U|xzn
+.select screen line 'U|xzn'
+.continue END                             ? _G|mehr
+.continue END                             ? M|tbaumstufe = 0
+.formula U|xzn = U|xzn + 1
+.formula U|xistufe = M|tbaumstufe
+.continue HOLMASKE                        ? F|empty(M|topen)
+.continue HOLMASKE                        ? M|topen <> M|iopen
+.. ab hier sind Ordner M|topen = M|iopen
+.continue OPEN
+..
+!SEND
+.continue END
+..
+!HOLEZEILE: Nachfolger bestimmen
+.select screen line
+.continue END ? _G|mehr
+.continue HOLEZEILE ? M|ttrans^dnr = 122
+.continue OPEN
+.continue END
+..
+!END
+.continue
+..
+!ERROR1: Keine Tabellenzeilen geladen!
+.error Keine Tabellenzeilen geladen!
+.end 1

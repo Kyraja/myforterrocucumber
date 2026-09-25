@@ -1,0 +1,466 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDIDAT.BSTART.BN
+.. Datum/Date     : 11.11.08
+.. Version        :
+.. Autor/Author   : dsch
+.. Verantwortlich : mh
+.. Funktion       : Vergleich zwischen EDI-Schema und EDI-Nachricht ausfÅhren.
+..                  Der Vergleich kann auch zwischen EDI-Schema und eine EDI-
+..                  Schnittstelle ausgefÅhrt werden.
+..                  Die PlausibilitÑtsprÅfung kann als Fehlerpotokoll gespeichert
+..                  werden (alle Fehlermeldungen erscheinen in dem Protokoll).
+..                  Folgende Fehlermeldungen werden mit einer Hintergrundfarbe
+..                  gekennzeichnet:
+..                    - Mussfelder ist nicht  gefÅllt
+..                    - Kein korrektes numerisches Feld
+..                    - FeldlÑnge wurde Åberschritten
+..                    - Laufende Zeilennummer ist nicht aufsteigend
+..                    - Muss-Zeile ist nocht vorhanden
+..                    - unbekannte Satzart (Segment) in der EDI-Schnittstelle
+..									ZusÑtzliche PrÅfungen erscheinen in dem Fehlerprotokoll:
+..                    - Zeile in EDI-Schnittstelle hat keine 25 Felder
+..                    - ungÅltige zulÑssige HÑufigkeit der Satzart
+..                    - Dummy-Feld ist nicht leer
+..                    - abweichende Versionnummer (Satzart 000)
+..
+.. Ablauf         : Die Schema-Struktur wird zuerst in Array-Felder gespeichert.
+..                  Danach wird die EDI-Nachricht bzw. Schnittstelle mit der
+..                  Schema-Struktur verglichen.
+..                  Ein Fehlerprotokoll (Ñhnlich dem Fop DFUE.CHKFILE) wird
+..                  erstellt.
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..    verwendet Arrayparameter (arg.i)          : nein
+..    verwendet Namensparameter (xpname=wert)   : nein
+..
+..    Parameter    Bedeutung
+..
+...Includes       :
+..  include dfue/EDIDAT.EXPORT.SCHEMA
+..  include dfue/EDIDAT.CHKFILE
+..*****************************************************************************
+.set trans +
+..
+.type text xtM01  ? _F|defined(xtM01)
+.type text xtM02  ? _F|defined(xtM02)
+.type text xtM03  ? _F|defined(xtM03)
+.type text xtM04  ? _F|defined(xtM04)
+.type text xtM05  ? _F|defined(xtM05)
+.type text xtM06  ? _F|defined(xtM06)
+.type text xtM07  ? _F|defined(xtM07)
+.type text xtM08  ? _F|defined(xtM08)
+.type text xtM09  ? _F|defined(xtM09)
+.type text xtM10  ? _F|defined(xtM10)
+.type text xtM11  ? _F|defined(xtM11)
+.type text xtM12  ? _F|defined(xtM12)
+.type text xtM13  ? _F|defined(xtM13)
+.type text xtM13B ? _F|defined(xtM13B)
+.type text xtM14  ? _F|defined(xtM14)
+.type text xtM15  ? _F|defined(xtM15)
+.type text xtM16  ? _F|defined(xtM16)
+.type text xtM17  ? _F|defined(xtM17)
+.type text xtM18  ? _F|defined(xtM18)
+.type text xtM19  ? _F|defined(xtM19)
+.type text xtM20  ? _F|defined(xtM20)
+.type text xtM21  ? _F|defined(xtM21)
+.type text xtM22  ? _F|defined(xtM22)
+.type text xtM23  ? _F|defined(xtM23)
+.type text xtM24  ? _F|defined(xtM24)
+..
+.type text xtMSEG ? _F|defined(xtMSEG)
+.type text xtMZEI ? _F|defined(xtMZEI)
+.type text xtMSPA ? _F|defined(xtMSPA)
+.type text xtMSOL ? _F|defined(xtMSOL)
+.type text xtMIST ? _F|defined(xtMIST)
+.type text xtMKAN ? _F|defined(xtMKAN)
+..
+.. Meldungen
+..
+.formula U|xtM01  = "Falsche Anzahl der Felder"
+.formula U|xtM02  = "Falsches Format fÅr numerisches Feld"
+.formula U|xtM03  = "Falsches Format fÅr das Datumsfeld"
+.formula U|xtM07  = "Belegart ist nicht unterstÅtzt"
+.formula U|xtM08  = "Abweichende Versionnummer in der Schnittstelle"
+.formula U|xtM09  = "Dokumentart ist nicht unterstÅtzt"
+.formula U|xtM10  = "Fehlende Satz-Position: Erforderlicher Mu·-VorgÑnger-Satz nicht vorhanden"
+.formula U|xtM11  = "UnzulÑssige Satz-Position: vorhandene Satzart ist nicht zulÑssig"
+.formula U|xtM12  = "UnzulÑssige HÑufigkeit des Satzes"
+.formula U|xtM13  = "maximale FeldlÑnge Åberschritten"
+.formula U|xtM13B = "minimale FeldlÑnge unterschritten"
+.formula U|xtM14  = "Mu·-Feld nicht ausgefÅllt"
+.formula U|xtM15  = "Leer-Feld nicht leer"
+.formula U|xtM16  = "keine fortlaufende Zeilennummer"
+.formula U|xtM20  = "Die Schema-Definition ist nicht vorhanden."
+.formula U|xtM21  = "Das Schema hat keine Struktur-Zuordnung."
+.formula U|xtM22  = "Es fehlen Zuordnungen in den Tabellenzeilen der Struktur."
+.formula U|xtM23  = "Die Schema-Datei kann nicht gefunden werden."
+.formula U|xtM24  = "Es kînnen nur die Schema-Standards (INHOUSE) oder (VDA) ÅberprÅft werden."
+.formula U|xtMSEG = "Segment"
+.formula U|xtMZEI = "Zeile"
+.formula U|xtMSPA = "Spalte"
+.formula U|xtMSOL = "Soll"
+.formula U|xtMIST = "Ist"
+.formula U|xtMKAN = "Kann"
+..
+.set trans -
+..
+.input "ARB"
+.input "dfue/DFUE.IMP.INI"
+..
+.type text xtsel         ? _F|defined(xtsel)
+.type text xttmp         ? _F|defined(xttmp)
+.type text xthptid       ? _F|defined(xthptid)
+.type text xtref         ? _F|defined(xtref)
+.type text xttoken       ? _F|defined(xttoken)
+.type text xttext1       ? _F|defined(xttext1)
+.type text xtfeld        ? _F|defined(xtfeld)
+.type text xtcmd         ? _F|defined(xtcmd)
+.type text xtLISTID      ? _F|defined(xtLISTID)
+.type text xtALLID       ? _F|defined(xtALLID)
+.type text xtL3TOKEN     ? _F|defined(xtL3TOKEN)
+.type text xtMIN         ? _F|defined(xtMIN)
+.type text xtMAX         ? _F|defined(xtMAX)
+.type text xtGRP         ? _F|defined(xtGRP)
+.type text xtTYP         ? _F|defined(xtTYP)
+.type text xtKEY         ? _F|defined(xtKEY)
+.type text xtMINLEN      ? _F|defined(xtMINLEN)
+.type text xtMAXLEN      ? _F|defined(xtMAXLEN)
+.type text xtNKOMMA      ? _F|defined(xtNKOMMA)
+.type text xtCNTID       ? _F|defined(xtCNTID)
+.type text xtCOUNTER     ? _F|defined(xtCOUNTER)
+.type text xtMAINID      ? _F|defined(xtMAINID)
+.type text xtNAME        ? _F|defined(xtNAME)
+.type text xtREFTOKEN    ? _F|defined(xtREFTOKEN)
+.type text xtACTID       ? _F|defined(xtACTID)
+.type text xtkztrenner   ? _F|defined(xtkztrenner)
+.type text xtTempDatei   ? _F|defined(xtTempDatei)
+.type text xtFProtDatei  ? _F|defined(xtFProtDatei)
+.type text xmmvvl        ? _F|defined(xmmvvl)
+.type text xsekundenz    ? _F|defined(xsekundenz)
+.type text xtImportDir   ? _F|defined(xtImportDir)
+.type text xtexport      ? _F|defined(xtexport)
+..
+.type integer  xindex        ? _F|defined(xindex)
+.type integer  xi            ? _F|defined(xi)
+.type integer  xiaid         ? _F|defined(xiaid)
+.type integer  xilfdnr       ? _F|defined(xilfdnr)
+.type integer  xiwert        ? _F|defined(xiwert)
+.type integer  xipos         ? _F|defined(xipos)
+.type integer  ximin         ? _F|defined(ximin)
+.type integer  ximax         ? _F|defined(ximax)
+.type integer  xizeilen      ? _F|defined(xizeilen)
+..
+.type real4 xrwert       ? _F|defined(xrwert)
+..
+.type bool xbediinit     ? _F|defined(xbediinit)
+.type bool xbedirec      ? _F|defined(xbedirec)
+.type bool xbedifin      ? _F|defined(xbedifin)
+.type bool xbschemafin   ? _F|defined(xbschemafin)
+.type bool xbedifile     ? _F|defined(xbedifile)
+.type bool xbende        ? _F|defined(xbende)
+.type bool xbchkok       ? _F|defined(xbchkok)
+.type bool xbisFProt     ? _F|defined(xbisFProt)
+.type bool xbdoFProt     ? _F|defined(xbdoFProt)
+.type bool xbexpsche     ? _F|defined(xbexpsche)
+.type bool xbexpschema   ? _F|defined(xbexpschema)
+.type bool xbistvda      ? _F|defined(xbistvda)
+.type bool xboffset      ? _F|defined(xboffset)
+..
+.type text xtF1          ? _F|defined(xtF1)
+.type text xtF2          ? _F|defined(xtF2)
+.type text xtF3          ? _F|defined(xtF3)
+.type text xtF4          ? _F|defined(xtF4)
+.type text xtF5          ? _F|defined(xtF5)
+.type text xtF6          ? _F|defined(xtF6)
+.type text xtF7          ? _F|defined(xtF7)
+.type text xtF8          ? _F|defined(xtF8)
+.type text xtF9          ? _F|defined(xtF9)
+.type text xtF10         ? _F|defined(xtF10)
+.type text xtF11         ? _F|defined(xtF11)
+.type text xtF12         ? _F|defined(xtF12)
+.type text xtF13         ? _F|defined(xtF13)
+.type text xtF14         ? _F|defined(xtF14)
+.type text xtF15         ? _F|defined(xtF15)
+.type text xtF16         ? _F|defined(xtF16)
+.type text xtF17         ? _F|defined(xtF17)
+.type text xtF18         ? _F|defined(xtF18)
+.type text xtF19         ? _F|defined(xtF19)
+.type text xtF20         ? _F|defined(xtF20)
+.type text xtF21         ? _F|defined(xtF21)
+.type text xtF22         ? _F|defined(xtF22)
+.type text xtF23         ? _F|defined(xtF23)
+.type text xtF24         ? _F|defined(xtF24)
+.type text xtF25         ? _F|defined(xtF25)
+..
+..*****************************************************************************
+.. AufzÑhlungstyp 118 fÅr Feld-Typ:   73 ;inhouse;
+..                                    86 ;vda;
+..*****************************************************************************
+.type A118 xainhouse   ? _F|defined(xainhouse)
+.type A118 xavda       ? _F|defined(xavda)
+.formula U|xainhouse = "(73)"
+.formula U|xavda     = "(86)"
+..*****************************************************************************
+.continue PROT ? U|xbexpschema = false
+.file -tempname U|xtTempDatei
+.formula U|xtFProtDatei = "S" + M|kschema^nummer + ".FOP"
+.output new 'U|xtTempDatei'
+.input "DATEI.F"
+..
+.formula U|xtexport = "I"
+.input EDIDAT.EXPORT.SCHEMA
+..
+.continue BEGIN
+..*****************************************************************************
+.. Protokoll-Datei vorbereiten (wird aus DFUE.CHKFILE Åbergeben oder im
+.. Infosystem gewÅnscht)
+..*****************************************************************************
+!PROT
+.formula U|xbisFProt    = true             ? _(M|kfprot = "")
+.formula U|xtFProtDatei = M|kfprot         ? U|xbisFProt
+.file -tempname U|xtTempDatei                ? U|xtFProtDatei = "" & M|kdofprot
+.assign U|xtFProtDatei = U|xtTempDatei +".ERR"  ? U|xtFProtDatei = "" & M|kdofprot
+.formula U|xbdoFProt      = true ? _(U|xtFProtDatei = "")
+..
+.. vorhandene RÅckgabe-Dateien lîschen wenn vorhanden
+..
+.formula U|xtTempDatei = U|xtFProtDatei <$ ".TMP" + "OK.TMP"
+.formula U|xtcmd       = "rm -f " + U|xtTempDatei + " > ${DEVNULL:-/dev/null}"
+.system 'U|xtcmd' background ? U|xbisFProt
+..
+..*****************************************************************************
+.. hollt den SCHEMA-Record
+..*****************************************************************************
+!BEGIN
+.select schemata 'M|select'
+.continue NOSCHEMA     ? _G|mehr
+.formula M|krequest   =  H|request
+.formula U|xthptid    =  H|struktur^nummer
+.formula U|xtref      =  H|struktur^nummer
+.formula U|xttoken    =  F|regreplaceall(H|struktur^token,"_","")
+.continue  FSSCHEMA    ?  M|kstandard <> U|xainhouse & M|kstandard <> U|xavda
+.continue NO1STRUCTUR ?  H|struktur = ""
+.formula U|xbistvda     = true ? M|kstandard = U|xavda
+.make screen line --
+.formula U|xtImportDir   = "${MANDANTDIR}/" + U|xempfangsverz + "/" ? _U|xbisFProt
+.formula U|xmmvvl        = "EDIDAT"                                 ? _U|xbisFProt
+.formula U|xsekundenz    = T|sekundenz                              ? _U|xbisFProt
+.output addedto 'U|xtFProtDatei' ? U|xbdoFProt
+.input "DATEI.F"             ? U|xbdoFProt
+.set trans +
+?'T|datum', 'T|zeit', Fehler in INHOUSE-Schnittstellen-Datei: 'xmmvvl''xsekundenz'.ERR? U|xbdoFProt & _U|xbisFProt
+?--------------------------------------------------------------------------------?      U|xbdoFProt & _U|xbisFProt
+.set trans -
+.select
+..*****************************************************************************
+.. Wir laden die komplette SCHEMA-Struktur einmal, speichern die Struktur in
+.. Array-Felder.Die PlausibilitÑtsprÅfung wird mit den Array-Felder durchgefÅhrt
+.. (damit wird nicht immer auf die Datenbank zugegriffen).
+.. Pro Struktur-ID werden folgende Informationen in ein Array (xAStruktur) gespeichert
+..*****************************************************************************
+.formula U|xtLISTID    = "LID"
+.formula U|xtL3TOKEN   = "L3TO"
+.formula U|xtALLID     = "ALLID"
+.formula U|xtMIN       = "MIN"
+.formula U|xtMAX       = "MAX"
+.formula U|xtGRP       = "GRP"
+.formula U|xtTYP       = "TYP"
+.formula U|xtKEY       = "KEY"
+.formula U|xtMINLEN    = "MINLEN"
+.formula U|xtMAXLEN    = "MAXLEN"
+.formula U|xtNKOMMA    = "KOM"
+.formula U|xtCNTID     = "CID"
+.formula U|xtCOUNTER   = "CNT"
+.formula U|xtMAINID    = "MID"
+.formula U|xtNAME      = "NAM"
+.formula U|xtREFTOKEN  = "RTO"
+.formula U|xtACTID     = "ACTID"
+.formula U|xtkztrenner = "#"
+.formula U|xindex      = 0
+.formula U|ximin       = 0
+.formula U|ximax       = 9999
+.formula U|xiaid       = U|xthptid
+..
+..*****************************************************************************
+.. Wenn Åber Schema-Datei gewÅnscht wird
+..*****************************************************************************
+.continue STRUCTUR ? U|xbexpschema  = true
+.continue STRUCTUR ? M|kschemadatei = false
+.formula U|xttmp = "ow1/S"+M|kschema+".FOP"
+.continue NOFILE ? _F|fileexists(U|xttmp)
+.input 'U|xttmp'
+.continue CHECK
+..*****************************************************************************
+!STRUCTUR
+.formula U|xtsel = "$,,nummer=" + 'U|xtref' + ";@gruppe=2"
+.load 'U|xindex' schemata 'U|xtsel'
+.continue STRUP       ? _G|mehr
+.formula U|xizeilen = F|eval('U|xindex'+"|ozeilen")
+.continue NO2STRUCTUR ? U|xizeilen = 0
+..
+.formula U|xboffset = false
+.formula U|xboffset = true ? M|kstandard = U|xainhouse & U|xizeilen = 24
+..
+.formula U|xiaid = U|xtref
+.type text xAStruktur.xiaid.xtLISTID    ? _F|defined(xAStruktur.xiaid.xtLISTID)
+.type text xAStruktur.xiaid.xtL3TOKEN   ? _F|defined(xAStruktur.xiaid.xtL3TOKEN)
+.type text xAStruktur.xiaid.xtALLID     ? _F|defined(xAStruktur.xiaid.xtALLID)
+.type text xAStruktur.xiaid.xtREFTOKEN  ? _F|defined(xAStruktur.xiaid.xtREFTOKEN)
+.type integer  xAStruktur.xiaid.xtGRP       ? _F|defined(xAStruktur.xiaid.xtGRP)
+.type integer  xAStruktur.xiaid.xtMIN       ? _F|defined(xAStruktur.xiaid.xtMIN)
+.type integer  xAStruktur.xiaid.xtMAX       ? _F|defined(xAStruktur.xiaid.xtMAX)
+.type integer  xAStruktur.xiaid.xtCNTID     ? _F|defined(xAStruktur.xiaid.xtCNTID)
+.type integer  xAStruktur.xiaid.xtCOUNTER   ? _F|defined(xAStruktur.xiaid.xtCOUNTER)
+..
+.formula U|xAStruktur.xiaid.xtMIN       = U|ximin
+.formula U|xAStruktur.xiaid.xtMAX       = U|ximax
+.formula U|xAStruktur.xiaid.xtREFTOKEN  = U|xttoken
+..
+.type text xAToken.xttoken                        ? U|xbistvda & _F|defined(xAToken.xttoken)
+.formula U|xAToken.xttoken              = U|xiaid ? U|xbistvda
+..
+!STRLOOP:
+.load 'U|xindex' line
+.continue STRUP   ? _G|mehr
+.formula U|xAStruktur.xiaid.xtLISTID    = U|xAStruktur.xiaid.xtLISTID + F|eval('U|xindex'+"|ref") + U|xtkztrenner
+.formula U|xAStruktur.xiaid.xtALLID     = U|xAStruktur.xiaid.xtALLID  + F|eval('U|xindex'+"|ref") + U|xtkztrenner
+.formula U|xAStruktur.xiaid.xtCNTID     = U|xAStruktur.xiaid.xtCNTID  + 1
+.continue STRDOWN ? F|eval(F|tostring(U|xindex)+"|ref^gruppe")<>3
+.formula U|xAStruktur.xiaid.xtGRP       = 3         ? U|xAStruktur.xiaid.xtGRP <> 3
+.formula U|xAStruktur.xiaid.xtLISTID    = U|xthptid ? U|xindex = 0
+.continue STRSKIP ? U|xAStruktur.xiaid.xtCNTID <> 1
+.formula U|xi = U|xindex
+!STR0LOOP
+.formula U|xiwert = F|eval('U|xi'+"|nummer")
+.formula U|xAStruktur.xiwert.xtL3TOKEN = U|xAStruktur.xiwert.xtL3TOKEN + U|xttoken + U|xtkztrenner
+.formula U|xi = U|xi -1
+.continue STR0LOOP ? U|xi >= 0
+!STRSKIP
+..
+.formula U|xboffset = true ? M|kstandard = U|xavda & F|eval('U|xindex'+"|zn") = 1 & F|eval('U|xindex'+"|reftoken") = "VERSION"
+.formula U|xAStruktur.xiaid.xtCNTID      = U|xAStruktur.xiaid.xtCNTID + 1 ? U|xboffset & F|eval('U|xindex'+"|zn") = 1
+..
+.formula U|xipos = U|xAStruktur.xiaid.xtCNTID
+..
+.type text xAFeld.xiaid.xtNAME.xipos     ? _F|defined(xAFeld.xiaid.xtNAME.xipos)
+.type text xAFeld.xiaid.xtREFTOKEN.xipos ? _F|defined(xAFeld.xiaid.xtREFTOKEN.xipos)
+.type integer  xAFeld.xiaid.xtMIN.xipos      ? _F|defined(xAFeld.xiaid.xtMIN.xipos)
+.type integer  xAFeld.xiaid.xtMAX.xipos      ? _F|defined(xAFeld.xiaid.xtMAX.xipos)
+.type text xAFeld.xiaid.xtTYP.xipos      ? _F|defined(xAFeld.xiaid.xtTYP.xipos)
+.type text xAFeld.xiaid.xtKEY.xipos      ? _F|defined(xAFeld.xiaid.xtKEY.xipos)
+.type integer  xAFeld.xiaid.xtMINLEN.xipos   ? _F|defined(xAFeld.xiaid.xtMINLEN.xipos)
+.type integer  xAFeld.xiaid.xtMAXLEN.xipos   ? _F|defined(xAFeld.xiaid.xtMAXLEN.xipos)
+.type integer  xAFeld.xiaid.xtNKOMMA.xipos   ? _F|defined(xAFeld.xiaid.xtNKOMMA.xipos)
+..
+.formula U|xAFeld.xiaid.xtNAME.xipos     = F|eval('U|xindex'+"|refname")
+.formula U|xAFeld.xiaid.xtREFTOKEN.xipos = F|eval('U|xindex'+"|reftoken")
+.formula U|xAFeld.xiaid.xtMIN.xipos      = F|eval('U|xindex'+"|min")
+.formula U|xAFeld.xiaid.xtMAX.xipos      = F|eval('U|xindex'+"|max")
+.formula U|xAFeld.xiaid.xtTYP.xipos      = F|eval('U|xindex'+"|reftype")
+.formula U|xAFeld.xiaid.xtKEY.xipos      = F|eval('U|xindex'+"|ref^coderef")
+.formula U|xAFeld.xiaid.xtMINLEN.xipos   = F|eval('U|xindex'+"|ref^minlength")
+.formula U|xAFeld.xiaid.xtMAXLEN.xipos   = F|eval('U|xindex'+"|ref^maxlength")
+.formula U|xAFeld.xiaid.xtNKOMMA.xipos   = F|eval('U|xindex'+"|ref^sqlnkomma")
+..
+.continue STRLOOP ? U|xbexpschema = false
+..
+.formula U|xtexport = "F"
+.input EDIDAT.EXPORT.SCHEMA
+..
+.continue STRLOOP
+..
+..>>> Wir gehen eine Stuffe in der Struktur zurÅck
+..
+!STRUP
+.continue SKIPUP ? U|xbexpschema = false
+..
+.formula U|xtexport = "S"
+.input EDIDAT.EXPORT.SCHEMA
+..
+!SKIPUP
+.formula U|xindex = U|xindex - 1
+.continue STREND  ? U|xindex < 0
+.formula U|xiaid  = F|eval('U|xindex'+"|num99")
+.continue STRLOOP
+..
+..  >>> Wir gehen eine Ebene tiefer in der Gruppe 2
+..
+!STRDOWN
+.formula U|xAStruktur.xiaid.xtGRP = 2 ? U|xAStruktur.xiaid.xtGRP = 0
+.formula U|xi = U|xindex
+!STR1LOOP
+.formula U|xi = U|xi -1
+.continue SWDOWN ? U|xi < 0
+.formula U|xiaid = F|eval('U|xi'+"|num99")
+.formula U|xAStruktur.xiaid.xtALLID = U|xAStruktur.xiaid.xtALLID + F|eval('U|xindex'+"|ref") + U|xtkztrenner
+.continue STR1LOOP
+!SWDOWN
+.formula U|ximin   = F|eval('U|xindex'+"|min")
+.formula U|ximax   = F|eval('U|xindex'+"|max")
+.formula U|xtref   = F|eval('U|xindex'+"|ref^nummer")
+.formula U|xiaid   = U|xtref
+.formula U|xttoken = F|regreplaceall(F|eval('U|xindex'+"|reftoken"),"_","")
+.formula U|xindex  = U|xindex + 1
+.continue STRUP     ? U|xindex > 9
+.continue STRUCTUR
+!STREND
+.formula U|xindex = 0
+.formula U|xiaid  = U|xthptid
+.load 0
+.load 1
+.load 2
+.load 3
+.load 4
+.load 5
+.load 6
+.load 7
+.load 8
+.load 9
+.continue ENDEXP ? U|xbexpschema = true
+..*****************************************************************************
+!CHECK
+.formula U|xiaid = U|xthptid
+.input "dfue/EDIDAT.CHKFILE"
+.output
+..
+.. RÅckgabewert in Datei schreiben
+..
+.formula U|xtTempDatei = U|xtFProtDatei <$ ".TMP" + "OK.TMP"  ? U|xbisFProt & U|xbchkok
+.formula U|xtcmd = "touch " + U|xtTempDatei
+.system 'U|xtcmd' background ? U|xbisFProt & U|xbchkok
+.output
+..
+.formula U|xtcmd = "cat " + U|xtFProtDatei + " >> " + U|xtImportDir + xmmvvl + xsekundenz + ".ERR"
+.system 'U|xtcmd' background ? U|xbdoFProt & _U|xbisFProt
+.formula M|kdatfprot = T|clwindir <$ "/" + "/" + U|xempfangsverz + "/" + xmmvvl + xsekundenz + ".ERR" ? U|xbdoFProt
+.continue
+..*****************************************************************************
+!ENDEXP
+.. backup Sxxxx.FOP-file
+.formula U|xtcmd = "cp -f ow1/" + U|xtFProtDatei + " ow1/" + U|xtFProtDatei + ".bak" + 'T|datum:8'
+.system 'U|xtcmd' background
+..
+.formula U|xtcmd = "cat " + U|xtTempDatei + " > ow1/" + U|xtFProtDatei
+.system 'U|xtcmd' background
+.continue ? _G|mehr
+.box
+Die Datei "ow1/'U|xtFProtDatei'" wurde erstellt...
+.continue
+..*****************************************************************************
+
+!NOSCHEMA
+.error 'U|xtM20'
+.continue
+!NO1STRUCTUR
+.error 'U|xtM21'
+.continue
+!NO2STRUCTUR
+.error 'U|xtM22'
+.continue
+!NOFILE
+.error 'U|xtM23'
+.continue
+!FSSCHEMA
+.error 'U|xtM24'
+.continue

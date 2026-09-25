@@ -1,0 +1,137 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : owinstall/EDIORDER
+.. Date           : 24.11.2015
+.. Version        :
+.. Author         : Ozan Kesim/abas
+.. Copyright      :
+.. Functionality  :
+..                  Vorlage-Programm owinstall/ORDER
+..                  Read from additional database sales orders (Auftr„ge) the edi related records
+..                  and creates forecast delivery schedule inhouse files, starts the automotive programs,
+..                  and finally creates new sales orders 
+.. 
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text xtsel    ? _defined(xtsel)
+.type text xtdat    ? _defined(xtdat)
+.type text xterrdat ? _defined(xterrdat)
+.type text xtcom xt2id x5year x5month
+.type bool xbfirst x555555 xline1
+.type int  xilines xlinenr
+.type GD   xmontag xfreitag xdleer xorder
+...input
+.fo U|xbfirst= G|FALSE
+...load 0 object 'T|xtid'
+..
+.formula xmontag  = 'M|qmontag'
+.formula xfreitag = 'M|qfreitag'
+..
+.formula T|xtsel = "$,,num80=;y40kw=;y40woche=;yedi="+'G|true'+";y40importiert="+'G|false'+";y40rahmen=;y40bis="+'xmontag'+"!"+'xfreitag'+";@gruppe=0;"
+.formula T|xtdat = "tmp/XORDER."+'G|versionneu'
+.formula U|xterrdat = 'U|xtdat' + ".ERR"
+..
+.output new 'T|xtdat'
+.input DATEI.F
+
+#!EDP_TESTFLAG2=1
+#!EDP_DATE='xmontag:8'
+#!EDP_LANG=D
+#!EDP_UPDATEMODE=ERRABORT
+#!action=do
+#!typedcmd=infosystem
+#!dontchange=~
+#!flddelimiter=#
+
+such  #rahmen   #zekunde  #labruf  #labrufd  #uebdat  #einfzahl #kinzeilen#kartikel\
+  zn#termint  #termcod                      #menge   #0:daterz
+
+!SELECT
+.load 0 file40 'T|xtsel'   ? _T|xbfirst
+.load 0 file40             ?  T|xbfirst
+.continue END     ? _G|mehr
+.continue NOREW   ? _T|xbfirst
+.select lock object 'T|xt2id'
+.formula H|y40importiert = G|true
+.rewrite
+!NOREW
+.formula T|xt2id = 0|id
+.formula T|xbfirst = G|true
+.formula T|xilines = 0|ozeilen
+..ERFLIE#1234         #1234         #123420150105              #.       #.      #0        #20#24004\
+.formula xlinenr = 0
+.formula x555555 = false
+..
+!LINE
+.load 0 line
+.continue SELECT   ? _G|mehr
+?~ #~             #~                  #~              #1     ? xlinenr=0 & xline1
+?                                                            ? xlinenr=0 & xline1
+.formula xline1 = true
+.. BLANKET ORDER CUMULATIVE QUANTITY
+.formula U|xtsel ="$,,kopf^nummer=;@gruppe=2;kotyp=(BlanketOrder);ablagef=(No);status=`;@ordnung=kopf^nummer;kunde=" + '0|y40kundenum^nummer' + ";artikel=" + '0|y40tartikelnr^nummer'
+.load 1 sales 'xtsel'
+?ERFLIE  #'0|y40rahmen'#'0|y40rahmen'#'0|y40rahmen''xmontag:8'  #.       #.      #'1|fzahl'#20#'0|y40tartikelnr'\ ? xlinenr=0
+.formula xlinenr = xlinenr + 1
+..
+..set deb +
+?'U|xlinenr'#~             #444444             # '0|y40tmenge' #~\   ? '0|y40abdattyp(L=":")'="(DeliveryScheduleDate)" & xlinenr=1
+?'U|xlinenr'#'0|y40tdatum' #~                  # '0|y40tmenge' #~\   ? '0|y40abdattyp(L=":")'="(DeliveryScheduleDate)" & xlinenr>1
+?'U|xlinenr'#'0|y40tdatum' #~                  # '0|y40tmenge' #~\   ? '0|y40abdattyp(L=":")'="(RequirementForWeek)"
+..
+?'U|xlinenr'#~             #555555             #    ~          #~\   ? '0|y40abdattyp(L=":")'="(RequirementForMonth)" & x555555 = false
+.formula xlinenr = xlinenr + 1   ? '0|y40abdattyp(L=":")'="(RequirementForMonth)" & x555555 = false
+.formula x555555 = true ? '0|y40abdattyp(L=":")'="(RequirementForMonth)"
+.formula x5year  = 'F|year(0|y40tdatum)'
+.formula x5year  = x5year>>2
+.formula x5month = 'F|month(0|y40tdatum)'
+.formula x5month = "0" + x5month ? +'x5month'=1
+?'U|xlinenr'#~             #'x5year''x5month'00                # '0|y40tmenge' #~\   ? '0|y40abdattyp(L=":")'="(RequirementForMonth)"
+..
+.continue LINE
+!END
+~ #~             #~                  #~              #1
+
+#!EDP_TESTFLAG2=1
+#!EDP_DATE='xmontag:8'
+#!action=do
+#!typedcmd=infosystem
+#!dontchange=~
+#!flddelimiter=#
+
+such#bstart#buimport
+EDIIMPORT#1#1
+
+#!EDP_TESTFLAG2=1
+#!EDP_DATE='xmontag:8'
+#!action=do
+#!typedcmd=infosystem
+#!dontchange=~
+#!flddelimiter=#
+
+such#kbabrufe#kbuverarb
+EDIIMPVER#1#1
+.continue ? F|empty(T|xt2id)
+.select lock object 'T|xt2id'
+.formula H|y40importiert = G|true
+.rewrite
+.output
+..continue
+..      .edi 'U|xtdat'
+.formula U|xtcom = "edpimport.sh -p abas123 -I "+'U|xtdat' + " > " + 'U|xterrdat' + " 2>&1 "
+.system 'T|xtcom' background
+..
+.. clean up when we don't have errors
+.formula U|xtcom = "rm -f " + 'U|xtdat' + " " + 'U|xterrdat'            ?  (F|filesize(U|xterrdat) = 0)
+.system 'U|xtcom' background                                            ?  (F|filesize(U|xterrdat) = 0)
+.continue

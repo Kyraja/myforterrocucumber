@@ -1,0 +1,92 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDIREF.EV
+.. Datum          : 30.12.2003
+.. Version        :
+.. Autor          : ok/mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Zentrales Eventhandling fr Infosystem EDIREF,
+..                  Auswahl einer EDI-Nachricht mit einem Referenzdatensatz
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+.. Ablauf         : Eventhandling: Button + Feldaustritt
+..
+.. Functionality  : Eventhandling for infosystem EDIREF,
+..                  Selection of an edi message with a reference message.
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+.. Program flow   : field exit + button
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.type text xtsel
+.type text such
+..
+.. event evaluation
+.. ----------- ----- Kopfteil Button -------------------------------------------
+.continue SE      ? G|evtartengl = "SCREEN_ENTER"
+.continue MENU    ? G|evtartengl = "BUTTON_AFTER"   & G|evtvar = "nabu"
+.continue EDINR   ? G|evtartengl = "FIELD_EXIT"     & G|evtvar = "edinr"
+.continue TABINIT ? G|evtartengl = "FIELD_EXIT"     & G|evtvar = "edinr2"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+!SE
+..  icomessage is not available in older versions
+..  .formula M|icoidentisch = G|icomessage
+.formula M|icoidentisch = "icon:ball_blue"
+.formula M|icoangepasst = G|icook
+.continue TABINIT
+.. 
+!MENU
+.formula M|edinr = ""
+.formula M|edinr2 = ""
+.set trans +
+.menu Nachricht w„hlen
+Lieferabruf        >> .formula U|such = "R-VKAUV"
+Feinabruf          >> .formula U|such = "R-VKAUV"
+Gutschrift         >> .formula U|such = "R-VKGAV"
+Auftrag            >> .formula U|such = "R-VKAUE"
+EDL-Meldung        >> .formula U|such = "R-VKEDL"
+Abbruch            >> .continue END
+.continue END     ? _T|mehr
+.continue END     ?  T|menue = 0
+.set trans -
+.formula T|xtsel = "$,,;@gruppe=0;nummer=;such=" + 'U|such' + ";name=;.vorart=0;@ordnung=erfass"
+.select edifact 'T|xtsel'
+.continue AUSWAHL ? _G|mehr
+.assign M|edinr = H|id
+.select edifact
+.continue EDINR   ? _G|mehr
+.assign M|edinr2 = H|id
+.select edifact
+.continue EDINR   ? _G|mehr
+!AUSWAHL: user has to decide if multiple/no matches are found
+.assign M|edinr = "%,,;nummer=;such=" + 'U|such' + ";name=;.vorart=0"
+.continue TABINIT ? _G|mehr
+..
+!EDINR
+.formula M|vorart    = M|edinr^vorart
+.formula M|nachricht = ""
+.set trans +
+.formula M|nachricht = "Lieferabruf/Feinabruf"       ?  M|ksuch/"R-VKAUV*"
+.formula M|nachricht = "Gutschrift"                  ?  M|ksuch/"R-VKGAV*"
+.formula M|nachricht = "Auftrag"                     ?  M|ksuch/"R-VKAUE*"
+.formula M|nachricht = "EDL-Meldung"                 ?  M|ksuch/"R-VKEDL*"
+.set trans -
+.continue TABINIT
+..
+!TABINIT: a key field was changed, remove old rows
+.make screen line -- ? M|tzeilen > 0
+.continue END
+..*****************************************************************************
+!END
+.continue

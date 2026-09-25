@@ -1,0 +1,293 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : PRICEMAINTENANCE.EV
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  : Central handling of events with simple handling.
+..*****************************************************************************
+.set trans -
+..
+..------------------------- Header --------------------------------------------
+.continue TYPE    ? G|evtartengl ="FIELD_EXIT"   & G|evtvar ="ktyp"
+.continue NOPART  ? G|evtartengl ="FIELD_EXIT"   & G|evtvar ="nurpartnerleer"
+.continue NOPROD  ? G|evtartengl ="FIELD_EXIT"   & G|evtvar ="nurartikelleer"
+.continue CLRTAB  ? G|evtartengl ="FIELD_EXIT"   & G|evtvar ="artpgvon"
+.continue CLRTAB  ? G|evtartengl ="FIELD_EXIT"   & G|evtvar ="artpgbis"
+.continue CLRTAB  ? G|evtartengl ="FIELD_EXIT"   & G|evtvar ="klpgvon"
+.continue CLRTAB  ? G|evtartengl ="FIELD_EXIT"   & G|evtvar ="klpgbis"
+.continue CLRTAB  ? G|evtartengl ="FIELD_EXIT"   & G|evtvar ="ksaktion"
+.continue SELPART ? G|evtartengl ="FIELD_EXIT"   & G|evtvar ="selpartner"
+.continue PARTNER ? G|evtartengl ="FIELD_EXIT"   & G|evtvar ="partner"
+.continue PERCENT ? G|evtartengl ="FIELD_EXIT"   & G|evtvar ="percentual"
+.continue ABSOLUT ? G|evtartengl ="FIELD_EXIT"   & G|evtvar ="absolute"
+.continue MARK    ? G|evtartengl ="BUTTON_AFTER"  & G|evtvar ="bumark"
+.continue UNMARK  ? G|evtartengl ="BUTTON_AFTER"  & G|evtvar ="buunmark"
+..------------------------- Table ---------------------------------------------
+.continue ZEROOUT ? G|evtartengl ="BUTTON_AFTER" & G|evtvar ="tzerooutrow"
+.continue WARNING ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="mlandneu"
+.continue WARNING ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="mnlandneu"
+.continue WARNING ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="tvonneu"
+.continue WARNING ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="tbisneu"
+.continue GENULL  ? G|evtartengl ="FIELD_VALIDATION" & G|evtvar ="rpreisneu"
+.continue GENULL  ? G|evtartengl ="FIELD_VALIDATION" & G|evtvar ="nrpreisneu"
+.continue GENULL  ? G|evtartengl ="FIELD_VALIDATION" & G|evtvar ="spreisneu"
+.continue GENULL  ? G|evtartengl ="FIELD_VALIDATION" & G|evtvar ="nspreisneu"
+.continue EXPRICE ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="rpreisneu"
+.continue EXPRICE ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="nrpreisneu"
+.continue EXPRICE ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="spreisneu"
+.continue EXPRICE ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="nspreisneu"
+.continue GROUPIN ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="gruppenprneu"
+.continue CHQTY   ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="mgrenzeneu"
+.continue EXSCALE ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="mprozneu"
+.continue EXSCALE ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="mpreisneu"
+.continue EXSCALE ? G|evtartengl ="FIELD_EXIT" & G|evtvar ="mnpreisneu"
+..-----------------------------------------------------------------------------
+.continue END
+..
+!EXSCALE: Exit scaled price
+.input 'M|setrowremoval' ? _F|empty(M|setrowremoval)
+.continue WARNING
+..
+!EXPRICE: Exit unit or preproduction price
+.continue NO1 ? F|empty(M|nrpreisneu) & F|empty(M|nspreisneu) & F|empty(M|rpreisneu) & F|empty(M|spreisneu)
+.protection M|gruppenprneu 'M|aktzeile'
+.copy M|gruppenprneu = G|false
+.continue WARNING
+..
+!NO1: Reset grouping
+.protection -reset M|gruppenprneu 'M|aktzeile'
+.continue WARNING
+..
+!WARNING: Check record
+.input 'M|checkrecordrow' ? _F|empty(M|checkrecordrow)
+.continue END
+..
+!GROUPIN: Check if grouping is possible
+.continue YES1 ? M|gruppenprneu
+.continue END ? M|ktyprabatt
+.protection -reset M|rpreisneu 'M|aktzeile'
+.protection -reset M|spreisneu 'M|aktzeile'
+.protection -reset M|nrpreisneu 'M|aktzeile'
+.protection -reset M|nspreisneu 'M|aktzeile'
+.continue END
+..
+!YES1: Protect unit and preproduction prices
+.assign M|rpreisneu = ""
+.protection M|rpreisneu 'M|aktzeile'
+.assign M|spreisneu = ""
+.protection M|spreisneu 'M|aktzeile'
+.assign M|nrpreisneu = ""
+.protection M|nrpreisneu 'M|aktzeile'
+.assign M|nspreisneu = ""
+.protection M|nspreisneu 'M|aktzeile'
+.continue WARNING
+..
+!TEMPTY: Table is empty.
+.input "is/STATUS.EMPTY.TABLE"
+.continue END
+..
+!MARK: Mark all unmarked rows
+.continue TEMPTY ? F|empty(M|tzeilen)
+.select screen line 'F|formatstr("$,,tmark={1}", G|false)'
+!CHECK1
+.continue END ? _G|mehr
+.copy M|tmark = G|true
+.select screen line
+.continue CHECK1
+..
+!UNMARK: Unmark all marked rows
+.continue TEMPTY ? F|empty(M|tzeilen)
+.select screen header
+.type integer currentrowno
+.formula U|currentrowno = M|aktzeile + 1
+!WHILE
+.continue END ? U|currentrowno > M|tzeilen
+.select screen line 'U|currentrowno'
+.continue END ? _G|mehr
+.continue ITERATE ? _M|tmark
+.copy M|tmark = G|false
+.input 'M|resetrow' ? _F|empty(M|resetrow)
+.input 'M|checkrecordrow' ? _F|empty(M|checkrecordrow)
+..
+!ITERATE
+.formula U|currentrowno = U|currentrowno + 1
+.continue WHILE
+..
+!CHQTY: Check quantity
+.continue ZEROOUT ? F|empty(M|mgrenzeneu)
+.input 'M|setrowremoval' ? _F|empty(M|setrowremoval)
+.continue WARNING
+..
+!ZEROOUT: Zero out row
+.copy M|tremoverow = G|true
+.assign M|mgrenzeneu = ""
+.colour -background "-1 -1 -1" mgrenzeneu 'M|aktzeile'
+.continue ZPRICES ? _M|ktyprabatt
+.assign M|mprozneu = ""
+.assign M|mnrabneu = ""
+.continue WARNING
+..
+!ZPRICES: Zero out prices
+.assign M|mpreisneu = ""
+.assign M|mnpreisneu = ""
+.continue WARNING
+..
+!GENULL: Price must be greater or equal null
+.continue ERROR02 ? M|.G|evtvar < 0.0
+.continue END
+..
+!PERCENT: User edited percentual increase
+.continue END ? F|empty(M|percentual)
+.assign M|absolute = ""
+.continue END
+..
+!ABSOLUT: User edited absolute increase
+.continue END ? F|empty(M|absolute)
+.assign M|percentual = ""
+.continue END
+..
+!TYPE: User has edit type
+.continue SALES ? F|equals(M|ktyp, "(SalesPriceList)") ; F|equals(M|ktyp, "(SalesDiscounts)")
+.continue PURCH ? F|equals(M|ktyp, "(PurchasingPriceList)") ; F|equals(M|ktyp, "(PurchasingDiscounts)")
+..
+!SALES: User chooses sales
+.copy M|ktypvk = G|true
+.copy M|ktyprabatt = F|equals(M|ktyp, "(SalesDiscounts)")
+.continue PROTECT
+..
+!PURCH: User chooses purchasing
+.copy M|ktypvk = G|false
+.copy M|ktyprabatt = F|equals(M|ktyp, "(PurchasingDiscounts)")
+..
+!PROTECT
+.continue PPITEMS ? M|ktyprabatt
+..
+.. Protect discount items
+.protection M|setsurcharge 0
+.protection -reset M|setscaledprice 0
+.protection -reset M|setnewscaledprice 0
+.protection -reset M|setpreprodprice 0
+.protection -reset M|setnewpreprodprice 0
+.protection -reset M|setunitprice 0
+.protection -reset M|setnewunitprice 0
+.continue VCLRTAB
+..
+!PPITEMS: Protect price items
+.protection M|setscaledprice 0
+.protection M|setnewscaledprice 0
+.protection M|setpreprodprice 0
+.protection M|setnewpreprodprice 0
+.protection M|setunitprice 0
+.protection M|setnewunitprice 0
+.protection -reset M|setsurcharge 0
+..
+.. Set default if neccessary because only because there is only one option
+.copy M|setsurcharge = G|true ? _M|setsurcharge
+.continue VCLRTAB
+..
+!NOPART: Select only price or discounts with no price or discount group for partners
+.continue ON01 ? M|nurpartnerleer
+.. Set off
+.protection -reset M|artpgvon 0
+.protection -reset M|artpgbis 0
+.protection -reset M|klpgvon 0
+.protection -reset M|klpgbis 0
+.continue CLRTAB
+..
+!ON01: Alternative was activated
+.continue OFF01 ? M|nurartikelleer
+.protection M|artpgvon 0
+.protection M|artpgbis 0
+.protection M|klpgvon 0
+.protection M|klpgbis 0
+.assign M|artpgvon = ""
+.assign M|artpgbis = ""
+.assign M|klpgvon = ""
+.assign M|klpgbis = ""
+.continue CLRTAB
+..
+!OFF01: Deactivate other
+.copy M|nurartikelleer = G|false
+.continue CLRTAB
+..
+!NOPROD: Select only price or discounts with no price or discount group for products
+.continue ON02 ? M|nurartikelleer
+.. Set off
+.protection -reset M|artpgvon 0
+.protection -reset M|artpgbis 0
+.protection -reset M|klpgvon 0
+.protection -reset M|klpgbis 0
+.continue CLRTAB
+..
+!ON02: Alternative was activated
+.continue OFF02 ? M|nurpartnerleer
+.protection M|artpgvon 0
+.protection M|artpgbis 0
+.protection M|klpgvon 0
+.protection M|klpgbis 0
+.assign M|artpgvon = ""
+.assign M|artpgbis = ""
+.assign M|klpgvon = ""
+.assign M|klpgbis = ""
+.continue CLRTAB
+..
+!OFF02: Deactivate other
+.copy M|nurpartnerleer = G|false
+.continue CLRTAB
+..
+!PARTNER: User edits partner
+.continue CLRTAB ? F|empty(M|partner)
+.continue CLRTAB ? M|partner^gruppe = 1 ; M|partner^gruppe = 6
+.assign M|partner = M|partner^firma
+.continue CLRTAB
+..
+!SELPART: User clicks button to select a partner
+.continue SETROFF ? M|selpartner
+.continue SETRON
+..
+!SETROFF: User activates select a partner
+.protection M|artpgvon 0
+.protection M|artpgbis 0
+.protection M|klpgvon 0
+.protection M|klpgbis 0
+.protection M|nurpartnerleer 0
+.protection M|nurartikelleer 0
+.assign M|artpgvon = ""
+.assign M|artpgbis = ""
+.assign M|klpgvon = ""
+.assign M|klpgbis = ""
+.copy M|nurpartnerleer = G|false
+.copy M|nurartikelleer = G|false
+.protection -reset M|partner 0
+.continue CLRTAB
+..
+!SETRON: User deactivates select a partner
+.protection -reset M|artpgvon 0
+.protection -reset M|artpgbis 0
+.protection -reset M|klpgvon 0
+.protection -reset M|klpgbis 0
+.protection -reset M|nurpartnerleer 0
+.protection -reset M|nurartikelleer 0
+.protection M|partner 0
+.assign M|partner = ""
+.continue CLRTAB
+..
+!VCLRTAB
+.input "is/TABLEEREN"
+.. Set visibility
+.note -update -immediately ? G|grafik
+.formula P|maskkontextfop = "DISCOUNT" ? M|ktyprabatt
+.formula P|maskkontextfop = "PRICE" ? _M|ktyprabatt
+.continue END
+..
+!CLRTAB: Clear table
+.input "is/TABLEEREN"
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR02: Negative prices not allowed!
+.error -line 'M|aktzeile' -field 'G|evtvar' -message Es sind keine negativen Rst- oder Stckpreise erlaubt!
+.end 1

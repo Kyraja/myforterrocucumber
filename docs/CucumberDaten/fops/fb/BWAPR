@@ -1,0 +1,154 @@
+..!interpreter english translate
+..*****************************************************************************
+..
+..  Name      : BWAPRUEF
+..  Datum     : 08.03.96
+..  Vers.     : 7.1
+..  Autor     : Halina Cuber
+..
+..  Verantwortlich : hc
+..  Kontrolle      : 
+..
+..
+..  Funktion  : Kontenprfung in der Tabelle BWAA.TAB und BWAB.TAB
+..
+..*****************************************************************************
+.set trans +
+.type text xn:1 a:20 a1:20 a2:20 a3:20 xko1:8 xko2:8 xrest:200 xkenn:6
+.type text xart:1 xber:200 xsko1:8 xsko2:8
+..
+.separator #
+.input "ARB"
+..
+.formula a =xarb+"BWAPR.AUS"
+.formula a1=xarb+"BWAPR.AUS1"
+.formula a2=xarb+"BWAPR.AUS2"
+.formula a3=xarb+"BWAPR.AUS3"
+..
+!MENUE
+.output terminal
+.input BILD.F
+..
+                        Prfung der Konteneigenschaften
+                             mit den Kontentabellen
+
+.menu Testen
+Kommen in der Kostenstatistik (BWAA.TAB) nur GuV-Konten vor               >>
+Gehen Aufwands- und Erl”skonten vorzeichenrichtig in Kostenstatistik ein  >>
+Kommt ein Konto in Kapitalverwendungrechnung (BWAB.TAB) nur einmal vor    >>
+Beenden                                                                   >>
+..
+.continue ENDE  ?  F|empty(G|menue) ; G|menue = 4
+.formula xn = "A"  ?  G|menue = 1
+.formula xn = "B"  ?  G|menue = 2
+.formula xn = "C"  ?  G|menue = 3
+..
+.select company "$,gruppe=7;@gruppe=7"
+.formula xko1  =  verb
+.formula xko2  =  ford
+.formula xsko1 =  sverb
+.formula xsko2 =  sford
+.select
+..
+.output terminal
+?GuV-Konten werden gesammelt? xn="A" ; xn="B"
+..
+.formula kotab=xarb+"BWAA.TAB" ? xn="A" ; xn="B"
+.formula kotab=xarb+"BWAB.TAB" ? xn="C"
+..
+.continue AE ? xn="C"
+..
+.output new 'a1'
+.input "DATEI.F"
+!A
+.select account
+.continue AE      ? _mehr
+.continue A       ? _bu  &  xko1 <> num  &  xko2 <> num  &  xsko1 <> num  &  xsko2 <> num
+?'   num'       ?  gv  &  xn = "A"
+?'   num' 'ev'  ?  gv  &  xn = "B"
+.continue A
+!AE
+..
+.output terminal
+Tabelle 'kotab' wird gelesen
+..
+.output new 'a2'
+.input "DATEI.F"
+!B
+.select from 'kotab' xkenn # xart # xber # xrest^ ? xn="A" ; xn="B"
+.select from 'kotab' xber # xrest^ ? xn="C"
+.continue BE ? _mehr
+.continue B ? xber=""
+.....
+!U1
+.formula xtber=xber<<","
+.continue B ? xtber=""
+.formula xber=xber>>","
+.select account 'xtber'
+.continue U1  ? _mehr
+.continue G2  ? _bu  &  xko1 <> num  &  xko2 <> num  &  xsko1 <> num  &  xsko2 <> num
+..
+!G
+?'   num'? xn="A" ; xn="C"
+?'   num' 'xart'? gv & xn="B"
+!G2
+.select account
+.continue U1  ? _mehr
+.continue G2  ? _bu  &  xko1 <> num  &  xko2 <> num  &  xsko1 <> num  &  xsko2 <> num
+.continue G
+..
+!BE
+.output terminal
+Sortierung l„uft
+..
+.output new 'a'
+.input "DATEI.F"
+.continue C1 ? xn="C"
+?Vergleich: GuV-Konten und Konten aus der Tabelle 'kotab'? xn="A"
+?Vergleich: Eintrag E/V in der Maske und in der Tabelle 'kotab'? xn="B"
+
+          Stammdaten
+?       ÚÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ    Konto fehlt in der Tabelle? xn="A"
+?       ÃÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ    kein Eintrag E/V in der Maske? xn="B"
+?       ³                  V   Eintrag E/V stimmt nicht mit der Tabelle? xn="B"
+?       ³                  E               -//-                        ? xn="B"
+       ³
+       ³         Tabelle
+?       ³       ÚÄÄÄÄÄÄÄÄÄÄ    Konto steht mehrmals in der Tabelle? xn="A"
+?       ³       ÃÄÄÄÄÄÄÄÄÄÄ    kein Eintrag E/V in der Tabelle? xn="B"
+?       ³       ³          V   Eintrag E/V stimmt nicht mit den Stammdaten? xn="B"
+?       ³       ³          E               -//-                        ? xn="B"
+       ³       ³
+       v       v
+
+.continue SORT
+..
+!C1
+Kommt ein Konto in der Tabelle 'kotab' nur einmal vor?
+
+                 Tabelle
+               ÚÄÄÄÄÄÄÄÄÄÄ    Konto steht mehrmals in der Tabelle
+               ³
+               v
+
+..
+!SORT
+.occupy WERF.WEG
+.output new WERF.WEG
+.set background +
+.formula sy="sort -o "+a3+" "+a2
+.system 'sy'
+.formula sy="sort -u "+a3+">"+a1 ? xn="C"
+.system 'sy' ? xn="C"
+.formula sy="comm -3 "+a1+" "+a3+">>"+a
+.system 'sy'
+.formula sy="tabsweg "+a
+.system 'sy'
+.occupy
+.set background -
+.output terminal
+.editing 'a'
+.continue MENUE
+..
+!ENDE
+.end .

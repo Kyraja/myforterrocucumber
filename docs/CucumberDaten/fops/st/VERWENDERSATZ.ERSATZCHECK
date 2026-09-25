@@ -1,0 +1,150 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : VERWENDERSATZ.ERSATZCHECK
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : amk
+.. Funktion       : šberprft die Ersetzbarkeit von Verwendungspaaren.
+.. Ablauf         : Unterprogramm
+..
+.. Functionality  : Checks the substituability of a pair of uses.
+.. Program flow   : Subroutine
+..*****************************************************************************
+.set trans -
+..
+.. Declarations
+.type bool xoriginal2dim ? _F|defined(U|xoriginal2dim)
+.type bool xoriginal1dim ? _F|defined(U|xoriginal1dim)
+.type bool xoriginal0dim ? _F|defined(U|xoriginal0dim)
+.type bool xersatz2dim   ? _F|defined(U|xersatz2dim)
+.type bool xersatz1dim   ? _F|defined(U|xersatz1dim)
+.type bool xersatz0dim   ? _F|defined(U|xersatz0dim)
+..
+.. Initializations
+.assign M|errortext = ""
+.copy M|aktersetzbar = G|FALSE
+.copy U|xoriginal2dim = G|FALSE
+.copy U|xoriginal1dim = G|FALSE
+.copy U|xoriginal0dim = G|FALSE
+.copy U|xersatz2dim = G|FALSE
+.copy U|xersatz1dim = G|FALSE
+.copy U|xersatz0dim = G|FALSE
+.continue TABLE ? M|aktzeile > 0
+..
+.. Possible checks in header
+.. Do we have a pair?
+.continue ERROR0 ? _M|komplett
+.. Do this elements have different types?
+.continue ERROR1 ? 'M|originalart(L="0")' <> 'M|ersatzart(L="0")'
+..
+.. Different handling due to different types
+.continue ARTICLE ? F|equals(M|originalart, "(Product)")
+.continue MEANPRO ? F|equals(M|originalart, "(MeansOfProduction)")
+.continue OPERAT1 ? F|equals(M|originalart, "(Operation)")
+.continue FATAL
+..
+!ARTICLE: Article
+.. Check for same dimensions
+.copy U|xoriginal2dim = _F|empty(M|original^flme) & _F|empty(M|original^fbme)
+.copy U|xoriginal1dim = _F|empty(M|original^flme) ; _F|empty(M|original^fbme)
+.copy U|xoriginal0dim =  F|empty(M|original^flme) &  F|empty(M|original^fbme)
+.copy U|xersatz2dim   = _F|empty(M|ersatz^flme)   & _F|empty(M|ersatz^fbme)
+.copy U|xersatz1dim   = _F|empty(M|ersatz^flme)   ; _F|empty(M|ersatz^fbme)
+.copy U|xersatz0dim   =  F|empty(M|ersatz^flme)   &  F|empty(M|ersatz^fbme)
+.continue DIM2 ? U|xoriginal2dim & U|xersatz2dim
+.continue DIM1 ? U|xoriginal1dim & U|xersatz1dim
+.continue DIM0 ? U|xoriginal0dim & U|xersatz0dim
+.continue ERROR2
+..
+!DIM2: both article have 2 dimensions
+.continue TRUE ? M|original^lme = M|ersatz^lme & M|original^bme = M|ersatz^bme
+.continue ERROR2
+..
+!DIM1: both article have 1 dimension
+.continue TRUE ? F|empty(M|original^fbme) & M|original^lme = M|ersatz^lme
+.continue TRUE ? F|empty(M|original^flme) & M|original^bme = M|ersatz^bme
+.continue ERROR2
+..
+!DIM0: both article have none dimensions
+.continue TRUE ? M|original^le = M|ersatz^le
+.continue ERROR2
+..
+!MEANPRO: Means of production
+.. Overwrites old values with info from master data files except number
+.. 3 kg change to 3 l
+.continue TRUE
+..
+!OPERAT1: Operation
+.. Overwrites old values with info from master data files except number
+.. But dimensions are changeable in the row of production list itsself
+.continue TRUE
+..
+!TRUE
+.copy M|aktersetzbar = G|TRUE
+.continue END
+..
+!TABLE: Possible checks in the row of the production list
+..
+.. General checks see haeder testings
+.. Different handling due to different types
+.continue ART2    ? F|equals(M|originalart, "(Product)")
+.continue TRUE    ? F|equals(M|originalart, "(MeansOfProduction)")
+.continue OPERAT2 ? F|equals(M|originalart, "(Operation)")
+.continue FATAL
+..
+!ART2: Article
+.. Check for same dimensions
+.copy U|xoriginal2dim = _F|empty(M|lge) & _F|empty(M|breite)
+.copy U|xoriginal1dim = _F|empty(M|lge) ; _F|empty(M|breite)
+.copy U|xoriginal0dim =  F|empty(M|lge) &  F|empty(M|breite)
+.copy U|xersatz2dim   = _F|empty(M|ersatz^flme)   & _F|empty(M|ersatz^fbme)
+.copy U|xersatz1dim   = _F|empty(M|ersatz^flme)   ; _F|empty(M|ersatz^fbme)
+.copy U|xersatz0dim   =  F|empty(M|ersatz^flme)   &  F|empty(M|ersatz^fbme)
+.continue TDIM2 ? U|xoriginal2dim & U|xersatz2dim
+.continue TDIM1 ? U|xoriginal1dim & U|xersatz1dim
+.continue TDIM0 ? U|xoriginal0dim & U|xersatz0dim
+.continue ERROR2
+..
+!TDIM2: both article have 2 dimensions
+.continue TRUE ? M|ellme = M|ersatz^lme & M|elbme = M|ersatz^bme
+.continue ERROR2
+..
+!TDIM1: both article have 1 dimension
+.continue TRUE ? F|empty(M|breite) & M|ellme = M|ersatz^lme
+.continue TRUE ? F|empty(M|lge) & M|elbme = M|ersatz^bme
+.continue ERROR2
+..
+!TDIM0: both article have none dimensions
+.continue TRUE ? M|melle = M|ersatz^le
+.continue ERROR2
+..
+!OPERAT2: Operation
+.. Okay, if both elements have the same dimensions
+.continue TRUE ? M|ersatz^zr = M|ellme & M|ersatz^ze = M|elbme
+.continue ERROR2
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+!FATAL
+.error -number 1111
+.end 1
+..
+..
+!ERROR0
+.set trans +
+.assign M|errortext = "Die Paarung aus Original und Ersatz ist nicht komplett!"
+.set trans -
+.continue END
+..
+!ERROR1
+.set trans +
+.assign M|errortext = "Ersatz von zwei Fertigungslistenelementen verschiedener Art ist nicht m”glich!"
+.set trans -
+.continue END
+..
+!ERROR2
+.set trans +
+.assign M|errortext = "Die Dimensionen zwischen Original und Ersatz sind nicht tauschbar! Die Ersetzung muss manuell vorgenommen werden."
+.set trans -
+.continue END

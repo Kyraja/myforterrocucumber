@@ -1,0 +1,192 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : DFUE.EXP.CHECK
+.. Datum          : 21.12.2007
+.. Version        : 2008r0n02
+.. Autor          : mh / ma / ok
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Prft ob die Einstellungen und FOPs fr den DFUE-Export
+..                  vollst„ndig und korrekt sind.
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+..   Parameter    Bedeutung
+..   ---------------------------------------------------------
+..   xbquiet      = ja   :  Keine Ausgabe / kein Ausfhren des
+..                          Druckermen (DRUCKER efop)
+..                = nein :  M”glichkeit ber Druckermen den
+..                          Ausgabekanal zu w„hlen
+..   xbfehler     der Rckgabewert, ja = Einstellunge/FOPs sind fehlerhaft
+..                                       oder fehlen
+..
+.. Ablauf         : ein Unterprogramm
+..
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+..   Argument     meaning
+..   ---------------------------------------------------------
+..   xbquiet      = true :  no output, no call/showing of the printmenu
+..                = false:  option to show test result via an output channel
+..                          selected via printmenu (DRUCKER efop)
+..   xbfehler     return value, true = config / efops have errors / are missing
+..
+.. Program flow   : a sub routine
+...Includes       :
+..  include     dfue/DFUE.EXP.INI
+..*****************************************************************************
+.set trans -
+.set demand -
+..
+.. argument
+.type bool  xbquiet          ? _F|defined(T|xbquiet)
+..
+.. return value
+.type bool  xbfehler         ? _F|defined(T|xbfehler)
+.type bool  xbsendeverzfehler ? _F|defined(T|xbsendeverzfehler)
+..
+.. local fields
+.type text  xtsel            ? _F|defined(T|xtsel)
+.type text  xfname           ? _F|defined(T|xfname)
+.type text  xpostbetreff     ? _F|defined(T|xpostbetreff)
+.type text  xpostempf        ? _F|defined(T|xpostempf)
+.type text  xpostftext       ? _F|defined(T|xpostftext)
+.type text  xpoststichw1     ? _F|defined(T|xpoststichw1)
+.type text  xpoststichw2     ? _F|defined(T|xpoststichw2)
+.type text  xpoststichw3     ? _F|defined(T|xpoststichw3)
+.type text  xpoststichw4     ? _F|defined(T|xpoststichw4)
+.type text  xtsystem         ? _F|defined(T|xtsystem)
+..
+.. filenames
+.type text  xtdfueexpcheck   ? _F|defined(T|xtdfueexpcheck)
+.type text  xtexpfiles       ? _F|defined(T|xtexpfiles)
+.type text  xtfilename       ? _F|defined(T|xtfilename)
+..
+.formula T|xbfehler = false
+.formula T|xbsendeverzfehler = false
+..
+.input "ARB"
+..
+..
+.file -tempname T|xtdfueexpcheck
+.output new 'T|xtdfueexpcheck'
+.input "DATEI.F"
+..
+.set trans +
+'txname             '      DFš - Export - Check         'zeit ' 'datum '
+                           ====================
+.set trans -
+..
+..
+.. read export configuration
+.input "dfue/DFUE.EXP.INI"
+OK.
+..
+..
+..
+.. check postage cost
+.formula T|xtsel = "$,,;@gruppe=4;such=`" + 'T|xSwVersand'
+.select parts 'T|xtsel'
+.set trans +
+?Versandkosten 'xSwVersand                       ' OK.              ?  T|mehr
+?Versandkosten 'xSwVersand                       ' ===> fehlen.     ? _T|mehr
+.set trans -
+.formula T|xbfehler = true                                           ? _T|mehr
+..
+..
+.. check packing cost
+.formula T|xtsel = "$,,;@gruppe=4;such=`" + 'T|xSwVerpackung'
+.select parts 'T|xtsel'
+.set trans +
+?Verpackungskosten 'xSwVerpackung                ' OK.              ?  T|mehr
+?Verpackungskosten 'xSwVerpackung                ' ===> fehlen.     ? _T|mehr
+.set trans -
+.formula T|xbfehler = true                                           ? _T|mehr
+..
+..
+.. does the edi export directory exist / is it a directory or a file
+.formula T|xbsendeverzfehler = true      ? _F|fileexists(T|xsendeverz)
+.formula T|xbsendeverzfehler = true      ? _F|isdir(T|xsendeverz)
+.formula T|xbfehler = true               ?  T|xbsendeverzfehler
+.set trans +
+Sendeverzeichnis 'T|xsendeverz'
+?                 ---->                            OK.              ? _T|xbsendeverzfehler
+?                 ---->                            ===> fehlt.      ?  T|xbsendeverzfehler
+.set trans -
+.continue EVERZ   ?  T|xbsendeverzfehler
+..
+.formula T|xbsendeverzfehler = true      ? _F|filewriteable(T|xsendeverz)
+.formula T|xbfehler = true               ?  T|xbsendeverzfehler
+.set trans +
+?Sendeverzeichnis beschreibbar                     OK.              ? _T|xbsendeverzfehler
+?Sendeverzeichnis beschreibbar                     ===> Fehler      ?  T|xbsendeverzfehler
+.set trans -
+!EVERZ
+..
+..
+.. check if logfile exists
+.. a missing logfile is not a critical error
+.continue NOPROT  ? _F|fileexists(T|xdproto)
+.continue ROPROT  ? _F|filewriteable(T|xdproto)
+.set trans +
+Protokolldatei 'xdProto                        '  existiert OK.
+.continue EPROT
+!ROPROT: logfile is read only
+Protokolldatei 'xdProto                        '  ===> nicht beschreibbar.
+.continue EPROT
+!NOPROT: no logfile yet
+Protokolldatei 'xdProto                        '  existiert noch nicht OK.
+.set trans -
+!EPROT
+..
+..
+.set trans +
+Ausgabe der Belege fr VK-RE:
+?gleich nach dem šbertragen                            ?  xbDruckVKRE
+?Ausgabeger„t 'xDfueVKREgeraet                       ' ?  xbDruckVKRE
+?manuell                                               ? _xbDruckVKRE
+.set trans -
+..
+..
+.. try to send a (mail) message
+.continue ERRPOST ? _(+F|foppath(T|xdpostsenden) > 0)
+.set trans +
+Sende den Checkbericht als Post an 'T|xiddfueexverteil':
+.output
+.formula T|xpostbetreff = "Test DFš-EXPORT"
+.formula T|xpoststichw1 = "Test DFš-EXPORT"
+.formula T|xpoststichw2 = ""
+.formula T|xpoststichw3 = ""
+.formula T|xpoststichw4 = ""
+.formula T|xpostftext   = T|xtdfueexpcheck
+.formula T|xpostempf    = xIdDfueExVerteil
+.input 'T|xdpostsenden'   ? _F|empty(T|xpostempf)
+.continue EPOST
+!ERRPOST
+Test der Post kann nicht durchgefhrt werden.
+Programm 'T|xdpostsenden             ' fehlt.     ===> Fehler.
+.set trans -
+.formula xbfehler = true
+!EPOST
+..
+!REPORT
+.output addedto 'T|xtdfueexpcheck'
+.set trans +
+?Es sind Fehler aufgetreten. ?  T|xbfehler
+?Alles OK.                   ? _T|xbfehler
+.set trans -
+======================================================================
+.output
+.continue END     ?  T|xbquiet
+.output terminal
+.input DRUCKER
+.input 'T|xtdfueexpcheck'
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,69 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDI.DO.OSEARCH.LASTDELIVERY
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : carue
+.. Functionality  : Updates date of last delivery note in edi message.
+..*****************************************************************************
+.set trans -
+..
+.. NOTE
+.. * Does not work for esp deliveries
+.. * Expensive on performance when searching files deliveries
+.. * Done a second time when processing with <(EDIProcessing)> <(Edit)>, (SalesDeliverySchedule)
+..
+.. Remove line to enable program
+.continue END
+..
+.. Required: edi message in H buffer
+.continue NOEDI ? _F|defined(H|edinachr)
+.continue NOTYPE ? F|empty(H|edinachr)
+..
+.. Local field to clean up last delivery "date"
+.type text U|xleinlief ? _F|defined(U|xleinlief)
+.formula U|xleinlief = F|regreplaceall(H|leinlief, "[\.\$\&\'\(\)\*\+\=\/\;\:\<\>\?\`\^\ \-]", "")
+..
+.. Nothing to do
+.continue END ? F|empty(U|xleinlief)
+..
+.. Lock Edi message!
+.select lock edifact 'H|id'
+.continue NOLOCK ? _G|mehr ; _G|gesperrt
+..
+.. Find date of last posted delivery note
+.load 1 sales 'F|formatstr("$,,;@gruppe=1;ktyp=4;@ordnung=vom.(Backwards);nummer={1}!{1};rahmen={2};@ablageart=(Active)", U|xleinlief, H|ideksrah)'
+.load 1 sales 'F|formatstr("$,,;@gruppe=1;ktyp=4;@ordnung=vom.(Backwards);nummer={1}!{1};rahmen={2};@ablageart=(Filed)", U|xleinlief, H|ideksrah)' ? _G|mehr
+.. If no success: check if delivery note is edl withdrawal
+.load 1 sales 'F|formatstr("$,,;@gruppe=1;ktyp=4;@ordnung=vom.(Backwards);edllsnr={1}!{1};rahmen={2};@ablageart=(Active)", U|xleinlief, H|ideksrah)' ? _G|mehr
+.load 1 sales 'F|formatstr("$,,;@gruppe=1;ktyp=4;@ordnung=vom.(Backwards);edllsnr={1}!{1};rahmen={2};@ablageart=(Filed)", U|xleinlief, H|ideksrah)' ? _G|mehr
+.. If no success: check if delivery note is edl -> llz with no blanket order
+.load 1 sales 'F|formatstr("$,,;@gruppe=1;ktyp=4;@ordnung=vom.(Backwards);edllsnr={1}!{1};kunde2={2};@ablageart=(Active)", U|xleinlief, H|idkundeab)' ? _G|mehr
+.load 1 sales 'F|formatstr("$,,;@gruppe=1;ktyp=4;@ordnung=vom.(Backwards);edllsnr={1}!{1};kunde2={2};@ablageart=(Filed)", U|xleinlief, H|idkundeab)' ? _G|mehr
+.continue RELEASE ? _G|mehr
+.continue WRITE  ? F|empty(H|leinlida)
+.. Date in edi message for last delivery is a quarter year different then erp
+.continue RELEASE ?  F|abs(H|leinlida-1|vom)>90
+!WRITE
+.formula H|leinlida = 1|vom ? G|mehr
+.rewrite
+..
+!RELEASE: release buffers
+.load 1 ? F|defined(1|id)
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!NOLOCK
+.error Das Sperren des EDI-Datensatzes 'H|nummer' ist gescheitert.
+.end 1
+..
+!NOEDI
+.error Fehler bei Start der Objektsuche: Kein EDI-Datensatz angegeben.
+.end 1
+..
+!NOTYPE
+.error Fehler bei Start der Objektsuche: EDI-Datensatz 'H|nummer' hat keinen Nachrichten-Eintrag.
+.end 1

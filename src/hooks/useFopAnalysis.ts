@@ -19,6 +19,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type { FopFile, FopBinding, FopTreeNode, FopAnalysis, FopUsage } from '../types/fop';
 import type { TableDef } from '../types/gherkin';
 import type { AgentType } from './useAgentActivity';
+import type { WorkflowEmitter } from '../lib/workflowEmitter';
 import { parseFopSource, computeFileHash } from '../lib/fopParser';
 import { parseFopTxt } from '../lib/fopTxtParser';
 import { buildFopTree, getAllFopPaths } from '../lib/fopTreeResolver';
@@ -26,6 +27,7 @@ import { buildUsageIndex } from '../lib/fopUsageIndex';
 import { FopCache, ensureOutputDirectories } from '../lib/fopCache';
 import { runFopAnalysis } from '../lib/fopOrchestrator';
 import { saveFopDirectoryHandle, loadFopDirectoryHandle, clearFopDirectoryHandle, verifyPermission } from '../lib/fileSystemAccess';
+import { getFopAutoRefreshIntervalSeconds, isFopAutoRefreshEnabled } from '../lib/settings';
 
 /** Full reactive state of the FOP workspace exposed by the hook. */
 export interface FopWorkspaceState {
@@ -85,6 +87,8 @@ interface UseFopAnalysisOptions {
   onActivityFinish?: (type: AgentType, status: 'done' | 'error') => void;
   /** Update a specific process-diagram step with live data (buffers, fields, etc.). */
   onStepUpdate?: (stepId: string, item: string, input?: string, output?: string) => void;
+  /** Unified workflow-timeline emitter supplied by the outer app. */
+  getEmitter?: (type: AgentType) => WorkflowEmitter;
 }
 
 const INITIAL_STATE: FopWorkspaceState = {
@@ -308,6 +312,7 @@ export function useFopAnalysis(opts: UseFopAnalysisOptions) {
 
     try {
       const currentOpts = optsRef.current;
+      const emitter = currentOpts.getEmitter?.('fop-analyst');
       const result = await runFopAnalysis({
         fopFiles,
         roots: selectedRoots,
@@ -319,6 +324,7 @@ export function useFopAnalysis(opts: UseFopAnalysisOptions) {
         forceRefresh,
         analystAgentId: currentOpts.analystAgentId,
         guidelinesAgentId: currentOpts.guidelinesAgentId,
+        emitter,
         onProgress: ({ current, currentFop, phase, input, output }) => {
           const agentType = phase === 'guidelines' ? 'fop-guidelines' as const : 'fop-analyst' as const;
           // For KI phases, use activity callbacks
@@ -432,6 +438,7 @@ export function useFopAnalysis(opts: UseFopAnalysisOptions) {
   }, []);
 
   const [restoring, setRestoring] = useState(true);
+  const pollFingerprintRef = useRef<string>('');
 
   // Auto-restore saved FOP directory on mount
   useEffect(() => {
@@ -447,6 +454,44 @@ export function useFopAnalysis(opts: UseFopAnalysisOptions) {
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Auto-refresh changed FOP folders (polling + metadata fingerprint).
+  useEffect(() => {
+    if (!state.rootDir) return;
+    if (!isFopAutoRefreshEnabled()) return;
+
+    let cancelled = false;
+    let running = false;
+    const intervalMs = getFopAutoRefreshIntervalSeconds() * 1000;
+
+    const tick = async () => {
+      if (cancelled || running) return;
+      if (state.isLoading || state.isAnalyzing) return;
+      running = true;
+      try {
+        const fp = await scanDirectoryFingerprint(state.rootDir, '');
+        if (!pollFingerprintRef.current) {
+          pollFingerprintRef.current = fp;
+          return;
+        }
+        if (fp !== pollFingerprintRef.current) {
+          pollFingerprintRef.current = fp;
+          await loadDirectory(state.rootDir);
+        }
+      } catch {
+        // Ignore transient read errors (permission race, file lock)
+      } finally {
+        running = false;
+      }
+    };
+
+    void tick();
+    const id = window.setInterval(() => { void tick(); }, intervalMs);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [state.rootDir, state.isLoading, state.isAnalyzing, loadDirectory]);
 
   return {
     ...state,
@@ -498,6 +543,36 @@ async function scanDirectory(
       results.push({ relativePath, content });
     }
   }
+}
+
+async function scanDirectoryFingerprint(
+  dir: FileSystemDirectoryHandle,
+  prefix: string,
+): Promise<string> {
+  const rows: string[] = [];
+  for await (const [name, handle] of dir.entries()) {
+    if (name.startsWith('.') || name === 'Konzept') continue;
+    if (handle.kind === 'directory') {
+      const subDir = await dir.getDirectoryHandle(name);
+      const newPrefix = prefix ? `${prefix}/${name}` : name;
+      rows.push(await scanDirectoryFingerprint(subDir, newPrefix));
+      continue;
+    }
+
+    const certainlyFop = isCertainFopFile(name);
+    const certainlyNotFop = isCertainlyNotFop(name);
+    if (certainlyNotFop) continue;
+
+    const file = await (handle as FileSystemFileHandle).getFile();
+    if (!certainlyFop) {
+      const peek = await file.slice(0, 200).text();
+      if (!peek.includes('!interpreter')) continue;
+    }
+    const relativePath = prefix ? `${prefix}/${name}` : name;
+    rows.push(`${relativePath}|${file.size}|${file.lastModified}`);
+  }
+  rows.sort();
+  return rows.join('\n');
 }
 
 /** Files that are certainly FOP by their extension — no need to peek content */

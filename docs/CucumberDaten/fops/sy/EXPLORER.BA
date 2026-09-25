@@ -1,0 +1,581 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name              : EXPLORER.BA
+.. Author            : tiwe
+.. Verantwortlich    : tiwe
+.. Kontrolleur       : cl
+.. Functionality	   : Buttonnach / Button After
+..                        Absetzen eines ls-Befehls
+..                        Navigation durch Ordner
+..                        Lîschen/Kopieren/Vergleichen von Dateien
+..*****************************************************************************
+.. include sy/EXPLORER.ZEILE
+..*****************************************************************************
+.. Variablen
+..*****************************************************************************
+.type text xtfile1        ? _F|defined(U|xtfile1)
+.type text xtline         ? _F|defined(U|xtline)
+.type text xtcmd          ? _F|defined(U|xtcmd)
+.type text xtcmdsich      ? _F|defined(U|xtcmdsich)
+.type text xtcmdkopie     ? _F|defined(U|xtcmdkopie)
+.type text xtkomplett     ? _F|defined(U|xtkomplett) 
+.type text xtrechte       ? _F|defined(U|xtrechte) 
+.type text xtowner        ? _F|defined(U|xtowner)
+.type text xtgruppe       ? _F|defined(U|xtgruppe)
+.type text xtgroesse      ? _F|defined(U|xtgroesse)  
+.type text xtdatum        ? _F|defined(U|xtdatum)
+.type text xtuhrzeit      ? _F|defined(U|xtuhrzeit)
+.type text xtdatei        ? _F|defined(U|xtdatei)
+.type integer xianzdat       ? _F|defined(U|xianzdat)
+.type text xtzeile        ? _F|defined(U|xtzeile)    
+.type text xtpfad         ? _F|defined(U|xtpfad) 
+.type text xtfileclient       ? _F|defined(U|xtfileclient)
+.type text xtfileclientdiff   ? _F|defined(U|xtfileclientdiff)
+.type text xtdatum         ? _F|defined(U|xtdatum)
+.type text xtuhrzeit       ? _F|defined(U|xtuhrzeit)
+.type text xtcopy          ? _F|defined(U|xtcopy)
+.type GD14 xddatsortiert  ? _F|defined(U|xddatsortiert)
+.type bool xbsichern      ? _F|defined(U|xbsichern)
+.type bool xbsichanzeigen ? _F|defined(U|xbsichanzeigen)
+.type bool xbkopie        ? _F|defined(U|xbkopie)
+.type bool xbinput        ? _F|defined(U|xbinput)
+.type bool xbsicherr      ? _F|defined(U|xbsicherr)
+.type bool xbkopiererr    ? _F|defined(U|xbkopiererr)
+.type bool xbzielerr      ? _F|defined(U|xbzielerr)
+.type text xtfehlzaehler  ? _F|defined(U|xtfehlzaehler )
+.type GL60 xtindatsuch    ? _F|defined(U|xtindatsuch)
+.type text xtdatendung    ? _F|defined(U|xtdatendung)
+..*****************************************************************************
+.. Eventhandling
+..*****************************************************************************
+.set trans -
+.continue BSTART2 ? G|evtvar = "vergleichen" & M|vergleichen & G|evtartengl = "FIELD_EXIT"
+.continue BNACH   ? G|evtartengl = "BUTTON_AFTER"
+.continue ENDE
+!BNACH
+.continue BSTART  ? G|evtvar = "bstart"
+.continue LOESCH1 ? G|evtvar = "tloeschen1"
+.continue LOESCH2 ? G|evtvar = "tloeschen2"
+.continue ZICON1  ? G|evtvar = "tzeilenicon"
+.continue ZICON2  ? G|evtvar = "tzeilenicon2"
+.continue ZURUECK ? G|evtvar = "einszurueck"
+.continue GREP    ? G|evtvar = "ttreffer"
+.continue GREP2   ? G|evtvar = "ttreffer2"
+.continue DIFF    ? G|evtvar = "tvergleich"
+.continue COPY    ? G|evtvar = "tcopy"
+.continue INPUT   ? G|evtvar = "inputdatanz"
+.continue MOVEDIF ? G|evtvar = "tdatdiffen"
+.continue LOESDIF ? G|evtvar = "loeschdiff"
+.continue DIFFEN  ? G|evtvar = "diffen"
+.continue ZEIGSIC ? G|evtvar = "sichdatzeigen"
+.continue REMOSIC ? G|evtvar = "sichdatloeschen"
+.continue STATPF1 ? G|evtvar = "statuspfad1"
+.continue STATPF2 ? G|evtvar = "statuspfad2"
+.continue STATPF3 ? G|evtvar = "statuspfad3"
+.continue STATPF4 ? G|evtvar = "statuspfad4"
+.continue STATPF5 ? G|evtvar = "statuspfad5"
+.continue STATPF6 ? G|evtvar = "statuspfad6"
+.continue STATPF7 ? G|evtvar = "statuspfad7"
+.continue STATDT1 ? G|evtvar = "statusdattyp1" 
+.continue STATDT2 ? G|evtvar = "statusdattyp2"
+.continue STATDT3 ? G|evtvar = "statusdattyp3"
+.continue STATDT4 ? G|evtvar = "statusdattyp4"
+.continue STATDT5 ? G|evtvar = "statusdattyp5"
+.continue STATSI  ? G|evtvar = "statussich"
+.continue ENDE
+..****************************************************
+.. Ein Verzeichnis zurÅck
+..****************************************************
+!ZURUECK
+.continue ERR02 ? M|vergleichen
+.formula M|suchbegriff = ""
+.formula M|verzeichnis1 = ""
+.formula M|pfad1 = M|pfad1 <$ "/" 
+.formula M|pfad1 = M|pfad1 <$ "/" 
+.formula M|pfad1 = M|pfad1 + "/"
+.formula M|such1 = "ls -ltr " + 'M|pfad1' 
+.continue BSTART
+..****************************************************
+.. Angezeigte Sicherungsdateien lîschen
+..****************************************************
+!REMOSIC
+..mit Schalter "bbackup" arbeiten
+..wird gesetzt beim Sicherungsdateien anzeigen
+.select screen header
+.select screen line
+.continue ERR11 ? _M|bbackup
+.continue ENDE ? _G|mehr
+.box -button no:yes
+Achtung!
+Die in der Tabelle enthaltenen Dateien werden gelîscht.
+..
+.continue ENDE  ? G|box = G|boxno 
+.continue ENDE  ? G|box = G|boxcancel 
+!SICHLOP
+..zuerst prÅfen, ob es sich um eine BAK-Datei handelt
+.formula U|xtdatendung = M|tkomplett >$ "."
+.continue NXTLINE ? _F|equals(U|xtdatendung, "BAK")
+..hier die Sicherung lîschen
+.formula U|xtcmd = "rm -f " + 'M|tkomplett'
+.system 'U|xtcmd' background
+!NXTLINE
+.select screen line
+.continue SICHLOP ? G|mehr
+.copy M|bbackup = G|false
+.make screen line --
+.continue ENDE
+..****************************************************
+.. Sicherungsdateien anzeigen
+..****************************************************
+!ZEIGSIC
+.. Beim Anzeigen der Sicherungsdateien sucht man auch rekursiv
+.. Wenn U|xbsichanzeigen auf ja steht, wird in sy/EXPLORER.ZEILE die Zeile entsprechend gelesen
+.copy U|xbsichanzeigen = G|true
+.protection M|vergleichen
+.formula M|suchbegriff = ""
+.formula M|such1 = "find " + 'M|pfadvor6' + " -iname *" + 'M|sichjahr' + "*.BAK -ls"
+.copy M|bbackup = G|true
+.continue BSTART3
+..****************************************************
+.. Start-Button drÅcken
+..****************************************************
+..hier wurde der Start-Knopf gedÅckt
+!BSTART
+.formula M|such1 = "" ? M|bbackup
+.copy M|bbackup = G|false
+!BSTART3: Anzeige von Sicherungsdateien
+.select screen header
+.select screen line
+.make screen line --
+.protection -reset M|vergleichen ? _U|xbsichanzeigen
+.continue ERR04 ? F|empty(M|such1)
+.continue SICHANZ ? U|xbsichanzeigen = G|true
+.continue ERR05 ? M|rekursiv & F|empty(suchbegriff)
+!SICHANZ
+.formula M|vergleichen   = G|false
+.formula P|maskkontextfop  = ""
+.formula M|pfad2 = ""
+..prÅfen, ob es den Pfad auch gibt
+.formula U|xtcmd = "ls -ltr " + 'M|pfad1'
+.system 'U|xtcmd' background
+.continue ERR10 ? _G|mehr
+.formula U|xtcmd = M|such1 + " > rmtmp/EXPLORER.SUCH1" 
+.system 'U|xtcmd' background
+..Datei aus einandernehmen
+..editing "rmtmp/EXPLORER.SUCH1"
+.select from "rmtmp/EXPLORER.SUCH1" U|xtline ^
+!DATLOOP
+.input "sy/EXPLORER.ZEILE"
+.select from "rmtmp/EXPLORER.SUCH1" U|xtline ^
+.continue DATLOOP ? G|mehr 
+.. Vergleichen
+.continue ENDE ? _M|vergleichen
+..hier wurde Vergleichen auf ja gesetzt
+!BSTART2
+.continue ENDE ? M|tzeilen = 0
+.select screen header
+.select screen line
+!LPVERG
+..Nur Dateien vergleichen
+.continue NODAT ? M|tzeilenicon <> M|icondatei
+.formula M|tsuch  = "ls -ltrd " + 'M|pfad2' + 'M|tdatei1'      
+.formula U|xtcmd = M|tsuch + " > rmtmp/EXPLORER.VERG" 
+.system 'U|xtcmd' background
+.select from "rmtmp/EXPLORER.VERG" U|xtline ^
+.input "sy/EXPLORER.ZEILE"
+..Beide Dateien diffen
+.formula U|xtcmd = "diff " + M|tkomplett + " " + M|tkomplett2 + " > rmtmp/EXPLORER.DIFF"
+.system 'U|xtcmd' background
+.formula M|tvergleich = M|icondiff ? _G|mehr
+.formula M|tcopy      = M|iconcopy ? _G|mehr
+.continue VIEWALL   ? _M|nurdiffszeigen
+.continue VIEWDIFF  ?  M|nurdiffszeigen
+!VIEWALL 
+.select screen line
+.continue LPVERG ? G|mehr
+.continue ENDE
+!VIEWDIFF
+.make screen line -o ? M|tvergleich <> M|icondiff
+.select screen line ? M|tvergleich = M|icondiff
+.continue LPVERG ? G|mehr
+.continue ENDE
+!NODAT
+..nur editiere Dateien anzeigen, keine Ordner und unbekannte Dateien
+.make screen line -
+.continue LPVERG ? G|mehr
+.continue ENDE
+..****************************************************
+.. Vergleich von Datei und Datei2
+..****************************************************
+!DIFF
+.continue ENDE ? M|tvergleich <> M|icondiff
+.continue DIFTOL1 ? M|diffverw & _F|empty(M|difftool)
+.formula U|xtcmd = "diff " + M|tkomplett + " " + M|tkomplett2
+.system 'U|xtcmd'
+.continue ENDE
+!DIFTOL1
+.formula U|xtfileclient     = G|dblquote + G|cltempdir + "\" + 'M|tdatei1' + G|dblquote
+.formula U|xtfileclientdiff = G|dblquote + G|cltempdir + "\" + 'M|tdatei2'+ ".R" + G|dblquote
+.pc.copy -pc -conv 'M|tkomplett' 'U|xtfileclient'
+.pc.copy -pc -conv 'M|tkomplett2' 'U|xtfileclientdiff'
+.pc.exec -wait 'M|difftool' 'U|xtfileclient' 'U|xtfileclientdiff'
+.continue ENDE
+..****************************************************
+.. Kopieren vom fÅhrenden System links ins System rechts
+..****************************************************
+!COPY
+.copy U|xbkopiererr = G|false
+.copy U|xbsicherr   = G|false
+.copy U|xbzielerr   = G|false
+.copy U|xbsichern   = G|false
+.copy U|xbkopie   = G|true ? _F|empty(M|pfadvor7)
+.continue ENDE ? M|tcopy <> M|iconcopy
+.. Sicherung im Zielsystem
+.continue NOSICH ? _M|sichverw
+..wenn es die Datein im Zielsystem gar nicht gibt, ist eine Sicherung unnîtig
+.continue NOSICH ? _F|empty(M|tkomplett) &  F|empty(tkomplett2)
+.continue NOSICH ? F|empty(M|tsichverz)
+.. Im Ziel-System gibt es die Datei und eine Sicherung soll verwendet werden
+.copy U|xbsichern       = G|true
+.assign U|xddatsortiert = G|zeitpunkt
+.. Kopierbefehl fÅr Sicherungsdatei
+.formula U|xtcmdsich = "cp " + M|tkomplett2 + " " + M|tsichverz + M|tdatei2 + "." + 'U|xddatsortiert' + ".BAK"
+!NOSICH
+.. Kopierbefehl fÅr die Kopie
+.continue NOCOPY ? _U|xbkopie
+.formula U|xtcmdkopie = "cp "  + M|tkomplett2 + " " + M|tkopieverz + M|tdatei2
+!NOCOPY
+..Update des Systems
+.formula U|xtcmd = "cp " + M|tkomplett + " " + M|tkomplett2                   ? _F|empty(M|tkomplett) & _F|empty(tkomplett2)
+.. im rechten System gibt es die Datei noch nicht
+.formula U|xtcmd = "cp " + M|tkomplett + " " + M|tpfad2 + 'M|tdatei1'    ? _F|empty(M|tkomplett) &  F|empty(tkomplett2)
+.continue NOSICH3 ? _M|sicherheit
+..
+.box -button no:yes
+ Achtung! Dateien werden kopiert:
+ 
+ Quelle:        'M|tkomplett'
+? Ziel:             'M|tkomplett2'         ? _F|empty(M|tkomplett) & _F|empty(tkomplett2)
+? Ziel:             'M|tpfad2''M|tdatei1' ? _F|empty(M|tkomplett) &  F|empty(tkomplett2)
+? Kopie:         'M|tkopieverz''M|tdatei2'                       ? U|xbkopie
+? Sicherung: 'M|tsichverz''M|tdatei2 '.'U|xddatsortiert'.BAK      ? U|xbsichern 
+..
+.continue ENDE  ? G|box = G|boxno 
+.continue ENDE  ? G|box = G|boxcancel 
+!NOSICH3
+..zuerst die Sicherung im Zielsystem erstellen
+.system 'U|xtcmdsich' background    ? U|xbsichern
+.copy U|xbsicherr = G|true  ? _G|mehr
+..dann die Datei im Ziel-System Åberschreiebn
+.system 'U|xtcmd' background
+.copy U|xbzielerr = G|true  ? _G|mehr
+..nun noch die Kopie erstellen
+.system 'U|xtcmdkopie' background ? U|xbkopie
+.formula U|xbkopiererr = G|true   ? _G|mehr
+.continue COPYOK  ? _U|xbsicherr & _U|xbkopiererr & _U|xbzielerr
+.continue COPYERR 
+!COPYOK
+.formula M|tcopy = ""
+.formula M|tvergleich = ""
+.continue ENDE  
+!COPYERR
+.box
+? Ins Ziel-System konnte nicht kopiert werden.   ? U|xbzielerr
+? Die Backup-Datei konnte nicht erstellt werden. ? U|xbsicherr    & U|xbsichern
+? Die Kopie konnte nicht erstellt werden.        ? U|xbkopiererr  & U|xbkopie  
+..
+.continue ENDE
+..
+..****************************************************
+.. Lîschen Datei 1
+..****************************************************
+!LOESCH1 
+.continue ENDE ? M|tzeilenicon <> M|icondatei
+.formula U|xtcmd = "rm -f " + M|tkomplett
+.continue NOSICH1 ? _M|sicherheit
+.box -button no:yes
+Achtung: Datei lîschen: 'M|tkomplett'
+..
+.continue ENDE  ? G|box = G|boxno 
+.continue ENDE  ? G|box = G|boxcancel 
+!NOSICH1
+.system 'U|xtcmd' background
+.note Datei erfolgreich gelîscht!
+..
+.continue ENDE
+..****************************************************
+.. Lîschen Datei 2
+..****************************************************
+!LOESCH2 
+.continue ENDE ? M|tzeilenicon2 <> M|icondatei
+.formula U|xtcmd = "rm -f " + M|tkomplett2
+.continue NOSICH2 ? _M|sicherheit
+.box -button no:yes
+Achtung: Datei lîschen: 'M|tkomplett2'
+..
+.continue ENDE  ? G|box = G|boxno 
+.continue ENDE  ? G|box = G|boxcancel 
+!NOSICH2
+.system 'U|xtcmd' background
+.note Datei erfolgreich gelîscht!
+..
+.continue ENDE
+..****************************************************
+.. Datei îffnen / Verzeichnis îffnen
+..****************************************************
+!ZICON1
+..Datei oder Verzeichnis
+.continue DATEI1   ? M|tzeilenicon = M|icondatei
+.continue VERZZU   ? M|tzeilenicon = M|iconverzzu
+.continue ERR03    ? M|tzeilenicon = M|icondateigesperrt
+.continue ERR01
+.continue ENDE
+..
+!DATEI1: Datei anzeigen
+.continue TXTEDIT ? M|texteditverw & _F|empty(M|textedittool)
+.editing 'M|tkomplett'
+.continue ENDE
+!TXTEDIT
+..TempDir: 'G|cltempdir'
+..TemporÑre Datei auf dem Client erzeugen
+.formula U|xtfileclient = G|dblquote + G|cltempdir + "\" + 'M|tdatei1' + G|dblquote
+..Datei vom Server zum Client kopieren
+.pc.copy -pc -conv 'M|tkomplett' 'U|xtfileclient'
+..Client-Datei îffnen
+.pc.exec -wait 'M|textedittool' 'U|xtfileclient'
+..hier vorher noch prÅfen ob ursprÅngliche Datei verÑndert wurde
+.formula U|xtcmd = "ls -ltr " + 'M|tkomplett' + " > rmtmp/EXPLORER.CHECKTIME"
+.system 'U|xtcmd' background
+.select from "rmtmp/EXPLORER.CHECKTIME" U|xtline ^
+.formula U|xtline = 'F|regreplaceall(U|xtline, " +", "#")' 
+.formula U|xtline          = U|xtline >> "#"
+.formula U|xtline          = U|xtline >> "#"
+.formula U|xtline          = U|xtline >> "#"
+.formula U|xtline          = U|xtline >> "#"
+.formula U|xtline          = U|xtline >> "#"
+.formula U|xtdatum         = U|xtline << "#"
+.formula U|xtline          = U|xtline >> "#"
+.formula U|xtdatum         = U|xtdatum + " " + U|xtline << "#"
+.formula U|xtline          = U|xtline >> "#"
+.formula U|xtuhrzeit       = U|xtline << "#"
+..énderungsdatum und Uhrzeit sind nun bekannt
+.continue REWRITE ? U|xtuhrzeit = M|tuhrzeit1 & U|xtdatum = M|tdatum1
+..box
+..Shell: Datum
+...U|xtuhrzeit: 'U|xtuhrzeit'
+..U|xtdatum: 'U|xtdatum'
+..Infosystem: Datum
+..M|tuhrzeit1: 'M|tuhrzeit1'
+..M|tdatum1: 'M|tdatum1'
+..
+..editing "rmtmp/EXPLORER.CHECKTIME"
+.formula U|xtcopy = M|tkomplett + ".COPY"
+.pc.copy -conv 'U|xtfileclient' 'U|xtcopy' 
+.box
+Achtung: Die Datei 'M|tdatei1' wurde verÑndert.
+Die Datei wurde nicht aktualisiert.
+Kopie 'U|xtcopy' wurde erstellt.
+..
+.continue BSTART
+!REWRITE
+..wieder zum Server zurÅckkopieren
+.pc.copy -conv 'U|xtfileclient' 'M|tkomplett' 
+.continue BSTART
+!VERZZU: Verzeichnis geschlossen, dieses îffnen
+.copy M|rekursiv = G|false
+.formula M|suchbegriff = ""
+.formula M|verzeichnis1 = ""
+.formula M|pfad1 = M|tpfad1 + M|tdatei1 + "/"
+.formula M|such1  = "ls -ltr " + M|pfad1
+.continue BSTART
+!ZICON2
+.continue DATEI2   ? M|tzeilenicon2 = M|icondatei
+.continue ERR03    ? M|tzeilenicon = M|icondateigesperrt
+.continue ENDE
+!DATEI2: Datei anzeigen
+.editing 'M|tkomplett2'
+.continue ENDE
+..***************************************************
+.. Treffer, nun den grep îffnen
+..***************************************************
+!GREP
+.continue NOTREF1 ? M|ttreffer <> M|icontreffer
+.formula U|xtindatsuch = G|dblquote + M|indatsuch + G|dblquote
+.formula U|xtcmd = "grep -n " + 'U|xtindatsuch' + " " + 'M|tkomplett' 
+.system 'U|xtcmd'
+!NOTREF1
+.continue ENDE
+!GREP2
+.continue NOTREF2 ? M|ttreffer2 <> M|icontreffer
+.formula U|xtindatsuch = G|dblquote + M|indatsuch + G|dblquote
+.formula U|xtcmd = "grep -n " + 'U|xtindatsuch' + " " + 'M|tkomplett2' 
+.system 'U|xtcmd'
+!NOTREF2
+.continue ENDE
+..***************************************************
+.. Input-Datei anzeigen
+..***************************************************
+!INPUT
+.continue ENDE ? M|inputdatanz <> M|iconvorbelegung
+.editing "sy/EXPLORER.INPUT"
+..Vorbelegungen aktualisieren
+.copy U|xbinput = G|true
+.input "sy/EXPLORER.SE"
+.continue ENDE
+..
+..****************************************************
+.. Dateien in den diff schieben
+..****************************************************
+!MOVEDIF
+.continue ERR06 ? F|empty(M|tkomplett)
+.continue ERR07 ? M|tzeilenicon = M|iconverzzu
+.continue ERR08 ? _F|empty(M|diffdat1) & _F|empty(M|diffdat2)
+.continue DAT1DIFF ? F|empty(M|diffdat1)
+.continue DAT2DIFF ? F|empty(M|diffdat2)
+!DAT1DIFF
+.formula M|diffdat1 = M|tdatei1
+.formula M|diffkomplett1 = M|tkomplett
+.continue ENDE
+!DAT2DIFF
+.formula M|diffdat2 = M|tdatei1
+.formula M|diffkomplett2 = M|tkomplett
+.continue ENDE
+..****************************************************
+.. Datei 1 und Datei 2 wieder leeren
+..****************************************************
+!LOESDIF
+.formula M|diffdat1 = ""
+.formula M|diffdat2 = ""
+.formula M|diffkomplett1 = ""
+.formula M|diffkomplett2 = ""
+.continue ENDE
+..****************************************************
+.. Datei 1 und Datei 2 diffen
+..****************************************************
+!DIFFEN
+.continue ERR09 ? F|empty(M|diffdat1) ; F|empty(M|diffdat2)
+.continue DIFTOL2 ? M|diffverw & _F|empty(M|difftool)
+.formula U|xtcmd = "diff " + M|diffkomplett1 + " " + M|diffkomplett2
+.system 'U|xtcmd'
+.continue ENDE
+!DIFTOL2
+.formula U|xtfileclient     = G|dblquote + G|cltempdir + "\" + 'M|diffdat1' + G|dblquote
+.formula U|xtfileclientdiff = G|dblquote + G|cltempdir + "\" + 'M|diffdat2'+ ".R" + G|dblquote
+.pc.copy -pc -conv 'M|diffkomplett1' 'U|xtfileclient'
+.pc.copy -pc -conv 'M|diffkomplett2' 'U|xtfileclientdiff'
+.pc.exec -wait 'M|difftool' 'U|xtfileclient' 'U|xtfileclientdiff'
+.continue ENDE
+..****************************************************
+.. Status / Fehler anzeigen Pfade
+..****************************************************
+!STATPF1:
+.formula U|xtfehlzaehler = "1"
+.continue ANZPFAD
+!STATPF2:
+.formula U|xtfehlzaehler = "2"
+.continue ANZPFAD
+!STATPF3:
+.formula U|xtfehlzaehler = "3"
+.continue ANZPFAD
+!STATPF4:
+.formula U|xtfehlzaehler = "4"
+.continue ANZPFAD
+!STATPF5:
+.formula U|xtfehlzaehler = "5"
+.continue ANZPFAD
+!STATPF6:
+.formula U|xtfehlzaehler = "6"
+.continue ANZPFAD
+!STATPF7:
+.formula U|xtfehlzaehler = "7"
+.continue ANZPFAD
+!ANZPFAD
+.continue ENDE ? M|statuspfad.xtfehlzaehler = M|icongruen
+.continue ENDE ? F|empty(M|statuspfad.xtfehlzaehler)
+.box
+'M|fehlerpfad.xtfehlzaehler'
+..
+.continue ENDE
+..****************************************************
+.. Status / Fehler anzeigen Dateien
+..****************************************************
+!STATDT1:
+.formula U|xtfehlzaehler = "1"
+.continue ANZDAT
+!STATDT2:
+.formula U|xtfehlzaehler = "2"
+.continue ANZDAT
+!STATDT3:
+.formula U|xtfehlzaehler = "3"
+.continue ANZDAT
+!STATDT4:
+.formula U|xtfehlzaehler = "4"
+.continue ANZDAT
+!STATDT5:
+.formula U|xtfehlzaehler = "5"
+.continue ANZDAT
+!ANZDAT
+.continue ENDE ? M|statusdattyp.xtfehlzaehler = M|icongruen
+.continue ENDE ? F|empty(M|statusdattyp.xtfehlzaehler)
+.box
+'M|fehlerdattyp.xtfehlzaehler'
+..
+.continue ENDE
+..****************************************************
+.. Status / Fehler Sicherung
+..****************************************************
+!STATSI
+.continue ENDE ? M|statussich = M|icongruen
+.continue ENDE ? F|empty(M|statussich)
+.box
+'M|fehlersich'
+..
+.continue ENDE
+..*****************************************************************************
+.. Programmende
+..*****************************************************************************
+!ENDE
+.continue
+..*****************************************************************************
+.. Fehler
+..*****************************************************************************
+!ERR01: keine Aktion auf Element mîglich
+.error Keine Aktion auf Element mîglich. Da unbekanntes Element
+..
+.end 1
+!ERR02: nicht mîglich im Vergleichsmodus
+.error Bitte Vergleichen deaktivieren.
+..
+.end 1
+!ERR03: Dateityp wird nicht unterstÅtzt
+.error Unbekannter Dateityp. ôffnen nicht mîglich.
+..
+.end 1
+!ERR04: Keine Suchkriterien
+.error Suchbegriff eingeben.
+..
+.end 1
+!ERR05 Rekursives suchen ohne Suchbegriff
+.error Rekursives Suchen: Suchbegriff eingeben
+.cursor suchbegriff
+.end 1
+!ERR06 tkomplett ist leer
+.error Pfad und Datei sind leer. Kein Diff mîglich.
+.cursor tkomplett 'M|aktzeile'
+.end 1
+!ERR07 nur Dateien kînnen gedifft werden
+.error Ein Verzeichnis kann nicht gedifft werden.
+.end 1
+!ERR08 Beide diff-Dateien sind bereits gefÅllt
+.error Beide Diff-Dateien sind bereits befÅllt. Bitte die Felder leeren.
+.end 1
+!ERR09 Diff Dateien sind nicht gefÅllt
+.error Diff-Dateien sind leer
+.end 1
+!ERR10 Pfad existiert nicht
+.error Der Pfad existiert nicht!
+.end 1
+!ERR11 keine Backup-Dateien
+.error Es werden keine Backup-Dateien angezeigt.
+.end 1
+

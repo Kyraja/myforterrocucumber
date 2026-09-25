@@ -1,0 +1,137 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDINFAKT.TAB
+.. Datum          : 24.05.2007
+.. Version        : 2007r3n00
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Zeigt Lieferscheinpositionen und zugehîrige Rechnungspositionen an
+..                  im H-Puffer wird ein Lieferschein Åbergeben, hier werden
+..                  die Zeilen zum Lieferschein gelesen, und zu jeder Lieferscheinpositon
+..                  die VerkaufsvorgÑnge, die die Position als ^orig haben
+..                  (also die Rechnungspositionen)
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+.. Ablauf         : Zeilen-FOP, wird pro Lieferschein aufgerufen
+..
+.. Functionality  : shows delivery slip rows and invoice items for those rows
+..                  is called with a delivery note in H-buffer,
+..                  here the rows for the delivery note are read, and for
+..                  each delivery note row all sales processes which have the
+..                  row as  ^orig are read (i.e. invoice items)
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+.. Program flow   : row-efop, called for each delivery slip
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.. selection
+.type text xtselo      ? _F|defined(xtselo)
+.. quantitiy on delivery note
+.type real xrdnmge     ? _F|defined(xrdnmge)
+.. sum quantitiy on invoice items for one delivery note item
+.type real xriimge     ? _F|defined(xriimge)
+.. old value on delivery note
+.type real xrdnoldval  ? _F|defined(xrdnoldval)
+.. sum old value on invoice items for one delivery note item,
+.. must be calucated to match currency of delivery note
+.type real xriioldval  ? _F|defined(xriioldval)
+..
+!NEXT: loop rows of delivery note
+.select line
+.continue END     ? _T|mehr
+.. new item, no invoice checked yet
+.formula T|xrdnmge  = 0
+.formula T|xriimge  = 0
+.formula T|xrdnoldval = 0
+.formula T|xriioldval = 0
+..
+.. restrictions for item
+.continue NEXT    ?  H|artex^gruppe <> 1
+.continue NEXT    ?  H|artex^packmit = true
+.continue NEXT    ?  H|artex^id  <> M|kartikel^id  &  _F|empty(M|kartikel)
+.continue NEXT    ?  H|zrahmen^id <> M|krahmen^id  &  _F|empty(M|krahmen)
+..
+.make screen line +O
+.colour -background -1 -1 -1 'M|aktzeile'
+.. tdatum = kopf^vom (?)
+.formula M|ttyp       = 0
+.formula M|tdatum     = H|kopf^budat
+.formula M|tvorgang   = H|kopf^id
+.formula M|tvortyp    = H|kopf^typa
+.formula M|tls        = H|kopf^id
+.formula M|trahmen    = H|zrahmen^id
+.formula M|tkunde     = H|kopf^kunde
+.formula M|tartikel   = H|artex^id
+.formula M|tnamebspr  = M|tartikel^sucherw
+.formula M|twerk      = H|kopf^werk
+.formula M|tablstelle = H|kopf^ablstelle
+.formula M|tmenge     = H|mge
+.formula M|the        = H|he
+.. old values, i.e. those in the delivery slip
+.formula M|tapreis    = H|preis
+.formula M|tawert     = H|pwert
+.assign M|tland    = H|kopf^land^id
+.. remember for comparisson with invoices
+.formula T|xrdnoldval = H|pwert
+.formula T|xrdnmge    = H|mge
+..
+.. process chain with deliver slip row as ^orig
+..
+.formula T|xtselo = "$,,;@gruppe=2;@ablage=(3);@zeilen=(0);orig=" + 'H|id' + ";art=" + H|artex^id
+.load 1 sales 'T|xtselo'
+!NORIG
+.continue EORIG   ? _T|mehr
+.make screen line +O
+.colour -background 'U|xabassubtotal' 'M|aktzeile'
+.formula M|ttyp       = 1
+.formula M|tdatum     = 1|kopf^budat
+.formula M|tvorgang   = 1|kopf^id
+.formula M|tvortyp    = 1|kopf^typa
+.formula M|tls        = H|kopf^id
+.formula M|trahmen    = 1|zrahmen^id
+.formula M|tkunde     = 1|kopf^kunde
+.formula M|tartikel   = 1|artex^id
+.formula M|tnamebspr  = M|tartikel^sucherw
+.formula M|tmenge     = 1|mge
+.formula M|the        = 1|he
+.formula M|tapreis    = 1|preis
+.formula M|tawert     = 1|pwert
+.assign M|tland    = 1|kopf^land^id
+.. remember+sum for comparisson with delivery note
+.. currency of items summed into T|xriioldval have to match currency of delivery note
+.formula T|xriioldval = T|xriioldval + M|tawert                                                ?  M|tls^land^id =  M|tland^id
+.formula T|xriioldval = T|xriioldval + F|fxamount(M|tls^land^id,M|tawert,M|tdatum,M|tland^id)  ?  M|tls^land^id <> M|tland^id
+.formula T|xriimge    = T|xriimge + 1|mge
+.load 1 sales
+.continue NORIG
+!EORIG
+..
+.. compare delivery slip row with invoice items
+..
+.make screen line +O
+.colour -background 'U|xabastotal' 'M|aktzeile'
+.formula M|ttyp       = 2
+.formula M|tls        = H|kopf^id
+.formula M|trahmen    = H|zrahmen^id
+.formula M|tkunde     = H|kopf^kunde
+.formula M|tartikel   = H|artex^id
+.formula M|tnamebspr  = M|tartikel^sucherw
+.formula M|the        = H|he
+.assign M|tland    = H|kopf^land^id
+.formula M|tmenge     = T|xrdnmge    - T|xriimge
+.formula M|tawert     = T|xrdnoldval - T|xriioldval
+.formula M|tstatus    = M|ergdifficon        ?  _F|empty(M|tmenge) ; _F|empty(M|tawert)
+..
+.continue NEXT
+..*****************************************************************************
+!END
+.continue

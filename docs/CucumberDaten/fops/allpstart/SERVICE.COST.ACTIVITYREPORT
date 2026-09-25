@@ -1,0 +1,649 @@
+..!interpreter english declaration noabbrev
+.. at 2017-03-06, 11:37
+.set trans -
+..========================================================================
+..==  Name              : SERVICE.COST.ACTIVITYREPORT
+..==  Pfad              : allpstart
+..==  Funktion          : Serviceprogramm zum Nachtragen der buchungsrelevanten Daten in der Leistungsmeldung
+..==  Erstellungsdatum  : 12.03.2014
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==  Menuepunkte       :
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird ber EasyCase bearbeitet und mit easy2lg generiert!
+..==  Žnderungen auáerhalb von EasyCase werden nach der n„chsten Žnderung
+..==  im EasyCase wieder berschrieben und drfen daher NICHT mit "edi"
+..==  realisiert werden!
+..==
+..==
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF"
+..====================================================
+.type text    xtsel xtprot xtkrit xtrohl xtselkritfelder xtprojleistkatid xtleiart xtindex
+.type text    xtwert xtkore xtpreis xttext
+.type text    xt001 xt002
+.type real    xrvsatzwert
+.type integer ximenu ximonat
+.type GD      xbudat xdkonddat xdatum xd1
+.type GD19    xdhistzeitstempel
+.type GJ      xgjahr
+.type bool    xbmehr xbwert xbkore xbpreis xbperopen xbtrstorno xblnstorno xybnomsg
+.type P86:1   xpprojekt
+.type P149:3  xpaufgabe
+.type P3:2    xpaupos
+.type integer xprocsp      ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- SelLock -----
+.select lock add 0|id
+.continue EL001 ? _(_(G|mehr))
+.set trans +
+Die Leistungsmeldung '0|nummer' kann nicht bearbeitet werden.
+.set trans -
+!EL001
+.continue 'xprocst.xprocsp'
+!PROC002: ----- PreiseErmitteln -----
+.continue EL002 ? _(F|sysinfo(18)^allpstd)
+.assign  U|xpprojekt        = H|yprojekt^id
+.assign  U|xpaufgabe        = H|yaufgabe^id
+.assign  U|xpaupos          = H|yaufgabe^yvorpos
+.assign  U|xdkonddat        = H|yadatum
+.formula U|xtprojleistkatid = H|yprojekt^yprojleistkatid
+.continue EL003 ? _((F|empty(H|ylsposid)) & (F|empty(H|yreposid)))
+.formula U|xpaartikel = H|yvkartikel^id
+.input 'U|xtupartpreis'
+.rewrite
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.formula H|ylmpreis   = U|xyhpreis
+.formula H|ytplmpreis = U|xyhpreis
+.continue FI003
+!EL003
+.output addedto 'U|xtprot'
+.set trans +
+Arbeitszeit ist bereits abgerechnet
+.set trans -
+!FI003
+.continue EL004 ? _((F|empty(H|ymzlsposid)) & (F|empty(H|ymzreposid)))
+.formula U|xpaartikel = H|ymaschvkart^id
+.input 'U|xtupartpreis'
+.rewrite
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+.formula H|ymzpreis   = U|xyhpreis
+.formula H|ytpmzpreis = U|xyhpreis
+.continue FI004
+!EL004
+.output addedto 'U|xtprot'
+.set trans +
+Maschinenzeit ist bereits abgerechnet
+.set trans -
+!FI004
+!EL002
+.continue 'xprocst.xprocsp'
+!PROC003: ----- VerrechnungssatzErmitteln -----
+.formula U|xrvsatzwert = 0
+.continue EL005 ? _(F|defined(9|id))
+.formula U|xtsel = "$,,ykstelle==" + 9|id + ";yleiart==" + U|xtleiart + ";ygjahr=" + F|tostring(U|xgjahr) + ";ybstd=(No);@filingmode=(Active);@rows=(Yes)"
+.load 8 group "150:4" 'U|xtsel'
+.continue EL006 ? _(G|mehr)
+.load 8 line '8|selzeile'
+.formula U|xrvsatzwert = 8|yvsf.ximonat                                         ?  8|yvland = G|inland ;  F|empty(8|yvland)
+.formula U|xrvsatzwert = F|fxamount(G|inland,8|yvsf.ximonat,U|xt001,8|yvland)   ? _8|yvland = G|inland & _F|empty(8|yvland)
+.continue FI006
+!EL006
+.formula U|xtsel = "$,,yleiart==" + U|xtleiart + ";ygjahr=" + F|tostring(U|xgjahr) + ";ybstd=(Yes);@filingmode=(Active);@rows=(Yes)"
+.load 8 group "150:4" 'U|xtsel'
+.continue EL007 ? _(G|mehr)
+.load 8 line '8|selzeile'
+.formula U|xrvsatzwert = 8|yvsf.ximonat                                         ?  8|yvland = G|inland ;  F|empty(8|yvland)
+.formula U|xrvsatzwert = F|fxamount(G|inland,8|yvsf.ximonat,U|xt001,8|yvland)   ? _8|yvland = G|inland & _F|empty(8|yvland)
+!EL007
+!FI006
+.continue FI005
+!EL005
+.formula U|xtsel = "$,,yleiart==" + U|xtleiart + ";ygjahr=" + F|tostring(U|xgjahr) + ";ybstd=(Yes);@filingmode=(Active);@rows=(Yes)"
+.load 8 group "150:4" 'U|xtsel'
+.continue EL008 ? _(G|mehr)
+.load 8 line '8|selzeile'
+.formula U|xrvsatzwert = 8|yvsf.ximonat                                         ?  8|yvland = G|inland ;  F|empty(8|yvland)
+.formula U|xrvsatzwert = F|fxamount(G|inland,8|yvsf.ximonat,U|xt001,8|yvland)   ? _8|yvland = G|inland & _F|empty(8|yvland)
+!EL008
+!FI005
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+!REPT001: ==============================
+.formula U|ximenu = 0
+.set trans +
+.formula U|xtwert  = "Nur Nachtragen der Werte zu vorhandenen Leistungsarten"
+.formula U|xtkore  = "Nachtragen der Kostenrechnungsdaten (Leistungsarten, Stammkostenstelle, Schichtplan etc.) und Werte"
+.formula U|xtpreis = "Nachtragen Verkaufspreise (nur in nicht abgerechneten Leistungsmeldungen)"
+.set trans -
+.formula U|xtwert  = " > " + U|xtwert  + " < "  ? U|xbwert
+.formula U|xtkore  = " > " + U|xtkore  + " < "  ? U|xbkore
+.formula U|xtpreis = " > " + U|xtpreis + " < "  ? U|xbpreis
+.set trans +
+.menu(0,0,0) Auswahl
+Selektion der Leistungsmeldungen: 'U|xtrohl' 'U|xtkrit' >>.formula U|ximenu = 1
+
+'U|xtwert'                                             >>.formula U|ximenu = 10
+'U|xtkore'                                             >>.formula U|ximenu = 20
+?'U|xtpreis'                                            >>.formula U|ximenu = 30    ? F|sysinfo(18)^allpstd
+
+Servicelauf starten                                     >>.formula U|ximenu = 99
+.set trans -
+.continue BRK001 ? _(U|ximenu = 1)
+.continue EL009 ? _(F|empty(U|xtrohl))
+.load 0 group "147:1" "%,,;@range=(Yes)"
+.continue FI009
+!EL009
+.load 0 group "147:1" 'F|expr(U|xtrohl + U|xtkrit)'
+!FI009
+.formula U|xtrohl = G|selrohl
+.formula U|xtkrit = G|selkrit
+.formula U|xtselkritfelder = G|selkritfelder
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(U|ximenu = 10)
+.copy U|xbwert  = _U|xbwert
+.copy U|xbkore  = G|false       ? U|xbwert
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(U|ximenu = 20)
+.copy U|xbkore  = _U|xbkore
+.copy U|xbwert  = G|false       ? U|xbkore
+.continue ESAC001
+!BRK003
+.continue BRK004 ? _(U|ximenu = 30)
+.copy U|xbpreis = _U|xbpreis
+.continue ESAC001
+!BRK004
+.continue BRK005 ? _(U|ximenu = 99)
+.continue EL010 ? _((F|empty(U|xtrohl)) ; (F|empty(U|xtkrit)))
+.set trans +
+.box Achtung
+Bitte zuerst die Selektionskriterien festlegen.
+.set trans -
+.formula U|ximenu = 0
+.continue FI010
+!EL010
+.continue EL011 ? _((_(U|xbwert)) & (_(U|xbkore)) & (_(U|xbpreis)))
+.set trans +
+.box Achtung
+Kein Service ausgew„hlt.
+.set trans -
+.formula U|ximenu = 0
+!EL011
+!FI010
+.continue ESAC001
+!BRK005
+!ESAC001: =====   ENDCASE   =====
+.continue REPT001 ? _((G|menue  = 0) ; (U|ximenu = 99))
+.continue EL012 ? _(_(G|menue = 0))
+.input "is/PREISAUSKUNFT"       ? U|xbpreis
+.copy U|xybnomsg = G|true
+.input DATEI.F
+.formula U|xtprot = "rmtmp/X.SERVICE.COST.ACTIVITYREPORT." + F|tostring(G|VERSIONNEU) + ".TMP"
+.output new 'U|xtprot'
+.load 0 group "147:1" 'F|expr(U|xtrohl + U|xtkrit)'
+.continue EL013 ? _(G|mehr)
+.output terminal
+.set trans +
+Daten der Leistungsmeldungen werden aktualisiert:
+.set trans -
+
+?'U|xtwert'     ? U|xbwert
+?'U|xtkore'     ? U|xbkore
+?'U|xtpreis'    ? U|xbpreis
+!EL013
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.set trans +
+.formula U|xttext = "Leistungsmeldung"
+.set trans -
+.output addedto 'U|xtprot'
+'U|xttext': '0|nummer' '0|such'
+.formula U|xt001 = (0|yadatum:8)<<6
+.continue EL014 ? _(_(F|defined(U|xbopen.xt001)))
+.type bool xbopen.xt001
+.formula U|xbudat = U|xt001 + "01"
+.input "allpstart/PRUEF.BUDAT"
+.copy U|xbopen.xt001 = U|xbbuchbar
+.continue EL015 ? _(U|xbopen.xt001)
+.formula U|xd1 =  U|xbudat + 31
+.formula U|xd1 = (U|xd1:8)<<6 + "01"
+.formula U|xd1 =  U|xd1 - 1
+.load 9 group 'U|xydbgrwipkonfighist' 'F|expr("$,,;ybewertdat==" + U|xd1:8 + ";@filingmode=(Active)")'
+.continue EL016 ? _(G|mehr)
+.copy U|xbopen.xt001 = G|false  ? 9|yperwipabs
+.load 9
+!EL016
+!EL015
+!EL014
+.copy U|xbperopen = U|xbopen.xt001
+.continue EL017 ? _((_(F|empty(0|yprojekt))) & (U|xbperopen))
+.formula U|xt002 = "p" + 0|yprojekt^nummer + "d" + U|xt001
+.continue EL018 ? _(_(F|defined(U|xbpropen.xt002)))
+.type bool U|xbpropen.xt002
+.formula U|xd1 =  U|xt001 + "01"
+.formula U|xd1 =  U|xd1 + 31
+.formula U|xd1 = (U|xd1:8)<<6 + "01"
+.formula U|xd1 =  U|xd1 - 1
+.formula U|xtsel = "$,,yprojekt==" + 0|yprojekt^id + ";ystichtag==" + U|xd1:8 + ";ybabgeschlossen==(Yes);@filingmode=(Active)"
+.load 8 group 'U|xydbgrwipstat' 'U|xtsel'
+.copy U|xbpropen.xt002 = _G|mehr
+!EL018
+.continue EL019 ? _(_(U|xbpropen.xt002))
+.copy U|xbperopen = G|false
+.output addedto 'U|xtprot'
+.set trans +
+.formula U|xtsel = F|formatstr("WiP fr das Projekt {1} ist bereits abgeschlossen.", 0|yprojekt^such)
+.set trans -
+'U|xtsel'
+!EL019
+!EL017
+.continue EL020 ? _(U|xbperopen)
+.copy U|xbtrstorno = G|false
+.continue EL021 ? _(((U|xbwert) ; (U|xbkore)) & (_(F|empty(0|ytransaktion))))
+.load 9 add 0|id
+.output addedto 'U|xtprot'
+.set trans +
+Transaktion '9|ytransaktion' wird storniert
+.set trans -
+.copy U|xblnstorno = G|false
+.input 'U|xtupstorno'
+.copy U|xbtrstorno = G|true
+.select -
+!EL021
+.select lock add 0|id
+.continue EL022 ? _(G|mehr)
+.continue EL023 ? _(F|empty(H|ytransaktion))
+.continue EL024 ? _(U|xbkore)
+.continue EL025 ? _((_(F|empty(H|ypersonal))) & (_(F|empty(H|yadatum))))
+.continue EL026 ? _(F|sysinfo(10)^ykonfigprjm^ypmbpershistorie)
+.formula U|xdhistzeitstempel = H|yadatum:8 + " " + 'H|yazeit'
+.formula U|xtsel = "$,,yhistpersonal==" + H|ypersonal^id        ? _G|evtkommd = G|kaktname12
+.formula U|xtsel = "$,,yhistpersonal==" + H|ypersonal^id        ?  G|evtkommd = G|kaktname12
+.formula U|xtsel = U|xtsel + ";yhistzeitstempel=" + 'U|xdhistzeitstempel(L=":")' + "!"
+.formula U|xtsel = U|xtsel + ";@ordnung=yhistzeitstempel;@filingmode=(Active)"
+.load 9 group 'U|xydbgrpershistorie' 'U|xtsel'
+.load 9 add H|ypersonal                 ? _G|mehr
+.continue FI026
+!EL026
+.load 9 add H|ypersonal
+!FI026
+.copy H|ypersperstypk  = 9|yprjmperstypk
+.assign H|yperskstelle   = 9|kstelle^id             ?  9|dnr = 11
+.assign H|yperskstelle   = 9|ykstelle^id            ? _9|dnr = 11
+.copy H|ypersleiart    = 9|yprjmleiart
+.copy H|yperswipleiart = 9|yprjmwipleiart
+.copy H|ypersgkleiart  = 9|yprjmgkleiart
+.copy H|yperssplan     = 9|splan                    ?  9|dnr = 11
+.copy H|yperssplan     = 9|ysplan                   ? _9|dnr = 11
+.copy H|yperssplan     = H|yperskstelle^yprjmsplan      ? F|empty(H|yperssplan)
+.copy H|ypersstandort  = 9|yprjmstandort
+.copy H|ypersstandort  = H|yperskstelle^yprjmstandort   ? F|empty(H|ypersstandort) & _9|dnr = 11
+.copy H|ypkstvollleiart = H|yperskstelle^yprjmvollleiart
+.copy H|ypkstwipleiart  = H|yperskstelle^yprjmwipleiart
+.copy H|ypkstgkleiart   = H|yperskstelle^yprjmgkleiart
+.copy H|ypkstzvksleiart = H|yperskstelle^yprjmzvksleiart
+.assign  U|xbmehr = G|false
+.formula U|xdatum = H|yadatum
+.formula U|xtsel = "$,,ypersonal==" + H|ypersonal^id
+.formula U|xtsel = U|xtsel + ";yvon=!" + H|yadatum:8
+.formula U|xtsel = U|xtsel + ";@ordnung=yvon,ybis;@filingmode=(Active)"
+.load 9 group 'U|xydbgrkstellezuord' 'U|xtsel'
+!LOOP002: ==============================
+.continue ELOP002 ? _((G|mehr) & (_(U|xbmehr)))
+.continue EL027 ? _((F|empty(9|ybis)) ; (U|xdatum <= 9|ybis))
+.assign U|xbmehr = G|true
+.copy H|yperskstzuord   = 9|ykstelle
+.copy H|ypersleiart     = 9|yvollleiart     ? _F|empty(9|yvollleiart)
+.copy H|yperswipleiart  = 9|ywipleiart      ? _F|empty(9|ywipleiart)
+.copy H|ypersgkleiart   = 9|ygkleiart       ? _F|empty(9|ygkleiart)
+.copy H|yperssplan      = 9|ysplan          ? _F|empty(9|ysplan)
+.copy H|ypersstandort   = 9|ystandort       ? _F|empty(9|ystandort)
+!EL027
+.load 9 continue
+.continue LOOP002
+!ELOP002: ==============================
+!EL025
+.continue EL028 ? _(F|empty(H|yprojekt))
+.continue EL029 ? _(F|empty(H|yaufgabe))
+.continue EL030 ? _(F|empty(H|ytaetschl^ykstelle))
+.copy   H|ykstelle        = H|yperskstelle
+.assign H|ypraaverantwkst = ""
+.copy   H|ypraaktr        = H|yperskstelle  ?  H|ytaetschl^ystammkst ; F|empty(H|ypraaktr)
+.continue FI030
+!EL030
+.copy   H|ykstelle        = H|ytaetschl^ykstelle
+.assign H|ypraaverantwkst = ""
+.copy   H|ypraaktr        = H|ytaetschl^ykstelle
+!FI030
+.continue FI029
+!EL029
+.copy H|ypraaverantwkst = H|yaufgabe^yverantwkst
+.copy H|ypraaktr        = H|yaufgabe^yktr
+.copy H|ykstelle        = H|yaufgabe^yverantwkst
+!FI029
+.continue FI028
+!EL028
+.copy H|ypraaverantwkst = H|yprojekt^yverantwkst
+.copy H|ypraaktr        = H|yprojekt^yktr
+.copy H|ykstelle        = H|yprojekt^yverantwkst
+!FI028
+.copy H|yleiart = H|ypersleiart ? _F|empty(H|ypersleiart)
+.load 9 add H|ypraaverantwkst
+.continue EL031 ? _(G|mehr)
+.copy H|yvkstvollleiart = 9|yprjmvollleiart
+.copy H|yvkstwipleiart  = 9|yprjmwipleiart
+.copy H|yvkstgkleiart   = 9|yprjmgkleiart
+.copy H|yvkstzvksleiart = 9|yprjmzvksleiart
+!EL031
+.rewrite
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+!EL024
+.continue EL032 ? _((U|xbwert) ; (U|xbkore))
+.copy U|xdatum = H|yadatum
+.continue EL033 ? _(_(F|empty(U|xdatum)))
+.formula U|ximonat = F|month(U|xdatum)
+.copy    U|xgjahr = F|getfy(U|xdatum)
+.continue EL034 ? _(_(G|mehr))
+.copy    U|xgjahr = F|firstfy()     ? U|xdatum < G|datum
+.formula U|ximonat = 1              ? U|xdatum < G|datum
+.copy    U|xgjahr = F|lastfy()      ? U|xdatum > G|datum
+.formula U|ximonat = 12             ? U|xdatum > G|datum
+!EL034
+.load 9 add H|ypraaverantwkst
+.continue EL035 ? _(G|mehr)
+.formula U|xtindex = "k" + 9|nummer + "d" + U|xt001
+.continue EL036 ? _(F|empty(9|yprjmvollleiart))
+.formula H|yvsvkstvollleiart = 0
+.continue FI036
+!EL036
+.continue EL037 ? _(_(F|defined(U|xrvsvoll.xtindex)))
+.type real xrvsvoll.xtindex
+.formula U|xtleiart = 9|yprjmvollleiart^id
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC003
+!RET004
+.formula xprocsp = xprocsp - 1
+.formula U|xrvsvoll.xtindex = U|xrvsatzwert
+!EL037
+.formula H|yvsvkstvollleiart = U|xrvsvoll.xtindex
+!FI036
+.continue EL038 ? _(F|empty(9|yprjmwipleiart))
+.formula H|yvsvkstwipleiart = 0
+.continue FI038
+!EL038
+.continue EL039 ? _(_(F|defined(U|xrvswip.xtindex)))
+.type real xrvswip.xtindex
+.formula U|xtleiart = 9|yprjmwipleiart^id
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC003
+!RET005
+.formula xprocsp = xprocsp - 1
+.formula U|xrvswip.xtindex  = U|xrvsatzwert
+!EL039
+.formula H|yvsvkstwipleiart = U|xrvswip.xtindex
+!FI038
+.continue EL040 ? _(F|empty(9|yprjmgkleiart))
+.formula H|yvsvkstgkleiart = 0
+.continue FI040
+!EL040
+.continue EL041 ? _(_(F|defined(U|xrvsgk.xtindex)))
+.type real xrvsgk.xtindex
+.formula U|xtleiart = 9|yprjmgkleiart^id
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC003
+!RET006
+.formula xprocsp = xprocsp - 1
+.formula U|xrvsgk.xtindex   = U|xrvsatzwert
+!EL041
+.formula H|yvsvkstgkleiart = U|xrvsgk.xtindex
+!FI040
+.continue EL042 ? _(F|empty(9|yprjmzvksleiart))
+.formula H|yvsvkstzvksleiart = 0
+.continue FI042
+!EL042
+.continue EL043 ? _(_(F|defined(U|xrvszvks.xtindex)))
+.type real xrvszvks.xtindex
+.formula U|xtleiart = 9|yprjmzvksleiart^id
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC003
+!RET007
+.formula xprocsp = xprocsp - 1
+.formula U|xrvszvks.xtindex = U|xrvsatzwert
+!EL043
+.formula H|yvsvkstzvksleiart = U|xrvszvks.xtindex
+!FI042
+!EL035
+.load 9 add H|yperskstelle
+.continue EL044 ? _(G|mehr)
+.formula U|xtindex = "k" + 9|nummer + "d" + U|xt001
+.continue EL045 ? _(F|empty(9|yprjmvollleiart))
+.formula H|yvspkstvollleiart = 0
+.continue FI045
+!EL045
+.continue EL046 ? _(_(F|defined(U|xrvsvoll.xtindex)))
+.type real xrvsvoll.xtindex
+.formula U|xtleiart = 9|yprjmvollleiart^id
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC003
+!RET008
+.formula xprocsp = xprocsp - 1
+.formula U|xrvsvoll.xtindex = U|xrvsatzwert
+!EL046
+.formula H|yvspkstvollleiart = U|xrvsvoll.xtindex
+!FI045
+.continue EL047 ? _(F|empty(9|yprjmwipleiart))
+.formula H|yvspkstwipleiart = 0
+.continue FI047
+!EL047
+.continue EL048 ? _(_(F|defined(U|xrvswip.xtindex)))
+.type real xrvswip.xtindex
+.formula U|xtleiart = 9|yprjmwipleiart^id
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC003
+!RET009
+.formula xprocsp = xprocsp - 1
+.formula U|xrvswip.xtindex  = U|xrvsatzwert
+!EL048
+.formula H|yvspkstwipleiart = U|xrvswip.xtindex
+!FI047
+.continue EL049 ? _(F|empty(9|yprjmgkleiart))
+.formula H|yvspkstgkleiart = 0
+.continue FI049
+!EL049
+.continue EL050 ? _(_(F|defined(U|xrvsgk.xtindex)))
+.type real xrvsgk.xtindex
+.formula U|xtleiart = 9|yprjmgkleiart^id
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC003
+!RET010
+.formula xprocsp = xprocsp - 1
+.formula U|xrvsgk.xtindex   = U|xrvsatzwert
+!EL050
+.formula H|yvspkstgkleiart = U|xrvsgk.xtindex
+!FI049
+.continue EL051 ? _(F|empty(9|yprjmzvksleiart))
+.formula H|yvspkstzvksleiart = 0
+.continue FI051
+!EL051
+.continue EL052 ? _(_(F|defined(U|xrvszvks.xtindex)))
+.type real xrvszvks.xtindex
+.formula U|xtleiart = 9|yprjmzvksleiart^id
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC003
+!RET011
+.formula xprocsp = xprocsp - 1
+.formula U|xrvszvks.xtindex = U|xrvsatzwert
+!EL052
+.formula H|yvspkstzvksleiart = U|xrvszvks.xtindex
+!FI051
+!EL044
+.load 9
+.formula U|xtindex = "p" + H|ypersonal^nummer + "d" + U|xt001
+.continue EL053 ? _(F|empty(H|ypersleiart))
+.formula H|yvspersleiart = 0
+.continue FI053
+!EL053
+.continue EL054 ? _(_(F|defined(U|xrperslart.xtindex)))
+.type real xrperslart.xtindex
+.formula U|xtleiart = H|ypersleiart^id
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC003
+!RET012
+.formula xprocsp = xprocsp - 1
+.formula U|xrperslart.xtindex = U|xrvsatzwert
+!EL054
+.formula H|yvspersleiart = U|xrperslart.xtindex
+!FI053
+.continue EL055 ? _(F|empty(H|yperswipleiart))
+.formula H|yvsperswipleiart = 0
+.continue FI055
+!EL055
+.continue EL056 ? _(_(F|defined(U|xrperswip.xtindex)))
+.type real xrperswip.xtindex
+.formula U|xtleiart = H|yperswipleiart^id
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET013" 
+.continue PROC003
+!RET013
+.formula xprocsp = xprocsp - 1
+.formula U|xrperswip.xtindex = U|xrvsatzwert
+!EL056
+.formula H|yvsperswipleiart = U|xrperswip.xtindex
+!FI055
+.continue EL057 ? _(F|empty(H|ypersgkleiart))
+.formula H|yvspersgkleiart = 0
+.continue FI057
+!EL057
+.continue EL058 ? _(_(F|defined(U|xrpersgk.xtindex)))
+.type real xrpersgk.xtindex
+.formula U|xtleiart = H|ypersgkleiart^id
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET014" 
+.continue PROC003
+!RET014
+.formula xprocsp = xprocsp - 1
+.formula U|xrpersgk.xtindex = U|xrvsatzwert
+!EL058
+.formula H|yvspersgkleiart  = U|xrpersgk.xtindex
+!FI057
+!EL033
+.rewrite
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET015" 
+.continue PROC001
+!RET015
+.formula xprocsp = xprocsp - 1
+!EL032
+.continue EL059 ? _(U|xbpreis)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET016" 
+.continue PROC002
+!RET016
+.formula xprocsp = xprocsp - 1
+.rewrite
+!EL059
+.continue EL060 ? _(U|xbtrstorno)
+.select -
+.load 9 add 0|id
+.input 'U|xtupbuchen'
+.output TERMINAL
+.output addedto 'U|xtprot'
+.set trans +
+Transaktion buchen
+.set trans -
+!EL060
+.continue FI023
+!EL023
+.output addedto 'U|xtprot'
+.set trans +
+Die Buchung konnte nicht storniert werden.
+.set trans -
+!FI023
+.continue FI022
+!EL022
+.output addedto 'U|xtprot'
+.set trans +
+Die Leistungsmeldung '0|nummer' kann nicht bearbeitet werden.
+.set trans -
+!FI022
+.continue FI020
+!EL020
+.output addedto 'U|xtprot'
+-> '0|yadatum': nicht mehr bebuchbar
+.continue EL061 ? _(U|xbpreis)
+.select lock add 0|id
+.continue EL062 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET017" 
+.continue PROC002
+!RET017
+.formula xprocsp = xprocsp - 1
+.rewrite
+.continue FI062
+!EL062
+.output addedto 'U|xtprot'
+.set trans +
+Die Leistungsmeldung '0|nummer' kann nicht bearbeitet werden.
+.set trans -
+!FI062
+!EL061
+!FI020
+.load 0 continue
+.continue LOOP001
+!ELOP001: ==============================
+.set trans +
+.box -button yes:no
+Serviclauf abgeschlossen.
+
+Soll das Protokoll 'U|xtprot' angezeigt werden?
+.set trans -
+.continue EL063 ? _(G|box = G|boxyes)
+.output terminal
+.input 'U|xtprot'
+!EL063
+!EL012
+.continue

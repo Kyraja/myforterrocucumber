@@ -1,0 +1,163 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : APLANROLL.TAB
+.. Autor          : foe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Infosystem, Absatzplan, Tabellen-FOP
+.. Functionality  :
+..
+.. Ablauf         :
+..
+...Includes       :
+.. include la/APLANROLL.PLAN
+..*****************************************************************************
+..
+.set trans -
+.type integer   xigerade   ? _F|defined(U|xigerade)
+.type GD    xdatum     ? _F|defined(U|xdatum)
+.type bool  xbfarbe1   ? _F|defined(U|xbfarbe1)
+.type bool  xbfirst    ? _F|defined(U|xbfirst)
+.type text  xfarbe1    ? _F|defined(U|xfarbe1)
+.type text  xfarbe2    ? _F|defined(U|xfarbe2)
+.type R9.2  xistkmge   ? _F|defined(U|xistkmge)
+.type ARTR52000 xistkwert  ? _F|defined(U|xistkwert)
+.type R9.2  xistkljmge ? _F|defined(U|xistkljmge)
+.type R9.2  xistkrmge  ? _F|defined(U|xistrmge)
+.type R9.2  xplankmge  ? _F|defined(U|xplankmge)
+.type ARTR52000 xplankwert ? _F|defined(U|xplankwert)
+.type R9.2  xplanpreis ? _F|defined(U|xplanpreis)
+.type ARTR51200 xistmge    ? _F|defined(U|xistmge)
+..
+.formula U|xfarbe1  = M|farbe1
+.formula U|xfarbe2  = M|farbe2
+.copy U|xbfarbe1 = G|TRUE
+.copy U|xbfirst  = G|TRUE
+..
+!SELROLL
+.formula M|select = "$,,artikel=" + 'M|kart^id'
+.formula M|select = M|select + ";lgruppe=" + 'M|klgruppe^id'   ? _F|empty(M|klgruppe)
+.formula M|select = M|select + ";lgruppe=`"                    ?  F|empty(M|klgruppe)
+.formula M|select = M|select + ";@ablageart=(Both)"
+.formula M|select = M|select + ";@ordnung=rollplanung,artikel,lgruppe"
+.formula M|select = M|select + ";@gruppe=4"
+..
+!LADE
+.load 0 salesplanning 'M|select'
+.error Keine passende Planungseinheit gefunden ? _G|mehr
+.end 1                                         ? _G|mehr
+.continue GETTYP
+..
+!LADEPLAN
+.load 0 salesplanning
+.continue PLANKARTE        ? _G|mehr
+.copy U|xbfirst  = G|FALSE
+..
+!GETTYP: Typspezifische Felder initialisieren
+.formula M|select = "$,,eplan=" + '0|id'
+..
+.. Rollierender Plan 'R'
+.formula M|select = M|select + ";typ=(82)"
+.formula M|select = M|select + ";archiv=nein"
+.formula M|select = M|select + ";@ablageart=(Both)"
+.formula M|select = M|select + ";@ordnung=abschn"
+.formula M|select = M|select + ";@gruppe=2"
+..
+.formula U|xistkmge    = 0
+.formula U|xistkwert   = 0
+.formula U|xplankmge   = 0
+.formula U|xplankwert  = 0
+.formula U|xplanpreis  = 0
+..
+!KOPF
+.select screen header
+..
+.select valuesequence 'M|select'
+.set trans +
+?Keine Daten vorhanden       ? _G|mehr
+.set trans -
+.continue ZENDE                ? _G|mehr
+..
+.formula M|kadatum = H|anfdat ? U|xbfirst ; (_U|xbfirst & M|kadatum > H|anfdat)
+.formula M|kedatum = H|enddat ? U|xbfirst ; (_U|xbfirst & M|kedatum < H|enddat)
+.formula U|xplanpreis = H|plpreis
+..
+!ZEILEN
+.select line
+.continue ROLLPLAN   ? _G|mehr
+.continue NEUZEILE   ?  U|xbfirst
+.continue SUMZEILE   ? _U|xbfirst
+..
+!NEUZEILE
+.make screen line +O
+.formula M|anzkaltage = H|anzkaltage
+.formula M|anzarbtage = H|anzarbtage
+.copy M|zrpass1  = H|zrpass
+.formula M|tvon       = H|vondat
+.formula M|tbis       = H|bisdat
+.assign M|le          = H|le
+.. Planwerte
+.formula M|tmge       = H|mge
+.formula M|twert      = H|wert
+.. Istwerte
+.formula M|tljmge     = H|istmge
+.formula M|tverrechplmge = H|mgeabweich
+.formula U|xplankmge  = U|xplankmge + M|tmge      ? M|kumuliert
+.formula U|xplankwert = U|xplankwert + M|twert    ? M|kumuliert
+.formula M|tmge       = U|xplankmge               ? M|kumuliert
+.formula M|twert      = U|xplankwert              ? M|kumuliert
+.formula U|xistkljmge = U|xistkljmge + M|tljmge   ? M|kumuliert
+.formula M|tljmge     = U|xistkljmge              ? M|kumuliert
+.assign  M|tstatus    = H|status
+.formula M|tfix       = H|fix
+..
+.formula U|xigerade   = M|aktzeile/2
+.formula U|xigerade   = U|xigerade*2 - M|aktzeile
+..
+.colour -background 'U|xfarbe1' 'M|aktzeile' ? U|xigerade = 0
+.colour -background 'U|xfarbe2' 'M|aktzeile' ? U|xigerade <> 0
+.continue ZEILEN
+..
+!SUMZEILE
+.select screen line
+.continue NEUZEILE                              ? _G|mehr
+.continue SUMZEILE                              ?  M|tvon < H|vondat
+..
+.. Von 'M|tvon' <> 'H|vondat' Bis 'M|tbis' <> 'H|bisdat'
+.error Zeitr„ume passen nicht zusammen! ? M|tvon <> H|vondat ; M|tbis <> H|bisdat
+.continue ZEILEN                           ? M|tvon <> H|vondat ; M|tbis <> H|bisdat
+..
+.formula M|tmge      = M|tmge + H|mge
+.formula M|twert     = M|twert + H|wert
+.assign M|tstatus = H|status           ? H|status > M|tstatus
+.formula M|tfix      = H|fix              ? H|fix = G|TRUE
+.continue ZEILEN
+..
+!ROLLPLAN: N„chster Abschnitt im rollierenden Plan
+.select valuesequence
+.continue ZENDE                            ? _G|mehr
+..
+.formula U|xdatum   = H|anfdat - 1
+..
+.make screen line +O                    ? M|kedatum <> U|xdatum
+..
+.formula M|kedatum  = H|enddat
+..
+.. 2 * 2 Farben abwechselnd verwenden
+.formula U|xbfarbe1 = _U|xbfarbe1
+.formula U|xfarbe1 = M|farbe4 ? _U|xbfarbe1
+.formula U|xfarbe2 = M|farbe3 ? _U|xbfarbe1
+.formula U|xfarbe1 = M|farbe1 ?  U|xbfarbe1
+.formula U|xfarbe2 = M|farbe2 ?  U|xbfarbe1
+.continue ZEILEN
+..
+!ZENDE
+.continue LADEPLAN
+..
+!PLANKARTE
+.reserve
+.input "la/APLANROLL.PLAN"  ? M|tzeilen > 0
+.select
+..
+!END
+.continue

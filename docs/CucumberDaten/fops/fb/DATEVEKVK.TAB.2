@@ -1,0 +1,123 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : DATEVEKVK.TAB.2
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Alle relevanten EK- und VK-Positionen in Datei exportieren
+..                  Sortierung erfolgt nach dnr,budat,kopf,postyp,konto,kstelle,steuer.
+..                  Wobei postyp 1 ist fuer Steuerpositionen und 2 fuer normale
+..                  Positionen.
+.. Functionality  :
+..*****************************************************************************
+.type text   xtdvevk
+.type text   xtdvkss
+.type text   xtdatafile   ? _F|defined(U|xtdatafile)
+.type text   xttmpfile    ? _F|defined(U|xttmpfile)
+.. 1 = Steuerposition, 2 = Brutto- oder Nettoposition
+.type integer xipostyp    ? _F|defined(U|xipostyp)
+.type AU8    xelaart      ? _F|defined(U|xelaart)
+.type A138   xeustart     ? _F|defined(U|xeustart)
+.type ID5    xpkonto      ? _F|defined(U|xpkonto)
+.type ID5    xpkstelle    ? _F|defined(U|xpkstelle)
+.type real   xrpwert      ? _F|defined(U|xrpwert)
+.type bool   xbkverteil   ? _F|defined(U|xbkverteil)
+.type BGL20  xtnummer     ? _F|defined(U|xtnummer)
+..*****************************************************************************
+..
+.set trans -
+..
+.input "DATEI.F"
+..
+.file -tempname U|xtdatafile
+.file -tempname U|xttmpfile
+..
+.output new 'U|xttmpfile'
+..
+.formula U|xtdvevk = "V" ? M|expverkauf
+.formula U|xtdvevk = "E" ? M|expeinkauf & _M|expverkauf
+..
+..*****************************************************************************
+!SELRG
+..*****************************************************************************
+.formula U|xtdvkss = "$,"
+.formula U|xtdvkss = U|xtdvkss + ";ktyp==" + 'G|reko'
+.formula U|xtdvkss = U|xtdvkss + ";budat=" + 'M|datvon:8' + "!" + 'M|datbis:8'
+.formula U|xtdvkss = U|xtdvkss + ";datev==" + 'M|selexpnum'
+.formula U|xtdvkss = U|xtdvkss + ";datevexp==`" ? F|empty(M|selexpnum)
+.formula U|xtdvkss = U|xtdvkss + ";@ablageart=(2)"
+.formula U|xtdvkss = U|xtdvkss + ";@gruppe=1"
+.formula U|xtdvkss = U|xtdvkss + ";@ordnung=budat,datev" 
+..
+.select sales 'U|xtdvkss' ?   U|xtdvevk = "V"
+.select purchasing 'U|xtdvkss' ?   U|xtdvevk = "E"
+.continue NEXT ?  _G|mehr
+..
+..*****************************************************************************
+!KOPF
+..*****************************************************************************
+.copy U|xelaart  = H|laart
+.copy U|xeustart = H|ustart
+.formula U|xtnummer = H|nummerb
+..
+..*****************************************************************************
+!HOLZEIL
+..*****************************************************************************
+.select line
+.continue HOLRG   ? _G|mehr
+.. Keine Zwischensummen-, Endsummen- und Trennpositionen
+.continue HOLZEIL ?  H|typ = G|zspos ; H|typ = G|supos ; H|typ = G|espos ; H|typ = G|trpos
+.continue HOLZEIL ?  H|pwert = 0
+.formula U|xipostyp = F|condexpr(H|typ = G|stpos ; H|typ = G|sipos, 1, 2)
+..
+.. Gegenkonto (DATEV-Konto ueber das in der RG-Position angegebene Konto ermitteln)
+.continue AUS ? F|empty(H|konto)
+.formula U|xpkonto = H|konto^id
+..
+..*****************************************************************************
+!AUS
+..*****************************************************************************
+.copy U|xpkstelle  = H|kstelle ? U|xbkstueb
+.formula   U|xbkverteil = U|xpkstelle^gruppe = 8
+.formula   U|xrpwert    = H|pwert
+.continue AUS2 ? U|xpkstelle^gruppe <> 8 ; F|empty(U|xpkstelle)
+..
+.. Kostenverteiler
+.type real xrgpwert ? _F|defined(U|xrgpwert)
+.formula   U|xrgpwert  = U|xrpwert
+.load 1 add H|kstelle
+..*****************************************************************************
+!KVERT: Kostenverteiler gefunden
+..*****************************************************************************
+.load 1 line
+.continue HOLZEIL ? _G|mehr
+.formula   U|xrpwert   = U|xrgpwert * (1|proz/100)
+.copy U|xpkstelle = 1|kstelle
+.continue AUS2
+..
+..*****************************************************************************
+!AUS2
+..*****************************************************************************
+'H|dnr'#'H|kopf^budat:8'#'H|kopf^id'#'U|xtnummer'#'H|kopf^ustart(L=":")'#'H|kobrutto(L="0")'#'H|kopf^land^id'#'U|xelaart'#'H|id'#'U|xipostyp'#'U|xpkonto'#'U|xpkstelle'#'H|steuer^id'#'U|xrpwert'
+.continue KVERT   ? U|xbkverteil
+.continue HOLZEIL
+..
+..*****************************************************************************
+!HOLRG
+..*****************************************************************************
+.select continue
+.continue KOPF ? G|mehr
+..*****************************************************************************
+!NEXT
+..*****************************************************************************
+.continue END  ? _M|expeinkauf ; U|xtdvevk = "E"
+.formula U|xtdvevk = "E"
+.continue SELRG
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.output terminal
+.. sortieren nach dnr,budat,renum,kopf-ID,postyp,konto,kstelle,steuer
+.system 'F|expr("sort -t# -k1,1n -k2,2n -k4,4 -k3,3 -k10,10n -k11,11 -k12,12 -k13,13 -o " + U|xtdatafile + " " + U|xttmpfile)' background
+.continue

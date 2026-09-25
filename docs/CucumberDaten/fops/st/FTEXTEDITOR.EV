@@ -1,0 +1,128 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : FTEXTEDITOR.EV
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      : lei
+.. Funktion       : Behandelt zentral einfachere Ereignisse.
+.. Functionality  : Central handling of simple events.
+..*****************************************************************************
+.set trans -
+..
+..------------------------------- Screen --------------------------------------
+.continue EXECUTE ? G|evtartengl = "SCREEN_EXIT"
+..------------------------------- Header --------------------------------------
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "evtvar"
+.continue FTTYPE  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "freitexttyp"
+.continue SPRFLD  ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "spra"
+.continue CLOSE   ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "menueokay"
+.continue CANCEL  ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "menueabbruch"
+..==============================================================================
+.continue END
+..
+!FTTYPE: Which type?
+.continue DEFAULT ? F|empty(M|freitexttyp)
+.continue SUBDIA  ? M|subdialog
+.continue NORMAL
+..
+!SPRFLD: Calculate index of language of correspondence
+.copy P|spra = M|spra
+.copy M|ksi = P|ksi
+..
+.. Refresh table
+.input "is/TABLEEREN"
+.input "st/FTEXTEDITOR.BSTART.BN"
+.continue END
+..
+!SUBDIA: Subdialog
+.continue ERROR03 ? F|empty(M|evtvar)
+!NORMAL
+.assign M|freitextart = "ARTF" + F|trim(M|freitexttyp^nummer)
+.continue CLRTAB
+..
+!DEFAULT
+.assign M|freitextart = ""
+.continue CLRTAB
+..
+!CLRTAB: Clear table
+.input "is/TABLEEREN"
+.continue END
+..
+!EXECUTE: Execute from head
+.continue CLOSE  ? F|empty(M|tzeilen)
+.continue FORBID ? F|empty(M|markiertzn)
+.select screen line 'M|markiertzn'
+.continue FORBID ? _G|mehr
+.continue ERROR01 ? _M|tmenuemoeglich
+.copy M|konvert = G|FALSE
+.copy M|konvertedit = G|FALSE
+.continue 'M|toperation'
+..
+!FTNEU: New freetext
+.type DVMI2 xtmpfile
+.assign U|xtmpfile = M|tvorlageft
+.input "st/FTEXTEDITOR.IS.HTML"
+.copy M|formathtml = U|xishtml
+.assign M|freitextdv = 'M|tvorlageft'
+.continue FTEDIT
+..
+!FTNOHTML: Edit freetext
+.assign M|formathtml = G|false
+!FTOPEN: Open freetext
+.input "st/FTEXTEDITOR.EDIT.BN"
+.continue END
+..
+!FTCONVERT: Convert old freetext to html
+.copy M|konvert = G|TRUE
+.input "st/FTEXTEDITOR.EDIT.BN"
+.continue END
+..
+!FTOPENCONVERT: Convert old freetext to html and open with editor
+.copy M|konvertedit = G|TRUE
+.input "st/FTEXTEDITOR.EDIT.BN"
+.continue END
+..
+!FTEDIT: Edit freetext
+.input "st/FTEXTEDITOR.EDIT.BN"
+.continue END
+..
+!FTSEL: Choose a short text using a selection bar
+.select group "12:3" 'F|formatstr("%,,;.typ==(TextModule);ftext{1}<>`;nummer=;such=;sucherw=;@autostart=(1)", M|ksi)'
+.continue END ? _G|mehr
+.assign M|tvorlage = H|id
+.assign M|tvorlageft = F|eval("M|tvorlage^ftext" + M|ksi)
+.type DVMI2 xtmpfile
+.assign U|xtmpfile = M|tvorlageft
+.input "st/FTEXTEDITOR.IS.HTML"
+.copy M|formathtml = U|xishtml
+.assign M|freitextdv = 'M|tvorlageft'
+.continue FTEDIT
+..
+!CLOSE: Close infosystem
+.end 0 "FileSaveClose"
+..
+!CANCEL: Cancel infosystem
+.end 0 "FileAbort"
+..
+!FORBID: Action is not allowed
+.error
+.end 1
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!FTNOP
+!ERROR01: Cannot execute command!
+.error -message 'M|tbaumtext': 'M|tbauminfo'
+.continue BREAK
+..
+!ERROR02: Only usable with the buffer of the parent dialog!
+.error -message Diese Funktion ben”tigt den Vaterpuffer!
+.continue BREAK
+..
+!ERROR03: Field not found!
+.error -line 0 -field M|evtvar -message Feld nicht gefunden!
+..
+!BREAK
+.end 1

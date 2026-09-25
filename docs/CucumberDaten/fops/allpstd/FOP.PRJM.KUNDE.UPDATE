@@ -1,0 +1,245 @@
+..!interpreter english declaration noabbrev
+.. at 2017-02-02, 16:31
+.set TRANS -
+..========================================================================
+..==
+..==  Name              : FOP.PRJM.KUNDE.UPDATE
+..==  Pfad              : allpstd
+..==  Funktion          : Žnderungen von Projektdaten
+..==
+..==  Erstellungsdatum  : 06.02.2013
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird ber EasyCase bearbeitet und mit easy2lg generiert!
+..==  Žnderungen auáerhalb von EasyCase werden nach der n„chsten Žnderung
+..==  im EasyCase wieder berschrieben und drfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+..====================================================
+.type text    xtsys xtsel xtcmd
+.type text    xtedpdat xtedpout xtedpmsg xtedperr xtprot
+.type P0      xpkunde xpkunde2
+.type P5:2    xpverantwkst
+.type integer ximenue
+.type bool    xbkdaa xbkdlm xbkstaa xbkstlm
+.'F|expr("type P" + U|xydbgrprojekt + " xpprojekt")'    ? _F|defined(U|xpprojekt)
+.type integer xprocsp   ? _F|defined(U|xprocsp)
+.set DEMAND -
+..====================================================
+.continue EPROCDEF
+!EPROCDEF: ----- end procedure definitions -----
+.set trans +
+.read "Bitte Projekt eingeben, fr welches der Kunde ge„ndert werden soll" U|xpprojekt  ? F|empty(U|xpprojekt)
+.set trans -
+.continue EL001 ? _(_(F|empty(U|xpprojekt)))
+.select lock add U|xpprojekt
+.continue EL002 ? _(G|mehr)
+!REPT001: ==============================
+.set trans +
+.menu(0,0,0) Projekt 'H|such'
+Kunde: 'H|ykunde'                               >>.formula U|ximenue = 1
+?--> „ndern in: 'U|xpkunde' / Rechnungsempf„nger 'U|xpkunde2'   >>.formula U|ximenue = 2    ? _F|empty(U|xpkunde)
+?--> nicht „ndern                               >>.formula U|ximenue = 2    ?  F|empty(U|xpkunde)
+verantwortliche Kostenstelle: 'H|yverantwkst'   >>.formula U|ximenue = 3
+?--> „ndern in: 'U|xpverantwkst'                >>.formula U|ximenue = 4    ? _F|empty(U|xpverantwkst)
+?--> nicht „ndern                               >>.formula U|ximenue = 4    ?  F|empty(U|xpverantwkst)
+
+?Žnderungen durchfhren                         >>.formula U|ximenue = 5    ? _F|empty(U|xpkunde) ; _F|empty(U|xpverantwkst)
+.set trans -
+.continue BRK001 ? _(U|ximenue = 2)
+.set trans +
+.formula U|xtsel = "Bitte neuen Kunden eingeben (bisheriger Kunde: " + H|ykunde^nummer + "/" + H|ykunde^such + ")"
+.set trans -
+.read 'U|xtsel' U|xpkunde
+.continue EL003 ? _(F|empty(U|xpkunde))
+.assign U|xpkunde2 = ""
+.continue FI003
+!EL003
+.continue EL004 ? _((U|xpkunde^gruppe = 2) ; (U|xpkunde^gruppe = 7))
+.assign U|xpkunde2 = U|xpkunde^firma^haendl^id    ? _F|empty(U|xpkunde^firma^haendl)
+.assign U|xpkunde2 = U|xpkunde^firma^id           ?  F|empty(U|xpkunde^firma^haendl)
+.continue FI004
+!EL004
+.assign U|xpkunde2 = U|xpkunde^haendl^id          ? _F|empty(U|xpkunde^haendl)
+.assign U|xpkunde2 = U|xpkunde^id                 ?  F|empty(U|xpkunde^haendl)
+!FI004
+!FI003
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(U|ximenue = 4)
+.formula U|xtsel = "Bitte neue verantwortliche Kostenstelle (bisherige verantwortliche Kostenstelle: " + H|yverantwkst^nummer + "/" + H|yverantwkst^such + ")"
+.read 'U|xtsel' U|xpverantwkst
+.formula U|xpverantwkst = ""    ? U|xpverantwkst^id = H|yverantwkst^id
+.continue EL005 ? _(_(F|empty(U|xpverantwkst)))
+.continue EL006 ? _((F|empty(U|xpverantwkst^yprjmzugvktr)) & (H|yprojekttyp^ykoobjanlagek <> "02"))
+.set TRANS +
+.box Hinweis
+Die Kostenstelle 'U|xpverantwkst' darf hier nicht eingetragen
+werden, da in dieser Kostenstelle kein zugeh”riger
+Verdichtungskostentr„ger hinterlegt ist.
+.set TRANS -
+.assign U|xpverantwkst = ""
+!EL006
+.continue EL007 ? _(_(U|xpverantwkst^bu))
+.set TRANS +
+.box Hinweis
+Es darf nur eine bebuchbare Kostenstelle eingetragen werden.
+.set TRANS -
+.assign U|xpverantwkst = ""
+!EL007
+!EL005
+.continue ESAC001
+!BRK002
+!ESAC001: =====   ENDCASE   =====
+.continue REPT001 ? _((U|ximenue = 5) ; (G|menue  = 0))
+.continue EL008 ? _(_(G|menue = 0))
+.file -TEMPNAME U|xtprot
+.file -TEMPNAME U|xtedpdat
+.file -TEMPNAME U|xtedpout
+.file -TEMPNAME U|xtedpmsg
+.file -TEMPNAME U|xtedperr
+.output NEW 'U|xtedpdat'
+.input DATEI.F
+.continue EL009 ? _(_(F|empty(U|xpkunde)))
+.copy U|xbkdaa = G|FALSE
+.load 9 group 'U|xydbgraufgabe' 'F|expr("$,,yprojekt==" + U|xpprojekt^id + ";ykunde<>" + U|xpkunde^id)'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL010 ? _(_(U|xbkdaa))
+.copy U|xbkdaa = G|TRUE
+.output ADDEDTO 'U|xtedpdat'
+#!EDP_LANGCODE='G|bsprache'
+#!database='U|xydbaufgabe'
+#!group='U|xygraufgabe'
+#!action=MODIFY
+id;ykunde;ykunde2;
+!EL010
+.output ADDEDTO 'U|xtprot'
+?'9|grbez': '9|nummer' - '9|ykunde' -> 'U|xpkunde'
+.output ADDEDTO 'U|xtedpdat'
+'9|id';'U|xpkunde^id';'U|xpkunde2^id';
+.load 9 continue
+.continue LOOP001
+!ELOP001: ==============================
+.copy U|xbkdlm = G|FALSE
+.load 9 group 'U|xydbgrlnachweis' 'F|expr("$,,yprojekt==" + U|xpprojekt^id + ";ykunde<>" + U|xpkunde^id)'
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.continue EL011 ? _(_(U|xbkdlm))
+.copy U|xbkdlm = G|TRUE
+.output ADDEDTO 'U|xtedpdat'
+#!EDP_LANGCODE='G|bsprache'
+#!database='U|xydblnachweis'
+#!group='U|xygrlnachweis'
+#!action=MODIFY
+id;ykunde;ykunde2;
+!EL011
+.output ADDEDTO 'U|xtprot'
+'9|grbez': '9|nummer' - '9|ykunde' -> 'U|xpkunde'
+.output ADDEDTO 'U|xtedpdat'
+'9|id';'U|xpkunde^id';'U|xpkunde2^id';
+.load 9 continue
+.continue LOOP002
+!ELOP002: ==============================
+.load 9
+!EL009
+.continue EL012 ? _(_(F|empty(U|xpverantwkst)))
+.copy H|yverantwkst = U|xpverantwkst
+.rewrite
+.copy U|xbkdlm = G|FALSE
+.load 9 group 'U|xydbgrlnachweis' 'F|expr("$,,yprojekt==" + U|xpprojekt^id + ";ypraaverantwkst<>" + U|xpverantwkst^id)'
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.copy U|xbkstlm = G|TRUE
+.continue EL013 ? _(F|empty(9|ytransaktion))
+#!EDP_LANGCODE='G|bsprache'
+#!DATABASE='U|xydblnachweis'
+#!group='U|xygrlnachweis'
+#!ACTION=VIEW
+id;ybukorefeldneuedp;
+'9|id';;
+.continue FI013
+!EL013
+#!EDP_LANGCODE='G|bsprache'
+#!DATABASE='U|xydblnachweis'
+#!group='U|xygrlnachweis'
+#!ACTION=VIEW
+id;ybukobustorno;
+'9|id';;
+
+#!EDP_LANGCODE='G|bsprache'
+#!DATABASE='U|xydblnachweis'
+#!group='U|xygrlnachweis'
+#!ACTION=VIEW
+id;ybukorefeldneuedp;
+'9|id';;
+
+#!EDP_LANGCODE='G|bsprache'
+#!DATABASE='U|xydblnachweis'
+#!group='U|xygrlnachweis'
+#!ACTION=VIEW
+id;ybubuchen;
+'9|id';;
+!FI013
+.load 9 continue
+.continue LOOP003
+!ELOP003: ==============================
+.load 9
+!EL012
+.continue EL014 ? _((U|xbkdaa) ; (U|xbkdlm) ; (U|xbkstaa) ; (U|xbkstlm))
+.select -
+.formula U|xtsys = "edpimport.sh"
+.formula U|xtsys = U|xtsys + " -c EKS -o UPDATEMODE=STRICT -o LOCKBEHAVIOR=NOWAIT -p " + G|einmalpw
+.formula U|xtsys = U|xtsys + " -H " + U|xtedpmsg
+.formula U|xtsys = U|xtsys + " -I " + U|xtedpdat
+.formula U|xtsys = U|xtsys + " >"   + U|xtedpout
+.formula U|xtsys = U|xtsys + " 2>"  + U|xtedperr
+.input "allpstart/FOP.ALL.EDP.CHECK"
+.continue EL015 ? _(U|xbfehler)
+.set TRANS +
+.box Fehler
+Es konnten nicht alle Datens„tze aktualisiert werden.
+.set TRANS -
+.error(0)
+.end 1          ? G|evtart = "maskpruef"
+.continue FI015
+!EL015
+.select lock add U|xpprojekt
+.copy H|ykunde  = U|xpkunde     ? _F|empty(U|xpkunde)
+.copy H|ykunde2 = U|xpkunde2    ? _F|empty(U|xpkunde2)
+.rewrite
+.output TERMINAL
+.input 'U|xtprot'   ? F|fileexists(U|xtprot)
+.set TRANS +
+.box Hinweis
+Der Kunde im Projekt 'H|such' wurde nach 'H|ykunde' ge„ndert.
+.set TRANS -
+!FI015
+.continue FI014
+!EL014
+.copy H|ykunde      = U|xpkunde         ? _F|empty(U|xpkunde)
+.rewrite
+.set TRANS +
+.box Hinweis
+?Der Kunde im Projekt 'H|such' wurde nach 'H|ykunde' ge„ndert.                              ? _F|empty(U|xpkunde)
+?Die verantwortliche Kostenstelle im Projekt 'H|such' wurde nach 'H|yverantwkst' ge„ndert.  ? _F|empty(U|xpverantwkst)
+.set TRANS -
+!FI014
+!EL008
+.continue FI002
+!EL002
+.set TRANS +
+.box Fehler
+Das Projekt kann nicht bearbeitet werden.
+Žnderung des Kunden ist nicht m”glich.
+.set TRANS -
+.error(0)
+.end 1          ? G|evtart = "maskpruef"
+!FI002
+!EL001
+.select -
+.continue

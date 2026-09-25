@@ -1,0 +1,289 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : S0179.YTBUSTO.BA
+.. Date           : 02/12/2015
+.. Version        : 1.0
+.. Author         : RASC
+.. Copyright      :
+.. Functionality  : BUTTON_AFTER <ytbusto>
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xttext     ? _F|defined(U|xttext)
+.type text U|xtcmd      ? _F|defined(U|xtcmd)
+.type text U|xtedp      ? _F|defined(U|xtedp)
+.type text U|xtout      ? _F|defined(U|xtout)
+.type text U|xterr      ? _F|defined(U|xterr)
+.type text U|xtref      ? _F|defined(U|xtref)
+.type real U|xrbetr     ? _F|defined(U|xrbetr)
+.type integer U|xiz     ? _F|defined(U|xiz)
+..
+.set trans -
+.continue VIEW          ? _G|evtkommd = "zeigen"
+..
+.file -TEMPNAME U|xtedp
+.file -TEMPNAME U|xtout
+.file -TEMPNAME U|xterr
+.continue NOSCHLUSS     ? M|ytschlussre
+.continue ISTSTORNO     ? M|ytbsto
+..
+..es wurde schon eine Rechnung erstellt - somit ist ein Offener Posten vorhanden
+.continue RECHNUNG      ? _F|empty(M|ytrepid) ; _F|empty(M|ytrechn)
+..
+.continue END           ? M|ytaufgabe^ablagef & F|empty(M|ytplanz)
+..
+.set trans +
+.text U|xttext 'G|bspri' "Wollen Sie die Aufgabe und die Planzahlung zu dieser Zeile stornieren?"
+.set trans -
+.box -button no:yes
+'U|xttext'
+.continue END           ? G|box = G|boxno
+..
+.continue AUFGABE       ? F|empty(M|ytplzid)
+..
+.output NEW 'U|xtout'
+.output NEW 'U|xterr'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Planzahlung zu Fakturaplan lîschen
+#!database=141
+#!group=1
+#!action=delete
+id
+'M|ytplzid'
+.output
+.formula U|xtcmd        = "edpimport.sh -P -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' PASSWORD background
+..
+.continue ERRPLZ        ? F|filesize(U|xterr) > 0
+..
+.select lock object 'M|id'
+.continue ERROR         ? _G|mehr
+.select lock line 'M|aktzeile'
+.formula H|ytplzid      = ""
+.formula H|ytbsto       = G|true
+.rewrite
+.select-
+..
+.formula M|ytplanz      = ""
+.formula M|ytplbetr     = 0
+.formula M|ytstorno     = G|true
+..
+!AUFGABE
+.continue END           ? F|empty(M|ytaufgid)
+.output NEW 'U|xtout'
+.output NEW 'U|xterr'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# Aufgabe zu Fakturaplan erledigen
+#!database=86
+#!group=6
+#!action=update
+id;status;
+'M|ytaufgabe^id';(70);
+.output
+.formula U|xtcmd        = "edpimport.sh -P -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' PASSWORD background
+..
+.assign M|ytaufgabe    = M|ytaufgabe
+.continue ERRAUFG      ? _M|ytaufgabe^ablagef
+..
+.select lock object 'M|id'
+.continue ERROR         ? _G|mehr
+.select lock line 'M|aktzeile'
+.formula H|ytbsto       = G|true
+.rewrite
+.select-
+.formula M|ytstorno     = G|true
+.continue END
+..
+!ERRAUFG
+.set trans +
+.text U|xttext 'G|bspri' "Die Aufgabe konnte nicht erledigt werden, soll sie geîffent werden?"
+.set trans -
+.box -button no:yes
+'U|xttext'
+.continue END           ? G|box = G|boxno
+.formula U|xtcmd        = "<(Transaction)>" + 'M|ytaufgabe^id' + "<(View)>,(Task)"
+.command -PARALLEL 'U|xtcmd'
+.continue END
+..
+!ERRPLZ
+.set trans +
+.text U|xttext 'G|bspri' "Das Lîschen der Planzahlung zu dieser Zeile ist fehlgeschlagen - Fehlermeldung wird im Anschluss ausgegeben!"
+.set trans -
+.error 'U|xttext'
+.edi -READONLY 'U|xterr'
+.continue END
+..
+!RECHNUNG
+.continue NOBUCH        ? _M|ytrechn^ablagef
+.continue NOREST        ? M|ytophist^abgeschl
+.continue STORNO        ? M|ytophist^rebetr <> M|ytophist^urbetr
+..
+.set trans +
+.text U|xttext 'G|bspri' "wollen Sie den vollstÑndigen OP stornieren!"
+.set trans -
+.box -button no:yes
+'U|xttext'
+.continue STORNO        ? G|box = G|boxyes
+.continue END
+..
+!STORNO
+.formula U|xrbetr       = -M|ytopbetr
+..
+.output NEW 'U|xtout'
+.output NEW 'U|xterr'
+.output NEW 'U|xtedp'
+.input DATEI.F
+# gebuchte Anzahlungsrechnung zu Fakturaplan stornieren
+#!database='M|yvorgang^dnr'
+#!group=24
+#!action=copy
+#!recordidfld=id
+#!firsttabfld=zn
+#!report=REF
+?id;ophist;ueb;zn;pwert;                                ? M|yvorgang^dnr = 3
+?'M|ytrechn^id';'M|ytophist^id';ja;1;'U|xrbetr';        ? M|yvorgang^dnr = 3
+.formula U|xttext = 'M|yvorgang^nummer' + "." + 'M|aktzeile'
+?id;vom;nummer;ebeleg;ophist;ueb;zn;pwert;                                      ? M|yvorgang^dnr = 4
+?'M|ytrechn^id';.;'U|xttext';'U|xttext'S;'M|ytophist^id';ja;1;'U|xrbetr';       ? M|yvorgang^dnr = 4
+.output
+.formula U|xtcmd        = "edpimport.sh -P -o FOPMODE=0 -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' PASSWORD background
+..
+..edi 'U|xtedp'
+..edi 'U|xterr'
+...input
+.continue ERROR         ? F|filesize(U|xterr) > 0        
+.formula U|xtref        = ""
+.select from
+.select from 'U|xtout' U|xtref^
+.continue ERROR         ? F|empty(U|xtref) ; 'U|xtref' = "(0,0,0)"
+..
+.select lock object 'M|id'
+.continue ERROR         ? _G|mehr
+.select lock line 'M|aktzeile'
+.formula H|ytstoid      = 'U|xtref'
+.formula H|ytbsto       = G|true
+.rewrite
+.select-
+..
+.assign  M|ytstore      = U|xtref
+.formula M|ytstorno     = G|true
+.assign  M|ytophist     = M|ytophist
+.formula M|ytopbetr     = 0     ? M|ytophist^abgeschl
+.continue END
+..
+!NOBUCH
+.load 0 nolock object 'M|ytrechn^id'
+.continue ERRANZ        ? _G|mehr
+.load 0 nolock line
+.continue ERRANZ        ? _G|mehr
+.formula U|xtref        = '0|orig^id'
+.load 0
+..
+.load 0 nolock object 'M|yvorgang^id'
+.continue ERRANZ        ? _G|mehr
+.formula U|xiz          = 0
+!ZANZPOS
+.load 0 nolock line
+.continue ERRANZ        ? _G|mehr
+..
+.formula U|xiz          = U|xiz + 1
+.continue ZANZPOS       ? '0|id' <> 'U|xtref'
+.load 0
+..
+.output NEW 'U|xtedp'
+.input DATEI.F
+# nicht gebuchte Anzahlungsrechnung zu Fakturaplan stornieren
+#!database='M|yvorgang^dnr'
+#!group=24
+#!action=update
+id;\
+zn;
+'M|ytrechn^id';\
+-*
+.output
+.formula U|xtcmd        = "edpimport.sh -P -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' PASSWORD background
+..
+.select lock object 'M|id'
+.continue ERROR         ? _G|mehr
+.select lock line 'M|aktzeile'
+.formula H|ytbsto       = G|true
+.rewrite
+.select-
+.formula M|ytstorno     = G|true
+.formula P|maskkontextfop       = "STORNO"
+.assign  M|ytrechn      = M|ytrechn
+..
+.output NEW 'U|xtedp'
+.input DATEI.F
+# nicht gebuchte Anzahlungsrechnung zu Fakturaplan stornieren
+#!database='M|yvorgang^dnr'
+#!group=22
+#!action=update
+#!recordidfld=id
+#!firsttabfld=zn
+id;zn;status;
+'M|yvorgang^id';'U|xiz';S;
+.output
+.formula U|xtcmd        = "edpimport.sh -P -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' PASSWORD background
+..
+.continue END
+..
+!ERRANZ
+.set trans +
+.text U|xttext 'G|bspri' "Die Anzahlungsposition im Vorgang konnte nicht storniert werden!"
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!NOREST
+.set trans +
+.text U|xttext 'G|bspri' "der Offene Posten ist schon abgeschlossen"
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!NOSCHLUSS
+.set trans +
+.text U|xttext 'G|bspri' "Die Schlussrechnung kann nicht storniert werden!"
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!VIEW
+.set trans +
+.text U|xttext 'G|bspri' "Diese Aktion darf nur im Zeigen-Modus ausgefÅhrt werden!"
+.set trans -
+.box
+'U|xttext'
+.continue END
+..
+!ISTSTORNO
+.set trans +
+.text U|xttext 'G|bspri' "Diese Zeile wurde bereits storniert!"
+.set trans -
+.error 'U|xttext'
+.continue END
+..
+!END
+.continue

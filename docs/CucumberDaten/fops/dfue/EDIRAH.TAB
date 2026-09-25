@@ -1,0 +1,193 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDIRAH.TAB
+.. Autor          : mh/ok
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : Creates table rows from sales and/or purchasing blanket orders
+..*****************************************************************************
+.set trans -
+..
+.type text       xtselSavings    ?  _F|defined(U|xtselSavings)
+.type text       xtselKL         ?  _F|defined(U|xtselKL)
+.type text       xtselDEB        ?  _F|defined(U|xtselDEB)
+.type text       xtselANY        ?  _F|defined(U|xtselANY)
+.type P2:6       xkab            ?  _F|defined(U|xkab)
+.type VPK17      xkl             ?  _F|defined(U|xkl)
+.type VPK17      xdeb            ?  _F|defined(U|xdeb)
+..
+..
+.. Initialize new row / reset colors
+.make screen line +O
+.colour -foreground -1 -1 -1  -background -1 -1 -1               'M|aktzeile'
+.colour -foreground -1 -1 -1  -background -1 -1 -1  tzkuartnr    'M|aktzeile'
+.colour -foreground -1 -1 -1  -background -1 -1 -1  tvorlaufrah  'M|aktzeile'
+.colour -foreground -1 -1 -1  -background -1 -1 -1  twerk        'M|aktzeile'
+..
+.protection -reset preisneu 'M|aktzeile' ?  M|kbpreiseneu
+.protection -reset tterm 'M|aktzeile'    ?  M|kbpreiseneu
+.protection preisneu 'M|aktzeile'        ? _M|kbpreiseneu
+.protection tterm 'M|aktzeile'           ? _M|kbpreiseneu
+..
+.protection -reset fmengeneu 'M|aktzeile'    ?  M|kbfmengeneu
+.protection fmengeneu 'M|aktzeile'           ? _M|kbfmengeneu
+..
+.. Show blanket order header data
+.. Keep blanket order header in D buffer
+.add H|kopf
+.assign M|rahmen = D|id
+.copy M|twerk      = D|werk
+.copy M|tablstelle = D|ablstelle
+.copy M|verwschl   = D|verwschl
+.copy M|spediteur  = D|spediteur
+.assign M|versand  = D|versand^sucherw
+.copy M|tabschlnr  = D|abschlnr
+.copy M|tbetreuer = D|betreuer
+.copy M|budat = D|budat
+.add
+..
+.. Show general blanket order item data
+.assign M|tpos = H|id
+.assign M|tart = H|artikel^id
+.assign M|artbez = H|artikel^vbezbspr
+.assign M|artbez = H|artikel^sucherw  ?  F|empty(M|artbez)
+.copy M|packmit = H|artikel^packmit
+..
+..
+.. Show sales blanket order data
+.continue ENDVK ? H|dnr<>3
+.add H|kopf
+.assign M|tkunde = D|kunde^id
+.assign M|tdebitor = D|kunde2^id
+.copy M|labediid = H|labediid             ? _F|empty(H|labediid)
+.copy M|fabediid = H|fabediid             ? _F|empty(H|fabediid)
+.formula M|labinfoz = M|klabdifficon      ? _F|empty(H|labediid)
+.copy M|lzeit = H|lzeit
+.copy M|tvorlaufrah = H|vorlauf
+.copy M|lztau = H|lztau
+.formula M|labnr = H|labnr
+.copy M|tfzdiff = H|fzdiff
+.copy M|tzefzdiff = H|zefzdiff
+.. Remember customer and debitor
+.copy U|xkl  = M|tkunde
+.copy U|xdeb = M|tdebitor
+.. Find customer product number
+.formula U|xtselKL  = "$,,;kl=" + 'U|xkl^id'  + ";art=" + 'M|tart^id' + ";@gruppe=6"
+.formula U|xtselDEB = "$,,;kl=" + 'U|xdeb^id' + ";art=" + 'M|tart^id' + ";@gruppe=6"
+.formula U|xtselANY = "$,,;kl=`;art=" + 'M|tart^id' + ";@gruppe=6"
+.assign U|xkab = U|xtselKL
+.assign U|xkab = U|xtselDEB ? F|empty(U|xkab)
+.assign U|xkab = U|xtselANY ? F|empty(U|xkab)
+.copy  M|tkuartnr = U|xkab^kuartnr ? _F|empty(U|xkab)
+.formula M|tvorlaufkab = U|xkab^vorlauf  ? _F|empty(U|xkab)
+.copy M|tzkuartnr = H|zkuartnr     ?  F|defined(H|zkuartnr)
+.. Savings
+.copy M|tbsavings = H|savings
+.protection preisneu 'M|aktzeile'  ? M|tbsavings
+.protection tterm 'M|aktzeile'  ? M|tbsavings
+.formula U|xtselSavings = "$,,;@gruppe=1;typ=(SalesPriceList);saktion=(No);@ordnung=gltvon;" + ";artpg=" + 'H|artikel^nummer' + ";klpg=" + 'D|nummer'
+.load 1 pricing 'U|xtselSavings'
+.formula M|savinfoz = M|ksavingsicon       ?  G|mehr &  M|tbsavings
+.formula M|savinfoz = M|ksavingserroricon  ?  G|mehr & _M|tbsavings
+.formula M|savinfoz = M|ksavingserroricon  ? _G|mehr &  M|tbsavings
+.add
+!ENDVK
+..
+..
+.. Purchasing blanket order
+.continue ENDEK  ? H|dnr<>4
+.add H|kopf
+.assign M|tkunde = D|lief^id
+.assign M|tdebitor = D|lief2^id
+.formula M|lztau = H|bstnr
+.formula M|labnr = H|bstnr
+.. Savings is used for "something" in purchasing
+.copy M|tbsavings = H|savings
+.formula M|savinfoz = M|ksavingsicon ? M|tbsavings
+.add
+!ENDEK
+..
+..
+.. Show edi processing object data
+.continue ENDPROC ? _F|defined(H|zprocobj)
+.continue ENDPROC ?  F|empty(H|zprocobj)
+.copy M|tzprocobj = H|zprocobj
+.copy M|tzprocobjabrufdat = H|zprocobj^abrufdat
+.copy M|tauftrag = H|zprocobj^auftrag
+.reserve
+.select edifact 'H|zprocobj^edifact^id'
+.copy M|teinfzahl = H|einfzahl
+.copy M|tkorrfzahl = H|korfzahl
+.select line
+.formula M|tlastfzdiff = H|text24 >> "DI:"
+.select
+!ENDPROC
+..
+..
+!MENGE
+.colour -foreground 'U|xabasblack' -background 'U|xabaslightgreen' 'M|aktzeile'       ?  H|artikel^packmit
+.colour -foreground 'U|xabasblack' -background 'U|xabasyellow' tzkuartnr 'M|aktzeile' ?  M|tkuartnr <> M|tzkuartnr
+.formula M|mge = H|mge
+.copy M|the  = H|he
+.formula M|preis = H|preis
+.copy M|preisneu = M|preis
+.formula M|waeh = H|kopf^land
+.copy M|tpe = H|pe
+.assign M|fzahl = H|fzahl
+.formula M|tterm = H|tterm
+.formula M|fzahlgeliefert = H|fzahlgeliefert
+.formula M|fzahlabgerufen = H|fzahlabgerufen
+.formula M|fzahlabrufoffen = H|fzahlabrufoffen
+.formula M|maxabrufmge = H|maxabrufmge
+.formula M|zgltvon = H|zgltvon
+.formula M|zgltbis = H|zgltbis
+.formula M|vom = H|kovom
+..
+.formula M|fmenge = H|fmenge
+.formula M|fmengeneu = H|fmenge
+.continue EPACK ? F|empty(H|packanw)
+.copy M|packanw = H|packanw
+.load 1 nolock packinginstructions 'H|packanw^id'
+.load 1 line
+.copy M|packm = 1|artikel
+.load 1
+!EPACK
+..
+.. Colorize lead time, if lead time in blanket order is different than
+.. time in customer product properties
+.colour -foreground 'U|xabasblack' -background 'U|xabasyellow' tvorlaufrah 'M|aktzeile' ?  M|tvorlaufrah <> M|tvorlaufkab
+.colour -foreground 'U|xabasblack' -background 'U|xabasyellow' tvorlaufrah 'M|aktzeile' ?  M|lzeit <> 0  &  M|tvorlaufrah = 0
+.. Colorize plant, if value in blanket order differs from customer contact
+.colour -foreground 'U|xabasblack' -background 'U|xabasyellow' twerk 'M|aktzeile' ?  M|twerk <> M|tkunde^werk
+..
+..
+.. Packaging materials
+.continue ENDPACK ? _M|mitpack
+.continue ENDPACK ?  F|empty(H|packanw)
+.load 0 packinginstructions 'H|packanw^id'
+.continue ENDPACK ? _G|mehr
+!NPACK
+.load 0 line
+.continue ENDPACK ? _G|mehr
+.make screen line +O
+.colour -foreground -1 -1 -1  -background -1 -1 -1               'M|aktzeile'
+.colour -foreground -1 -1 -1  -background -1 -1 -1  tzkuartnr    'M|aktzeile'
+.colour -foreground -1 -1 -1  -background -1 -1 -1  tvorlaufrah  'M|aktzeile'
+.copy M|tart = 0|art
+.assign M|artbez = 0|artname
+.copy M|packmit = G|true
+.copy M|preis = 0|artikel^vpr
+.. Find customer product number
+.formula U|xtselKL  = "$,,;kl=" + 'U|xkl^id'  + ";art=" + 'M|tart^id' + ";@gruppe=6"
+.formula U|xtselDEB = "$,,;kl=" + 'U|xdeb^id' + ";art=" + 'M|tart^id' + ";@gruppe=6"
+.formula U|xtselANY = "$,,;kl=`;art=" + 'M|tart^id' + ";@gruppe=6"
+.assign U|xkab = U|xtselKL
+.assign U|xkab = U|xtselDEB ? F|empty(U|xkab)
+.assign U|xkab = U|xtselANY ? F|empty(U|xkab)
+.copy M|tkuartnr = U|xkab^kuartnr ? _F|empty(U|xkab)
+.continue NPACK
+!ENDPACK
+..
+..*****************************************************************************
+!END
+.continue

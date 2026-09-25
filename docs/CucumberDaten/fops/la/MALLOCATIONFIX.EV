@@ -1,0 +1,94 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : MALLOVATIONFIX.EV
+.. Author         : tiwe
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Function       : Event-FOP fÅr IS MALLOCATION
+..                 
+.. Functionality  : Anzeige von fixierten Materialzuordnungen beim Lagerbestand
+..
+.set trans -
+..
+..*****************************************************************************
+.. Eventhandling
+..*****************************************************************************
+.continue BUAFTER    ? G|evtartengl = "BUTTON_AFTER"
+.continue FIEXIT     ? G|evtartengl = "FIELD_EXIT"  
+.continue ENDE
+..*****************************************************************************
+.. Button nach
+..*****************************************************************************
+!BUAFTER
+.continue BSTART ? G|evtvar = "bstart"
+.continue ENDE
+..******************************************
+.. Start-Button
+..******************************************
+!BSTART
+.input "is/TABLEEREN"
+.continue ERR01 ? F|empty(M|artikel) ; F|empty(M|lgruppe)
+.. Wird der Lagerbestand, durch eine sofort abrufbare Menge aus einem VK-Rahmen reserviert
+.formula M|select = "$,,artikel=" + 'M|artikel^id' + ";lgruppe=" + 'M|lgruppe^id' 
+.formula M|select = M|select + ";einplan=j"
+.formula M|select = M|select + ";bs=" + 'M|bslager'   ? _F|empty(M|bslager)
+.formula M|select = M|select + ";fix=j" 
+.load 0 mallocation 'M|select'
+!ZLOOP
+.continue ENDE ? _G|mehr
+.make screen line +o   
+.assign M|treserv   = 0|reserv
+.formula M|tmge     = 0|zuomge
+.formula M|teinheit = 0|einh
+.formula M|tverwend = 0|verw
+.assign M|tprojekt  = 0|projekt
+.assign M|tlffert   = 0|res^lffert
+.copy M|tbis        = 0|bis
+.assign M|tvart = "(Warehouse)" ? _F|empty(M|tbis)
+.continue WR   ? 0|reserv^dnr = 121
+.continue AFL  ? 0|reserv^dnr = 4 & 0|reserv^gruppe = 4
+.continue NEXT
+!WR
+.assign M|tvorgang  = 0|reserv^rahmenkopf
+.assign M|tvart = "(BlanketOrder)"
+.continue NEXT 
+!AFL
+.continue AUFTRAG ? 0|reserv^vor^dnr = 3
+.continue FV      ? 0|reserv^vor^dnr = 4
+.continue NEXT
+!AUFTRAG
+.assign M|tvorgang  = 0|reserv^vor^kopf
+.assign M|tvart = "(SalesOrder)" 
+.continue NEXT
+!FV
+.assign M|tvorgang  = 0|reserv^vor^ba
+.assign M|tvart = "(InhouseProduction)"
+.continue NEXT
+!NEXT
+.load 0 mallocation
+.continue ZLOOP ? G|mehr
+.continue ENDE
+..*****************************************************************************
+.. Feldaustritt
+..*****************************************************************************
+!FIEXIT
+.continue ARTIKEL ? G|evtvar = "artikel"
+.continue LGRUPPE ? G|evtvar = "lgruppe"
+.continue ENDE
+!ARTIKEL
+.formula M|bslager = ""
+.continue ENDE
+!LGRUPPE
+.formula M|bslager = ""
+.continue ENDE
+..*****************************************************************************
+.. Programmende
+..*****************************************************************************
+!ENDE
+.continue
+..*****************************************************************************
+.. Fehlerhandling
+..*****************************************************************************
+!ERR01: leerer Artikel oder leere Lagergruppe
+.error Artikel und Lagergruppe eingeben!
+.end 1

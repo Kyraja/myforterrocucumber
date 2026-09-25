@@ -1,0 +1,133 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LABDIFF.BSTART.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Start-Button Infosystem LABDIFF: Daten Sammeln
+.. Functionality  : Start button infosystem LABDIFF: gather data
+...Includes
+..  include  dfue/LABDIFF.LEEREN
+..*****************************************************************************
+.set trans -
+..
+.. schedule of 1st forecast can be added as new rows to table
+.. schedule of 2nd forecast has to be merged with schedule of 1st forecast
+.type bool  xblab1
+.type bool  xblab2
+.type bool  xblief
+.type gd19  xgdlast
+.type gd19  xgd1
+.type gd19  xgd2
+.type GD    endfab
+.type integer   xizeile
+.type text  xtsel
+..
+.. params in/out for ABRUFTERMIN-FOPs (used in LABDIFF.TAB)
+.type realx xmge
+.type bool  xistabrzeitraum
+..   xmge               korrigierte Abrufmenge
+..   xptext             Abrufzeitraum, Inhalt fr Positionstext
+..   xistabrzeitraum    ja/nein, Zeitr„ume sind verschlsselt
+..   xtterm             Abruftermin
+..   xttermtxt           "  als Text (z.B. bei Monatsvorschaumengen)
+..
+..
+.. clear header / table rows
+.input "dfue/LABDIFF.LEEREN"
+..
+.. fill header fields
+.input "dfue/LABDIFF.BK"
+..
+..
+.. initialize local fields for 1st forecast
+.copy U|xblab1 = G|true
+.copy U|xblab2 = G|false
+.copy U|xblief = G|false
+.copy U|xistabrzeitraum = G|false
+.formula U|xgd1 = ""
+.formula U|xgd2 = ""
+.formula U|endfab = ""
+..
+.. fill table from first (old) forecast
+.continue ENDLAB1 ?  F|empty(M|klab1)
+.select edifact 'M|klab1^id'
+.continue ERREDI1 ? _G|mehr
+!NEXT1
+.select line
+.continue ENDLAB1 ? _G|mehr
+.continue NEXT1   ?  F|empty(H|nabdat)
+.input "dfue/LABDIFF.TAB"
+.continue NEXT1
+!ENDLAB1
+.select -
+..
+..
+.. initialize local fields for 2nd forecast
+.select screen line 1   ? M|tzeilen > 0
+.copy U|xblab1 = G|false
+.copy U|xblab2 = G|true
+.copy U|xblief = G|false
+.copy U|xistabrzeitraum = G|false
+.formula U|xgd1 = ""
+.formula U|xgd2 = ""
+..
+..
+.. fill table from second (new) forecast
+.continue ENDLAB2 ?  F|empty(M|klab2)
+.select edifact 'M|klab2^id'
+.continue ERREDI2 ? _G|mehr
+!NEXT2
+.select line
+.continue ENDLAB2 ? _G|mehr
+.continue NEXT2   ?  F|empty(H|nabdat)
+.input "dfue/LABDIFF.TAB"
+.continue NEXT2
+!ENDLAB2
+.select -
+..
+..
+.. initialize local fields for reading delivery notes
+.select screen line 1   ? M|tzeilen > 0
+.copy U|xblab1 = G|false
+.copy U|xblab2 = G|false
+.copy U|xblief = G|true
+.copy U|xistabrzeitraum = G|false
+.formula U|xgd1 = ""
+.formula U|xgd2 = ""
+..
+..
+.. fill table from delivery notes
+.continue ENDLIEF ?  F|empty(M|krahmen)
+.formula U|xtsel = "$,,;@gruppe=2;@ablage=(1);kotyp=(4);fzahl=0;mge<>0"
+.formula U|xtsel = U|xtsel + ";zrahmen=" + M|krahmen^id
+.formula U|xtsel = U|xtsel + ";artikel=" + M|kartikel^id
+.select sales 'U|xtsel'
+!NEXT3
+.continue ENDLIEF ? _G|mehr
+.input "dfue/LABDIFF.TAB"
+.select sales
+.continue NEXT3
+!ENDLIEF
+.select -
+..
+..
+.. complete table and header fields from table results
+.input "dfue/LABDIFF.BF"   ?  M|tzeilen > 0
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERREDI1
+.error Fehler beim Lesen von EDI-Nachricht 'M|klab1^nummer'.
+.end 1
+..
+!ERREDI2
+.error Fehler beim Lesen von EDI-Nachricht 'M|klab2^nummer'.
+.end 1
+..
+!ERRLIEF
+.error Fehler beim Lesen der Lieferscheine.
+.end 1

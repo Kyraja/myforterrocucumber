@@ -1,0 +1,669 @@
+..!interpreter english
+..@@BEGINHEAD
+..========================================================================
+..==
+..==  Name              : DFUE.VKRE.VUEB
+..==
+..==  Pfad              : dfue
+..==
+..==  Funktion          : efop vor Åbertragen der VK-RE
+..==                      berechnet das voraussichtliche DFö-datum
+..==
+..==  Erstellungsdatum  : 4.5.98
+..==
+..==  Autor             : Marco Machmer
+..==  Verantwortlich    : mh
+..==
+..==  Menuepunkte       :
+..==
+..==  Maskenprioritaet
+..==  bei EFOP          :
+..==
+..==  Besonderheiten    :
+..==
+..==  Aenderungshistorie: 1.1 <5.6.98>
+..==                      - erste version im lieferumfang 8.3N__
+..==                      1.2 <17.11.98>
+..==                      - genauere prÅfung nach .dazu
+..========================================================================
+..@@ENDHEAD
+..
+.. include standard programs
+.input ARB
+..
+.. variable definitions
+..@@BEGINVARDEFS
+..====================================================
+.set trans -
+.type integer   xamonat
+.type integer   xAnzMo
+.type integer   xAnzMostart
+.type integer   xAnzMojetzt
+.type integer   xAnzTa
+.type integer   xAnzWo
+.type date xdatum
+.type date xedatum
+.type integer   xii
+.type integer   xjj
+.type integer   xmm
+.type integer   xMonat
+.type integer   xMoTag
+..... procedure stack pointer .....
+.type integer   xprocsp
+.type real  xrtmp
+.type date xstartdat
+.type integer   xStartTag
+.type date xDfueDat
+.type date xDfueDat2
+.type integer   xTage
+.type text  xtxt
+.type text  xtxt1
+.type text  xtxt2
+.type text  xUltimo
+.type integer   xWoche
+.type integer   xWoTag
+..====================================================
+..@@ENDVARDEFS
+..
+.. initialize procedure stack pointer
+.formula xprocsp = 0
+.. alle variablen mÅssen definiert sein, sonst bricht das programm ab
+.set demand -
+..
+.. ----------------------------------------
+.continue EPROCDEF
+.. procedure definitions
+..
+!PROC001: ----- FEHLER -----
+.box Fehler
+'xtxt1'
+'xtxt2'
+.end 1
+..
+.continue 'xprocst.xprocsp'
+..
+..
+!PROC002: ----- LAST_DAY_IN_MON -----
+.. xdatum ist Åbergabe parameter und wird verÑndert
+.select period 'xdatum'
+.select month 'amonat'
+.formula xdatum = edatum
+..
+.continue 'xprocst.xprocsp'
+..
+..
+!PROC003: ----- CHECK_ULTIMO -----
+.. xstartdat ist Åbergabeparameter
+.. xDfueDat  ist Åbergabeparameter und wird evtl. verÑndert
+.. xDfueDat2 ist Åbergabeparameter
+..
+.. aktueller monat
+.select period 'datum'
+.formula xamonat = amonat
+..
+.. ende des monats
+.select month
+.formula xedatum = edatum
+..
+..
+.continue EL001 ? _(xultimo = "Z")
+.. IF001
+.. ultimo Z
+.. monat des nÑchsten DFö-datums
+.select period 'xDfueDat2'
+..
+..
+.continue EL002 ? _(xamonat < amonat)
+.. IF002
+.. liegt im nÑchsten monat
+..
+..
+.continue EL003 ? _(xedatum >= xstartdat)
+.. IF003
+.. startdatum liegt nicht in der zukunft
+.formula xDfueDat = xedatum
+..
+!EL003
+.. FI003
+..
+!EL002
+.. FI002
+..
+.continue FI001
+!EL001
+..
+.continue EL004 ? _(xultimo = "U")
+.. IF004
+.. ultimo U
+.. monat des bereits berechneten DFö-datums
+.select period 'xDfueDat'
+..
+..
+.continue EL005 ? _(xamonat < amonat)
+.. IF005
+.. es gab einen monatswechsel
+..
+..
+.continue EL006 ? _(xedatum >= xstartdat)
+.. IF006
+.. startdatum liegt nicht in der zukunft
+.formula xDfueDat = xedatum
+..
+!EL006
+.. FI006
+..
+!EL005
+.. FI005
+..
+.continue FI004
+!EL004
+..
+.continue EL007 ? _(xultimo = "K")
+.. IF007
+.. kein ultimo
+..
+.continue FI007
+!EL007
+.. fehler
+.set trans +
+.formula xtxt1 = "Falsches Ultimo: " + xultimo + "!"
+.formula xtxt2 = ""
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+..
+!FI007
+..
+!FI004
+..
+!FI001
+..
+.continue 'xprocst.xprocsp'
+..
+!EPROCDEF: ----- end procedure definitions -----
+.. ----------------------------------------
+..
+..
+.continue EL008 ? _((m|dfuesenden) & (+'m|dfuedat' = 0))
+.. IF008
+.. ----------------------------------------
+.add m|kunde2
+.select add d|edinfosnr
+..
+.continue EL009 ? _(mehr)
+.. IF009
+.set decpoint 'dezpunkt'
+..
+.. daten aus dem debitor
+.. erste gefundene zeile aus edinfo gewinnt
+.select line
+..
+..
+!LOOP001: ==============================
+.continue ELOP001 ? _(mehr)
+..
+.continue EL010 ? _(h|vorgang = "VKRE")
+.. IF010
+..
+.. =====   CASE001   =====
+.continue BRK001 ? _(h|turnus = "T")
+.. taggenau
+.formula xUltimo = h|ultimo
+.formula xTage = h|zyklus << 2
+.formula xStartTag = h|zyklus >> 2
+..
+..
+.continue EL011 ? _((_((xTage >= 1) & (xTage <= 31))) ; (_((xStartTag >= 1) & (xStartTag <= 31))) ; (+'h|startdat' = 0))
+.. IF011
+.. fehler
+.set trans +
+.formula xtxt1 = "Falsches Format der Terminangaben"
+.formula xtxt2 = "bei DFö-Einstellungen beim Kunden!"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+..
+!EL011
+.. FI011
+..
+.. starttermin ist der genaue tag
+..
+..
+.continue EL012 ? _(h|startdat > datum)
+.. IF012
+.. zukunft
+.. den monat des startdatums
+.formula xtxt = ('h|startdat:8' >> 4) << 2
+.formula xii = xtxt
+.. achtung im februar
+.formula xStartTag = 28 ? xii = 2 & xStartTag > 28
+.. der starttag in diesem monat
+.formula xstartdat = 'xStartTag' + "." + xtxt + "." + ('h|startdat:8' << 4)
+..
+.continue FI012
+!EL012
+.. jetzt
+.. den monat des datums
+.formula xtxt = ('datum:8' >> 4) << 2
+.formula xii = xtxt
+.. achtung im februar
+.formula xStartTag = 28 ? xii = 2 & xStartTag > 28
+.. der starttag in diesem monat
+.formula xstartdat = 'xStartTag' + "." + xtxt + "." + ('datum:8' << 4)
+..
+!FI012
+..
+..
+.continue EL013 ? _(+'xstartdat' = 0)
+.. IF013
+.. fehler
+.set trans +
+.formula xtxt1 = "Konnte Starttermin fÅr DFö-Datum nicht berechnen!"
+.formula xtxt2 = ""
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+..
+!EL013
+.. FI013
+..
+.. anzahl der tage seit starttermin
+.formula xAnzTa = datum - xstartdat
+..
+..
+.continue EL014 ? _(xAnzTa > 0)
+.. IF014
+.. sollen heute rechnungen raus
+.formula xii = xAnzTa // xTage
+..
+..
+.continue EL015 ? _(xii > 0)
+.. IF015
+.. nÑchsten tag suchen
+.formula xAnzTa = xAnzTa + (xTage - xii)
+..
+!EL015
+.. FI015
+..
+.continue FI014
+!EL014
+.. starttermin liegt in der zukunft
+.formula xAnzTa = 0
+..
+!FI014
+..
+.. termin ist damit klar
+.formula xDfueDat = xstartdat + xAnzTa
+..
+.. mîglicher nÑchster DFö-termin
+.formula xDfueDat2 = xDfueDat + xTage
+.. noch auf ultimo prÅfen
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC003
+!RET004
+.formula xprocsp = xprocsp - 1
+..
+.formula m|dfuedat = xDfueDat
+..
+.continue
+.. zum debugging obigen .weiter auskommentieren
+Start: 'xstartdat'  ('h|startdat')
+Tage : 'xTage'
+AnzTa: 'xanzta'
+xDfueDat: 'xDfueDat'
+.continue
+..
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(h|turnus = "W")
+.. wochengenau
+.formula xUltimo = h|ultimo
+.formula xWoche = h|zyklus >> -2
+.formula xWoTag = h|zyklus >>  2
+.. starttermin soll montags sein
+.formula xstartdat = h|startdat
+.formula xii = xstartdat // 7
+.formula xstartdat = xstartdat - (xii - 1)
+..
+..
+.continue EL016 ? _((xWoche = 0) ; (_((xWoTag >= 1) & (xWoTag <= 7))) ; (+'xstartdat' = 0))
+.. IF016
+.. fehler
+.set trans +
+.formula xtxt1 = "Falsches Format der Terminangaben"
+.formula xtxt2 = "bei DFö-Einstellungen beim Kunden!"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC001
+!RET005
+.formula xprocsp = xprocsp - 1
+..
+!EL016
+.. FI016
+..
+.. wieviel wochen bin ich nach dem startdatum
+.formula xrtmp  = (datum - xstartdat) / 7
+.formula xAnzWo = 'xrtmp' << ","
+..
+..
+.continue EL017 ? _(xAnzWo > 0)
+.. IF017
+.. stehen diese woche rechnungen per dfÅ an
+.formula xii = xAnzWo // xWoche
+..
+..
+.continue EL018 ? _(xii > 0)
+.. IF018
+.. die jetzige woche kommt nicht in frage
+.. also zur nÑchsten in frage kommenden springen
+.formula xAnzWo = xAnzWo + (xWoche - xii)
+..
+!EL018
+.. FI018
+..
+.continue FI017
+!EL017
+.. startdat ist zukunft
+.. erster ausfÅhrungstag
+.formula xAnzWo = 0
+..
+!FI017
+..
+.. auf den montag von startdat + xAnzWo springen
+.formula xii = 7 * xAnzWo
+.formula xDfueDat = xstartdat + xii
+.formula xii = xDfueDat // 7
+.formula xDfueDat = xDfueDat - (xii - 1)
+..
+.. jetzt noch den richtigen tag in der woche ansteuern
+.formula xDfueDat = xDfueDat + (xWoTag - 1)
+..
+..
+.continue EL019 ? _(xDfueDat < datum)
+.. IF019
+.. bin doch in der vergangenheit gelandet
+.. ab zum nÑchsten termin
+.formula xAnzWo = xAnzWo + xWoche
+..
+.. auf den montag von startdat + xAnzWo springen
+.formula xii = 7 * xAnzWo
+.formula xDfueDat = xstartdat + xii
+.formula xii = xDfueDat // 7
+.formula xDfueDat = xDfueDat - (xii - 1)
+..
+.. jetzt noch den richtigen tag in der woche ansteuern
+.formula xDfueDat = xDfueDat + (xWoTag - 1)
+..
+!EL019
+.. FI019
+..
+.. mîglicher nÑchster DFö-termin
+.formula xii = xWoche * 7
+.formula xDfueDat2 = xDfueDat + xii
+.. noch auf ultimo prÅfen
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC003
+!RET006
+.formula xprocsp = xprocsp - 1
+..
+.formula m|dfuedat = xDfueDat
+..
+.continue
+.. zum debugging obigen .weiter auskommentieren
+Start: 'xstartdat'  ('h|startdat')
+Woche: 'xwoche'
+WoTag: 'xwotag'
+AnzWo: 'xanzwo' 'xrtmp'
+xDfueDat: 'xDfueDat'
+.continue
+..
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(h|turnus = "M")
+.. monatlich am
+.formula xUltimo = h|ultimo
+.formula xMonat = h|zyklus >> -2
+.formula xMoTag = h|zyklus >>  2
+.. starttermin soll erster des monats sein
+.formula xtxt = h|startdat
+.formula xstartdat = "1." + (xtxt >> ".")
+..
+..
+.continue EL020 ? _((xMonat = 0) ; (_((xMoTag >= 1) & (xMoTag <= 31))))
+.. IF020
+.. fehler
+.set trans +
+.formula xtxt1 = "Falsches Format der Terminangaben"
+.formula xtxt2 = "bei DFö-Einstellungen im Kunden!"
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC001
+!RET007
+.formula xprocsp = xprocsp - 1
+..
+!EL020
+.. FI020
+..
+.. anzahl der monate seit startdat
+.select period 'xstartdat'
+.. wieviel monate sind seit 1900 bis xstartdat vergangen
+.formula xAnzMostart = 'xstartdat:8' << 4
+.formula xAnzMostart = xAnzMostart * 12 + amonat
+.. wieviel monate sind seit 1900 bis heute vergangen
+.select period 'datum'
+.formula xAnzMojetzt = 'datum:8' << 4
+.formula xAnzMojetzt = xAnzMojetzt * 12 + amonat
+.. die differenz ist's
+.formula xAnzMo = xAnzMojetzt - xAnzMostart
+..
+..
+.continue EL021 ? _(xAnzMo > 0)
+.. IF021
+.. ist der jetzige monat fÅr rechnungen dran
+.formula xii = xAnzMo // xMonat
+..
+..
+.continue EL022 ? _(xii > 0)
+.. IF022
+.. dieser monat nicht
+.. also zum nÑchsten in frage kommenden
+.formula xAnzMo = xAnzMo + (xMonat - xii)
+..
+!EL022
+.. FI022
+..
+.continue FI021
+!EL021
+.. zukunft
+.formula xAnzMo = 0
+..
+!FI021
+..
+.. anzahl d. monate mu· jetzt zu xstartdat addiert werden
+.formula xii = (xAnzMostart + xAnzMo)
+.. jetzt wird der monat der dfÅ errechnet
+.formula xmm = xii // 12
+.. falls xii vielfaches von 12 ist -> xmm = dezember
+.formula xmm = 12 ? xmm = 0
+.. das jahr der dfÅ
+.formula xjj = (xii - xmm) / 12
+..
+..
+.continue EL023 ? _(xMoTag = 31)
+.. IF023
+.. letzter tag im monat
+.formula xdatum = "1." + 'xmm' + "." + 'xjj'
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC002
+!RET008
+.formula xprocsp = xprocsp - 1
+..
+.formula xDfueDat = xdatum
+..
+.continue FI023
+!EL023
+..
+.continue EL024 ? _((xmm = 2) & ((xMoTag = 29) ; (xMoTag = 30) ; (xMoTag = 31)))
+.. IF024
+.. letzter tag im februar
+.formula xdatum = "1." + 'xmm' + "." + 'xjj'
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC002
+!RET009
+.formula xprocsp = xprocsp - 1
+..
+.formula xDfueDat = xdatum
+..
+.continue FI024
+!EL024
+.. der tag ist klar
+.formula xDfueDat = 'xMoTag' + "." + 'xmm' + "." + 'xjj'
+..
+!FI024
+..
+!FI023
+..
+..
+.continue EL025 ? _(xDfueDat < datum)
+.. IF025
+.. DFö-termin wÑre vergangenheit -> also nÑchsten termin
+.formula xii = xAnzMostart + xAnzMo + xMonat
+.. jetzt wird der monat der dfÅ errechnet
+.formula xmm = xii // 12
+.. falls xii vielfaches von 12 ist -> xmm = dezember
+.formula xmm = 12 ? xmm = 0
+.. das jahr der dfÅ
+.formula xjj = (xii - xmm) / 12
+..
+..
+.continue EL026 ? _(xMoTag = 31)
+.. IF026
+.. letzter tag im monat
+.formula xdatum = "1." + 'xmm' + "." + 'xjj'
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC002
+!RET010
+.formula xprocsp = xprocsp - 1
+..
+.formula xDfueDat = xdatum
+..
+.continue FI026
+!EL026
+..
+.continue EL027 ? _((xmm = 2) & ((xMoTag = 29) ; (xMoTag = 30) ; (xMoTag = 31)))
+.. IF027
+.. letzter tag im februar
+.formula xdatum = "1." + 'xmm' + "." + 'xjj'
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC002
+!RET011
+.formula xprocsp = xprocsp - 1
+..
+.formula xDfueDat = xdatum
+..
+.continue FI027
+!EL027
+.. der tag ist klar
+.formula xDfueDat = 'xMoTag' + "." + 'xmm' + "." + 'xjj'
+..
+!FI027
+..
+!FI026
+..
+!EL025
+.. FI025
+..
+.. nÑchster mîglicher DFö-termin kann nur im nÑchsten monat sein
+.formula xDfueDat2 = xDfueDat + 31
+.. noch auf ultimo prÅfen
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC003
+!RET012
+.formula xprocsp = xprocsp - 1
+..
+.formula m|dfuedat = xDfueDat
+..
+.continue
+.. zum debugging obigen .weiter auskommentieren
+Start: 'xstartdat'  ('h|startdat')
+Monat: 'xMonat'
+MoTag: 'xMotag'
+AnzMo: 'xanzMo'
+xDfueDat: 'xDfueDat'
+.continue
+..
+.continue ESAC001
+!BRK003
+.set trans +
+.formula xtxt1 = "Unbekannter Turnus: " + h|turnus + "!"
+.formula xtxt2 = ""
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET013" 
+.continue PROC001
+!RET013
+.formula xprocsp = xprocsp - 1
+..
+!ESAC001: =====   ENDCASE   =====
+..
+!EL010
+.. FI010
+..
+.select line
+..
+.continue LOOP001
+!ELOP001: ==============================
+..
+!EL009
+.. FI009
+..
+.add
+.. ----------------------------------------
+..
+!EL008
+.. FI008
+..

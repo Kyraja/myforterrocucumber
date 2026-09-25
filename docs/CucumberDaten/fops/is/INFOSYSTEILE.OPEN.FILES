@@ -1,0 +1,110 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : INFOSYSTEILE.OPEN.FILES
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      :
+.. Funktion       : Oeffnet einen Ordner der Schluesselart M|dateinamen. Dieser
+.. Ordner hat mindestens ein und maximal viele Elemente.
+.. Ablauf         : Unterprogramm
+..
+.. Functionality  : Open a node with a key of the type M|dateinamen. This node
+.. has at least one and at most many elements.
+.. Program flow   : Subroutine
+..*****************************************************************************
+.set trans -
+..
+.. Decalarations
+.type text xsyscmmd   ? _F|defined(U|xsyscmmd)
+.type text xprogram   ? _F|defined(U|xprogram)
+.type DVM2 xqualified ? _F|defined(U|xqualified)
+..
+..Initializations
+.file -tempname U|xqualified
+..
+.. Get the filenames of the programs
+.formula U|xsyscmmd = "infosys_get_files.sh"
+.formula U|xsyscmmd = U|xsyscmmd + " -v PROGRAM"
+.formula U|xsyscmmd = U|xsyscmmd + " -w " + M|kdatenobjekt^arb
+.formula U|xsyscmmd = U|xsyscmmd + " -s " + M|kdatenobjekt^such65
+.formula U|xsyscmmd = U|xsyscmmd + " >" + M|result
+.formula U|xsyscmmd = U|xsyscmmd + " 2>" + M|error
+.system 'U|xsyscmmd' background
+.continue ERROR ? _G|mehr
+.continue END ? _F|filenotempty(M|result)
+..
+.. Check existance and qualifiy names
+.output new 'U|xqualified'
+..
+!PROGRAM
+.select from 'M|result' U|xprogram ^
+.continue DOUBLES ? _G|mehr
+.continue PROGRAM ? F|empty(U|xprogram)
+.input "isfop/INFOSYS.TST"
+.copy M|kexist = _F|empty(U|xtpath)
+.continue ORIGIN  ? U|xtpath = "LIB_JAR"
+.continue QUALIFY ? M|kexist
+.continue ORIGIN  ? U|xprogram = M|wurzel^maske
+.continue ORIGIN  ? U|xprogram = M|wurzel^maskdir
+..
+!INVALID: Path does not exist
+?!'U|xprogram' ? G|TRUE
+.continue PROGRAM
+..
+!ORIGIN: Show original path
+'U|xprogram'
+.continue PROGRAM
+..
+!QUALIFY: Show qualified path
+'U|xtpath'
+.continue PROGRAM
+..
+!DOUBLES: Remove doubles
+.output terminal
+.system 'F|expr("sort -u " + U|xqualified + " -o " + U|xqualified + " 2>" + M|error)' background
+.continue ERROR ? _G|mehr
+..
+.assign M|kbaumstat = ""
+.assign M|kbaumtext = G|kdatname13
+.assign M|kbauminfo = M|datei
+.copy M|kschluessel = M|datei
+.assign M|kpaket = ""
+.copy M|kaktiv = G|TRUE
+..
+!NEXT
+.select from 'U|xqualified' U|xprogram^
+.continue END ? _G|mehr
+.continue NEXT ? F|empty(U|xprogram)
+..
+.copy M|kgeneriert = G|FALSE
+.copy M|kexist = _F|regmatch(U|xprogram, "^!.*")
+.assign M|kname = U|xprogram
+.assign M|kname = F|substr(M|kname, 2, F|length(M|kname)) ? _M|kexist
+.continue GENERAT ? F|tostring(M|kdatenobjekt^maskorigin, "AS167") = "(GenerateAutomatically)" & M|kname = M|kdatenobjekt^maske
+.continue GENERAT ? M|kname = M|kdatenobjekt^maske & M|kdatenobjekt^neuemaske
+.continue GENERAT ? M|kname = M|kdatenobjekt^transfop
+.continue ROW
+..
+!GENERAT
+.continue NEXT ? _M|generierte
+.copy M|kgeneriert = G|TRUE
+..
+!ROW
+.input 'M|tab' ? _F|empty(M|tab)
+.continue NEXT
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR
+.error -message Beim Bestimmen der Programmnamen ist ein Fehler aufgetreten!
+.continue ERRFILE ? F|filenotempty(M|error)
+.continue BREAK
+..
+!ERRFILE
+.output terminal
+.input -text 'M|error'
+..
+!BREAK
+.end 1

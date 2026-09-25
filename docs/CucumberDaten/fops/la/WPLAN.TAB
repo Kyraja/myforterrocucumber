@@ -1,0 +1,136 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..
+..  FOP-Name       : WPLAN.TAB
+..  Datum          : 04.05.2011
+..  Version        :
+..  Autor          : es
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..
+..  Funktion       : Infosystem, Wochenplankarte, Tabellenzeigfop
+..
+..  Ablauf         :
+..
+..*****************************************************************************
+.set trans -
+.type GD2     xterm     ? _F|defined(U|xterm)
+.type GD2     xmontag   ? _F|defined(U|xmontag)
+.type integer xzeile    ? _F|defined(U|xzeile)
+.type integer xdays     ? _F|defined(U|xdays)
+.type integer xi        ? _F|defined(U|xi)
+.type real0   xmge      ? _F|defined(U|xmge)
+.type real0   xrest     ? _F|defined(U|xrest)
+..
+.. mit welcher Tabellenzeile wird der aktuelle Plankarteneintrag verrechnet ?
+..  1. Zeile    alles vor der aktuellen Woche (Rueckstand)
+..  2. Zeile    ab Wochenbeginn der aktuellen Woche
+..  3. Zeile    ab Wochenbeginn der aktuellen Woche + 1
+..  ...
+.. 53. Zeile    ab Wochenbeginn der aktuellen Woche + 51
+.. 54. Zeile    alles danach (Vorschau)
+..
+.continue ROLL       ? H|dnr=121
+.continue LM         ? H|dnr=40
+..
+.. BS/RES:
+.. Alle limgen <= 0.0 ueberspringen. Ausnahme: Zugang aus Koppelproduktion
+.continue                                  ? H|limge=0.0 ; (H|limge<0.0 & (H|mge>=0.0 ; H|typ<>G|RESERV))
+.assign U|xterm    = H|tterm
+.continue TABZEILE
+..
+!ROLL: Plandaten aus rollierender Planung
+.continue                                  ? H|mgeabweich<=0.0
+.assign U|xterm    = H|vondat
+..
+!TABZEILE: auf den Montag der Woche setzen, in der xterm liegt
+.formula U|xterm    =  U|xterm - U|xterm//7 + 1
+.formula U|xmontag  =  G|datum - G|datum//7 + 1
+.formula U|xzeile   = (U|xterm - U|xmontag) / 7 + 2
+.formula U|xzeile   = 1 + U|xi            ? U|xzeile + U|xi < 1
+.formula U|xzeile   = 54                  ? U|xzeile + U|xi > 54
+.formula U|xdays    = (M|aktzeile - U|xi - 2) * 7 ? M|tzeilen = 1
+.formula M|woche    =  U|xmontag + U|xdays ? M|aktzeile < 54 & M|tzeilen = 1
+.. Zeile 'xzeile' erzeugen, wenn sie noch fehlt
+.select screen line 'M|tzeilen'
+..
+!MACHZEILE:
+.continue TABZDA                           ? (U|xzeile + U|xi) <= M|tzeilen
+.make screen line +O
+.formula U|xdays    = (M|aktzeile - U|xi - 2) * 7
+.formula M|woche    =  U|xmontag + U|xdays ? M|aktzeile < 54
+.continue MACHZEILE
+..
+!TABZDA: Auf die richtige Zeile positionieren
+.formula U|xzeile = U|xzeile + U|xi
+.select screen line 'U|xzeile'
+..
+.continue WR         ? H|dnr=121
+.continue LM         ? H|dnr=40
+..
+.. Stoepsel zur aktuellen BS/RES selektieren
+.. Gesamte Stoepselmenge
+.formula U|xmge     = 0.0
+.formula M|select   = "$,,artikel=" + 'M|kart^id' + ";lgruppe=" + 'M|klgruppe^id'
+.formula M|select   = M|select + ";bs="     +  H|id                   ? H|gruppe <> 4 & H|dnr <> 40
+.formula M|select   = M|select + ";bs=`;reserv=`;bszid=" + 'H|lgzid'  ? H|dnr=40
+.formula M|select   = M|select + ";reserv=" +  H|id                   ? H|gruppe  = 4
+.formula M|select   = M|select + ";bis>="   + 'G|datum'
+.formula M|select   = M|select + ";@ablageart=(Both)"
+.load 0 mallocation 'M|select'
+..
+!NST:
+.continue EST                                            ? _G|mehr
+.formula U|xmge     = U|xmge   + 0|lzuomge
+.load 0 mallocation
+.continue NST
+..
+!EST:
+.continue RES        ? H|typ=G|RESERV
+.continue BS
+..
+!BS: Beschaffung
+.formula M|zugang   = M|zugang + H|netlimge - U|xmge
+.continue FV         ? H|typ=G|FEVOR
+.. Bestell-/Umlagerungsvorschlaege, Bestell-/Umlagerungspositionen
+.formula M|freig    = M|freig  + H|netlimge - U|xmge ? _F|empty(H|kopf)
+.continue
+..
+!FV: Fertigungsvorschlaege
+.formula M|freig    = M|freig  + H|netlimge - U|xmge ? _F|empty(H|ba)
+.continue
+..
+!RES: Reservierung
+.continue KOPPEL     ? H|limge < 0.0
+.. Stoepsel in folgender Reihenfolge mit RES-Teilmengen verrechnen:
+..                             |----- xmge ------|
+..  |----------------- H|limge ------------------|
+..  |--- H|aumge ---|--- H|planmge ---|-- rest --|
+.. Also zuerst Restmenge, dann Planmge, dann Aumge anknabbern
+.formula U|xrest    = H|limge  - U|xmge
+.continue                                               ? U|xrest   <  0.0
+.formula M|abgang   = M|abgang + U|xrest
+.formula M|aumge    = M|aumge  + H|aumge               ? H|aumge   <  U|xrest
+.formula M|aumge    = M|aumge  + U|xrest               ? H|aumge   >= U|xrest
+.formula U|xrest    = U|xrest  - H|aumge
+.continue                                               ? U|xrest   <  0.0
+.formula M|planmge  = M|planmge+ H|planmge             ? H|planmge <  U|xrest
+.formula M|planmge  = M|planmge+ U|xrest               ? H|planmge >= U|xrest
+.continue
+..
+!KOPPEL: Koppelproduktion
+.formula M|zugang   = M|zugang - H|limge  - U|xmge
+.continue
+..
+!WR:     rollierende Planwerte
+.formula M|abgang   = M|abgang + H|mgeabweich
+.formula M|planmge  = M|planmge+ H|mgeabweich
+.continue
+..
+!LM:  Lagermengen
+.make screen line +O
+.formula U|xmge     =  H|dlemge
+.formula M|zugang   =  H|dlemge        ? U|xmge>0
+.formula M|abgang   = (H|dlemge  * -1) ? U|xmge<0
+.formula U|xi       = M|aktzeile
+.continue

@@ -1,0 +1,326 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICEPROCESS.OBJSUCHE.VP5.BUSINESSPARTNER.FO
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Functionality  : Kunden/Lieferanten zu externen Angaben ermitteln
+..
+..  Parameter
+..      .type text xsuchsteunr  = Steuernummer 
+..      .type text xsuchustid   = Umsatzsteuer-Identnummer   
+..      .type text xsuchgln     = GLN  
+..
+.. RÅckgabewerte sind:
+..      .type VP5 xgefundenVP5
+..      .type text xtsuchfehler
+..*****************************************************************************
+.set trans -
+..
+..Supplier/Suppliercontact
+..<META 2|='P1:1.2'>
+..
+..Customer/Customercontact
+..<META 4|='P1:1.2'>
+..
+.. Parameter-Variablen vervollstÑndigen
+.type text xsuchsteunr ? _F|defined(U|xsuchsteunr)
+.type text xsuchustid  ? _F|defined(U|xsuchustid)
+.type text xsuchgln    ? _F|defined(U|xsuchgln)
+..
+.. Ergaenzende Parameter um Kunden/Lieferanten NICHT zu durchzsuchen
+.. Verhalten, wenn nicht konfiguiert: nicht "skippen" = KUN + LIEF durchsuchen
+.type bool xskippLIEF  ? _F|defined(U|xskippLIEF)
+.type bool xskippKUN   ? _F|defined(U|xskippKUN)
+..
+.. Ergebnis initialisieren
+.type VP5 xgefundenVP5 ? _F|defined(U|xgefundenVP5)
+.formula U|xgefundenVP5 = ""
+..
+.. Fehlerhinweis
+.type text xtsuchfehler ? _F|defined(U|xtsuchfehler)
+.formula U|xtsuchfehler = ""
+..
+..*****************************************************************************
+..
+.. KEINE SUCHPARAMETER = NICHT SUCHEN
+.. xgefundenVP5 und xtsuchfehler bleiben auf ""
+..
+.continue END ? F|empty(U|xsuchsteunr) & F|empty(U|xsuchustid) & F|empty(U|xsuchgln)
+..
+..*****************************************************************************
+..
+.. SKIPP SEARCH, IF CACHE HAS IDENTICAL SEARCH PARAMETERS
+..
+.type bool xvp5empty ?_F|defined(U|xvp5empty)
+.copy U|xvp5empty = G|false
+..
+.input "ev/ELINVOICEPROCESS.CACHE.VP5.OUT.FO"
+.continue ENDDNC ? _F|empty(U|xgefundenVP5)
+.continue ENDDNC ?  U|xvp5empty 
+..
+..*****************************************************************************
+..
+.. Hilfsfelder zur Duplikatserkennung
+.type bool  xbgefundenEK ? _F|defined(U|xbgefundenEK)
+.copy U|xbgefundenEK = G|false
+.type bool xbgefundenVK ? _F|defined(U|xbgefundenVK)
+.copy U|xbgefundenVK = G|false
+..
+..*****************************************************************************
+..
+.. Sprungmarken-Namen, PREFIX
+..  END = Ende 
+..  EVK = Ende Verkauf = Kunden/Kundenkontakte lesen
+..  EEK = Ende Einkauf = Lieferanten/Lieferrantenkontakte lesen
+..  DUP = Dupliatksfehlermeldung
+..
+.. Sprungmarken-Namen, SUFFIX
+..  S = mit STEUNR (Steuernummer) Suchen
+..  U = mit USTID suchen
+..  G = mit GLN suchen
+..  UG = mit USTID und GLN suchen, 
+..  usw.
+..
+.. Ein Duplikat tritt auch dann auf, wenn ein Kunde und ein Lieferant die selbe 
+.. STEUNR/USTID/GLN haben.
+.. Je mehr Parameter angegeben werden, desto genauer wird gesucht.
+..
+.. Wird mit einer Suche ein eindeutiger treffer gefunden, wird nicht 
+.. mehr mit einer anderen Suche gesucht.
+..
+.. TOOD / ZU KLéREN: passt die aktuelle Such-Priorisierung / Reihenfolge?
+.. 
+..*****************************************************************************
+..
+.. Fehlertexte Åbersetzen; Namen wie SUFFIX, s.o.
+..
+.type text xtdupliSUG ? _F|defined(U|xtdupliSUG)
+.type text xtdupliSU ? _F|defined(U|xtdupliSU) 
+.type text xtdupliSG ? _F|defined(U|xtdupliSG) 
+.type text xtdupliUG ? _F|defined(U|xtdupliUG) 
+.type text xtdupliS ? _F|defined(U|xtdupliS) 
+.type text xtdupliU ? _F|defined(U|xtdupliU) 
+.type text xtdupliG ? _F|defined(U|xtdupliG) 
+..
+.set trans +
+.formula  U|xtdupliSUG = "Mehrere GeschÑftspartner mit Steuernummer {1}, Umsatzsteuer-Identnummer {2} und GLN {3}"
+.formula U|xtdupliSU = "Mehrere GeschÑftspartner mit Steuernummer {1} und Umsatzsteuer-Identnummer {2}"
+.formula U|xtdupliSG = "Mehrere GeschÑftspartner mit Steuernummer {1} und GLN {2}" 
+.formula U|xtdupliUG = "Mehrere GeschÑftspartner mit Umsatzsteuer-Identnummer {1} und GLN {2}" 
+.formula U|xtdupliS = "Mehrere GeschÑftspartner mit Steuernummer {1}" 
+.formula U|xtdupliU = "Mehrere GeschÑftspartner mit Umsatzsteuer-Identnummer {1}" 
+.formula U|xtdupliG = "Mehrere GeschÑftspartner mit GLN {1}" 
+.set trans -
+..
+..*****************************************************************************
+..
+..<BLOCK> Mit STEUNR, USTID, GLN suchen
+.continue ENDSUG ? F|empty(U|xsuchsteunr) ; F|empty(U|xsuchustid) ; F|empty(U|xsuchgln)
+.continue EEKSUG ? U|xskippLIEF
+.load 2 supplier 'F|formatstr("$,,;@gruppe=1.2;steunr=={1};ustid=={2};gln=={3}", U|xsuchsteunr, U|xsuchustid, U|xsuchgln)'
+.continue EEKSUG ? _G|mehr
+.assign U|xgefundenVP5 = 2|id
+.copy U|xbgefundenEK = G|true
+.load 2 supplier
+.continue DUPSUG ? G|mehr
+!EEKSUG
+.continue EVKSUG ? U|xskippKUN
+.load 4 customer 'F|formatstr("$,,;@gruppe=1.2;steunr=={1};ustid=={2};gln=={3}", U|xsuchsteunr, U|xsuchustid, U|xsuchgln)'
+.continue EVKSUG ? _G|mehr
+.assign U|xgefundenVP5 = 4|id
+.copy U|xbgefundenVK = G|true
+.load 4 customer
+.continue DUPSUG ? G|mehr
+!EVKSUG
+.continue DUPSUG ? U|xbgefundenEK & U|xbgefundenVK
+.continue END    ? U|xbgefundenEK ; U|xbgefundenVK
+.continue ENDSUG 
+!DUPSUG
+.formula U|xgefundenVP5 = ""
+.formula U|xtsuchfehler = F|formatstr(U|xtdupliSUG, U|xsuchsteunr, U|xsuchustid, U|xsuchgln) 
+.continue END
+!ENDSUG
+..</BLOCK>
+..
+..
+..<BLOCK> Mit STEUNR, USTID suchen
+.continue ENDSU ? F|empty(U|xsuchsteunr) ; F|empty(U|xsuchustid)
+.continue EEKSU ? U|xskippLIEF
+.load 2 supplier 'F|formatstr("$,,;@gruppe=1.2;steunr=={1};ustid=={2}", U|xsuchsteunr, U|xsuchustid)'
+.continue EEKSU ? _G|mehr
+.assign U|xgefundenVP5 = 2|id
+.copy U|xbgefundenEK = G|true
+.load 2 supplier
+.continue DUPSU ? G|mehr
+!EEKSU
+.continue EVKSU ? U|xskippKUN
+.load 4 customer 'F|formatstr("$,,;@gruppe=1.2;steunr=={1};ustid=={2}", U|xsuchsteunr, U|xsuchustid)'
+.continue EVKSU ? _G|mehr
+.assign U|xgefundenVP5 = 4|id
+.copy U|xbgefundenVK = G|true
+.load 4 customer
+.continue DUPSUG ? G|mehr
+!EVKSU
+.continue DUPSU ? U|xbgefundenEK & U|xbgefundenVK
+.continue END    ? U|xbgefundenEK ; U|xbgefundenVK
+.continue ENDSU 
+!DUPSU
+.formula U|xgefundenVP5 = ""
+.formula U|xtsuchfehler = F|formatstr(U|xtdupliSU, U|xsuchsteunr, U|xsuchustid) 
+.continue END
+!ENDSU
+..</BLOCK>
+..
+..
+..<BLOCK> Mit STEUNR, GLN suchen
+.continue ENDSG ? F|empty(U|xsuchsteunr) ; F|empty(U|xsuchgln)
+.continue EEKSG ? U|xskippLIEF
+.load 2 supplier 'F|formatstr("$,,;@gruppe=1.2;steunr=={1};gln=={2}", U|xsuchsteunr, U|xsuchgln)'
+.continue EEKSG ? _G|mehr
+.assign U|xgefundenVP5 = 2|id
+.copy U|xbgefundenEK = G|true
+.load 2 supplier
+.continue DUPSG ? G|mehr
+!EEKSG
+.continue EVKSG ? U|xskippKUN
+.load 4 customer 'F|formatstr("$,,;@gruppe=1.2;steunr=={1};gln=={2}", U|xsuchsteunr, U|xsuchgln)'
+.continue EVKSG ? _G|mehr
+.assign U|xgefundenVP5 = 4|id
+.copy U|xbgefundenVK = G|true
+.load 4 customer
+.continue DUPSG ? G|mehr
+!EVKSG
+.continue DUPSG ? U|xbgefundenEK & U|xbgefundenVK
+.continue END   ? U|xbgefundenEK ; U|xbgefundenVK
+.continue ENDSG 
+!DUPSG
+.formula U|xgefundenVP5 = ""
+.formula U|xtsuchfehler = F|formatstr(U|xtdupliSG, U|xsuchsteunr, U|xsuchgln) 
+.continue END
+!ENDSG
+..</BLOCK>
+..
+..
+..<BLOCK> Mit USTID, GLN suchen
+.continue ENDUG ? F|empty(U|xsuchustid) ; F|empty(U|xsuchgln)
+.continue EEKUG ? U|xskippLIEF
+.load 2 supplier 'F|formatstr("$,,;@gruppe=1.2;ustid=={1};gln=={2}", U|xsuchustid, U|xsuchgln)'
+.continue EEKUG ? _G|mehr
+.assign U|xgefundenVP5 = 2|id
+.copy U|xbgefundenEK = G|true
+.load 2 supplier
+.continue DUPUG ? G|mehr
+!EEKUG
+.continue EVKUG ? U|xskippKUN
+.load 4 customer 'F|formatstr("$,,;@gruppe=1.2;ustid=={1};gln=={2}", U|xsuchustid, U|xsuchgln)'
+.continue EVKUG ? _G|mehr
+.assign U|xgefundenVP5 = 4|id
+.copy U|xbgefundenVK = G|true
+.load 4 customer
+.continue DUPUG ? G|mehr
+!EVKUG
+.continue DUPUG ? U|xbgefundenEK & U|xbgefundenVK
+.continue END   ? U|xbgefundenEK ; U|xbgefundenVK
+.continue ENDUG 
+!DUPUG
+.formula U|xgefundenVP5 = ""
+.formula U|xtsuchfehler = F|formatstr(U|xtdupliUG, U|xsuchustid, U|xsuchgln) 
+.continue END
+!ENDUG
+..</BLOCK>
+..
+..
+..<BLOCK> Mit STEUNR suchen
+.continue ENDS ? F|empty(U|xsuchsteunr)
+.continue EEKS ? U|xskippLIEF
+.load 2 supplier 'F|formatstr("$,,;@gruppe=1.2;steunr=={1}", U|xsuchsteunr)'
+.continue EEKS ? _G|mehr
+.assign U|xgefundenVP5 = 2|id
+.copy U|xbgefundenEK = G|true
+.load 2 supplier
+.continue DUPS ? G|mehr
+!EEKS
+.continue EVKS ? U|xskippKUN
+.load 4 customer 'F|formatstr("$,,;@gruppe=1.2;steunr=={1}", U|xsuchsteunr)'
+.continue EVKS ? _G|mehr
+.assign U|xgefundenVP5 = 4|id
+.copy U|xbgefundenVK = G|true
+.load 4 customer
+.continue DUPS ? G|mehr
+!EVKS
+.continue DUPS ? U|xbgefundenEK & U|xbgefundenVK
+.continue END  ? U|xbgefundenEK ; U|xbgefundenVK
+.continue ENDS 
+!DUPS
+.formula U|xgefundenVP5 = ""
+.formula U|xtsuchfehler = F|formatstr(U|xtdupliS, U|xsuchsteunr) 
+.continue END
+!ENDS
+..</BLOCK>
+..
+..
+..<BLOCK> Mit USTID suchen
+.continue ENDU ? F|empty(U|xsuchustid)
+.continue EEKU ? U|xskippLIEF
+.load 2 supplier 'F|formatstr("$,,;@gruppe=1.2;ustid=={1}", U|xsuchustid)'
+.continue EEKU ? _G|mehr
+.assign U|xgefundenVP5 = 2|id
+.copy U|xbgefundenEK = G|true
+.load 2 supplier
+.continue DUPU ? G|mehr
+!EEKU
+.continue EVKU ? U|xskippKUN
+.load 4 customer 'F|formatstr("$,,;@gruppe=1.2;ustid=={1}", U|xsuchustid)'
+.continue EVKU ? _G|mehr
+.assign U|xgefundenVP5 = 4|id
+.copy U|xbgefundenVK = G|true
+.load 4 customer
+.continue DUPU ? G|mehr
+!EVKU
+.continue DUPU ? U|xbgefundenEK & U|xbgefundenVK
+.continue END  ? U|xbgefundenEK ; U|xbgefundenVK
+.continue ENDU 
+!DUPU
+.formula U|xgefundenVP5 = ""
+.formula U|xtsuchfehler = F|formatstr(U|xtdupliU, U|xsuchustid) 
+.continue END
+!ENDU
+..</BLOCK>
+..
+..
+..<BLOCK> Mit GLN suchen
+.continue ENDG ? F|empty(U|xsuchgln)
+.continue EEKG ? U|xskippLIEF
+.load 2 supplier 'F|formatstr("$,,;@gruppe=1.2;gln=={1}", U|xsuchgln)'
+.continue EEKG ? _G|mehr
+.assign U|xgefundenVP5 = 2|id
+.copy U|xbgefundenEK = G|true
+.load 2 supplier
+.continue DUPG ? G|mehr
+!EEKG
+.continue EVKG ? U|xskippKUN
+.load 4 customer 'F|formatstr("$,,;@gruppe=1.2;gln=={1}", U|xsuchgln)'
+.continue EVKG ? _G|mehr
+.assign U|xgefundenVP5 = 4|id
+.copy U|xbgefundenVK = G|true
+.load 4 customer
+.continue DUPG ? G|mehr
+!EVKG
+.continue DUPG ? U|xbgefundenEK & U|xbgefundenVK
+.continue END  ? U|xbgefundenEK ; U|xbgefundenVK
+.continue ENDG 
+!DUPG
+.formula U|xgefundenVP5 = ""
+.formula U|xtsuchfehler = F|formatstr(U|xtdupliG, U|xsuchgln) 
+.continue END
+!ENDG
+..</BLOCK>
+..
+..*****************************************************************************
+!END
+.load 2 ? F|defined(2|id)
+.load 4 ? F|defined(4|id)
+.input "ev/ELINVOICEPROCESS.CACHE.VP5.IN.FO"
+!ENDDNC: nicht cachen
+.continue

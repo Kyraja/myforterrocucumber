@@ -1,0 +1,133 @@
+..!interpreter english translate
+..*****************************************************************************
+..
+..  Name      : KOMIPROT3
+..  Datum     : 26.10.95
+..  Vers.     : 6.2
+..  Autor     : Andrzej Klusek
+..
+..  Verantwortlich : as
+..  Verantwortlich : mibr
+..
+..
+..  Funktion  : KOMIPROT3 wird von SLV ber Lader aufgerufen (xtwahl="D")
+..              oder mit dem Men "Protokollausgabe wiederholen" (xtwahl="E")
+..              Protokoll der Sammellieferscheinerzeugung mit
+..              Lieferscheinnummern.
+..
+..*****************************************************************************
+..                           SUBROUTINE
+..                           ----------
+.input "ARB"
+..
+..*****************************************************************************
+.type integer xzahl xpos
+.type bool amende
+.type text xtnum xthilf xtzahl xtpos:14 xtkunde xtlin xtlinold
+.set trans -
+..
+.formula amende   = false
+.formula xtlinold = "-1"
+.formula xtwahl   = "D"  ?  txname / "*KOMIPROT3"
+.continue VA5         ?  xtwahl = "E"
+..
+..  xtwahl = "D"
+                    Sammellieferscheine - Protokoll ausgeben
+
+.input DRUCKER
+..
+.formula  xtnum = xarb + "KOMI.N"
+.select from
+.occupy 'xtnum'
+.select from 'xtnum' xzahl
+.formula xtzahl = xzahl - 1
+.continue VA10
+..
+!VA5: xtwahl = "E"
+.read "Nummer der Vorschlagsliste eingeben, zurck zum Men mit <return>" xtzahl
+.continue BEENDEN  ?  xtzahl = ""
+..
+!VA10: Protokoll fr Datei xtvor ausgeben
+.formula xtvor = xarb + "VL." + xtzahl
+.continue VA20  ?  xtwahl = "D"
+..
+.formula xkom   = "test -f " + xtvor
+.system 'xkom' background
+.continue VA20  ?  mehr
+.output terminal
+.set trans +
+.input BILD.F
+Vorschlagsliste 'xtvor' nicht vorhanden
+
+.continue VA5
+..
+!VA20
+.occupy
+.output 'geraet'
+.input VE.F
+.page 1
+.up
+'Mandant   '  Protokolldruck fr Vorschlagsliste ' xtzahl'    '    datum'
+'txname    '  ============================================    Seite' sei'
+
+.set trans -
+..
+.formula xkom = "test -s " + xtvor
+.system 'xkom' background
+.continue ENDE    ? _mehr
+..
+!SCHLEIF
+.select from 'xtvor' xtaun ^
+.continue ENDE    ? _mehr
+.continue SCHLEIF ?  xtaun = "#"
+.continue SCHLEIF ? _xtaun / "#*" ; xtaun / "*##*"
+.formula xtaun = xtaun >> "#"
+.formula xtlin = xtaun >> " "
+.formula xtaun = xtaun << " "
+.continue SCHLEIF ? xtaun=""
+.formula xbablage = false
+.formula xtkunde  = ""
+.select sales 'xtaun'
+.formula xbablage = true  ? _mehr
+.add kunde          ?  mehr
+.formula xtkunde=name     ?  mehr
+.add
+.select
+?ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ? xtlin<>xtlinold  &  amende
+?                                   ? xtlin <> xtlinold
+.formula amende = false                  ? xtlin <> xtlinold
+.set trans +
+?Lieferscheinnummer:       'xtlin ' ? xtlin <> xtlinold
+.set trans -
+?Auftrag     Anz. Pos.     Kunde    ? xtlin <> xtlinold  & _amende
+?ÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄÄ ? xtlin<>xtlinold  & _amende
+..
+.formula xpos = 0
+.select sales 'xtaun'
+.continue AUSG ? _mehr
+..
+!POSLOOP
+.select line
+.formula xpos = xpos + 1 ? mehr
+.continue POSLOOP     ? mehr
+.select
+..
+!AUSG
+.formula xtpos = xpos
+.formula xtpos = "in Ablage"  ?  xbablage
+'xtaun ' '     xtpos'     'xtkunde                        '
+.formula amende   = true      ?  xtlin <> xtlinold
+.formula xtlinold = xtlin
+.continue SCHLEIF
+..
+!ENDE
+.set trans +
+?Vorschlagsliste 'xtzahl' ist leer.  ?  xtlinold = "-1"
+.set trans -
+=========================================================================
+..
+.output terminal ...  ?  geraet = ""
+..
+!BEENDEN
+.end .        ?  xtwahl = "D"
+.continue

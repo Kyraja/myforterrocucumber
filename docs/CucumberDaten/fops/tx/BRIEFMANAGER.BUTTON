@@ -1,0 +1,178 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BRIEFMANAGER.BUTTON
+.. Datum          : 03.08.2007
+.. Version        : 2007
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Behandelt Ereignisse der Buttons in der Personenliste
+..
+.. Ablauf         : EFOP fÅr Buttons, Kueztexte und Textbausteine
+..
+.. Functionality  : Handles such events of the buttons in the list of persons.
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+.set trans -
+.type integer  xi         ? _F|defined(U|xi)
+.type text xtsys      ? _F|defined(U|xtsys)
+.type DVM2 xbrief     ? _F|defined(U|xbrief)
+.type DVM2 xmenue     ? _F|defined(U|xmenue)
+.type text x1         ? _F|defined(U|x1)
+.type text x2         ? _F|defined(U|x2)
+.type text xihrzeich  ? _F|defined(U|xihrzeich)
+.type text xihrenach  ? _F|defined(U|xihrenach)
+.type text xbetreff   ? _F|defined(U|xbetreff)
+.type bool xbool      ? _F|defined(U|xbool)
+..
+.copy U|xbool = G|FALSE
+.continue NEUBRIEF     ? G|evtvar = "neubrief"
+.continue MENUEJ       ? G|evtvar = "budruck"
+.continue WAEHL        ? G|evtvar = "waehlbrief"
+.continue JOURNAL      ? G|evtvar = "editjournal"
+.continue EDITIEREN    ? G|evtvar = "editbrief"
+.continue MENUEJ       ? G|evtvar = "brief"
+.continue TEXTBAUSTEIN ? _F|empty(M|textbaust)
+.continue KURZTEXT     ? _F|empty(M|kurztext)
+.continue
+..
+!NEUBRIEF: neuen Briefnamen vergeben
+.formula M|ball   = M|rotz
+.formula U|xbrief = M|arbber + "/BRIEF." + 'G|zeitpunkt:14'
+.formula U|xbrief = "BRIEF." + 'G|zeitpunkt:14'  ? F|empty(M|arbber)
+.formula M|brief  = U|xbrief
+.continue END
+..
+!TEXTBAUSTEIN: erst Test, ob Datei vorhanden
+.continue FEHLER       ? _G|mehr & _F|empty(M|textbaust)
+.continue FEHLER1      ? _F|empty(M|textbaust) & _F|fileexists('M|textbaust')
+.input "DATEI.F"
+.output addedto 'M|brief'
+.input -text 'M|textbaust'
+
+..
+.formula M|ball        = M|gruenz
+.assign M|textbaust = ""
+.continue END
+..
+!KURZTEXT
+.load 1 company 'M|kurztext'
+.input "DATEI.F"
+.output addedto 'M|brief'
+'1|namebspr'
+
+..
+.formula M|ball     = M|gruenz ?  F|empty(1|ftext)
+.formula M|kurztext = ""       ?  F|empty(1|ftext)
+.continue END                   ?  F|empty(1|ftext)
+.input -text '1|ftext'
+
+..
+.assign M|kurztext = ""
+.continue END
+..
+!EDITIEREN
+.continue FEHLER3                         ?  F|empty(M|brief)
+.editing -right 'M|spalte' 'M|brief'
+.formula M|ball = M|rotz                 ? _F|filenotempty(M|brief)
+.continue END
+..
+!MENUEJ
+.continue FEHLER5                  ? M|ball = M|rotz & G|evtvar = "budruck"
+.continue FEHLER3                  ? F|empty(M|brief)
+.formula M|ball      = M|gruenz   ? F|filenotempty(M|brief)
+.formula U|xbrief    = M|brief
+.formula U|xihrzeich = M|ihrzeich
+.formula U|xihrenach = M|ihrenach
+.formula U|xbetreff  = M|betreff
+.input "DATEI.F"
+.output addedto 'M|jmenue'
+..
+.select screen line
+.continue                           ? _G|mehr
+?'U|xbrief'#'M|arbber'#'G|datum:8'  ? M|tdrucken
+.select screen header
+.continue EDITJ                     ? G|evtvar = "budruck"
+.continue                           ? G|evtvar = "brief"
+..
+!EDITJ
+.input "DATEI.F"
+.output addedto 'M|journal'
+..
+!ZEILE
+.select screen line
+.continue                 ? _G|mehr
+?'G|datum ' 'G|bzeichen ' 'M|tnum       ' 'xbrief                                ' 'xihrzeich         '  'xihrenach         '   'U|xbetreff' ? M|tdrucken
+.continue ZEILE
+..
+!JOURNAL
+.continue FEHLER2         ? _F|filenotempty('M|journal')
+.editing -readonly 'M|journal'
+.continue
+..
+!WAEHL
+.formula U|xtsys = "sort -t# +0r +1r -o " + M|jmenue + " " + M|jmenue
+.system 'U|xtsys' background
+.formula U|xtsys = "sort -u -t# +0r -1 -o " + M|jmenue + " " + M|jmenue
+.system 'U|xtsys' background
+..
+.formula U|xmenue = M|arbber + "/BRMENUE"
+.formula U|xmenue = "BRMENUE"        ? F|empty(M|arbber)
+..
+.output new 'U|xmenue'
+.input "DATEI.F"
+..
+.set command =%
+.set trans +
+.menu Brief wÑhlen
+.set trans -
+%set command=.
+..
+!HOLE
+.continue FEHLER4          ? _F|filenotempty('M|jmenue')
+.select from 'M|jmenue' U|x1 # U|x2 #
+.continue AUSGABE          ? _G|mehr
+.continue HOLE             ? _F|filenotempty('U|x1')
+?'U|x1'  >>  'U|x1'          ? U|x2 = M|arbber
+.copy U|xbool = G|TRUE ? U|x2 = M|arbber
+.continue HOLE
+..
+!AUSGABE
+.continue FEHLER4 ? _U|xbool
+.output terminal
+.input 'U|xmenue'
+.formula M|brief = 'G|mentxt'
+.formula M|ball = M|rotz    ? _F|filenotempty(M|brief)
+.continue END
+..
+!END
+.formula M|ball = M|gruenz  ?  F|fileexists(M|brief) & F|filenotempty(M|brief)
+.formula M|ball = M|rotz    ? _F|filenotempty(M|brief)
+.formula M|ball = M|rotz    ? _F|fileexists(M|brief)
+.continue
+..
+!FEHLER
+.error -message UngÅltiger FO-Dateiname 'M|textbaust'.
+.end 1
+..
+!FEHLER1
+.error -message Der verwendete Textbaustein 'M|textbaust' existiert nicht.
+.end 1
+..
+!FEHLER2
+.error -message Journal 'M|journal' ist nicht vorhanden.
+.end 1
+..
+!FEHLER3
+.error -message Es wurde kein Brief ausgewÑhlt.
+.end 1
+..
+!FEHLER4
+.error -message Es existieren derzeit keine Briefe im angegebenen Arbeitsbereich.
+.end 1
+..
+!FEHLER5
+.error -message Es wurde noch kein Brief zusammengestellt.
+.end 1

@@ -1,0 +1,102 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Author         : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+.. include fb/ZM.LOAD.SUB1 
+..*****************************************************************************
+..
+..!meta M|=fb/ZM
+..!meta H|=P131:0
+..
+.set trans -
+..
+.continue END ? F|empty(M|adatum) ; F|empty(M|edatum)
+..
+.type text xtselect
+.type R xramount
+..
+.formula U|xtselect = "$,@gruppe=0;@zeilen=(1);gruppe=0;@ordnung=ustid,zmart,budat;0:typ==1;0:laart==(EUCountry);0:ustid<>`;ev<>(Purchasing);0:kart<>(TaxAccount);zmrel=1"
+.formula U|xtselect = U|xtselect + F|condexpr(F|empty(M|selzmart), ";0:zmart<>`", F|formatstr(";0:zmart=={1}", F|value(M|selzmart, "AS234")))
+.formula U|xtselect = U|xtselect + F|formatstr(";0:budat={1}!{2};1:bukreis=={3}", M|adatum, M|edatum, M|bukreis^id)
+..
+.continue GROUPED ? M|gruppiert
+.type NT xtustid xtselustid
+.formula U|xtselustid = F|regreplaceall(F|toupper(M|selustid), "[^A-Z0-9]", "")
+.select 'G|hdatname131' 'U|xtselect'
+..*****************************************************************************
+!L1
+..*****************************************************************************
+.continue END ? _G|mehr
+.formula U|xtustid = F|regreplaceall(F|toupper(H|ustid), "[^A-Z0-9]", "")
+.continue N1 ? _F|empty(M|selustid) & U|xtustid <> U|xtselustid
+.make screen line +O
+.assign  M|tbuchung = H|id ? F|defined(M|tbuchung)
+.copy    M|tkonto = H|konto ? F|defined(M|tkonto)
+.copy    M|tklm = H|klm ? F|defined(M|tklm)
+.copy    M|tustva = H|ustva ? F|defined(M|tustva)
+.copy    M|tursacheref = H|ursacheref ? F|defined(M|tursacheref)
+.formula M|tbeleg = H|beleg ? F|defined(M|tbeleg)
+.formula M|tustidges = U|xtustid
+.copy    M|tzmart = H|zmart
+.copy    U|xramount = F|fxamount(M|auswaehr, H|betrag, G|datum, H|iwbu)
+.copy    U|xramount = U|xramount * -1 ? H|soll
+.formula M|tbetrag = U|xramount
+.formula M|tbutext = F|condexpr(F|empty(H|ptext), H|text, H|ptext) 
+.input "fb/ZM.LOAD.SUB1"
+.continue N1
+..
+..*****************************************************************************
+!N1
+..*****************************************************************************
+.select continue
+.continue L1
+..
+..*****************************************************************************
+!GROUPED
+..*****************************************************************************
+.type text xtfile
+.file -tempname U|xtfile
+.input "DATEI.F"
+.output new 'U|xtfile'
+.select 'G|hdatname131' 'U|xtselect'
+..*****************************************************************************
+!L2
+..*****************************************************************************
+.continue GROUP ? _G|mehr
+.copy U|xramount = F|fxamount(M|auswaehr, H|betrag, G|datum, H|iwbu)
+.copy U|xramount = U|xramount * -1 ? H|soll
+'F|regreplaceall(F|toupper(H|ustid), "[^A-Z0-9]", "")' # 'H|zmart(L=":")' # 'U|xramount'
+.continue N2
+..
+..*****************************************************************************
+!N2
+..*****************************************************************************
+.select continue
+.continue L2
+..
+..*****************************************************************************
+!GROUP
+..*****************************************************************************
+.output terminal
+.type text xtout xterr
+.type bool xbmehr xbvalid
+.file -tempname U|xtout
+.file -tempname U|xterr
+.system 'F|expr("group_by.sh -n 3 -k 1 -k 2 -s 3 " + U|xtfile + " 1>" + U|xtout + " 2>" + U|xterr)' background
+!L3
+.make screen line +O
+.select from 'U|xtout' M|tustidges # M|tzmart # M|tbetrag^
+.copy U|xbmehr = G|mehr
+.make screen line -O ? _U|xbmehr
+.continue END ? _U|xbmehr
+.copy U|xbvalid = M|tbetrag <> 0
+.make screen line -O ? _U|xbvalid
+.input "fb/ZM.LOAD.SUB1" ? U|xbvalid
+.continue L3
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

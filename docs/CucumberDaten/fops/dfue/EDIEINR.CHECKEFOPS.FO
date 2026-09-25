@@ -1,0 +1,83 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDIEINR.CHECKEFOPS.FO
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : Checks if EFOPs from a given fop.txt.template have 
+..                  been activated
+..*****************************************************************************
+.set trans -
+..
+..
+.. Params and return values for efop CHECKEFOPS
+.type text xfoptxt ? _F|defined(U|xfoptxt)
+.type bool xfopactive  ? _F|defined(U|xfopactive)
+..
+.. Default return value
+.copy U|xfopactive = G|false
+..
+.. Nothing to check
+.continue END ? F|empty(U|xfoptxt)
+..
+..
+.type text U|xdatei ?_F|defined(U|xdatei)
+.type text U|xfopname ? _F|defined(U|xfopname)
+.type text U|xt1 ? _F|defined(U|xt1)
+.type text U|xsys ? _F|defined(U|xsys)
+..
+..
+.file -tempname U|xdatei
+.formula U|xfopname = ""
+.formula U|xt1 = ""
+..
+.. copy fop.txt.<sth> into accessable file
+.formula U|xsys = "cat " + 'U|xfoptxt' + " > " + U|xdatei
+.system 'U|xsys' background
+.continue ENDFOP ? _G|mehr
+..
+.. find efop in fop.txt.<sth>'s copy
+.. if no non-comment rows are found, there is no activateable efop
+.. -> treat as "everything is activated" result
+!NEXTTXT
+.select from 'U|xdatei' U|xt1^
+.continue FOPOK   ? _G|mehr
+.formula U|xt1 = F|trim(U|xt1)
+.continue NEXTTXT ?  F|empty(U|xt1)
+.continue NEXTTXT ? 'U|xt1:1' = "#"
+.select from
+..
+.. efop name in 7th column, possible odd number of whitespaces
+.. possible control character [X] before efop name
+.. e.g. "36  Rechnung   maskpruef  *  *  *    DFUE.VKRE.MP"
+.. e.g. "36  Rechnung   maskpruef  *  *  *    [C]  DFUE.VKRE.MP"
+.formula U|xfopname = F|trim(U|xt1>>"]")
+.continue ENDFOP ?  F|empty(U|xfopname)
+..
+.. grep for efop in active fop.txt, store grep result in file
+.formula U|xsys = "grep " + U|xfopname + " fop.txt > " + 'U|xdatei'
+.system 'U|xsys' background
+.continue ENDFOP  ? _G|mehr
+..
+.. find efop in fop.txt's grep result
+!NEXTAKT
+.select from 'U|xdatei' U|xt1^
+.continue ENDFOP  ? _G|mehr
+.formula U|xt1 = F|trim(U|xt1)
+.continue NEXTAKT ?  F|empty(U|xt1)
+.continue NEXTAKT ? 'U|xt1:1' = "#"
+.select from
+..
+.. efop name in 7th column, possible odd number of whitespaces
+.formula U|xfopname = F|trim(F|trim(F|trim(F|trim(F|trim(F|trim(F|trim(U|xt1)>>" ")>>" ")>>" ")>>" ")>>" ")>>" ")
+.continue ENDFOP  ?  F|empty(U|xfopname)
+..
+!FOPOK
+.. fop was found ; or no fop in activate-file
+.copy U|xfopactive = G|true
+..
+!ENDFOP
+..
+..*****************************************************************************
+!END
+.continue

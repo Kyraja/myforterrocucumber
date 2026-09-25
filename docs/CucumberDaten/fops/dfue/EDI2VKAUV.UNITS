@@ -1,0 +1,110 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDI2VKAUV.UNITS
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : carue
+.. Functionality  : Check if the unit of quantity used in an edi message is known
+..                  in abas erp's unit table.
+..                  If no parameters are given, the to be checked edi messages
+..                  may be picked with an object selection.
+..
+..      Meaning                 Field Name      Type        English Variable
+..      ----------------------- --------------- ----------- ------------------
+..      idno edi message        xtediparam      text       
+..
+.. Includes       :
+...     include     dfue/EDI.UNITS
+..*****************************************************************************
+.set trans -
+..
+.. Own parameters
+.type text xtediparam ? _F|defined(U|xtediparam)
+..
+.. Parameters / return values for EDI.UNITS
+.type text xposphe ? _F|defined(U|xposphe)
+.type TAZ1 etaz ? _F|defined(U|etaz)
+.type NT3  eiso ? _F|defined(U|eiso)
+.type NT2  evda ? _F|defined(U|evda)
+.. 
+.. Local fields
+.type bool xbsingle   ? _F|defined(U|xbsingle)
+.type text xtselEDI          ? _F|defined(U|xtselEDI)
+.. 
+.formula U|xbsingle = _F|empty(U|xtediparam)
+.formula U|xtselEDI = ""
+..
+..
+.. Event evaluation
+.. ----------- ---------- ---------- -------------------------------------------
+.continue PARAM  ?  U|xbsingle
+.continue QUERY
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+..
+.. Get forecast from parameter
+!PARAM
+.load 1 edifact 'U|xtediparam'
+.continue ENDE  ? _G|mehr
+.continue SPERREN
+..
+..
+.. Pick forecasts with query
+!QUERY
+.formula U|xtselEDI = "%,,nummer=;such=VKAUV;ideksrah=;ideksart=;erfass=;nachrtyp=;datenart=;einfzahl=;@ordnung=nummer;@bereich=ja;@auto=nein"
+.load 1 edifact 'U|xtselEDI'
+.continue ENDE  ? _G|mehr
+.continue SPERREN
+!NEXTQUE
+.load 1 edifact
+.continue ENDE  ? _G|mehr
+.continue SPERREN
+..
+..
+.. Process single EDI message from buffer 1
+!SPERREN
+.continue ERREDI  ?   F|empty(1|such)
+.continue ERREDI  ? _(1|such/"VKAUV*")
+..
+.select lock nowait edifact '1|id'
+.continue ERRLOCK ? _G|mehr
+.continue ERRLOCK ? _G|gesperrt
+..
+!NEXTROW
+.select lock line
+.continue ENDROWS  ? _G|mehr
+.continue NEXTROW  ?  H|text1 <> "500"
+.formula U|xposphe = text14
+.input "EDI.UNITS"
+.continue NOUNIT ? 'U|etaz'=""
+.continue NEXTROW
+!NOUNIT
+.. Write error status into edi message
+.formula H|status = 4
+.formula H|fcode = 61
+.rewrite
+.select -
+!ENDROWS
+..
+!SUCCESS
+.continue ENDE  ? U|xbsingle
+'1|nummer'
+.continue NEXTQUE
+..
+!ERRLOCK
+.continue ENDE  ? U|xbsingle
+'1|nummer' - cannot lock
+.continue NEXTQUE
+..
+!ERREDI
+.continue ENDE  ? U|xbsingle
+'1|nummer' - not a forecast
+.continue NEXTQUE
+..
+!ENDE
+.load 1  ?  F|defined(1|id)
+..
+..*****************************************************************************
+!END
+.continue

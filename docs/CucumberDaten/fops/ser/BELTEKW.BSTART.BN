@@ -1,0 +1,94 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BELTEKW.BSTART.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Hole EFOP - Liest alle Servicereservierung fÅr einen Techniker (oder fÅr alle Techniker eines Teams)
+.. Functionality  : select efop - reads all servicereservations for a technician (or for all technicians of a team)
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.. Auswertung fÅr: nur einen Techniker, oder alle Techniker eines Teams?
+.type bool  xbteam
+.type text  xtsel
+..
+.. Hat der aktuell auszuwertende Techniker eine Reservierung?
+.. wird an TAB Åbergeben, falls der Techniker keine Reservierung hat, wird eine "leere" Zeile ausgegeben (d.h. nur der Name des Technikers)
+.type bool  xbtechhatres
+..
+.. Folgende Variable werden nur in TAB verwendet (sollen nicht bei jedem Aufruf neu definiert werden)
+.type integer   xiwtagmax
+.type integer   xiwtagmin
+.type integer   xint
+.type GD    xdnext
+.type bool  xbwende
+.type bool  xbwende1
+.type bool  xbwende2
+.type bool  xbwende3
+.type bool  xbwende4
+.type bool  xbwende5
+.type bool  xbwende6
+.type bool  xbwende7
+.type GD    xtag1
+.type GD    xtag2
+.type GD    xtag3
+.type GD    xtag4
+.type GD    xtag5
+.type GD    xtag6
+.type GD    xtag7
+.type GD    xdtag
+.type GD    xdvon
+.type GD    xdbis
+.type time  xzvon
+.type time  xzbis
+.type text  xtvar
+..
+.. SchlÅssel Termin fÅr Servicereservierung
+.type text  xttermin
+.set trans +
+.formula T|xttermin = "Termin"
+.set trans -
+..
+.make screen line -- ? M|tzeilen > 0
+..
+.. Erste Zeile mit Datumsfeldern anlegen
+.. Das FO-Programm BALTEKW.TAB muss fÅr aktzeile = 0 die Datumsfelder ausgeben
+.. Datumszeile ist kein Techniker, also auch keine Reservierung
+.formula T|xbtechhatres = false
+.input 'M|tab'
+..
+.. Nur ein Techniker, oder alle Techniker eines Teams?
+.formula T|xbteam = true    ?  M|ktechniker = ""
+.formula T|xbteam = false   ?  M|ktechniker <> ""
+.continue TEAM    ? T|xbteam
+.load 0 serviceemployees 'M|ktechniker^id'
+.continue END     ? _T|mehr
+.continue TECH
+!TEAM
+.load 1 serviceemployees 'M|kteamnr^id'
+.continue END     ? _T|mehr
+!TEAMNXT
+.load 1 line
+.continue END     ? _T|mehr
+.continue TEAMNXT ? _F|empty(1|gltbis)  &  1|gltbis < M|kvon
+.continue TEAMNXT ? _F|empty(1|gltvon)  &  1|gltvon > M|kbis
+.load 0 serviceemployees '1|mitarbrolle^id'
+.continue END     ? _T|mehr
+..
+!TECH: Der Techniker ist im 0-Puffer
+.formula T|xbtechhatres = false
+.formula T|xtsel = "$,,;@ordnung=techniker,termvon,termbis;techniker=" + '0|id' + ";termvon=!" + 'M|kbis' + ";termbis=" + 'M|kvon' + "!"
+.select servicereservation 'T|xtsel'
+.formula T|xbtechhatres = T|mehr
+!NEWROW: Ausgabe in Tabelle: nur Techniker-Daten wenn kein Einsatz, oder Techniker-Daten + Einsatz-/Reservierungsdaten
+.input 'M|tab'
+.continue TECHEND ? _T|xbtechhatres
+.select servicereservation
+.continue NEWROW  ?  T|mehr
+!TECHEND
+.continue TEAMNXT ?  T|xbteam
+..*****************************************************************************
+!END
+.continue

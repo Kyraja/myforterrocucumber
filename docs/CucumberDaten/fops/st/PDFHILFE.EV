@@ -1,0 +1,84 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : PDFHILFE.EV
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      : mg
+.. Funktion       : Behandelt die Ereignisse der Eingabeparameter.
+.. Ablauf         : Zentrales Ereignis-FOP
+..
+.. Functionality  : Handles events of the input parameters.
+.. Program flow   : Central event fop
+..*****************************************************************************
+.set trans -
+..
+..------------------------------- Header --------------------------------------
+.continue SCALE   ? G|evtartengl = "FIELD_FILL" & G|evtvar = "ganzehilfe"
+.continue LANG    ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "hsprache"
+..------------------------------- Table  --------------------------------------
+.continue CHAPTER ? G|evtartengl = "FIELD_FILL"   & G|evtvar = "tmark"
+.continue OPENPDF ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "buzielzeigen"
+..=============================================================================
+.continue END
+..
+!SCALE: new scale of help was chosen
+.input 'M|tab' ? M|tzeilen > 0
+.continue END
+..
+!LANG: help language was changed
+.input "st/PDFHILFE.GET.HELPLANG"
+..
+.. Show chapters in table
+.input 'M|tab'
+.continue END
+..
+!CHAPTER: selection of chapter was changed
+.continue ADDONE ? 'G|evtfeldneu' = 'G|TRUE'
+..
+.. Substract one chapter
+.formula M|markkapitel = M|markkapitel - 1 ? M|markkapitel > 0
+.continue COMPLET
+..
+!ADDONE: add one chapter
+.formula M|markkapitel = M|markkapitel + 1
+..
+!COMPLET: set switch for generation of the complete help in header
+.type bool xalt
+.copy U|xalt = M|ganzehilfe
+.assign M|ganzehilfe = (M|tzeilen = M|markkapitel)
+.continue END ? U|xalt = M|ganzehilfe
+..
+.. Update table
+.select screen header
+!NEXT
+.select screen line
+.continue END ? _G|mehr
+.assign M|tziel = M|kziel ? M|ganzehilfe
+.formula M|tziel = M|tkapitelnr + ".pdf" ? _M|ganzehilfe
+..
+.. Check if target file exists
+.copy M|tzielda = F|filenotempty(F|formatstr("{1}/{2}", M|pfadziele, M|tziel))
+.continue NEXT
+..
+!OPENPDF: copy validated file to client and open it
+.type DV xziel
+..
+.continue ERROR1 ? _M|tzielda
+.formula U|xziel = F|formatstr("{1}{2}/h{3}/{4}{1}", G|dblquote, G|cltempdir, M|hspr, M|tziel)
+..
+.. Copy and open it
+.pc.copy -PC -BIN 'F|formatstr("{1}/{2}", M|pfadziele, M|tziel)' 'U|xziel'
+.continue ERROR2 ? _G|mehr
+.pc.open 'U|xziel'
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1
+.error -message Die Datei 'M|tziel' ist nicht vorhanden und muss erst erzeugt werden
+.end 1
+..
+!ERROR2
+.error -message Das Kopieren von 'U|xziel' auf den Client ist gescheitert
+.end 1

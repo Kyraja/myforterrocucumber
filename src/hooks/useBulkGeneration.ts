@@ -28,6 +28,7 @@ async function generateOne(
   model: string,
   testUser: string,
   tables: TableDef[],
+  lang: 'de' | 'en' = 'de',
 ): Promise<{ feature: FeatureInput; gherkin: string }> {
   const result = await generatePackage({
     text: wp.description,
@@ -35,6 +36,7 @@ async function generateOne(
     tables,
     testUser: testUser || undefined,
     featureName: wp.title,
+    lang,
   });
 
   const feature: FeatureInput = {
@@ -58,11 +60,11 @@ interface UseBulkGenerationResult {
   /** Pre-populate results with `pending` entries before starting generation. */
   initResults: (packages: WorkPackage[]) => void;
   /** Start processing all packages sequentially; resets previous results. */
-  startGeneration: (packages: WorkPackage[], model: string, testUser: string, tables: TableDef[]) => void;
+  startGeneration: (packages: WorkPackage[], model: string, testUser: string, tables: TableDef[], lang?: 'de' | 'en') => void;
   /** Signal the running loop to stop after the current package completes. */
   cancelGeneration: () => void;
   /** Re-run generation for a single failed or pending item by index. */
-  retryItem: (index: number, model: string, testUser: string, tables: TableDef[]) => void;
+  retryItem: (index: number, model: string, testUser: string, tables: TableDef[], lang?: 'de' | 'en') => void;
   /** Clear all results and stop any in-progress generation. */
   reset: () => void;
 }
@@ -97,7 +99,7 @@ export function useBulkGeneration(): UseBulkGenerationResult {
   }, []);
 
   const startGeneration = useCallback(
-    async (packages: WorkPackage[], model: string, testUser: string, tables: TableDef[]) => {
+    async (packages: WorkPackage[], model: string, testUser: string, tables: TableDef[], lang: 'de' | 'en' = 'de') => {
       cancelRef.current = false;
       setIsRunning(true);
 
@@ -124,7 +126,7 @@ export function useBulkGeneration(): UseBulkGenerationResult {
         });
 
         try {
-          const { feature, gherkin } = await generateOne(packages[i], model, testUser, tables);
+          const { feature, gherkin } = await generateOne(packages[i], model, testUser, tables, lang);
           setResults((prev) => {
             const next = prev.map((r, j) =>
               j === i ? { ...r, status: 'done' as const, feature, gherkin, error: null } : r,
@@ -161,7 +163,7 @@ export function useBulkGeneration(): UseBulkGenerationResult {
   }, []);
 
   const retryItem = useCallback(
-    async (index: number, model: string, testUser: string, tables: TableDef[]) => {
+    async (index: number, model: string, testUser: string, tables: TableDef[], lang: 'de' | 'en' = 'de') => {
       const wp = resultsRef.current[index]?.workPackage;
       if (!wp) return;
 
@@ -174,7 +176,7 @@ export function useBulkGeneration(): UseBulkGenerationResult {
       });
 
       try {
-        const { feature, gherkin } = await generateOne(wp, model, testUser, tables);
+        const { feature, gherkin } = await generateOne(wp, model, testUser, tables, lang);
         setResults((prev) => {
           const next = prev.map((r, j) =>
             j === index ? { ...r, status: 'done' as const, feature, gherkin, error: null } : r,

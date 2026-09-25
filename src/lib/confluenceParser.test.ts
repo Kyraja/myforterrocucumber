@@ -70,29 +70,19 @@ describe('parseConfluenceHtml', () => {
     const result = parseConfluenceHtml(html);
     expect(result.features).toHaveLength(1);
 
-    const feature = result.features[0].feature;
+    const pkg = result.features[0];
+    const feature = pkg.feature;
     expect(feature.name).toBe('Kurztext (V-12-03)');
     expect(feature.description).toContain('V-12-03');
     expect(feature.description).toContain('P12:3');
-    expect(feature.scenarios).toHaveLength(1);
+    // Scenarios stay empty — tests come from the AI response, not rule-based generation
+    expect(feature.scenarios).toHaveLength(0);
 
-    const scenario = feature.scenarios[0];
-    expect(scenario.name).toContain('Kurztext');
-    expect(scenario.steps.length).toBeGreaterThanOrEqual(3);
-
-    // Should have a Given (editor open), When/And (field set), Then (field check)
-    expect(scenario.steps[0].keyword).toBe('Given');
-    expect(scenario.steps[0].text).toContain('P12:3');
-
-    // Field-setting steps
-    const setSteps = scenario.steps.filter(s => s.text.includes('Feld setzen'));
-    expect(setSteps.length).toBe(3);
-    expect(setSteps[0].text).toContain('nummer');
-    expect(setSteps[0].text).toContain('254');
-
-    // Field-check steps
-    const checkSteps = scenario.steps.filter(s => s.text.includes('Feld pruefen'));
-    expect(checkSteps.length).toBeGreaterThan(0);
+    // Table data is forwarded via sourceText so the AI has full context
+    expect(pkg.sourceText).toContain('nummer');
+    expect(pkg.sourceText).toContain('254');
+    expect(pkg.sourceText).toContain('ANEUTRAL');
+    expect(pkg.sourceText).toContain('namebspr');
   });
 
   it('parses multiple h4 sections into separate features', () => {
@@ -163,7 +153,9 @@ describe('parseConfluenceHtml', () => {
 
     const table = result.features[1];
     expect(table.feature.name).toContain('Kurztext');
-    expect(table.feature.scenarios).toHaveLength(1);
+    expect(table.feature.scenarios).toHaveLength(0);
+    expect(table.sourceText).toContain('nummer');
+    expect(table.sourceText).toContain('254');
   });
 
   it('captures h3 freetext sections as features', () => {
@@ -206,10 +198,12 @@ describe('parseConfluenceHtml', () => {
 
     const result = parseConfluenceHtml(html);
 
-    // Table-based feature
+    // Table-based feature — no rule-based scenarios, table content in sourceText
     const tableFeature = result.features.find(f => f.feature.name.includes('Kurztext'));
     expect(tableFeature).toBeDefined();
-    expect(tableFeature!.feature.scenarios).toHaveLength(1);
+    expect(tableFeature!.feature.scenarios).toHaveLength(0);
+    expect(tableFeature!.sourceText).toContain('nummer');
+    expect(tableFeature!.sourceText).toContain('254');
 
     // Freetext h2 feature
     const angebotFeature = result.features.find(f => f.feature.name === 'Prozess Angebot');
@@ -239,11 +233,12 @@ describe('parseConfluenceHtml', () => {
     const result = parseConfluenceHtml(html);
     expect(result.features).toHaveLength(1);
 
-    const steps = result.features[0].feature.scenarios[0].steps;
-    // Should include table field checks
-    const allTexts = steps.map(s => s.text).join('\n');
-    expect(allTexts).toContain('frist');
-    expect(allTexts).toContain('30');
+    // No scenarios — but table field content must be preserved in sourceText
+    // so the AI has everything it needs to generate tests.
+    expect(result.features[0].feature.scenarios).toHaveLength(0);
+    const src = result.features[0].sourceText;
+    expect(src).toContain('frist');
+    expect(src).toContain('30');
   });
 
   it('builds correct TOC with structure/package/skipped entries', () => {
@@ -293,9 +288,10 @@ describe('parseConfluenceHtml', () => {
 
     const result = parseConfluenceHtml(html);
     expect(result.features).toHaveLength(1);
-    // Two tables with separate Kopffeld headers = two variants = two scenarios
-    expect(result.features[0].feature.scenarios).toHaveLength(2);
-    expect(result.features[0].feature.scenarios[0].name).toContain('Variante 1');
-    expect(result.features[0].feature.scenarios[1].name).toContain('Variante 2');
+    // No rule-based scenarios — both variants must end up in sourceText so the AI can pick them up
+    expect(result.features[0].feature.scenarios).toHaveLength(0);
+    const src = result.features[0].sourceText;
+    expect(src).toContain('DEUTSCHLAND');
+    expect(src).toContain('FRANKREICH');
   });
 });

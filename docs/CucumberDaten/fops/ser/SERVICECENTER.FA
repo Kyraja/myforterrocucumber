@@ -1,0 +1,186 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SERVICEENTER.FA
+.. Autor          : cl
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       :
+.. Functionality  :
+..
+..*****************************************************************************
+.type text xholtext
+.type PS2:1 xservice
+..
+.set trans -
+.continue KUNDE     ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "kunde"
+.continue VORGANG   ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "vorgang"
+.continue SERVICE   ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "service"
+.continue DATUM     ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "datef"
+.continue DATET     ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "datet"
+.continue LEBENDIG  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "lebendig"
+.continue BEIDES    ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "beides"
+.continue CHARGE    ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "charge"
+.continue EXCHARGE  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "tcharge"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "kprojekt"
+.continue SELVORGANG ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "selvorgang"
+.continue TABLEEREN
+..
+!SELVORGANG
+.formula M|kunde = ""       ? _F|empty(M|selvorgang)
+.formula M|sertyp = ""      ? _F|empty(M|vorgang) & M|selvorgang <> M|vorgang^typa
+.formula M|vorgang = ""     ? _F|empty(M|vorgang) & M|selvorgang <> M|vorgang^typa
+.continue TABLEEREN
+..
+!EXCHARGE: externe Chargennummer bzw. Seriennummer
+.continue SEREIND         ? _F|empty(M|tcharge)
+.formula M|service = ""
+.formula M|charge  = ""
+.continue TABLEEREN
+..
+!SEREIND: Seriennummer eindeutig
+.formula U|xholtext = "&,,exnum=" + M|tcharge
+.load 3 lots 'U|xholtext'
+.continue SERNOTEIND                ? _G|mehr
+.load 3 lots
+.continue SERNOTEIND                ?  G|mehr
+.formula M|tcharge = 3|exnum
+.load 4 serviceproduct '3|id'
+.formula M|service = 4|id
+.continue SERVICE
+..
+!SERNOTEIND: Seriennummer bringt mehrere Treffer -> dynamische Selektion
+.formula U|xholtext = "%,,exnum=" + M|tcharge + ";nummer=;artikel="
+.load 3 lots 'U|xholtext'
+.error Seriennummer 'M|tcharge' nicht vorhanden ? _G|mehr
+.continue CHLEEREN                                 ? _G|mehr
+.formula M|tcharge = 3|exnum
+.formula M|charge  = 3|id
+.continue SERCHARGE
+..
+!CHARGE: Wenn das Textfeld leer gemacht wurde nichts tun
+.continue TABLEEREN ? F|empty(M|charge) & F|empty(M|service)
+.formula M|service = ""  ? F|empty(M|charge)
+.formula M|tcharge = ""  ? F|empty(M|charge)
+.formula M|charge = M|service^charge  ? _F|empty(M|service) & F|empty(M|charge)
+.continue TABLEEREN ? F|empty(M|charge) & F|empty(M|service)
+....
+!SERCHARGE: Selektion einer eingegeben Charge
+.formula U|xholtext = "$,,charge=" + M|charge^id
+.continue CHLEEREN                  ? _G|mehr
+.select serviceproduct 'U|xholtext'
+.continue ERROR2                    ? _G|mehr
+.formula M|service = H|id
+.continue SERVICE
+....
+!CHLEEREN
+.formula M|charge  = ""
+.formula M|tcharge = ""
+.formula M|service = ""
+.continue TABLEEREN
+..
+!LEBENDIG
+.copy M|beides = G|TRUE   ? _M|lebendig
+.copy M|beides = G|FALSE  ?  M|lebendig
+.continue TABLEEREN
+..
+!BEIDES
+.copy M|lebendig = G|TRUE   ? _M|beides
+.copy M|lebendig = G|FALSE  ?  M|beides
+.continue TABLEEREN
+..
+!SERVICE
+.formula M|vorgang   = ""
+.formula M|sertyp    = ""
+.formula M|selvorgang = ""                ? _F|empty(M|service)
+.formula M|tcharge   = ""                 ? F|empty(M|service)
+.formula M|charge    = ""                 ? F|empty(M|service)
+.formula M|tcharge   = M|service^tcharge  ? _F|empty(M|service)
+.formula M|charge    = M|service^charge   ? _F|empty(M|service)
+.continue SERCHARGE                       ? F|empty(M|service) & _F|empty(M|tcharge)
+.continue TABLEEREN
+..
+!VORGANG
+.assign M|service = ""
+.assign M|sertyp = ""
+.continue TABLEEREN ? F|empty(M|vorgang)
+.. Plausis
+.continue SALES ? M|vorgang^dnr = 3 & (F|equals(M|vorgang^typa, "(PackingSlip)") ; F|equals(M|vorgang^typa, "(Invoice)") ; F|equals(M|vorgang^typa, "(ServiceQuotation)") ; F|equals(M|vorgang^typa, "(ServiceOrder)") ; F|equals(M|vorgang^typa, "(RepairOrder)") ; F|equals(M|vorgang^typa, "(CostEstimate)"))
+.continue PURCH ? M|vorgang^dnr = 4 & (F|equals(M|vorgang^typa, "(PackingSlip)") ; F|equals(M|vorgang^typa, "(Invoice)") ; F|equals(M|vorgang^typa, "(PurchaseOrder)"))
+.continue SERVREQ ? M|vorgang^dnr = 122 & M|vorgang^gruppe = 1
+.continue ERROR4
+..
+!SALES: Sales process
+.formula M|sertyp = M|vorgang^typa
+.copy M|kunde = M|vorgang^kunde
+.assign M|selvorgang = 'F|value(M|vorgang^typa, "AS5")'
+.continue TABLEEREN
+..
+!PURCH: Purchase process
+.formula M|sertyp = M|vorgang^typa
+.assign M|selvorgang = 'F|value(M|vorgang^typa, "AS4")'
+.continue LEEREN
+..
+!SERVREQ: Service request
+.type text xtext
+.text U|xtext 'G|bsprache' Serviceanfrage
+.formula M|sertyp = 'U|xtext'
+.copy M|kunde = M|vorgang^kunde
+.assign M|selvorgang = ""
+.continue TABLEEREN
+..
+!DATUM: Datum von
+.formula M|datet = M|datef  ?  F|empty(M|datet)
+.continue TABLEEREN
+..
+!DATET: Datum bis
+.formula M|datet = "."      ?  F|empty(M|datet) & F|empty(M|datef)
+.continue ERROR5            ?  M|datet > G|datum
+.continue ERROR1            ? 'M|datet:8' < 'M|datef:8' & _F|empty(M|datet) & _F|empty(M|datef)
+.continue TABLEEREN
+..
+!KUNDE
+.continue LEEREN    ? F|empty(kunde)
+.continue LEEREN    ? M|vorgang^dnr = 4
+.continue ERROR3    ? M|vorgang^kunde^id <> M|kunde^id & _F|empty(M|vorgang)
+.continue TABLEEREN
+..
+!LEEREN
+.formula M|kunde = ""
+.copy M|kunde = M|vorgang^kunde    ? _F|empty(M|vorgang) & M|vorgang^dnr = 3
+.continue TABLEEREN
+..
+!TABLEEREN
+.formula M|nettosum = ""
+.input "is/TABLEEREN"
+.continue ENDE
+..
+!ERROR1
+.error Bis-Datum ist kleiner als Von-Datum.
+.formula M|datet = ""
+.continue TABLEEREN
+..
+!ERROR2
+.error 'M|charge' ist keine Seriennummer zu einem Serviceprodukt!   ? _F|empty(charge)
+.error 'M|tcharge' ist keine Seriennummer zu einem Serviceprodukt!  ? _F|empty(tcharge)
+.formula M|charge  = ""
+.formula M|tcharge = ""
+.formula M|service = ""
+.continue TABLEEREN
+..
+!ERROR3
+.error Kunde 'M|kunde' passt nicht zum Vorgang 'M|vorgang'.
+.copy M|kunde   = M|vorgang^kunde
+.continue TABLEEREN
+..
+!ERROR4
+.error Der Vorgang 'M|vorgang' geh”rt zu keinem Servicevorgang!
+.formula M|vorgang = ""
+.continue TABLEEREN
+..
+!ERROR5
+.error -field M|datet -message "bis-Datum" darf max. Tagedatum sein!
+.formula M|datet = ""
+.end 1
+..
+!ENDE
+.continue

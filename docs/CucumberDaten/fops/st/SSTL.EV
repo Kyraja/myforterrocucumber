@@ -1,0 +1,97 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name              : SSTL.EV
+.. Autor             : bs
+.. Verantwortlich    : cl
+.. Kontrolle         : tiwe
+.. Funktion          : Behandelt die Eingabeparameter ausser dem Startbutton.
+.. Ablauf            : Zentrales Ereignis-FOP
+..
+.. Functionality     : Handles the input parameters except the start button.
+.. Program flow      : Central event fop
+...Includes          :
+.. include st/SSTL.TABLEEREN
+.. include st/SSTL.BSTART.BV
+..*****************************************************************************
+..
+.set trans -
+.. ---------------------------------------------------------------------------
+.. Kopfteil/header
+.. ---------------------------------------------------------------------------
+.continue PART     ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "artikel"
+.continue WAREHSE  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "lgruppe"
+.continue PRODLST  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "fertliste"
+.continue CLRTAB   ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "menge"
+.continue CLRTAB   ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "konddat"
+.continue CLRTAB   ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "bmitag"
+.continue CLRTAB   ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "bmitfm"
+.continue CLRTAB   ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "mitaufl"
+.continue CLRTAB   ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "relevant"
+.. ---------------------------------------------------------------------------
+.. Tabellenteil/table
+.. ---------------------------------------------------------------------------
+.continue NODE      ? G|evtartengl = "BUTTON_AFTER"   & G|evtvar = "tbaumaufzu"
+.continue BUELEM    ? G|evtartengl = "BUTTON_AFTER"   & G|evtvar = "buelem"
+.continue FORBIDD   ? G|evtartengl = "ROW_MOVED_BEFORE"
+.continue END
+..  ---------------------------------------------------------------------------
+..
+!PART: Part has changed
+.continue CLEARED ? F|empty(M|artikel)
+.continue CLRTAB ? F|empty(M|lgruppe)
+.continue DETAILS
+..
+!WAREHSE: Warehouse group has changed
+.continue CLEARED ? F|empty(M|lgruppe)
+.continue CLRTAB ? F|empty(M|artikel)
+.continue DETAILS
+..
+!CLEARED: Part or warehouse was cleared
+.continue CLRTAB ? F|empty(M|fertliste)
+.assign M|fertliste = ""
+.continue PRODLST
+..
+!DETAILS: Get details of adapted part
+.select add M|artikel
+.. Before reading data we have to fit part to warehouse group and
+.copy H|lgruppean = M|lgruppe
+..
+.copy M|artbsart = H|bsart
+.formula M|menge = H|minbsmge ? _F|empty(H|minbsmge)
+.formula M|menge = H|losgr    ?  H|losgr > H|minbsmge
+.copy M|gesamtle = H|le
+.formula M|flbasis = H|flbasis
+.assign M|flbasis = 1.0 ? F|empty(M|flbasis)
+.select -
+.continue LISTFIT ? G|evtvar <> "fertliste" & _F|empty(M|fertliste)
+.continue CLRTAB
+..
+!PRODLST: Production list has changed
+.continue CLRTAB ? F|empty(M|fertliste)
+.copy M|artikel = M|fertliste^artikel ? _F|empty(M|fertliste^artikel)
+.copy M|lgruppe = M|fertliste^lgruppe ? _F|empty(M|fertliste^lgruppe)
+.continue PART
+..
+!LISTFIT: If production list does not fit to part and warehouse, clear production list
+.continue CLRTAB ? M|artikel^id = M|fertliste^artikel^id & M|lgruppe^id = M|fertliste^lgruppe^id
+.assign M|fertliste = ""
+.continue PRODLST
+..
+!NODE: Open or close node
+.copy M|bstartbut = G|FALSE
+.formula M|stufe = M|tbaumstufe
+.input "is/TBAUMAUFZU.BN"
+.continue END
+..
+!BUELEM: show actual element in a mask
+.command -parallel 'M|elem^id'
+.continue END
+..
+!FORBIDD: Action not allowed
+.end 1
+..
+!CLRTAB: Clear table
+.input "st/SSTL.TABLEEREN"
+..*****************************************************************************
+!END
+.continue

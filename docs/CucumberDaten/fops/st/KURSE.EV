@@ -1,0 +1,179 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : KURSE.EV
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : EFOP des Infosystems st/KURSE
+.. Functionality  : EFOP of the Infosystem st/KURSE (exchange rates)
+..*****************************************************************************
+..
+.set trans -
+..
+.type text xtmark
+..
+.formula U|xtmark = "END"
+..
+.continue ADDDATA  ? G|evtartengl   = "FIELD_EXIT"   & G|evtvar = "daten"
+.continue ADDHEAD  ? G|evtartengl   = "BUTTON_BEFORE" & G|evtvar = "bkopfzuzeile"
+.continue DELTAB   ? G|evtartengl   = "BUTTON_BEFORE" & G|evtvar = "btableeren"
+.continue CLEANTAB ? G|evtartengl   = "BUTTON_BEFORE" & G|evtvar = "btabaufraeum"
+.continue SCREENEN ? G|evtartengl   = "SCREEN_ENTER"
+.continue ROWINSAF ? G|evtartengl   = "ROW_INSERTION_AFTER"
+.continue ROWINSBF ? G|evtartengl   = "ROW_INSERTION_BEFORE"
+.continue TFIELD   ? G|evtzeile > 0 & G|evtartengl = "FIELD_EXIT"
+.continue HFIELD   ? G|evtzeile = 0 & G|evtartengl = "FIELD_EXIT"
+.continue END
+..
+..*****************************************************************************
+!DELTAB
+..*****************************************************************************
+.make screen line --
+.continue END
+..
+..*****************************************************************************
+!ADDHEAD: Add head data to table
+..*****************************************************************************
+.continue END ? _M|kursok
+.. append row
+.select screen line 'M|tzeilen' ? M|tzeilen > 0
+.make screen line +O
+.copy M|tkursdatum = M|kursdatum
+.copy M|teinwaehr  = M|einwaehr
+.copy M|tauswaehr  = M|auswaehr
+.copy M|tkurs      = M|kurs
+.copy M|tkursok    = M|kursok
+.continue END
+..
+..*****************************************************************************
+!ADDDATA: Add data rows
+..*****************************************************************************
+.type GL xt
+.type text xelem
+.type integer xi ximod
+.formula   U|xtmark= "AD2"
+.copy U|xt    = M|daten
+!AD1
+.formula   U|ximod = U|xi // 3 + 1
+.formula   U|xelem = U|xt << ";"
+.formula   U|xt    = U|xt >> ";"
+.formula   U|xi    = U|xi + 1
+.make screen line +O ? U|ximod = 1
+.formula   M|tkursdatum = U|xelem ? U|ximod = 1
+.formula   M|teinwaehr  = U|xelem ? U|ximod = 2
+.formula   M|tauswaehr  = U|xelem ? U|ximod = 3
+.continue TFIELD ? U|ximod = 3
+!AD2
+.continue AD1 ? _F|empty(U|xt)
+.continue END
+..
+..*****************************************************************************
+!CLEANTAB: Clean up table (remove invalid, senseless, duplicate rows and merge periods)
+..*****************************************************************************
+.continue END ? M|tzeilen = 0
+.type GD    xtkursdatum
+.type text  xteinwaehr
+.type text  xtauswaehr
+.type RP7.6 xtkurs
+!L1
+.select screen line "$,@ordnung=teinwaehr^iso3a,tauswaehr^iso3a,tkursdatum.r"
+!L2
+.continue E1 ? _G|mehr
+.copy M|tmarkiert   = G|TRUE ? _M|tkursok
+.copy M|tmarkiert   = G|TRUE ?  M|teinwaehr^id = M|tauswaehr^id
+.copy M|tmarkiert   = G|TRUE ?  M|tkursdatum = U|xtkursdatum & M|teinwaehr^iso3a = U|xteinwaehr & M|tauswaehr^iso3a = U|xtauswaehr
+.copy M|tmarkiert   = G|TRUE ?  M|tkurs = U|xtkurs & M|teinwaehr^iso3a = U|xteinwaehr & M|tauswaehr^iso3a = U|xtauswaehr & M|tkursdatum < U|xtkursdatum
+.copy U|xtkursdatum = M|tkursdatum
+.copy U|xteinwaehr  = M|teinwaehr^iso3a
+.copy U|xtauswaehr  = M|tauswaehr^iso3a
+.copy U|xtkurs      = M|tkurs
+.continue N1
+!N1
+.select screen line continue
+.continue L2
+!E1
+.type integer  xizeile
+.copy U|xizeile = M|tzeilen
+!L3
+.continue E2 ? U|xizeile = 0
+.select screen line 'U|xizeile'
+.continue E2 ? _G|mehr
+!L4
+.make screen line -O ? M|tmarkiert
+.formula   U|xizeile = U|xizeile - 1
+.continue L3
+!E2
+.continue END
+..
+..*****************************************************************************
+!SCREENEN
+..*****************************************************************************
+.copy M|kursdatum = G|datum
+.copy M|einwaehr  = F|condexpr(_F|empty(G|auebereuro) & _F|empty(G|eurokurs) & _F|empty(G|bueuro), F|condexpr(M|kursdatum < G|bueuro, G|ainland, G|ninland), G|inland)
+.assign M|auswaehr  = ""
+.formula   M|kurs      = 0
+.copy M|kursok    = G|FALSE
+.continue END
+..
+..*****************************************************************************
+!ROWINSBF: Before new row will be inserted
+..*****************************************************************************
+.. Manuelles Einfuegen von Zeilen aktuell nicht verwendet.
+.end 1
+.. Hack damit nur beim Maskeneintritt keine Zeile eingefuegt wird (nur GUI)
+.continue ? _G|grafik
+.type bool x
+.copy U|x          = M|zeileeinok
+.copy M|zeileeinok = G|TRUE
+.end 1 ? _U|x
+.continue
+..
+..*****************************************************************************
+!ROWINSAF: After new row has been inserted
+..*****************************************************************************
+.copy M|tkursdatum = G|datum
+.copy M|teinwaehr  = F|condexpr(_F|empty(G|auebereuro) & _F|empty(G|eurokurs) & _F|empty(G|bueuro), F|condexpr(M|tkursdatum < G|bueuro, G|ainland, G|ninland), G|inland)
+.assign M|tauswaehr  = ""
+.formula   M|tkurs      = 0
+.copy M|tkursok    = G|FALSE
+.continue 'U|xtmark'
+..
+..*****************************************************************************
+!TFIELD
+..*****************************************************************************
+.continue TNOK ? F|empty(M|tkursdatum)
+.continue TNOK ? F|empty(M|teinwaehr)
+.continue TNOK ? F|empty(M|tauswaehr)
+.copy M|tkurs   = F|fxrate(M|tauswaehr, M|tkursdatum, M|teinwaehr)
+.copy M|tkursok = G|TRUE
+.continue 'U|xtmark'
+..
+..*****************************************************************************
+!TNOK
+..*****************************************************************************
+.formula   M|tkurs   = 0
+.copy M|tkursok = G|FALSE
+.continue 'U|xtmark'
+..
+..*****************************************************************************
+!HFIELD
+..*****************************************************************************
+.continue HNOK ? F|empty(M|kursdatum)
+.continue HNOK ? F|empty(M|einwaehr)
+.continue HNOK ? F|empty(M|auswaehr)
+.copy M|kurs    = F|fxrate(M|auswaehr, M|kursdatum, M|einwaehr)
+.copy M|kursok  = G|TRUE
+.continue 'U|xtmark'
+..
+..*****************************************************************************
+!HNOK
+..*****************************************************************************
+.formula   M|kurs   = 0
+.copy M|kursok = G|FALSE
+.continue 'U|xtmark'
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue
+

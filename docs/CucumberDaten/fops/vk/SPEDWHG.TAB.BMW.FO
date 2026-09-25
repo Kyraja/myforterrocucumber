@@ -1,0 +1,166 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SPEDWHG.TAB.BMW.FO
+.. Author         : calbayrak
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Functionality  : fill data fields for label VDA 4902 BMW specification
+..*****************************************************************************
+.set trans -
+..
+..<META M|='vk/SPEDWHG' >
+..
+.. sales item with packaging mateiral
+..<META H|='P3:2' >
+.. sales item for product
+..<META 2|='P3:2' >
+.. blanket order item for product
+..<META 3|='P3:1.2' >
+.. sales header (packing slip)
+..<META 5|='P3:1' > 
+.. shipping order
+..<META 7|='P55:1' > 
+.. Blanket order header
+..<META D|='P3:1' > 
+..
+..*****************************************************************************
+.. FIELD DATA
+..*****************************************************************************
+..
+.input "SPEDWHG.TAB.VDA.DATA.FO"
+..
+.copy M|tkuans1 = M|kempans
+.copy M|tkuans2 = M|kempstr
+.copy M|tempstaat = M|kempstaat
+.copy M|tempplz = M|kempplz
+.copy M|temport = M|kemport
+..
+.. Use NAEL from blanket order (buffer 3) if packing slip did not have one
+.formula M|tnaelnr =  2|naelnr          
+.formula M|turlandiso3 = 2|artikel^urland^iso3
+..
+.continue EBO ? _F|defined(3|id)
+.formula M|tnaelnr     = 3|naelnr  ?  F|empty(M|tnaelnr)
+.formula M|tabschlnr   = 3|kopf^abschlnr
+.formula M|tlabruf     = 3|kopf^lztabnr
+!EBO
+..
+..*****************************************************************************
+.. BARCODES
+..*****************************************************************************
+..
+..
+..  PDF-417 -- VDA -- BMW-Variante
+..
+.continue NOBMW  ?  F|empty(M|tlsnr)
+..
+.. Note
+..  Data values are written without identifider into the barcode.
+..  The sequence of data elements is fixed!
+..  Fields are separated by backslash "\".
+..  Empty fields have to be written into the barcode.
+..  Empty fields look like this: \\
+..
+.. List of fields
+..       1  PDF-Kennung              7 Text M   "VDA4902"
+..       2  Version                  7 Text M   "BMW_V01"
+..       3  Warenempfaenger          8 Text M   Unternehmensschluessel BMW oder Werk Kunde
+..       4  Abladestelle             5 Num  M
+..       5  Lagerort/Montageort      7 Text K
+..     5.1  Verwendungsschluessel    1 Text K
+..     5.2  Verbrauchsstelle        14 Text K
+..       6  Lieferscheinnummer       8 Num  M
+..       7  Gewicht netto            5 Num  M   '99999' (numerisch)
+..       8  Gewicht brutto           5 Num  M   '99999' (numerisch)
+..       9  Anzahl-Packstuecke       4 Num  M   '9999'  (numerisch)
+..      10  Sachnummer Kunde        10 Text M   (Sachnummer Besteller)
+..      11  Aenderungsindex          2 Text K
+..      12  Aenderungsstand          6 Text K   Aenderungsstand Konstruktion (Nael-Nr. /Bauabweichungs-Nr.) passend zur gelieferten Ware.
+..      13  Fuellmenge              10 Num  M   '9999999v999'
+..      14  Mengeneinheit            2 Text M
+..      15  Packmittelnummer Kunde  10 Text M
+..      16  Packmittelnummer Lief.  10 Text K
+..      17  Lieferant                8 Text M   Nummer des Lieferanten bei BMW
+..      18  Datum                    6 Text M   JJMMTT (vercodet)   TT.MM.JJJJ (visuell auf Beleg)
+..      19  Packstuecknummer         9 Num  M
+..      20  Charge                  12 Text K
+..      21  Bestellnummer            7 Num  M
+..      22  Abrufnummer              9 Num  K   Abrufnummer BMW, wenn vorgegeben
+..      23  Transportweg            50 Text K   SA 518 (neu fuerr BMW), Wenn von BMW gesendet
+..      24  Ursprungsland            3 Text M
+..
+.. Example:
+..      [)>RS07GSVDA4902\BMW_V01\A1100903\18123\LO_1234\S\Verbrauch\35000003\100\120\4\0003221100\03\AST03\
+..      200000\ST\3100419\Gibo\58518910\000404\32300001\Charge_02\8211808\1020304\Ueber Aufzug 0815 an Band 1020\004RSEOT
+..
+.. Filling Quantity 9999999v999 (no decimal point)
+.type integer xidecifilling ? _F|defined(U|xidecifilling)
+.formula U|xidecifilling = M|tfmenge * 1000
+..
+.type text xposphe ? _F|defined(U|xposphe)
+.formula U|xposphe = 'H|he(L=":")'
+.type NT2 evda ? _F|defined(U|evda)
+.input "EDI.UNITS"
+..
+.. Control characters are converted to controls in jasper!
+.type text xtfact ? _F|defined(U|xtfact)
+.type text ula    ? _F|defined(U|ula )
+.type text xtrs   ? _F|defined(U|xtrs)
+.type text xtgs   ? _F|defined(U|xtgs)
+.type text xteot  ? _F|defined(U|xteot)
+.formula U|xtfact = "07"
+.formula U|xtrs   = "-RS-"
+.formula U|xtgs   = "-GS-"
+.formula U|xteot  = "-EOT-"
+..
+.. Compose barcode data
+.type text xt ? _F|defined(U|xt)
+.formula U|xt =         U|xtrs + U|xtfact
+.formula U|xt = U|xt  + U|xtgs + "VDA4902\BMW_V01"
+.formula U|xt = U|xt  + "\"    +  M|kwerk
+.formula U|xt = U|xt  + "\"    +  M|tkuablade
+.formula U|xt = U|xt  + "\"    +  M|tlagerort
+.formula U|xt = U|xt  + "\"    +  M|tverwschl
+.formula U|xt = U|xt  + "\"    +  M|tvbrstelle
+.formula U|xt = U|xt  + "\"    +  M|tlsnr^nummer
+.formula U|xt = U|xt  + "\"    + 'M|tgewnetto'
+.formula U|xt = U|xt  + "\"    + 'M|tgewbrutto'
+.formula U|xt = U|xt  + "\"    + 'M|tpckanzinner'
+.formula U|xt = U|xt  + "\"    +  M|tartkuartnr
+.formula U|xt = U|xt  + "\"
+.formula U|xt = U|xt  + "\"    +  M|tnaelnr
+.formula U|xt = U|xt  + "\"    + 'U|xidecifilling'
+.formula U|xt = U|xt  + "\"    +  U|evda
+.formula U|xt = U|xt  + "\"    +  M|tpackkuartnr
+.formula U|xt = U|xt  + "\"    +  M|tpackmit^nummer
+.formula U|xt = U|xt  + "\"    +  M|tliefnr
+.formula U|xt = U|xt  + "\"    +  M|tlsvom>>"D"
+.formula U|xt = U|xt  + "\"    +  M|tlspcknr
+.formula U|xt = U|xt  + "\"    +  M|tlsartchg
+.formula U|xt = U|xt  + "\"    +  M|tabschlnr
+.formula U|xt = U|xt  + "\"    +  M|tlabruf
+.formula U|xt = U|xt  + "\"
+.formula U|xt = U|xt  + "\"    +  M|turlandiso3
+.formula U|xt = U|xt  + U|xtrs +  U|xteot
+..
+.. Hide control values when displaying in info system
+.type text xtregex ? _F|defined(U|xtregex)
+.formula U|xtregex = U|xtrs+U|xtfact+"|"+U|xtrs+"|"+U|xtgs+"|"+U|xteot
+..
+.continue PDFSIZE  ?  +U|xt > 255
+..
+.formula M|tbmwpdfcode = U|xt
+.formula M|tbmwpdf = F|regreplaceall(U|xt, U|xtregex, "")
+..
+!NOBMW
+.continue
+..
+..
+..*****************************************************************************
+!END
+.continue
+..
+!PDFSIZE
+.error Die Daten fÅr den PDF-417 Barcode sind zu lang.
+.end 1
+..

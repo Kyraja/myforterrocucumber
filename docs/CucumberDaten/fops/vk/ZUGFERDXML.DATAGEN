@@ -1,0 +1,89 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : ZUGFERDXML.DATAGEN
+..  Autor          : saac
+..  Verantwortlich : teamreport
+..  Kontrolle      : cl
+..  Funktion       : XML-Datengenerator des Infosystems ev/EVVORGANG zur Erzeugung
+..                   der Rechnungsdaten im ZUGFeRD-Format
+..  Functionality  : XML data generator for the Infosystem ev/EVVORGANG to build
+..                   invoice date for ZUGFeRD
+..*****************************************************************************
+.type text xfullsubs                            ? _F|defined(U|xfullsubs)
+.type text xpoorsubs                            ? _F|defined(U|xpoorsubs)
+.type bool xTestMode                            ? _F|defined(U|xTestMode)
+.type text xFormat                              ? _F|defined(U|xFormat)
+.type text xcurrencyID                          ? _F|defined(U|xcurrencyID)
+.type text xDateFormat                          ? _F|defined(U|xDateFormat)
+.type text xBuyerReference                      ? _F|defined(U|xBuyerReference)
+.type text xBuyerOrderReferencedDocument        ? _F|defined(U|xBuyerOrderReferencedDocument)
+.type text xerrormessage                        ? _F|defined(U|xerrormessage)
+..
+.set trans -
+.continue ERRCONFIG ? _F|sysinfo(18)^zugferd
+..
+.. Basic settings for all sections
+.copy U|xTestMode = _M|vorgang^uebertr
+.copy U|xFormat = "comfort"
+.copy U|xcurrencyID = M|land
+.copy U|xDateFormat = "102"
+..
+.copy U|xBuyerReference = M|frzeich
+.copy U|xBuyerOrderReferencedDocument = M|navom
+..
+.formula U|xpoorsubs="+LX,&,&amp;, ,<,&lt;, ,>,&gt;,"
+.set substitution 'U|xpoorsubs'
+.tablerecord unformatted
+.set decpoint .
+.set thoussep ""
+.output new 'U|xxmldata' -encoding "UTF-8"
+..*****************************************************************************
+!OUTPUT
+..*****************************************************************************
+<?xml version="1.0" encoding="UTF-8"?>
+..*****************************************************************************
+<rsm:CrossIndustryDocument xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:rsm="urn:ferd:CrossIndustryDocument:invoice:1p0"
+    xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:12" xmlns:udt="urn:un:unece:uncefact:data:standard:UnqualifiedDataType:15">
+    <rsm:SpecifiedExchangedDocumentContext>
+.continue FORMAT ? _U|xTestMode
+        <ram:TestIndicator>
+            <udt:Indicator>true</udt:Indicator>
+        </ram:TestIndicator>
+!FORMAT
+        <ram:GuidelineSpecifiedDocumentContextParameter>
+            <ram:ID>urn:ferd:CrossIndustryDocument:invoice:1p0:'U|xFormat'</ram:ID>
+        </ram:GuidelineSpecifiedDocumentContextParameter>
+    </rsm:SpecifiedExchangedDocumentContext>
+.input "ZUGFERDXML.HEADEREXCHANGEDDOCUMENT"
+        <rsm:SpecifiedSupplyChainTradeTransaction>
+            <ram:ApplicableSupplyChainTradeAgreement>
+?               <ram:BuyerReference>'U|xBuyerReference'</ram:BuyerReference>? _F|empty(U|xBuyerReference)
+.input "ZUGFERDXML.SELLERTRADEPARTY"
+.input "ZUGFERDXML.BUYERTRADEPARTY"
+.input "ZUGFERDXML.APPLICABLETRADEDELIVERYTERMS"
+.continue ENDSUPPLYCHAIN ? F|empty(U|xBuyerOrderReferencedDocument)
+            <ram:BuyerOrderReferencedDocument>
+                <ram:ID>'U|xBuyerOrderReferencedDocument'</ram:ID>
+            </ram:BuyerOrderReferencedDocument>
+!ENDSUPPLYCHAIN
+            </ram:ApplicableSupplyChainTradeAgreement>
+.input "ZUGFERDXML.APPLICABLESUPPLYCHAINTRADEDELIVERY"
+.input "ZUGFERDXML.APPLICABLESUPPLYCHAINTRADESETTLEMENT"
+.input "ZUGFERDXML.INCLUDEDSUPPLYCHAINTRADELINEITEM"
+        </rsm:SpecifiedSupplyChainTradeTransaction>
+    </rsm:CrossIndustryDocument>
+..*****************************************************************************
+.output terminal
+.set substitution
+.tablerecord
+.set languagesettings "T"
+.continue END
+..*****************************************************************************
+!ERRCONFIG
+.set trans +
+.formula U|xerrormessage = "In der Konfiguration ist die Erweiterung ZUGFeRD nicht aktiviert."
+.set trans -
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

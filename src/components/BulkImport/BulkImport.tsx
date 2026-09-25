@@ -13,6 +13,7 @@
  * @prop {(feature: FeatureInput) => void} onLoadToEditor - Loads a generated feature into the main editor.
  */
 import { useState, useRef } from 'react';
+import { IconUpload, IconDownload, IconPlay, IconStop, IconZip, IconClose } from '../icons';
 import type { FeatureInput, WorkPackage, TableDef } from '../../types/gherkin';
 import { parseWorkPackageXlsx } from '../../lib/workPackageParser';
 import { downloadExampleXlsx } from '../../lib/exampleWorkPackages';
@@ -31,7 +32,7 @@ interface BulkImportProps {
 }
 
 export function BulkImport({ model, testUser, tables, onLoadToEditor }: BulkImportProps) {
-  const { t } = useTranslation();
+  const { t, lang } = useTranslation();
   const [packages, setPackages] = useState<WorkPackage[]>([]);
   const [bulkTestUser, setBulkTestUser] = useState(testUser);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -54,7 +55,7 @@ export function BulkImport({ model, testUser, tables, onLoadToEditor }: BulkImpo
 
   const handleStart = () => {
     if (packages.length === 0 || !isLoggedIn()) return;
-    startGeneration(packages, model, bulkTestUser, tables);
+    startGeneration(packages, model, bulkTestUser, tables, lang as 'de' | 'en');
   };
 
   const handleDownloadOne = (index: number) => {
@@ -89,7 +90,7 @@ export function BulkImport({ model, testUser, tables, onLoadToEditor }: BulkImpo
           onClick={() => fileRef.current?.click()}
           type="button"
         >
-          {t('bulk.uploadXlsx')}
+          <IconUpload />{t('bulk.uploadXlsx')}
         </button>
         <input
           ref={fileRef}
@@ -103,7 +104,7 @@ export function BulkImport({ model, testUser, tables, onLoadToEditor }: BulkImpo
           onClick={downloadExampleXlsx}
           type="button"
         >
-          {t('bulk.downloadExample')}
+          <IconDownload />{t('bulk.downloadExample')}
         </button>
         {packages.length > 0 && (
           <>
@@ -111,7 +112,7 @@ export function BulkImport({ model, testUser, tables, onLoadToEditor }: BulkImpo
               {packages.length} {t('bulk.packagesLoaded')}
             </span>
             <button className={styles.clearBtn} onClick={handleClear} type="button">
-              &times;
+              <IconClose />
             </button>
           </>
         )}
@@ -131,7 +132,7 @@ export function BulkImport({ model, testUser, tables, onLoadToEditor }: BulkImpo
             onClick={downloadExampleXlsx}
             type="button"
           >
-            {t('bulk.downloadExampleBtn')}
+            <IconDownload />{t('bulk.downloadExampleBtn')}
           </button>
         </div>
       )}
@@ -154,11 +155,11 @@ export function BulkImport({ model, testUser, tables, onLoadToEditor }: BulkImpo
                 disabled={!apiKeySet}
                 type="button"
               >
-                {t('bulk.generateAll')}
+                <IconPlay />{t('bulk.generateAll')}
               </button>
             ) : (
               <button className={styles.cancelBtn} onClick={cancelGeneration} type="button">
-                {t('bulk.cancel')}
+                <IconStop />{t('bulk.cancel')}
               </button>
             )}
             {isRunning && (
@@ -168,7 +169,7 @@ export function BulkImport({ model, testUser, tables, onLoadToEditor }: BulkImpo
             )}
             {doneCount > 0 && (
               <button className={styles.zipBtn} onClick={handleDownloadAll} type="button">
-                {t('bulk.downloadZip', { done: doneCount, total: results.length })}
+                <IconZip />{t('bulk.downloadZip', { done: doneCount, total: results.length })}
               </button>
             )}
           </div>
@@ -226,7 +227,7 @@ export function BulkImport({ model, testUser, tables, onLoadToEditor }: BulkImpo
                         {status === 'pending' && !isRunning && (
                           <button
                             className={styles.generateOneBtn}
-                            onClick={() => retryItem(i, model, bulkTestUser, tables)}
+                            onClick={() => retryItem(i, model, bulkTestUser, tables, lang as 'de' | 'en')}
                             disabled={!apiKeySet}
                             type="button"
                           >
@@ -236,7 +237,7 @@ export function BulkImport({ model, testUser, tables, onLoadToEditor }: BulkImpo
                         {status === 'error' && (
                           <button
                             className={styles.retryBtn}
-                            onClick={() => retryItem(i, model, bulkTestUser, tables)}
+                            onClick={() => retryItem(i, model, bulkTestUser, tables, lang as 'de' | 'en')}
                             type="button"
                           >
                             {t('bulk.retry')}

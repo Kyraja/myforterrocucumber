@@ -1,0 +1,146 @@
+..!interpreter declaration english translate noabbrev englvar
+..*****************************************************************************
+.. Name           : SEARCHCONFIG.LADEN.BA
+.. Author         : thge
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Functionality  : Load VTS configuration
+..*****************************************************************************
+..
+.. Declarations
+.type text    xtpath2conf  ? _F|defined(U|xtpath2conf)
+.type text    xtpath2data  ? _F|defined(U|xtpath2data)
+.type text    xtfileindex  ? _F|defined(U|xtfileindex)
+.type text    xtfilerep    ? _F|defined(U|xtfilerep)
+.type text    xtfile2read  ? _F|defined(U|xtfile2read)
+.type text    xtreadline   ? _F|defined(U|xtreadline)
+.type integer xifile1      ? _F|defined(U|xifile1)
+.type integer xifile2      ? _F|defined(U|xifile2)
+.type integer xifile3      ? _F|defined(U|xifile3)
+.type integer xiid         ? _F|defined(U|xiid)
+.type text    xttmpfile1   ? _F|defined(U|xttmpfile1)
+.type text    xttmpfile2   ? _F|defined(U|xttmpfile2)
+.type text    xttmpfile3   ? _F|defined(U|xttmpfile3)
+.type text    xtcmd        ? _F|defined(U|xtcmd)
+.type text    xtkey        ? _F|defined(U|xtkey)
+.type text    xtvalue      ? _F|defined(U|xtvalue)
+.type text    xtv1         ? _F|defined(U|xtv1)
+.type text    xtv2         ? _F|defined(U|xtv2)
+.type text    xtv3         ? _F|defined(U|xtv3)
+..
+.input "is/KOPFLEEREN"
+.make screen line --
+..
+.formula U|xtpath2conf  = "abasbase/lucene-index/"
+.formula U|xtpath2data  = 'E|VTS_INDEX'
+.formula U|xtfileindex  = U|xtpath2conf + "VTSINDEXLIST.CFG"
+.formula U|xtfilerep    = U|xtpath2conf + "VTSINDEXREPRESENTATION.CFG"
+..
+..*****************************************************************************
+.. Read path
+..*****************************************************************************
+.formula M|webserver  = U|xtpath2data + "/jetty"
+.formula M|configpath = U|xtpath2conf
+.formula M|datapath   = U|xtpath2data
+..
+.formula M|host = 'E|VTS_HOSTNAME'
+.formula M|port = 'E|VTS_PORT'
+..
+..*****************************************************************************
+.. Read VTSINDEXLIST.CFG
+..*****************************************************************************
+!IDXLIST: Read VTSINDEXLIST.CFG
+.file -tempname U|xttmpfile2
+.file -tempname U|xttmpfile1
+.formula U|xtcmd = "cp -f " + U|xtfileindex + " " + U|xttmpfile1
+.system 'U|xtcmd' background
+.formula U|xtfile2read = U|xttmpfile1
+.file -test 'U|xtfile2read'
+.continue ERROR01 ? _G|success
+.file -open U|xifile2 'U|xtfile2read'
+..
+!LISTCPY
+.file -read U|xifile2 U|xtreadline ^
+.continue LSTOPEN ? _G|success
+.continue LISTCPY ? F|regmatch('U|xtreadline', "#.*")
+.output addedto 'U|xttmpfile2'
+..formula M|status = M|status + U|xtreadline + ";"
+.println 'U|xtreadline'
+.continue LISTCPY
+..
+!LSTOPEN
+.formula U|xtfile2read = U|xttmpfile2
+.file -test 'U|xtfile2read'
+.continue ERROR01 ? _G|success
+.file -open U|xifile3 'U|xtfile2read'
+..
+.formula U|xiid = 1
+!LSTREAD
+.file -read U|xifile3 U|xtv1 U|xtv2 U|xtv3
+.continue REPRSNT ? _G|success
+.make screen line +
+.assign M|tobjtyp   = "Data"
+.assign M|tobjid    = 'U|xiid'
+.assign M|tabbmod   = 'U|xtv1'
+.assign M|tinterval = 'U|xtv2'
+.assign M|tstatus   = 'U|xtv3'
+.assign M|tobjsuch  = "DATA" + 'U|xiid'
+.formula U|xiid = U|xiid + 1
+.continue LSTREAD
+..
+..*****************************************************************************
+.. Read VTSINDEXREPRESENTATION.CFG
+..*****************************************************************************
+!REPRSNT: Read VTSINDEXREPRESENTATION.CFG
+.file -tempname U|xttmpfile3
+.file -tempname U|xttmpfile1
+.. copy file to FOP readable temp-file
+.formula U|xtcmd = "cp -f " + U|xtfilerep + " " + U|xttmpfile1
+.system 'U|xtcmd' background
+.formula U|xtfile2read = U|xttmpfile1
+.file -test 'U|xtfile2read'
+.continue ERROR01 ? _G|success
+.file -open U|xifile2 'U|xtfile2read'
+..
+!REPCPY: Copy into new file without lines beginning with #
+.file -read U|xifile2 U|xtreadline ^
+.continue REPOPEN ? _G|success
+.continue REPCPY ? F|regmatch('U|xtreadline', "#.*")
+.output addedto 'U|xttmpfile3'
+.println 'U|xtreadline'
+.continue REPCPY
+..
+!REPOPEN: Read representation information
+.formula U|xtfile2read = U|xttmpfile3
+.file -test 'U|xtfile2read'
+.continue ERROR01 ? _G|success
+.file -open U|xifile3 'U|xtfile2read'
+..
+.formula U|xiid = 1
+!REPREAD
+.file -read U|xifile3 U|xtv1 U|xtv2 U|xtv3
+.continue DONE ? _G|success
+.make screen line +
+.assign M|tobjtyp = "Web"
+.assign M|tobjid  = 'U|xiid'
+.assign M|tabbmod = 'U|xtv1'
+.assign M|tschema = 'U|xtv2'
+.assign M|tstatus = 'U|xtv3'
+.assign M|tobjsuch  = "WEB" + 'U|xiid'
+.formula U|xiid = U|xiid + 1
+.continue REPREAD
+..
+!DONE
+.continue END
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+.. Error handling
+..*****************************************************************************
+..
+!ERROR01: Missing file!
+.set trans +
+.formula M|status = F|formatstr("Die Datei {1} wurde nicht gefunden!", U|xtfile2read)
+.set trans -
+.continue END

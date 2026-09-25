@@ -1,0 +1,158 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDI2VKAUV.FRUEHWARNUNG
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Fuehrt zu einem Abruf die Fruehwarnpruefung durch:
+..                  * Ist der aktuelle Abruf ein "LAB" wird mit dem
+..                    vorangegangenen LAB verglichen.
+..                  * Ist der aktuelle Abruf ein "FAB" wird mit dem
+..                    dazugehoerenden LAB verglichen.
+..                  * Gibt es keinen Vorgaenger, gibt es keine Warnung.
+.. Functionality  :
+...Includes
+..      include     dfue/EDI2VKAUV.RAHMENPOS
+..*****************************************************************************
+.set trans -
+..
+.. How is this (E)FOP used?
+.type bool xbsingle      ? _F|defined(U|xbsingle)
+.type text xtediparam    ? _F|defined(U|xtediparam)
+.type text xtselEDI      ? _F|defined(U|xtselEDI)
+.type text xtselEDIalt   ? _F|defined(U|xtselEDIalt)
+..
+.. Forecasts difference qty + percentage
+.type realx xfzdiffmge   ? _F|defined(U|xfzdiffmge)
+.type realx xfzdiffp     ? _F|defined(U|xfzdiffp)
+.type realx xfzdiffpx    ? _F|defined(U|xfzdiffpx)
+.type bool  xbwarnings   ? _F|defined(U|xbwarnings)
+..
+.. Early warning period
+.type gd xdiffStart      ? _F|defined(U|xdiffStart)
+.type gd xdiffEnde       ? _F|defined(U|xdiffEnde)
+..
+.. Cumulative quantity in warning period
+.type realx xFZalt       ? _F|defined(U|xFZalt)
+.type realx xFZneu       ? _F|defined(U|xFZneu)
+..
+.. More warnings
+.type realx xsumSOFORT   ? _F|defined(U|xsumSOFORT)
+.type realx xsumRUECK    ? _F|defined(U|xsumRUECK)
+..
+.. Local fields
+.type text xideksrah     ? _F|defined(U|xideksrah)
+.type text xideksart     ? _F|defined(U|xideksart)
+..
+.. Quantity
+.type realx xmge         ? _F|defined(U|xmge)
+..
+.. Text for free text notice
+.type text xtAbrufAlt        ? _F|defined(U|xtAbrufAlt)
+.type text xtAbrufNeu        ? _F|defined(U|xtAbrufNeu)
+.type text xtAbrufSumme      ? _F|defined(U|xtAbrufSumme)
+.type text xtSofortbedarf    ? _F|defined(U|xtSofortBedarf)
+.type text xtRueckstand      ? _F|defined(U|xtRueckstand)
+.type text xtDifferenz       ? _F|defined(U|xtDifferenz)
+.type text xtErlaubt         ? _F|defined(U|xtErlaubt)
+.type text xtZeile           ? _F|defined(U|xtZeile)
+.type text xtDatum           ? _F|defined(U|xtDatum)
+.type text xtMenge           ? _F|defined(U|xtMenge)
+.type text xtAbrufnummer     ? _F|defined(U|xtAbrufnummer)
+.type text xtEdiId           ? _F|defined(U|xtEdiId)
+.type text xtZeitraum        ? _F|defined(U|xtZeitraum)
+.type text xtFruehwarnsystem ? _F|defined(U|xtFruehwarnsystem)
+.set trans +
+.formula U|xtAbrufAlt = F|formatstr("Abruf {1}ALT{1}", dblquote)
+.formula U|xtAbrufNeu = F|formatstr("Abruf {1}NEU{1}", dblquote)
+.formula U|xtAbrufSumme = "Summe"
+.formula U|xtSofortbedarf = "Sofortbedarf"
+.formula U|xtRueckstand = "RÅckstand"
+.formula U|xtDifferenz = "Differenz"
+.formula U|xtErlaubt = "erlaubt"
+.formula U|xtZeile = "Zeile"
+.formula U|xtDatum = "Datum"
+.formula U|xtMenge = "Menge"
+.formula U|xtAbrufnummer = "Abrufnummer"
+.formula U|xtEdiId = "EDI-Id"
+.formula U|xtZeitraum = "Auswertungszeitraum"
+.formula U|xtFruehwarnsystem = "Auswertung FrÅhwarnsystem"
+.set trans -
+..
+.. Check if (E)FOP is attached to mask 137, database 53 (EDI message)
+.continue EMASK  ? _F|empty(U|xtediparam)
+.continue EMASK  ? _F|defined(G|evtartengl)
+.continue EMASK  ?  G|evtartengl <> "SCREEN_EXIT" & G|evtartengl <> "SCREEN_VALIDATION" & G|evtartengl <> "SCREEN_END"
+.continue EMASK  ? _F|defined(M|dnr)
+.continue EMASK  ?  M|dnr<>53
+.formula U|xtediparam = M|id
+!EMASK
+..
+.. Query or use parameter?
+.formula U|xbsingle = _F|empty(U|xtediparam)
+.formula U|xtselEDI = ""
+.formula U|xtselEDIalt = ""
+..
+..
+.. Event evaluation
+.. ----------- ---------- ---------- -------------------------------------------
+.continue PARAM  ?  U|xbsingle
+.continue QUERY
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+..
+.. Get forecast from parameter
+!PARAM
+.load 1 edifact 'U|xtediparam'
+.continue ENDE  ? _G|mehr
+.continue SPERREN
+..
+..
+.. Pick forecasts with query
+!QUERY
+.formula U|xtselEDI = "%,,nummer=;such=VKAUV;ideksrah=;ideksart=;erfass=;nachrtyp=;datenart=;einfzahl=;@ordnung=nummer;@bereich=ja;@auto=nein"
+.load 1 edifact 'U|xtselEDI'
+.continue ENDE  ? _G|mehr
+.continue SPERREN
+!NEXTQUE
+.load 1 edifact
+.continue ENDE  ? _G|mehr
+.continue SPERREN
+..
+..
+.. Process single EDI message from buffer 1
+!SPERREN
+.continue ERREDI  ?   F|empty(1|such)
+.continue ERREDI  ? _(1|such/"VKAUV*")
+.. Early warning only for delivery forcast schedules and just in time schedules
+.continue SUCCESS ?  '1|edinachr^nummer'<>"2101" & '1|edinachr^nummer'<>"2102"
+..
+.select lock nowait edifact '1|id'
+.continue ERRLOCK ? _G|mehr
+.continue ERRLOCK ? _G|gesperrt
+.select -
+.. .command -wait 'F|formatstr("(Infosystem) LABDIFF ? klab={1}|kfwupdateedi=1|bstart=1|[invisible]=1", 1|id)'
+.system 'F|formatstr("edpinfosys.sh -P -n LABDIFF -t X -s {1}klab={2} X kfwupdateedi=1 X bstart=1{1} -f - -k -", G|dblquote, 1|id)' password background
+..
+!SUCCESS: success
+.continue ENDE  ? U|xbsingle
+'1|nummer'
+.continue NEXTQUE
+..
+!ERRLOCK
+.continue ENDE  ? U|xbsingle
+'1|nummer' - cannot lock
+.continue NEXTQUE
+..
+!ERREDI
+.continue ENDE  ? U|xbsingle
+'1|nummer' - not a forecast
+.continue NEXTQUE
+..
+!ENDE
+.load 1  ?  F|defined(1|id)
+..
+..*****************************************************************************
+!END
+.continue

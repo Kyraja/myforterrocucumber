@@ -1,0 +1,328 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ZAHLSCHEIN.TAB
+.. Datum          : 26.06.06
+.. Version        : 2006r3
+.. Autor          : kk
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : selektiert Zahlscheindaten
+..                : fixe Konstanten
+..                : - Version fÅr QR Code: Version 2.0 -> 0200
+..                  - QRType -> SPC 
+..                  - Coding Type -> 1
+..                : Hinweis:
+..                : - Refernz muss 27 Stellen haben und ist Pflichtfeld
+..                  - Eigene Bankverbindung muss gefÅllt sein
+.. Ablauf         : 
+..
+.. Functionality  : select datas for the payment form
+.. Program flow   :
+.. Includes       :
+.. include vk/KOZEI.ESR15
+.. include vk/KOZEI.ESR15M
+.. include vk/KOZEI.ESR16
+.. include vk/KOZEI.ESR16M
+.. include vk/KOZEI.ESR27
+.. include vk/KOZEI.ESR27M
+.. include vk/KOZEI.RUECK
+..*****************************************************************************
+..
+.set trans -
+.continue DATENQRCODE  ? G|evtvar/"*qrbetrag*"     & G|evtartengl="FIELD_EXIT" & _F|empty(M|qrtyp)
+..
+!BEGTAB: Beginn/beginning
+.type text    xtnum         ? _F|defined(U|xtnum)
+.type text    xtkd          ? _F|defined(U|xtkd)
+.type text    xtbankid      ? _F|defined(U|xtbankid)
+.type text    xtlnnr        ? _F|defined(U|xtlnnr)
+.type text    xtbetr        ? _F|defined(U|xtbetr)
+.type real    xrbetr        ? _F|defined(U|xrbetr)
+.type bool    xbesr         ? _F|defined(U|xbesr)
+.type integer xiposzahl     ? _F|defined(U|xiposzahl)
+.type text    xtstrasse     ? _F|defined(U|xtstrasse)
+.type integer xilaenge      ? _F|defined(U|xilaenge)
+.type integer xistartindex  ? _F|defined(U|xistartindex)
+.type text    xtzusatzinfo1 ? _F|defined(U|xtzusatzinfo1)
+.type text    xtzusatzinfo2 ? _F|defined(U|xtzusatzinfo2)
+.type text    xtqriban      ? _F|defined(U|xtqriban)
+.type text    xtqrreferenz  ? _F|defined(U|xtqrreferenz)
+.type integer xiqriban      ? _F|defined(U|xiqriban)
+.type text    xqrnameend    ? _F|defined(U|xqrnameend)
+..
+.. Anschrift des ZahlungsempfÑngers/Address from payee
+.load 0 company "$,,gruppe=10"
+.continue END ? _G|mehr
+.assign M|empfans  = 0|ans << ";"
+.assign M|empfstr  = 0|str
+.assign M|empfort  = 0|lakenn + "-" + (0|ort << ";")
+.load 0
+..
+.. RechnungsempfÑnger/Invoice recipient
+.assign M|reans  = H|reempf^ans
+.assign M|restr  = H|reempf^str
+.add H|reempf
+.assign M|reort  = D|lakenn + "-" + (H|ort << ";")
+.add
+..
+.. Zahlungscheindaten/datas for payment form
+.assign M|zsrefnr     = H|zareferenz
+.formula M|zstlnnr    = M|vorgang^fabverb^tlnr
+.copy M|beinzahlsch   = G|TRUE    
+..
+.. BetrÑge/Values
+.assign M|rebetr      = H|rebetr
+.assign M|rewaeh      = H|land
+.assign U|xtbetr      = 'M|rebetr'
+.assign M|regbetr     = U|xtbetr << 'G|dezpunkt'  ?  M|beinzahlsch
+.assign M|rerbetr     = U|xtbetr >> 'G|dezpunkt'  ?  M|beinzahlsch
+.assign M|regbetr     = ""               ? _M|beinzahlsch
+.assign M|rerbetr     = ""               ? _M|beinzahlsch
+..
+.. Bankanschrift
+.continue ERROR    ? H|fabverb = ""
+.load 0 bankdata 'H|fabverb^id'
+.continue END       ? _G|mehr
+.assign M|bank        = 0|bank^ans << ";"
+.assign M|baplz       = 0|bank^plz
+.assign M|baort       = 0|bank^nort
+.assign M|zugunsten = ""              ? '0|bank^bankart(L="0")' = "(0)"
+.assign M|zugunsten = "Zugunsten von" ? '0|bank^bankart(L="0")' = "(112)"
+.load 0
+..
+.. Kodierzeile generieren
+.. öbergabevariablen
+.formula U|xrbetr = M|vorgang^rebetr
+.formula U|xtnum  = M|vorgang^nummer
+.formula U|xtkd   = M|vorgang^kunde^nummer
+.formula U|xbesr  = M|beinzahlsch
+.. Identifikation der Bank
+.formula U|xtbankid = M|vorgang^fabverb^bank^ident
+.. Teilnehmernummer wird in dieser Schreibweise
+.. fÅr den Zahlschein benîtigt 01-1613-8
+.formula U|xtlnnr   = M|zstlnnr
+..
+.input "vk/KOZEI.ESR"
+.. RÅckgabewerte fÅr die Maske
+.formula M|zsrefnr     = U|xtzref
+.formula M|zskodzeile  = U|xtzs1
+.formula M|zs2kodzeile = U|xtzs2
+.continue QRCODE
+..
+!QRCODE: QR-Code 
+.assign M|spr = F|value(H|kunde^spr, "AS72")
+.assign P|spr = M|spr        ? _P|sprfoschutz
+.copy P|sprmaske = G|TRUE
+..
+.formula M|qrtyp  ="SPC"
+.formula M|qrcoding = "1"
+.formula M|qrversion = "0200"
+.. Adress-Typ: S steht fuer Strukturierte Adresse und K fuer Kombinierte Adresse
+.formula M|zeadrtyp = "S"
+.formula M|ezpadrtyp = "S"
+.formula M|qrreferenz = F|regreplaceall(M|vorgang^zareferenz, " " , "")
+.formula M|qrreferenz = F|regreplaceall(M|zsrefnr, " " , "") ? F|empty(M|qrreferenz)
+.formula M|qrreferenz = M|zsrefnr ? F|empty(M|qrreferenz)
+.formula M|qriban = M|vorgang^zatlnr
+.formula M|qriban = M|vorgang^fabverb^iban ? F|empty(M|qriban)
+.formula M|qriban  = F|regreplaceall(M|qriban, " " , "")
+.. Referenztyp ermitteln. Es gibt QRR oder SCOR oder NON
+.formula U|xtqriban = M|qriban
+.formula U|xtqriban = U|xtqriban << -4
+.formula U|xtqriban = U|xtqriban << 5
+.. F|empty(f|regreplaceall(U|xtqriban,"[0-9]", "")) alle zahlen rausschneiden, wenn leere String rauskommt waren nur zahlen drin, sonst eben nicht
+.formula U|xiqriban = 'U|xtqriban' ? F|empty(f|regreplaceall(U|xtqriban,"[0-9]", ""))
+.formula M|qrreferenztyp = "QRR"  ? U|xiqriban >= 30000 & U|xiqriban <= 31999
+.continue QRADREMP  ? _F|empty(M|qrreferenztyp)
+.formula U|xtqrreferenz = M|qrreferenz << 2
+.formula M|qrreferenztyp = "SCOR" ? U|xtqrreferenz = "RF"
+.formula M|qriban = M|vorgang^fabverb^iban ? U|xtqrreferenz = "RF"
+.continue QRADREMP  ? _F|empty(M|qrreferenztyp)
+.formula M|qrreferenz = ""
+.formula M|qrreferenztyp = "NON"
+.formula M|qriban = F|regreplaceall(M|vorgang^fabverb^iban, " " , "")
+..
+!QRADREMP
+.formula M|qrnameemp = M|empfans
+.formula M|qrstrempf = M|empfstr
+.formula M|qrurlt = F|sysinfo(10)^urlt
+.formula M|qrdatum = 'F|year(M|vorgang^tterm)' + "-"
+.formula U|xilaenge = +'F|year(M|vorgang^tterm)'
+.formula U|xilaenge = +'F|month(M|vorgang^tterm)'
+.formula M|qrdatum = M|qrdatum + 'F|month(M|vorgang^tterm)' + "-"  ? U|xilaenge = 2
+.formula M|qrdatum = M|qrdatum + "0" + 'F|month(M|vorgang^tterm)' + "-"  ? U|xilaenge = 1
+.formula U|xilaenge = +'F|day(M|vorgang^tterm)'
+.formula M|qrdatum = M|qrdatum + 'F|day(M|vorgang^tterm)' ? U|xilaenge = 2
+.formula M|qrdatum = M|qrdatum + "0" + 'F|day(M|vorgang^tterm)' ? U|xilaenge = 1
+..
+.. das Feld Strasse des ZahlungsempfÑngers muss zerlegt werden -> str + nummer
+.. Entfernt Leerzeichen am Anfang und Ende
+....
+.formula U|xiposzahl = 0
+.formula U|xtstrasse = F|trim(M|qrstrempf)
+.formula U|xiposzahl = F|regindex(U|xtstrasse, "\d{1,}")
+.formula U|xiposzahl = F|strindex(U|xtstrasse, "\d{1,}", 1) ? U|xiposzahl = 1
+.formula U|xilaenge  = +U|xtstrasse
+.formula U|xistartindex = U|xilaenge - U|xiposzahl + 1 ? U|xistartindex <> U|xilaenge
+.formula U|xistartindex = U|xilaenge ? U|xistartindex = U|xilaenge
+.formula M|qrhausnumemp = U|xtstrasse >> U|xistartindex
+.formula M|qrstrempf = U|xtstrasse >> - U|xistartindex
+.formula M|qrplzempf = F|sysinfo(10)^plz
+.formula M|qrortempf = F|sysinfo(10)^nort
+.formula M|qrlandemf = F|sysinfo(10)^staat^iso3
+.formula M|qrbetrag = H|rebetr ? M|beinzahlsch
+.assign M|qrrewaeh   = H|land
+..
+.add M|vorgang^reempf
+.continue END ? _G|mehr
+.formula M|qrnameend = D|ans
+.formula M|qrstrend  = D|str
+.formula M|qrplzend = D|plz
+.formula M|qrortend = D|nort
+.formula M|qrlandend = D|staat^iso3
+.add
+..
+.. das Feld Strasse des endgÅltigen Zahlungspflichtigen muss zerlegt werden -> str + nummer
+.. Entfernt Leerzeichen am Anfang und Ende
+..
+.formula U|xiposzahl = 0
+.formula U|xtstrasse = F|trim(M|qrstrend)
+.formula U|xiposzahl = F|regindex(U|xtstrasse, "\d{1,}")
+.formula U|xiposzahl = F|strindex(U|xtstrasse, "\d{1,}", 1) ? U|xiposzahl = 1
+.formula U|xilaenge  = +U|xtstrasse
+.formula U|xistartindex = U|xilaenge - U|xiposzahl + 1 ? U|xistartindex <> U|xilaenge
+.formula U|xistartindex = U|xilaenge ? U|xistartindex = U|xilaenge
+.formula M|qrhausnumend = U|xtstrasse >> U|xistartindex
+.formula M|qrstrend = U|xtstrasse >> - U|xistartindex
+..
+.. das Feld ZusÑtzliche Informationen besteht -> Vorgangsnummer + Vorgangsdatum
+.. 
+.text U|xtzusatzinfo1 'P|spr' ReNr.
+.text U|xtzusatzinfo2 'P|spr' vom
+..
+.formula M|qrzusatzinfo = U|xtzusatzinfo1 + " " + 'M|vorgang^nummer'
+.formula M|qrzusatzinfo = M|qrzusatzinfo + " " + U|xtzusatzinfo2 + " " + 'M|vorgang^vom'
+..
+.. IBAN blockweise darstellen
+.type text    xtqrreferenz2  ? _F|defined(U|xtqrreferenz2)
+.type text    xtqrreferenz3  ? _F|defined(U|xtqrreferenz3)
+..
+.formula U|xtqrreferenz = M|qriban
+.formula U|xtqrreferenz3 = M|qriban
+.formula U|xtqrreferenz = U|xtqrreferenz << 4
+.formula U|xtqrreferenz2 = U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula U|xtqrreferenz3 = U|xtqrreferenz3 << -4
+.formula U|xtqrreferenz = U|xtqrreferenz3
+.formula U|xtqrreferenz = U|xtqrreferenz << 4
+.formula U|xtqrreferenz2 = U|xtqrreferenz2 + U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula U|xtqrreferenz3 = U|xtqrreferenz3 << -4
+.formula U|xtqrreferenz = U|xtqrreferenz3
+.formula U|xtqrreferenz = U|xtqrreferenz << 4
+.formula U|xtqrreferenz2 = U|xtqrreferenz2 + U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula U|xtqrreferenz3 = U|xtqrreferenz3 << -4
+.formula U|xtqrreferenz = U|xtqrreferenz3
+.formula U|xtqrreferenz = U|xtqrreferenz << 4
+.formula U|xtqrreferenz2 = U|xtqrreferenz2 + U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula U|xtqrreferenz3 = U|xtqrreferenz3 << -4
+.formula U|xtqrreferenz = U|xtqrreferenz3
+.formula U|xtqrreferenz = U|xtqrreferenz << 4
+.formula U|xtqrreferenz2 = U|xtqrreferenz2 + U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula U|xtqrreferenz3 = U|xtqrreferenz3 << -4
+.formula U|xtqrreferenz = U|xtqrreferenz3
+.formula U|xtqrreferenz2 = U|xtqrreferenz2 + U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula M|qriban = U|xtqrreferenz2
+..
+.. Referenz blockweise darstellen
+.formula U|xtqrreferenz= ""
+.formula U|xtqrreferenz2= ""
+.formula U|xtqrreferenz3= ""
+..
+.continue DATENQRCODE              ? M|qrreferenztyp = "NON"
+.continue SCOR                     ? M|qrreferenztyp = "SCOR"
+..
+!QRR
+.formula U|xtqrreferenz = M|qrreferenz
+.formula U|xtqrreferenz3 = M|qrreferenz
+.formula U|xtqrreferenz = U|xtqrreferenz << 2
+.formula U|xtqrreferenz2 = U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula U|xtqrreferenz3 = U|xtqrreferenz3 << -2
+.formula U|xtqrreferenz = U|xtqrreferenz3
+.formula U|xtqrreferenz = U|xtqrreferenz << 5
+.formula U|xtqrreferenz2 = U|xtqrreferenz2 + U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula U|xtqrreferenz3 = U|xtqrreferenz3 << -5
+.formula U|xtqrreferenz = U|xtqrreferenz3
+.formula U|xtqrreferenz = U|xtqrreferenz << 5
+.formula U|xtqrreferenz2 = U|xtqrreferenz2 + U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula U|xtqrreferenz3 = U|xtqrreferenz3 << -5
+.formula U|xtqrreferenz = U|xtqrreferenz3
+.formula U|xtqrreferenz = U|xtqrreferenz << 5
+.formula U|xtqrreferenz2 = U|xtqrreferenz2 + U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula U|xtqrreferenz3 = U|xtqrreferenz3 << -5
+.formula U|xtqrreferenz = U|xtqrreferenz3
+.formula U|xtqrreferenz = U|xtqrreferenz << 5
+.formula U|xtqrreferenz2 = U|xtqrreferenz2 + U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula U|xtqrreferenz3 = U|xtqrreferenz3 << -5
+.formula U|xtqrreferenz = U|xtqrreferenz3
+.formula U|xtqrreferenz2 = U|xtqrreferenz2 + U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula M|qrreferenz = U|xtqrreferenz2
+.continue DATENQRCODE
+..
+!SCOR
+.formula U|xtqrreferenz = M|qrreferenz
+.formula U|xtqrreferenz3 = M|qrreferenz
+.formula U|xtqrreferenz = U|xtqrreferenz << 4
+.formula U|xtqrreferenz2 = U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula U|xtqrreferenz3 = U|xtqrreferenz3 << -4
+.formula U|xtqrreferenz = U|xtqrreferenz3
+.formula U|xtqrreferenz = U|xtqrreferenz << 4
+.formula U|xtqrreferenz2 = U|xtqrreferenz2 + U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula U|xtqrreferenz3 = U|xtqrreferenz3 << -4
+.formula U|xtqrreferenz = U|xtqrreferenz3
+.formula U|xtqrreferenz = U|xtqrreferenz << 4
+.formula U|xtqrreferenz2 = U|xtqrreferenz2 + U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula U|xtqrreferenz3 = U|xtqrreferenz3 << -4
+.formula U|xtqrreferenz = U|xtqrreferenz3
+.formula U|xtqrreferenz2 = U|xtqrreferenz2 + U|xtqrreferenz + " " ? _F|empty(U|xtqrreferenz)
+.formula M|qrreferenz = U|xtqrreferenz2
+..
+!DATENQRCODE- Datenelemente Swiss QR Code
+.formula U|xtqrreferenz= ""
+.formula U|xtqrreferenz2= ""
+.formula U|xtqrreferenz = F|regreplaceall(M|qriban," ","")
+.formula U|xtqrreferenz2 = F|regreplaceall(M|qrreferenz," ","")
+..
+.formula U|xqrnameend = M|qrnameend << ";"
+..
+.formula M|qrcode = M|qrtyp + ";"
+.formula M|qrcode = M|qrcode + M|qrversion + ";"
+.formula M|qrcode = M|qrcode + M|qrcoding + ";"
+.formula M|qrcode = M|qrcode + U|xtqrreferenz + ";"
+.formula M|qrcode = M|qrcode + M|zeadrtyp + ";"
+.formula M|qrcode = M|qrcode + M|qrnameemp + ";"
+.formula M|qrcode = M|qrcode + M|qrstrempf + ";"
+.formula M|qrcode = M|qrcode + M|qrhausnumemp + ";"
+.formula M|qrcode = M|qrcode + M|qrplzempf + ";"
+.formula M|qrcode = M|qrcode + M|qrortempf + ";"
+.formula M|qrcode = M|qrcode + M|qrlandemf + ";"
+.formula M|qrcode = M|qrcode + ";;;;;;;"
+.formula M|qrcode = M|qrcode + 'M|qrbetrag' + ";" ? M|qrbetrag <> 0
+.formula M|qrcode = M|qrcode + " ;" ? M|qrbetrag = 0
+.formula M|qrcode = M|qrcode + 'M|qrrewaeh' + ";"
+.formula M|qrcode = M|qrcode + M|ezpadrtyp + ";"
+.formula M|qrcode = M|qrcode + U|xqrnameend + ";"
+.formula M|qrcode = M|qrcode + M|qrstrend + ";"
+.formula M|qrcode = M|qrcode + M|qrhausnumend + ";"
+.formula M|qrcode = M|qrcode + M|qrplzend + ";"
+.formula M|qrcode = M|qrcode + M|qrortend + ";"
+.formula M|qrcode = M|qrcode + M|qrlandend + ";"
+.formula M|qrcode = M|qrcode + M|qrreferenztyp + ";"
+.formula M|qrcode = M|qrcode + U|xtqrreferenz2 + ";"
+.formula M|qrcode = M|qrcode + M|qrzusatzinfo + ";"
+.formula M|qrcode = M|qrcode + "EPD" + ";"
+..
+!END
+.continue
+..
+!ERROR
+.error Eigene Bankverbindung im Vorgang 'M|vorgang^nummer' ist nicht gefÅllt!
+.end 1

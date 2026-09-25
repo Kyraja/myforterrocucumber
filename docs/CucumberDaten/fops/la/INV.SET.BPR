@@ -1,0 +1,170 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : INV.SET.BPR
+.. Author         : Marco Machmer
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  : setzt Bewertungspreis = Mischpreis
+.. 
+..*****************************************************************************
+.set trans -
+..
+.input "ARB"
+..
+.type bool  xbablage          ? _F|defined(U|xbablage)
+.type text  xcom              ? _F|defined(U|xcom)
+.type text  xdParam           ? _F|defined(U|xdParam)
+.type text  xIOSchl           ? _F|defined(U|xIOSchl)
+..art int   xprocsp           ? _F|defined(U|xprocsp)
+.type text  xzlnr             ? _F|defined(U|xzlnr)
+.type text  xzlsnr            ? _F|defined(U|xzlsnr)
+.type text  xzlnrnew          ? _F|defined(U|xzlnrnew)
+.type bool  xbBasisNull       ? _F|defined(U|xbBasisNull)
+.type bool  xbIDIFF2Z         ? _F|defined(U|xbIDIFF2Z)
+.type bool  xbIDIFFmitDummys  ? _F|defined(U|xbIDIFFmitDummys)
+.type bool  xbmitArtName      ? _F|defined(U|xbmitArtName)
+.type text  xdIDIFFprint      ? _F|defined(U|xdIDIFFprint)
+.type text  xInvObjSchl       ? _F|defined(U|xInvObjSchl)
+.type text  xInvObjSchlAbl    ? _F|defined(U|xInvObjSchlAbl)
+.type text  xzaehlliste       ? _F|defined(U|xzaehlliste)
+.type text  xabschluss        ? _F|defined(U|xabschluss)
+.type text  xsys              ? _F|defined(U|xsys)
+.type bool  xbopened          ? _F|defined(U|xbopened)
+.type bool  xbclosed          ? _F|defined(U|xbclosed)
+.type bool xbmischpreis       ? _F|defined(U|xbmischpreis)
+..
+.. Mischpreis als ersten Preis nehmen
+.copy U|xbmischpreis = G|true
+.set cancel -
+.. alle Variablen mÅssen definiert sein, sonst bricht das Programm ab
+.set demand -
+..
+!EPROCDEF: end procedure definitions 
+.continue EL001 ? _G|evtartengl = "NO_EVENT"
+.. das ist kein Maskenereignis -> ZÑhlliste abfragen
+.continue NOMENU ? G|edp
+.set trans +
+.menu Bewertungspreis aktualisieren
+Mischpreis                           >> .formula U|xbmischpreis = G|TRUE
+Durchschnittlicher Bewertungspreis     >> .formula U|xbmischpreis = G|FALSE
+.set trans -
+..
+!NOMENU
+.output terminal
+.input BILD.F
+.set trans +
+?Artikelmischpreise als Inventurbewertungspreise in ZÑhlliste setzen                ? U|xbmischpreis
+?Durchschnittliche Bewertungspreise als Inventurbewertungspreise in ZÑhlliste setzen ? _U|xbmischpreis       
+
+.set trans -
+.input "INV.HOL.ZL"
+..
+.continue EL002 ? _F|length(U|xzlnr) = 0
+.end .
+.continue FI002
+..
+!EL002: mal mit Sperre holen, um sicher zu gehen, dass da keiner mehr drin ist
+.select stocktaking lock recordnumber 'U|xzlsnr'
+.continue EL003 ? G|mehr
+..
+.box Fehler
+Kann ZÑhlliste nicht exklusiv holen.
+..
+.end .
+.continue FI002
+..
+!EL003
+.continue EL004 ? _U|xbablage
+..
+.box Fehler
+ZÑhlliste ist bereits abgeschlossen.
+..
+.end .
+.continue FI002
+..
+!EL004
+.formula U|xbopened = G|FALSE
+.formula U|xbclosed = G|FALSE
+... startdat = Datum Inventurerîffnung
+... benddat  = Datum Inventurbestandsabschluss
+... Nacharbeiten Inventurer"ffnung --> U|xbopened = TRUE
+... Nacharbeiten Inventurbestandsabschluss --> U|xbclosed = TRUE
+.formula U|xbopened = _F|empty(H|startdat) & F|empty(H|benddat)
+.formula U|xbclosed = _F|empty(H|startdat) & _F|empty(H|benddat)
+..
+!FI002
+.set trans +
+.select -
+Bitte warten
+..
+.set trans -
+.continue FI001
+..
+!EL001: Nacharbeiten Inventurerîffnung --> U|xbopened = TREU
+..      Nacharbeiten Inventurbestandsabschluss --> U|xbclosed = TREU
+.formula U|xbopened = (G|evtmaske = 65 & (G|evtartengl = "SCREEN_EXIT" ; G|evtartengl = "SCREEN_EXIT_KERNEL" ; G|evtartengl = "SCREEN_END") & G|evtkommd = G|kaktname3)
+.formula U|xbclosed = (G|evtmaske = 66 & (G|evtartengl = "SCREEN_EXIT" ; G|evtartengl = "SCREEN_EXIT_KERNEL" ; G|evtartengl = "SCREEN_END") & G|evtkommd = G|kaktname1)
+.formula U|xzlnr = M|nummer
+.formula U|xIOSchl = U|xInvObjSchl
+.continue EL005 ? U|xbmischpreis
+..
+!FI001
+.continue EL006 ? _U|xbopened
+.formula U|xzlnrnew = F|regreplaceall(U|xzlnr, "_", "")
+.formula U|xzlnrnew = F|regreplaceall(U|xzlnrnew, "-", "")
+.formula U|xzaehlliste = "la/I." + 'U|xzlnrnew' + "." + G|pid + ".OPENED"
+..
+.output new 'U|xzaehlliste'
+.input "DATEI.F"
+.output
+..
+!EL006
+.continue EL005 ? _U|xbclosed
+.formula U|xzlnrnew = F|regreplaceall(U|xzlnr, "_", "")
+.formula U|xzlnrnew = F|regreplaceall(U|xzlnrnew, "-", "")
+.formula U|xabschluss = "la/I." + 'U|xzlnrnew' + "." + G|pid + ".CLOSED"
+..
+.output new 'U|xabschluss'
+.input "DATEI.F"
+.output
+..
+!EL005: alle inv-objekte dieser zÑhlliste holen und mischpreis des artikels ins inv-obj setzen
+..      so holt man die inv-objekte
+..      die rohlingslose selektion
+.formula U|xcom = "$,,"
+..      die bedingungen, die erfÅllt werden mÅssen
+.formula U|xcom = U|xcom + ";zlsnr="  + U|xzlnr + ";end=nein;@ordnung=posnr;@gruppe=1;@ablageart=(Both)"
+.select stocktaking lock 'xcom'
+..
+!LOOP001
+.continue ELOP001 ? _G|mehr
+.add H|artikel
+..
+.continue FI009 ? _G|mehr
+.input "la/INV.SET.BEWPR"
+.continue FI009
+..
+!EL009: am Anfang ist der neue Bewertungspreis = bpr
+.formula H|bpr = D|mpr
+.formula H|nbpr = H|bpr
+.rewrite
+..
+!FI009
+.add
+.select stocktaking lock
+.continue LOOP001
+..
+!ELOP001: Schreibschutz setzen
+.continue EL010 ? U|xbmischpreis
+.continue EL011 ? _U|xbopened
+.formula U|xsys = "chmod 444 " + U|xzaehlliste
+.system 'U|xsys' background
+..
+!EL011: Schreibschutz setzen
+.continue EL010 ? _U|xbclosed
+.formula U|xsys = "chmod 444 " + U|xabschluss
+.system 'U|xsys' background
+..
+!EL010
+.set cancel +
+.continue

@@ -1,0 +1,181 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : VSTATUS.TAB
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Infosystem, VSTATUS, Tabellenzeigfop
+..                  im H-Puffer liegt die aktuelle Beschaffung/Auftragsposition
+.. Ablauf         : Tabellen-EFOP
+...Includes
+.. include st/GETICONPART
+..*****************************************************************************
+..
+.set trans -
+.type bool    xverkauf   ? _F|defined(U|xverkauf)
+.type real0   xgbest     ? _F|defined(U|xgbest)
+.type real0   xrmge      ? _F|defined(U|xrmge)
+.type real0   xm         ? _F|defined(U|xm)
+.type text    xmarke     ? _F|defined(U|xmarke)
+.type text    xlgruppe   ? _F|defined(U|xlgruppe)
+.type text    xdispo     ? _F|defined(U|xdispo)
+.type integer xprevz     ? _F|defined(U|xprevz)
+.type GD      xprevwterm ? _F|defined(U|xprevwterm)
+.type GD      xprevterm  ? _F|defined(U|xprevterm)
+.type VPKS1   xtartid    ? _F|defined(xtartid)
+.type ID39:2  xtlgid     ? _F|defined(xtlgid)
+.type text    xticon     ? _F|defined(xticon)
+..
+.make screen line +O
+.formula M|tbaumstufe = M|stufe
+..  Beschaffung / Auftragsposition
+.formula M|elart      = 1
+.formula U|xlgruppe   = 'H|lgruppe^id'
+.formula M|lgruppe    = U|xlgruppe
+.formula M|vorlauf    = 0
+.reserve
+.select add H|art
+.formula M|elem      = H|id
+.assign M|tbasisartikel = M|elem^basisartikel
+.copy U|xtartid      = M|elem
+.assign U|xtlgid     = M|lgruppe
+.input "st/GETICONPART"
+.formula M|ticon     = U|xticon
+.formula U|xgbest    = 0.0
+.formula H|lgruppean = U|xlgruppe      ? U|xlgruppe <> ""
+.formula U|xgbest    = H|gbest
+.select
+.formula M|bmge      = H|limge         ? H|typ=G|FEVOR
+.formula M|bmge      = H|limge*H|lehe  ? H|typ<>G|FEVOR
+.formula M|eterm     = H|tterm
+.formula M|bfterm    = H|fterm
+.formula M|baumge    = H|aumge         ? F|defined(H|aumge)
+.formula M|bplanmge  = H|planmge       ? F|defined(H|planmge)
+.formula M|vorlauf   = H|vorlauf       ? H|typ<>G|FEVOR
+.formula M|vorgang   = H|id
+.formula M|bfix      = H|fix
+.formula M|verwerbtxt = H|verwerbtxt
+.continue AU                           ? F|equals(H|dbez, "(Sales)")
+.formula M|bwterm    = H|twterm
+.formula M|bdispo    = H|dispo
+.formula M|bdispoa   = H|dispoa
+.assign M|bdispoa    = "(MinimumStockLevelRelated)"   ? F|equals(H|dispoa, "(MinimumStockLevelRelatedNone)")
+.assign M|bdispoa    = "(RemainingQuantitiesRelated)" ? F|equals(H|dispoa, "(RemainingQuantityRelatedNone)")
+.continue FV                           ? H|typ=G|FEVOR
+..
+.. Bestellposition/BV/UMV/LFV
+.assign M|vart = "(ExternalProcurement)" ? F|equals(H|bsart, "(ExternalProcurement)")
+.assign M|vart = "(Relocation)"          ? F|equals(H|bsart, "(Relocation)")
+.assign M|vart = "(Subcontracting)"      ? F|equals(H|bsart, "(Subcontracting)")
+.add H|kopf
+.formula M|vkopf = D|id            ?  G|mehr
+.formula M|aterm = H|sterm         ? _G|mehr
+.formula M|aterm = ""              ?  G|mehr
+.add
+.continue ZUORD
+..
+!FV: Fertigungsvorschlag
+.assign M|vart = "(InhouseProduction)"
+.add H|ba
+.formula M|vkopf = D|id            ?  G|mehr
+.formula M|aterm = H|sterm
+.continue ZUORD
+..
+!AU: Auftragsposition
+.formula M|bwterm = M|eterm         ? M|bfix
+.. V -> A
+.assign M|vart   = "(SalesOrder)"
+.formula M|aterm = H|sterm
+.formula M|vkopf = H|kopf^id
+.copy M|projekt  = H|projekt
+.continue
+..
+!ZUORD: zugeordnete Reservierungen zusammenstellen
+.reserve
+.formula U|xm = 0.0
+.reserve application                ? _(M|alle)
+.reserve application +              ?  (M|alle)
+.formula U|xprevz     = 0
+.formula U|xprevterm  = ""
+.formula U|xprevwterm = ""
+..
+!ZIEL:
+.select application
+.continue BVENDE                    ? _G|mehr
+.continue BVENDE                    ? G|bvkenn=""
+.make screen line +O                ? M|zug<>0
+.formula M|tbaumstufe = M|stufe
+.formula M|zug    = G|bvmge
+.formula U|xm     = U|xm+G|bvmge    ? G|bvmge<>0
+.formula U|xm     = U|xrmge         ? G|bvmge= 0
+.formula U|xmarke = "ZIEL"
+.continue LAGER                     ? G|bvkenn="L"
+.continue EIGEN                     ? G|bvkenn="S"
+.continue WERTEREIHE                ? G|bvkenn="W"
+..
+.. Reservierung
+.formula M|reserv = H|id
+.add H|vor
+.continue HIER                      ? _G|mehr
+.formula U|xverkauf = D|dnr = 3
+.copy M|projekt = D|projekt
+.continue FEVOR                     ? D|typ = G|FEVOR
+..
+.formula M|vartbedarf = "(SalesOrder)"          ?  U|xverkauf
+.formula M|vartbedarf = "(ExternalProcurement)" ? _U|xverkauf
+.formula M|verwendung = D|verw  
+.add
+.continue HIER
+..
+!FEVOR
+.formula M|vartbedarf = "(InhouseProduction)"
+.add ba
+.continue HIER ? _G|mehr
+.formula M|verwendung = D|nummer
+.copy M|projekt = D|projekt
+.add
+..
+!HIER
+.formula U|xrmge    = H|limge
+.formula M|rmge     = U|xrmge
+.formula M|term     = H|tterm
+.formula M|rfterm   = H|fterm
+.formula M|rwterm   = H|twterm
+.formula M|aumge    = H|aumge
+.formula M|planmge  = H|planmge
+.formula M|evbu     = H|bu
+.formula U|xdispo   = H|dispo
+.formula M|dispo    = U|xdispo
+.formula M|dispoa   = H|dispoa
+.assign M|dispoa    = "(MinimumStockLevelRelated)"   ? F|equals(H|dispoa, "(MinimumStockLevelRelatedNone)")
+.assign M|dispoa    = "(RemainingQuantitiesRelated)" ? F|equals(H|dispoa, "(RemainingQuantityRelatedNone)")
+.. die aktuelle Zeile kann weiter verfolgt werden
+.formula M|bstl      = -1
+.formula M|aufzu     =  "icon:folder_closed"
+.continue ZIEL         ?  (_F|empty(U|xprevterm) & U|xprevterm<M|term) ; (U|xprevterm=M|term & U|xprevwterm<M|rwterm)
+.formula U|xprevz    =  M|aktzeile
+.assign U|xprevterm  =  M|term
+.assign U|xprevwterm =  M|rwterm
+.continue ZIEL
+
+!LAGER: Lagerbestand
+.copy M|bfix = G|TRUE
+.formula M|vartbedarf = "(Warehouse)" 
+.continue 'U|xmarke'
+
+!EIGEN: Eigene Zuordnung
+.copy M|bfix = G|TRUE
+.formula M|vartbedarf = "(IndividualAllocation)"
+.continue 'U|xmarke'
+
+!WERTEREIHE
+.copy M|bfix = G|TRUE
+.formula M|vartbedarf = "(PlannedRequirement)"
+.continue 'U|xmarke'
+
+!BVENDE
+.continue     ? U|xprevz=0
+.. die Zeile xprevz ist der kritischste zugeordnete Bedarf
+.select screen line 'U|xprevz'
+.copy M|pfad = G|TRUE
+.continue

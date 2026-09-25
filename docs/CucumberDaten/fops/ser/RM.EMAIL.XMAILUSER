@@ -1,0 +1,119 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : RM.EMAIL.XMAILUSER
+.. Autor          : bheim
+.. Verantwortlich : cl
+.. Kontrolle      : as
+.. Funktion       :
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+.. Program flow   :
+...Includes       :
+..
+.. *************************************************************
+.. Funktion: Unterprogramm von ser/RM.EMAIL,
+..           schreibt die rmtmp/XXMAILUSER+T|aufrufnr-Datei,
+..           öbergabeparameter = T|xtemdatei
+.. *************************************************************
+.type text xtsubject    ? _defined(xtsubject)
+.type text xtmailto     ? _defined(xtmailto)
+.type text xt1cc        ? _defined(xt1cc)
+.type text xt2cc        ? _defined(xt2cc)
+.type text xt3cc        ? _defined(xt3cc)
+.type text xt4cc        ? _defined(xt4cc)
+.type text xt5cc        ? _defined(xt5cc)
+.type text xtattach     ? _defined(xtattach)
+.type text xt1attach    ? _defined(xt1attach)
+.type text xt2attach    ? _defined(xt2attach)
+.type text xtftzeile    ? _defined(xtftzeile)
+.type text xt2ftzeile   ? _defined(xt2ftzeile)
+.type text xt3ftzeile   ? _defined(xt3ftzeile)
+.type text xtsys        ? _defined(xtsys)
+.type text xtmandat     ? _defined(xtmandat)
+..
+.. eMail-Datei mit Parametern schreiben
+.output addedto 'xtemdatei'
+.input "DATEI.F"
+..
+.formula T|xtsubject = "RÅckantwort zu Ihrer Anfrage " + 'M|extnr'       ? M|extnr <> ""
+.formula T|xtsubject = "RÅckantwort zu unserer Anfrage " + 'M|nummer'    ? M|extnr = "" & M|nummer<> ""
+.formula T|xtmailto = 'M|rman1^email'
+.formula T|xt1cc    = 'M|rman2^email'
+.formula T|xt2cc    = 'M|rman3^email'
+.formula T|xt3cc    = 'M|rman4^email'
+.formula T|xt4cc    = 'M|rman5^email'
+.. CC an Techniker, wenn gewollt
+.formula T|xt5cc    = 'M|techniker^mitarb^email'           ? M|rmtech
+..
+.. Attachment zusammenbauen
+.continue ENATT                                             ? M|attach  = "" & T|evtvar="budruck"
+.formula T|xtattach = 'M|attach'                           ? T|evtvar="budruck"
+.. Mandantenverzeichnis holen
+.formula T|xtmandat = "rmtmp/XMANDANT" + 'T|aufrufernr' + ".TMP"
+.formula T|xtsys    = "echo $MANDANTDIR > " + 'T|xtmandat'
+.system 'xtsys' background
+.select from 'xtmandat' xtsys^
+.continue ENATT       ? _T|mehr
+..
+!SP1ATT:
+.continue SP2ATT      ? F|strindex(T|xtattach, "\") = 0
+.formula T|xt1attach = T|xtattach << "\"
+.formula T|xt2attach = T|xtattach >> "\"
+.formula T|xtattach  = T|xt1attach + "/" + T|xt2attach
+.continue SP1ATT
+..
+!SP2ATT:
+.formula T|xtattach = T|xtsys + "/win/" + T|xtattach
+.continue ENATT
+..
+!ENATT:
+.set trans +
+[ABASMAIL]
+HTMLBODY=0
+SEND=0
+PRIORITY=3
+SUBJECT='xtsubject'
+.. -----------------------------------------------------------------
+!SCFT: Freitext zeilenweise lesen und ZeilenlÑnge prÅfen
+.select from 'M|trmtext' xtftzeile^
+.continue ENFT                           ? _T|mehr
+..
+.formula T|xilge = +T|xtftzeile
+?BODYZ='xtftzeile'                     ? T|xilge<2994
+.continue SCFT                           ? T|xilge<2994
+.. Freitext zerlegen und Schaltung anhÑngen
+.formula T|xt3ftzeile = T|xtftzeile >> " "
+.formula T|xt2ftzeile = T|xtftzeile << T|xt3ftzeile
+..
+!SCPRFT: Freitextzeile auf LÑnge prÅfen
+.formula T|xilge      = +T|xt2ftzeile
+.formula T|xt2ftzeile = T|xt2ftzeile + "\" ? T|xilge < 2994
+?BODYZ='T|xt2ftzeile'                     ? T|xilge < 2994
+?BODYZ='T|xt3ftzeile'                     ? T|xilge < 2994
+.continue SCFT                              ? T|xilge < 2994
+..
+.formula T|xtftzeile  = T|xt2ftzeile >> -1
+.formula T|xt2ftzeile = " " + T|xt3ftzeile
+.formula T|xt3ftzeile = T|xt3ftzeile + T|xt2ftzeile
+.formula T|xt2ftzeile = T|xtftzeile << T|xt3ftzeile
+.continue SCPRFT
+..
+!ENFT: Ende des Freitextes
+.. -----------------------------------------------------------------
+FROMADRESS='xtfromadress'
+TO1='xtmailto'
+?CC1='xt1cc'       ? T|xt1cc <> ""
+?CC2='xt2cc'       ? T|xt2cc <> ""
+?CC3='xt3cc'       ? T|xt3cc <> ""
+?CC4='xt4cc'       ? T|xt4cc <> ""
+?CC5='xt5cc'       ? T|xt5cc <> ""
+?ATTACHMENT1='xtattach'       ? T|xtattach<>""
+.set trans -
+.output
+.formula T|xtsys = "s3_conv 11 " + 'T|xtemdatei'
+.system 'xtsys' background
+.continue
+

@@ -1,0 +1,123 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SERVICEKETTE.TAB
+.. Autor          : cl
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Erzeugt eine Tabellenzeile in der Servicekette
+.. Functionality  : Unterprogramm von SERVICEKETTE.BSTART.BN
+..*****************************************************************************
+.set trans -
+.type text xvorgang    ? _F|defined(xvorgang)
+.type VP27 xtvorgang   ? _F|defined(xtvorgang)
+.type bool xiststorno  ? _F|defined(U|xiststorno)
+..
+.continue MACH    ? M|tzeilen = 0 ; _F|empty(M|stufe)
+.continue MACH    ? M|tstufe = "----" ; M|tstufe = "xxxx"
+.. Create empty row
+.make screen line +O
+.formula M|tstufe  = "----"
+.formula M|vart    = "------------------------------"
+.formula M|pnum    = "------"
+.formula M|artname = M|vart
+.assign M|land     = ""
+..
+!MACH
+.assign U|xtvorgang = U|xtid
+.assign U|xtvorgang = U|xtvorgang^kopf ? U|xtvorgang^gruppe = 2
+.continue END  ? _F|empty(H|orig) & U|xtvorgang^typ = 34 & M|stufe = 0 & F|equals(M|richtung, "(Forwards)") & M|svorgang^dnr = 122
+..
+.continue STORNO     ? M|tzeilen = 0
+.formula M|stufe = 0 ? M|tstufe = "++++"
+..
+!STORNO
+.copy U|xiststorno = G|FALSE
+.copy U|xiststorno = G|TRUE ? F|equals(H|kotyp, "(PackingSlip)") & (F|equals(H|tlsart, "(CanceledCustomerDelivery)") ; F|equals(H|tlsart, "(CancelationCustomerDelivery)") ; F|equals(H|tlsart, "(CancelationReturnPackingSlip)") ; F|equals(H|tlsart, "(CanceledReturnPackingSlip)") ; F|equals(H|tlsart, "(PackingSlipCanceled)") ; F|equals(H|tlsart, "(PackingSlipReversal)"))
+.copy U|xiststorno = G|TRUE ? F|equals(H|kotyp, "(Invoice)") & (F|equals(H|treart, "(CanceledDownpayment)") ; F|equals(H|treart, "(CancelationDownpayment)") ; F|equals(H|treart, "(CanceledCreditNoteCommercial)") ; F|equals(H|treart, "(CancelationCreditNoteCommercial)") ; F|equals(H|treart, "(CashPaymentReversal)") ; F|equals(H|treart, "(CashPaymentCanceled)") ; F|equals(H|treart, "(InvoiceCanceled)") ; F|equals(H|treart, "(InvoiceReversal)"))
+.continue END ? U|xiststorno & M|bnostorno
+
+!MAKE
+.make screen line +O
+.formula M|tstufe  = 'M|stufe'
+.assign M|tvorgang = U|xtvorgang
+.copy M|tvom       = M|tvorgang^vom
+.copy M|gebucht = G|FALSE
+.copy M|gebucht = G|TRUE ? _M|tvorgang^uebertr & (F|equals(M|tvorgang^typ, "(PackingSlip)") ; F|equals(M|tvorgang^typ, "(Invoice)"))
+.formula M|tterm   = M|tvorgang^tterm
+.formula M|tvorp   = H|id
+.copy M|tpost = M|show
+.copy M|tpost = M|post             ?  H|kopf^uebertr
+.formula M|vart    = M|tvorgang^typa
+.formula M|vart    = M|tvorgang^vorganga  ?  _F|empty(M|tvorgang^vorganga) & F|equals(H|kategorie, "(Downpayment)")
+.set trans +
+.formula M|vart    = "Rahmenauftrag" ? M|tvorgang^typ = G|RAKO
+.set trans -
+.formula M|vart    = M|tvorgang^lsart     ? F|equals(M|tvorgang^typ, "(PackingSlip)")
+.formula M|vart    = M|tvorgang^vorganga  ? F|equals(M|tvorgang^typ, "(Invoice)")
+.copy M|wahrsch    = M|tvorgang^wahrsch
+.copy M|tnoablage  = M|tvorgang^noablage
+..
+.. Artikeldaten ueber Verweis
+.assign M|artikel = H|art^id
+.continue ERROR01     ? _G|mehr
+..
+.copy M|alternativpos = H|alternativpos
+.formula M|artname    = H|art^sucherw
+.formula M|pnum       = H|pnum
+.formula M|mge        = H|mge
+.assign M|the         = H|he
+.formula M|pwert      = H|pwert
+.copy M|land          = H|kopf^land
+.formula M|proz       = H|proz
+.formula M|bmge       = H|bmge
+.formula M|vmge       = H|vmge
+.formula M|limge      = H|limge
+.formula M|lifrg      = H|lifrg
+.formula M|remge      = H|remge
+.formula M|refrg      = H|refrg
+.formula M|status     = H|status
+.formula M|ils        = H|ls
+.formula M|ire        = H|re
+.formula M|ablagef    = H|ablagef
+.. Save original
+.continue ITEM               ?  F|empty(H|okopf)
+.assign M|tnvorg = H|okopf
+.continue ERROR01            ? _G|mehr
+..
+!ITEM: Save parent item
+.continue SEARCH             ?  F|empty(H|orig)
+.assign M|tnvorp = H|orig
+.continue ERROR01            ? _G|mehr
+..
+!SEARCH: Set flag for tracking
+.. Forward
+.formula M|tbvverfolg = (M|stufe >= 0)
+.. Backward
+.formula M|tbverfolg  = G|TRUE  ? _F|empty(M|tnvorp) ; _F|empty(M|tnvorg)
+.formula M|tbverfolg  = G|FALSE ?  M|stufe < 0
+.continue ZEILENSERANF  ? _M|tbverfolg & U|xtvorgang^seranf^id <> M|svorgang^id & _F|empty(U|xtvorgang^seranf) & F|equals(M|richtung, "(Backwards)")
+.continue END
+..
+!ZEILENSERANF
+.make screen line +O
+.formula M|stufe   = M|stufe + 1
+.formula M|tstufe  = 'M|stufe'
+.assign M|tvorgang = U|xtvorgang^seranf
+.assign M|tvom     = M|tvorgang^anferfd
+.copy M|tpost      = M|show
+..
+.set trans +
+.formula M|vart = "Serviceanfrage"
+.set trans -
+..
+.. Stufe zurÅcksetzten
+.formula M|stufe      = M|stufe - 1
+.formula M|tbvverfolg = G|FALSE
+.continue END
+..
+!END
+.continue
+..
+!ERROR01
+.error Zuweisung gescheitert!
+.end 1

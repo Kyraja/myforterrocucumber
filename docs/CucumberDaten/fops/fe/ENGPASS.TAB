@@ -1,0 +1,186 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ENGPASS.TAB
+.. Datum          : 29.11.06
+.. Version        : 2007
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : FÅllt Tabelle des Infosystems ENGPASS
+..
+.. Ablauf         : Status: öberlastet, wenn xproz >= M|krit
+..                          Kritisch, wenn xproz > 100
+..
+.. Functionality  : Filling table of IS ENGPASS
+..
+.. Program flow   : Status: overlded, when xproz >= M|krit
+..                          critical, when xproz > 100
+.. Includes       :
+..*****************************************************************************
+.set trans -
+.type text xstring       ? _F|defined(U|xstring)
+.type gd2  xedatum       ? _F|defined(U|xedatum)
+.type R9.2 xproz         ? _F|defined(U|xproz)
+.type GD2  xtedat        ? _F|defined(U|xtedat)
+.type GD2  xtadat        ? _F|defined(U|xtadat)
+.type R5.2 xsukapaz      ? _F|defined(U|xsukapaz)
+.type R5.2 xsubelegt     ? _F|defined(U|xsubelegt)
+.type R5.2 xsuverfuegbar ? _F|defined(U|xsuverfuegbar)
+.type ID39 xlgruppe      ? _F|defined(U|xlgruppe)
+.type realx xmb          ? _F|defined(U|xmb)
+.type realx xastd        ? _F|defined(U|xastd)
+..
+.error Bitte einen Zeitraum angeben. ? F|empty(kadatum) ; F|empty(kedatum)
+.cursor kedatum ? F|empty(kedatum)
+.cursor kadatum ? F|empty(kadatum)
+.end 1                               ? F|empty(kadatum) ; F|empty(kedatum)
+..
+.copy U|xlgruppe   = M|lgruppe
+..
+.assign U|xstring     = ""
+.formula U|xsukapaz      = 0.00
+.formula U|xsubelegt     = 0.00
+.formula U|xsuverfuegbar = 0.00
+..
+.make screen line --
+.continue ALLE   ?  F|empty(M|mgr) &  F|empty(M|abtlg)
+.continue MGR    ? _F|empty(M|mgr) &  F|empty(M|abtlg)
+.continue ABTLG  ?  F|empty(M|mgr) & _F|empty(M|abtlg)
+.continue HOPPLA
+..
+!ALLE
+.assign U|xstring   = "$,,num8=;gruppe=2"
+.set trans +
+.assign M|mgrname   = "alle Maschinengruppen"
+.set trans -
+.assign M|abtlgname = ""
+.continue HOL
+..
+!MGR
+.formula U|xstring   = 'M|mgr^num8'
+.assign M|abtlg   = M|mgr^abtlg^id
+.formula M|abtlgname = M|mgr^abtlg^sucherw
+.continue HOL
+..
+!ABTLG
+.assign U|xstring   = "$,,abtlg=" + 'M|abtlg^num8'
+.continue HOL
+..
+!HOPPLA: M|mgr <> "" & M|abtlg <> ""
+.continue FEHLER  ? 'M|abtlg^id' <> 'M|mgr^abtlg^id'
+.continue HOL
+..
+!FEHLER
+.set trans +
+.error Die Abteilung 'M|abtlg^num8' gehîrt nicht zur Maschinengruppe 'M|mgr^num8'
+.set trans -
+.continue KOPF
+..
+!HOL: Maschinenbelegung zum Anfangsdatum
+.formula U|xedatum = M|kadatum
+.formula G|adatum  = M|kadatum
+.formula G|edatum  = U|xedatum
+..
+.select add M|mgr ? F|empty(M|mgr)
+.select capacity
+.continue MELDUNG  ? _G|mehr
+.continue NMGR     ? H|gruppe = 1
+.continue NMGR     ? 'H|abtlg^num8' <> 'M|abtlg^num8' & _F|empty(M|abtlg)
+..
+.select capacity specific 'U|xlgruppe'
+.continue MELDUNG  ? _G|mehr
+.. eine Maschinengruppe (gruppe = 2) gefunden
+.continue NMGR     ? 'H|nummer' <> 'M|mgr^num8' & _F|empty(M|mgr)
+..
+!MBEL
+.formula M|adatum = G|adatum
+.formula M|edatum = G|edatum
+.select machloading
+.formula U|xmb    = G|mbel
+.formula U|xastd  = G|astd
+.formula U|xsukapaz      = U|xsukapaz + U|xastd
+.formula U|xsubelegt     = U|xsubelegt + U|xmb
+.formula U|xsuverfuegbar = U|xsuverfuegbar + (U|xastd - U|xmb)
+..
+.. Engpass, wenn Belegungsstunden grî·er als Arbeitsstunden
+.continue NTAG     ?   U|xastd > U|xmb
+.continue NTAG     ?   U|xmb = 0
+..
+.. (Belegung in Stunden/Anzahl Arbeitstunden im angegeben Zeitraum)*100
+.formula U|xproz = U|xmb*100
+.formula U|xproz = (U|xmb/U|xastd)*100      ? U|xastd <> 0
+.make screen line +O
+.assign M|tmgr      =  H|id
+.assign M|tabtlg    =  H|abtlg^id
+.formula M|tdatum      =  G|edatum
+.formula M|tkapaz      =  U|xastd
+.formula M|tbelegt     =  U|xmb
+.formula M|tverfuegbar =  M|tkapaz - M|tbelegt
+.formula M|tprozent    =  U|xproz
+.. Status: Tag -> Grenzen fÅr unkritisch -> kritisch -> Åberlastet
+.formula M|tstatus1    = M|gruenz ? U|xproz <= 100
+.formula M|tstatus1    = M|gelbz  ? U|xproz > 100
+.formula M|tstatus1    = M|rotz   ? U|xproz >= M|krit
+..
+.formula U|xtadat      = G|adatum
+.formula U|xtedat      = G|edatum
+.. Maschinenbelegung Bereich +/- Arbeitstage
+.formula G|adatum      = G|adatum & (-M|bereich)
+.formula G|edatum      = G|edatum & M|bereich
+..
+.formula M|adatum = G|adatum
+.formula M|edatum = G|edatum
+.select machloading
+.formula U|xmb    = G|mbel
+.formula U|xastd  = G|astd
+.formula U|xproz     = U|xmb*100
+.formula U|xproz     = (U|xmb/U|xastd)*100  ? U|xastd <> 0
+.. Status: Bereich -> Grenzen fÅr unkritisch -> kritisch -> Åberlastet
+.formula M|tbereich1 = M|gruenz ? U|xproz <= 100
+.formula M|tbereich1 = M|gelbz  ? U|xproz > 100
+.formula M|tbereich1 = M|rotz   ? U|xproz >= M|krit
+.formula G|adatum    = U|xtadat
+.formula G|edatum    = U|xtedat
+.make screen line -O ? M|tstatus1 = M|gruenz & M|tbereich1 = M|gruenz
+..
+!NTAG
+.formula G|adatum = G|edatum & 1
+.formula G|edatum = G|adatum
+.continue NMGR     ? G|adatum > M|kedatum
+.continue MBEL
+..
+!NMGR
+.select capacity
+.continue ENDE     ? _G|mehr
+.continue NMGR     ?  H|gruppe = 1
+.continue NMGR     ? 'H|abtlg^num8' <> 'M|abtlg^num8' & _F|empty(M|abtlg)
+.continue NMGR     ? 'H|nummer' <> 'M|mgr^num8' &  _F|empty(M|mgr)
+.select capacity specific 'U|xlgruppe'
+.continue ENDE     ? _G|mehr
+..
+.formula U|xedatum = M|kadatum
+.formula G|adatum  = M|kadatum
+.formula G|edatum  = U|xedatum
+.continue MBEL
+..
+!ENDE
+.continue KOPF     ? 'tzeilen' <> "0"
+..
+!MELDUNG
+.error Kein Engpass im Zeitraum 'M|kadatum' - 'M|kedatum'
+.end 1
+..
+.. Kopffelder leeren
+.assign M|sukapaz      = ""
+.assign M|subelegt     = ""
+.assign M|suverfuegbar = ""
+.. Tabelle leeren
+.input "is/TABLEEREN"
+.end 1
+..
+!KOPF
+.select screen header
+.formula M|sukapaz      = U|xsukapaz
+.formula M|subelegt     = U|xsubelegt
+.formula M|suverfuegbar = U|xsuverfuegbar
+.end 1

@@ -91,7 +91,7 @@ export function makeFopGuid(fopPath: string): string {
   return generateFeatureGuid(filename.toLowerCase());
 }
 
-const GUID_TAG_RE = /^@([0-9a-f]{16})$/;
+const GUID_TAG_RE = /^@(?:guid-)?([0-9a-f]{16})$/;
 
 /**
  * Collect all feature GUIDs currently assigned in the file explorer tree.

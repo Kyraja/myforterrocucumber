@@ -1,0 +1,170 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : APLANISTVERGL.TAB
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Infosystem, Absatzplan, Tabellen-FOP
+.. Functionality  :
+..
+.. Ablauf         :
+..
+..*****************************************************************************
+..
+.set trans -
+.type GD      xdatum     ? _F|defined(U|xdatum)
+.type text    xselect1   ? _F|defined(U|xselect1)
+.type text    xselect2   ? _F|defined(U|xselect2)
+.type R9.2    xistkmge   ? _F|defined(U|xistkmge)
+.type ARTR52000 xistkwert  ? _F|defined(U|xistkwert)
+.type R9.2    xplankmge  ? _F|defined(U|xplankmge)
+.type ARTR52000 xplankwert ? _F|defined(U|xplankwert)
+.type ID126   xideplan   ? _F|defined(U|xideplan)
+.type text    xtselect   ? _F|defined(U|xtselect)
+.type text    xtbaumstat ? _F|defined(U|xtbaumstat)
+.type integer xistufe    ? _F|defined(U|xistufe)
+..
+!GETTYP: Typspezifische Felder initialisieren
+.formula M|select   = "$,,eplan=" + 'M|kplaneinheit^id'
+.formula M|select   =  M|select + ";abschn=0"
+.formula M|select   =  M|select + ";@ordnung=eplan,typ,abschn,archiv"
+.formula M|select   =  M|select + ";@ablageart=(Both)"
+.formula M|select   =  M|select + ";@gruppe=1"
+..
+.formula U|xistufe     = 0
+.formula U|xistkmge    = 0
+.formula U|xistkwert   = 0
+.formula U|xplankmge   = 0
+.formula U|xplankwert  = 0
+..
+.. Plandaten 'P'
+.formula U|xselect1 =  M|select + ";typ=(80)"
+.. Istdaten 'I'
+.formula U|xselect2 =  M|select + ";typ=(73)"
+..
+.load 1 valuesequence 'U|xselect1'
+.continue WERTEREIHE         ? G|mehr
+..
+.set trans +
+.error Keine Plan-Daten vorhanden.
+.set trans -
+.continue END
+..
+!WERTEREIHE
+.load 2 valuesequence 'U|xselect2'
+..
+.. Zeitraum der Plandaten-Wertereihe
+.formula M|kadatum = 1|anfdat
+.formula M|kedatum = 1|enddat
+..
+!ZEILEN
+.load 1 line
+.continue END    ? _G|mehr
+.load 2 line     ?  F|defined(2|id)
+.continue STUFE
+..
+!STUFE
+.select salesplanning 'M|kplaneinheit^id'         ?  M|kplaneinheit^gruppe = 1
+.select salesplanning 'M|kplaneinheit^heplan^id'  ?  M|kplaneinheit^gruppe = 2
+.continue END                             ? _G|mehr
+.assign U|xideplan  H|id
+.continue END                             ? _G|mehr
+.reserve
+.load 4 salesplanning 'U|xideplan'
+..
+.formula U|xtselect "$,,vor=" + 'U|xideplan' + ";@gruppe=1"
+.load 4 salesplanning 'U|xtselect'
+..
+.formula U|xtbaumstat = "" 
+.formula U|xtbaumstat = "+" ? G|mehr
+..
+!NEUZEILE
+.make screen line +O
+..
+.formula M|tbaumstufe = U|xistufe
+.formula M|tstufe = 'M|tbaumstufe'
+.assign  M|planeinheit = M|kplaneinheit 
+.formula M|tbaumstat   = U|xtbaumstat
+.formula M|t2baumstat  = U|xtbaumstat
+.formula M|merkselect  = U|xtselect ? M|tbaumstat = "+"
+.continue WEITER ? F|empty(M|merkselect)
+.load 8 salesplanning 'M|merkselect'
+.formula M|tbaumstat = "" ? _G|mehr
+.load 8                   ? G|mehr
+!WEITER
+.formula M|tvon         = 1|vondat
+.formula M|tvon         = M|kadatum ? M|kumuliert
+.formula M|tbis         = 1|bisdat
+.formula M|tmenge       = 1|mge
+.formula M|twertplan    = 1|wert
+..
+.formula U|xplankmge    = U|xplankmge + M|tmenge      ? M|kumuliert
+.formula U|xplankwert   = U|xplankwert + M|twertplan  ? M|kumuliert
+.formula M|tmenge       = U|xplankmge                 ? M|kumuliert
+.formula M|twertplan    = U|xplankwert                ? M|kumuliert
+..
+.formula M|twertist     = 0.00     ? _F|defined(2|wert)
+.formula M|twertist     = 2|wert   ?  F|defined(2|wert)
+.formula M|twertist     = M|twertplan ?  M|twertist = 0 & ('G|datum:8' < 'M|tvon:8') & M|bistplan & 'M|gdistplan' = ""
+.formula M|twertist     = M|twertplan ?  M|bistplan & 'M|gdistplan' <> "" & 'M|gdistplan:8' < 'M|tvon:8'
+.formula M|tistmenge    = 0.000       ? _F|defined(2|mge)
+.formula M|tistmenge    = 2|mge       ?  F|defined(2|mge)
+.formula M|tistmenge    = M|tmenge    ?  M|tistmenge = 0 & ('G|datum:8' < 'M|tvon:8') & M|bistplan & 'M|gdistplan' = ""
+.formula M|tistmenge    = M|tmenge    ?  M|bistplan & 'M|gdistplan' <> "" & 'M|gdistplan:8' < 'M|tvon:8'
+..
+.formula U|xistkmge     = U|xistkmge + M|tistmenge  ? M|kumuliert
+.formula U|xistkwert    = U|xistkwert + M|twertist  ? M|kumuliert
+.formula M|tistmenge    = U|xistkmge                ? M|kumuliert
+.formula M|twertist     = U|xistkwert               ? M|kumuliert
+..
+.. Prozentwerte auf Null setzten, wenn keine Ist-Werte vorhanden sind?
+.formula M|twertproz    = 0
+.formula M|tmengeproz   = 0
+.formula M|twertproz    = (M|twertist*100/M|twertplan)-100 ? M|twertplan <> 0
+.formula M|tmengeproz   = (M|tistmenge*100/M|tmenge)-100   ? M|tmenge  <> 0
+.formula M|mgeneg = ""
+.formula M|mgepos = ""
+.formula M|wertneg = ""
+.formula M|wertpos = ""
+.continue MGEPOS ? M|tmengeproz > 0
+..
+!MGENEG
+.formula M|mgeneg = G|icoerror ? M|tmengeproz < (M|mgeneggelb * (-1))
+.formula M|mgeneg = G|icowarn  ? M|tmengeproz <= (M|mgeneggruen * (-1)) & (M|tmengeproz >= M|mgeneggelb * (-1))
+.formula M|mgeneg = G|icook    ? M|tmengeproz >= (M|mgeneggruen * (-1))
+.formula M|mgeneg = ""         ? M|tmengeproz = 0
+.continue WERTNEG
+..
+!MGEPOS
+.formula M|mgepos = G|icoerror ? M|tmengeproz > M|mgeposgelb
+.formula M|mgepos = G|icowarn  ? M|tmengeproz <= M|mgeposgelb & M|tmengeproz >= M|mgeposgruen
+.formula M|mgepos = G|icook    ? M|tmengeproz <= M|mgeposgruen
+.formula M|mgepos = ""         ? M|tmengeproz = 0
+..
+!WERTNEG
+.continue WERTPOS ? M|twertproz > 0
+.formula M|wertneg = G|icoerror  ? M|twertproz < (M|wertneggelb * (-1))
+.formula M|wertneg = G|icowarn   ? M|twertproz <= (M|wertneggruen * (-1)) & M|twertproz >= (M|mgeneggelb * (-1))
+.formula M|wertneg = G|icook     ? M|twertproz >= (M|wertneggruen * (-1))
+.formula M|wertneg = ""          ? M|twertproz = 0
+.continue STATUS
+..
+!WERTPOS
+.formula M|wertpos = G|icoerror  ? M|twertproz > M|wertposgelb
+.formula M|wertpos = G|icowarn   ? M|twertproz <= M|wertposgelb & M|twertproz >= M|wertposgruen
+.formula M|wertpos = G|icook     ? M|twertproz <= M|wertposgruen
+.formula M|wertpos = ""          ? M|twertproz = 0
+..
+!STATUS
+.assign M|tstatus    = 1|status
+.assign M|tiststatus = 2|status ?  F|defined(2|status)
+.formula M|tfix         = 1|fix
+.formula M|tistfix      = 2|fix    ?  F|defined(2|fix)
+.formula M|abwmgepos  = M|mgepos 
+.formula M|abwmgeneg  = M|mgeneg
+.formula M|abwwertpos = M|wertpos 
+.formula M|abwwertneg = M|wertneg 
+.continue ZEILEN
+..
+!END: Ende Wertereihe
+.continue

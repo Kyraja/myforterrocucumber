@@ -1,0 +1,1257 @@
+..!interpreter english declaration noabbrev
+.. at 2016-11-01, 09:54
+.set trans -
+..========================================================================
+..==
+..==  Name              : UP.CHECK.TRANSACTION
+..==                      V3
+..==  Pfad              : allpstart
+..==
+..==  Funktion          : vor AusfÅhrung der Buchung AbprÅfung auf
+..==                      Korekktheit der Daten im Transaktionsdatensatz
+..==  Erstellungsdatum  : 05.07.07
+..==  Autor             : alltrotec GmbH/CP
+..==  Copyright         : (c) 1990 - 2016 alltrotec GmbH
+..==  Besonderheiten    : FOP kann in Maske wie auch im batchmode laufen
+..==                      Aufruf aus FOP.MASK.TRANSAKTION -> CHECK.TRANSACTION
+..==
+..========================================================================
+.input DATEI.F
+..====================================================
+.type integer   xprocsp         ? _F|defined(U|xprocsp)
+.type integer   xupi00 xupi01
+.type bool      xupberror xupb00 xupb01 xupb02
+.type text      xuperrorprot xupt00 xupt01 xupt02 xupt03 xupt04 xupt05 xbudat
+.type text      xtsel           ? _F|defined(U|xtsel)
+.type text      xytjkenn        ? _F|defined(U|xytjkenn)
+.type bool      xybgltkenn      ? _F|defined(U|xybgltkenn)
+.type GD        xupd00          ? _F|defined(U|xupd00)
+.type GD8       xupd08          ? _F|defined(U|xupd08)
+.type real      xuprps          ? _F|defined(U|xuprps)
+.type real      xuprns          ? _F|defined(U|xuprns)
+.type real      xuprph          ? _F|defined(U|xuprph)
+.type real      xuprnh          ? _F|defined(U|xuprnh)
+.type bool      xupbpb          ? _F|defined(U|xupbpb)
+.type bool      xupbnb          ? _F|defined(U|xupbnb)
+.type P86:1     xuppprojekt     ? _F|defined(U|xuppprojekt)
+.type VPK31     xupklm          ? _F|defined(U|xupklm)
+..====================================================
+.set demand -
+.formula U|xuperrorprot = "rmtmp/XERRORPROT" + G|pid + ".TMP"
+.continue EPROCDEF
+!PROC001: ----- kostenobjekt -----
+.continue EL001 ? _((F|empty(1|ykstelle)) & (F|empty(1|ytprojekt)))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Kostenobjekt fehlt in Zeile 'xupi00'
+.set TRANS -
+.continue FI001
+!EL001
+.continue EL002 ? _(F|empty(1|ykstelle))
+.assign U|xuppprojekt = 1|ytprojekt
+.continue EL003 ? _((F|empty(U|xuppprojekt)) ; (_(G|mehr)))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set trans +
+Transaktionsdatensatz '1|nummer    ' : Projekt '1|ytprojekt' in Zeile 'U|xupi00' unbekannt
+.set trans -
+.continue FI003
+!EL003
+.continue EL004 ? _(_(U|xuppprojekt^bebuchbar))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Projekt '1|ytprojekt' in Zeile 'U|xupi00' muss bebuchbar sein
+.set TRANS -
+.continue FI004
+!EL004
+.continue EL005 ? _(F|empty(2|kstelle))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set trans +
+Transaktionsdatensatz '1|nummer    ' : das Konto '2|nummer' muss eine Kostenstelle eingetragen haben oder
+                                       es darf nicht die Eigenschaft Kostenrechnungszwang haben
+.set trans -
+!EL005
+!FI004
+!FI003
+.continue FI002
+!EL002
+.formula U|xtsel = "$,,nummer==" + 1|ykstelle   ?  1|ykstelle / "(09)*"
+.formula U|xtsel = "$,,such=="   + 1|ykstelle   ? _1|ykstelle / "(09)*"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 2 group "5:2.4.8" 'U|xtsel'
+.continue EL006 ? _(_(G|mehr))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : unbekanntes Kostenobjekt '1|ykstelle' in Zeile 'xupi00'
+.set TRANS -
+.continue FI006
+!EL006
+.continue EL007 ? _(_(2|gruppe = 8))
+.continue EL008 ? _(_(2|bu))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Verdichtungs-Kostenobjekt '1|ykstelle' in Zeile 'xupi00'
+.set TRANS -
+!EL008
+!EL007
+.formula U|xupt02 = 2|id
+.formula U|xupd00 = 1|ybudat
+.load 3 cotype "$,,@gruppe=5;gruppe==5"
+.continue EL009 ? _(F|defined(3|ysperre))
+.continue EL010 ? _(3|ysperre)
+.copy U|xupb00 = G|false
+.formula U|xupt00 = "formula xupb00 = G|true   ? 2|"+'3|ybusperr'
+.'xupt00'
+.continue EL011 ? _(xupb00)
+.continue EL012 ? _(_(3|ysperreab = ""))
+.copy U|xupb00 = G|false
+.formula U|xupt00 = "formula xupb00 = G|true   ? xupd00 < 2|"+'3|ysperreab'
+.'xupt00'
+.continue EL013 ? _(xupb00)
+.continue FI013
+!EL013
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Kostenobjekt in Zeile 'xupi00' gesperrt
+.set TRANS -
+!FI013
+.continue FI012
+!EL012
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Kostenobjekt in Zeile 'xupi00' gesperrt
+.set TRANS -
+!FI012
+!EL011
+!EL010
+!EL009
+.continue EL014 ? _(F|defined(3|ybbukto))
+.continue EL015 ? _(3|ybbukto)
+.continue EL016 ? _(F|filenotempty("allko/BBKONTEN.KONFIG.INI"))
+.input BBKONTEN.KONFIG.INI
+.continue EL017 ? _(_(F|empty(1|ykstelle)))
+.load 4 object 'U|xupt02'
+.continue EL018 ? _(4|gruppe = 8)
+.formula U|xupi01 = 0
+.load 4 line
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.formula U|xupi01 = xupi01 + 1
+.type text xupktr.xupi01
+.formula U|xupktr.xupi01 = '4|kstelle^id'
+.load 4 line
+.continue LOOP001
+!ELOP001: ==============================
+.continue FI018
+!EL018
+.formula U|xupi01 = 1
+.type text xupktr.xupi01
+.formula U|xupktr.xupi01 = 'xupt02'
+!FI018
+.formula U|xupi01 = 1
+!LOOP002: ==============================
+.continue ELOP002 ? _(F|defined(xupktr.xupi01))
+.copy U|xupb00 = G|false
+.formula U|xupt00 = "load 4 object 'xupktr"+'xupi01'+"'"
+.continue EL019 ? _(4|gruppe = 2)
+.formula U|xupt00 = "$,,@gruppe="+'xygrbkonto'+";such==KST"
+.continue EL020 ? _('4|nummer'/"*F")
+.formula U|xupt00 = xupt00 + ('4|nummer'<<"F")
+.continue FI020
+!EL020
+.continue EL021 ? _('4|nummer'/"*V")
+.formula U|xupt00 = xupt00 + ('4|nummer'<<"V")
+.continue FI021
+!EL021
+.formula U|xupt00 = xupt00 + '4|nummer'
+!FI021
+!FI020
+.continue FI019
+!EL019
+.formula U|xupt00 = "$,,such==KTRALLE;gruppe="+'xygrbkonto'+";@gruppe=0;@ordnung=Suchwort"
+!FI019
+.load 4 'T|hdatname.xydbbkonto' 'xupt00'
+.continue EL022 ? _(G|mehr)
+.continue EL023 ? _(4|ybnegativ)
+.copy U|xupb00 = G|true
+!EL023
+.continue EL024 ? _(1|ykonto / "(09)*")
+.formula U|xupt01 = "$,,nummer=="+'1|ykonto'
+.continue FI024
+!EL024
+.formula U|xupt01 = "$,,such=="+'1|ykonto'
+!FI024
+.load 5 account 'xupt01'
+.load 4 line
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.continue EL025 ? _('4|ykonto^id' = '5|id')
+.continue EL026 ? _(4|ybnegativ)
+.copy U|xupb00 = G|false
+.continue FI026
+!EL026
+.copy U|xupb00 = G|true
+!FI026
+!EL025
+.load 4 line
+.continue LOOP003
+!ELOP003: ==============================
+!EL022
+.continue EL027 ? _(_(xupb00))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Kst / Ktr in Zeile 'xupi00' darf nicht fÅr das Konto bebucht werden
+.set TRANS -
+!EL027
+.formula U|xupi01 = xupi01 + 1
+.continue LOOP002
+!ELOP002: ==============================
+.continue FI017
+!EL017
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Kst / Ktr fehlt in Zeile 'xupi00'
+.set TRANS -
+!FI017
+.continue FI016
+!EL016
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Zusatzmodul [bebuchbare Konten] aktiviert, aber nicht installiert bzw. fehlt die
+                                       betreffende Datei allko/BBKONTEN.KONFIG.INI - Fortsetzung der PrÅfung nicht mîglich!
+.set TRANS -
+!FI016
+!EL015
+!EL014
+!FI006
+!FI002
+!FI001
+.continue 'xprocst.xprocsp'
+!PROC002: ----- vergleichswerte -----
+.formula U|xuprps = 0
+.formula U|xuprns = 0
+.formula U|xuprph = 0
+.formula U|xuprnh = 0
+.copy    U|xupbnb = G|false
+.copy    U|xupbpb = G|false
+.continue EL028 ? _(G|mehr)
+.copy U|xupb01 = G|false
+.copy U|xupb02 = G|false
+.continue EL029 ? _(((1|ybetrag > 0) & (1|yhbetrag = 0)) ; ((1|ybetrag = 0) & (1|yhbetrag > 0)))
+.copy U|xupb01 = G|true
+!EL029
+.continue EL030 ? _(((1|ybetrag < 0) & (1|yhbetrag = 0)) ; ((1|ybetrag = 0) & (1|yhbetrag < 0)))
+.copy U|xupb02 = G|true
+!EL030
+.continue EL031 ? _(((1|ybetrag < 0) & (1|yhbetrag > 0)) ; ((1|ybetrag > 0) & (1|yhbetrag < 0)))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : verschiedene Vorzeichen in Zeile 'xupi00'
+.set TRANS -
+!EL031
+!EL028
+.continue 'xprocst.xprocsp'
+!PROC003: ----- vorzeichen -----
+.formula U|xuprps = U|xuprps + 1|ybetrag    ? 1|ybetrag  > 0
+.formula U|xuprns = U|xuprns + 1|ybetrag    ? 1|ybetrag  < 0
+.formula U|xuprph = U|xuprph + 1|yhbetrag   ? 1|yhbetrag > 0
+.formula U|xuprnh = U|xuprnh + 1|yhbetrag   ? 1|yhbetrag < 0
+.copy    U|xupbnb = G|true                  ? 1|ybetrag  < 0 ; 1|yhbetrag < 0
+.copy    U|xupbpb = G|true                  ? 1|ybetrag  > 0 ; 1|yhbetrag > 0
+.continue EL032 ? _((U|xyprjmkonfig^ybvorzpruef) & (U|xupb01) & ((1|ybetrag < 0) ; (1|yhbetrag < 0)))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Vorzeichen wechselt in Zeile 'xupi00'
+.set TRANS -
+!EL032
+.continue EL033 ? _((U|xyprjmkonfig^ybvorzpruef) & (U|xupb02) & ((1|ybetrag > 0) ; (1|yhbetrag > 0)))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Vorzeichen wechselt in Zeile 'xupi00'
+.set TRANS -
+!EL033
+.continue EL034 ? _((_(1|ybetrag = 0)) & (_(1|yhbetrag = 0)))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Zeile 'xupi00'  es darf nur Sollbetrag ODER Habenbetrag gefÅllt sein
+.set TRANS -
+!EL034
+.continue EL035 ? _((1|ybetrag = 0) & (1|yhbetrag = 0))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Zeile 'xupi00'  es muss entweder Sollbetrag ODER Habenbetrag gefÅllt sein
+.set TRANS -
+!EL035
+.continue 'xprocst.xprocsp'
+!PROC004: ----- anlage -----
+.continue EL036 ? _(_(F|empty(1|yanlage)))
+.formula U|xupt00 = "$,,nummer==" + 1|yanlage   ?  1|yanlage / "(09)*"
+.formula U|xupt00 = "$,,such=="   + 1|yanlage   ? _1|yanlage / "(09)*"
+.load 2 fixedasset 'U|xupt00'
+.continue EL037 ? _(_(G|mehr))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : unbekannte Anlage in Zeile 'xupi00'
+.set TRANS -
+!EL037
+!EL036
+.continue 'xprocst.xprocsp'
+!PROC005: ----- erfassungswaehrung -----
+.formula U|xupt00 = "$,,symbol==" + '1|yewbu'
+.load 2 currency 'U|xupt00'
+.continue EL038 ? _(_(G|mehr))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : ErfassungswÑhrung ist in abas-ERP nicht angelegt
+.set TRANS -
+!EL038
+.continue 'xprocst.xprocsp'
+!PROC006: ----- Buchungssperre -----
+.formula U|xupd00 = 1|ybudat
+.load 3 cotype "$,,@gruppe=5;gruppe==5"
+.continue EL039 ? _(F|defined(3|ysperre))
+.continue EL040 ? _(3|ysperre)
+.copy U|xupb00 = G|false
+.formula U|xupt00 = "formula U|xupb00 = G|true   ? 2|"+'3|ybusperr'
+.'xupt00'
+.continue EL041 ? _(U|xupb00)
+.continue EL042 ? _(_(F|empty(3|ysperreab)))
+.copy U|xupb00 = G|false
+.formula U|xupt00 = "formula U|xupb00 = G|true   ? xupd00 < 2|"+'3|ysperreab'
+.'xupt00'
+.continue EL043 ? _(_(U|xupb00))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Konto in Zeile 'xupi00' gesperrt
+.set TRANS -
+!EL043
+.continue FI042
+!EL042
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Konto in Zeile 'xupi00' gesperrt
+.set TRANS -
+!FI042
+!EL041
+!EL040
+!EL039
+.continue 'xprocst.xprocsp'
+!PROC007: ----- CheckSollHaben -----
+.continue EL044 ? _((U|xupbpb) & (_(U|xuprps = U|xuprph)))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set trans +
+Transaktionsdatensatz '1|nummer    ' : Keine Balance fÅr positive BetrÑge in der Buchung.
+.set trans -
+!EL044
+.continue EL045 ? _((U|xupbnb) & (_(U|xuprns = U|xuprnh)))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set trans +
+Transaktionsdatensatz '1|nummer    ' : Keine Balance fÅr negative BetrÑge in der Buchung.
+.set trans -
+!EL045
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.formula U|xupb01 = G|false
+.continue EL046 ? _(G|txname / "*FOP.MASK.TRANSDATEN")
+.continue EL047 ? _(G|evtkommd = G|kaktname12)
+.load 1 add M|id
+.continue FI047
+!EL047
+.set TRANS +
+.box Hinweis
+Aufruf der PrÅfroutine nur im Zeigen mîglich!
+.set TRANS -
+.error(0)
+.end 2
+!FI047
+!EL046
+.output NEW 'U|xuperrorprot'
+.continue EL048 ? _(_(1|tzeilen = 0))
+.continue EL049 ? _(_(F|empty(1|ybuart)))
+.continue EL050 ? _(_(F|empty(1|ykenn)))
+.formula U|xytjkenn = 1|ykenn
+.input "allpstart/UP.CHECK.JOURNALKZ"
+.continue EL051 ? _(_(U|xybgltkenn))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Journalkennzeichen '1|ykenn' nicht in Standardkontierung hinterlegt
+.set TRANS -
+!EL051
+!EL050
+.formula U|xupi00 = 1
+.continue EL052 ? _(F|defined(1|yinbukreis.U|xupi00))
+.copy U|xupb00 = G|false
+!LOOP004: ==============================
+.continue ELOP004 ? _(F|defined(1|yinbukreis.xupi00))
+.continue EL053 ? _((1|yinbukreis.xupi00) & (_(1|ybbukreis)))
+.copy U|xupb00 = G|true
+!EL053
+.formula U|xupi00 = U|xupi00 + 1
+.continue LOOP004
+!ELOP004: ==============================
+.continue EL054 ? _(xupb00)
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Abweichende Buchungskreis-Zuordnung NICHT gewÑhlt, aber Buchungskreis ausgewÑhlt
+.set TRANS -
+!EL054
+.continue EL055 ? _((_(1|yinbukreis1)) & (_(1|yinbukreis2)) & (_(1|yinbukreis3)) & (_(1|yinbukreis4)) & (_(1|yinbukreis5)) & (1|ybbukreis))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Abweichende Buchungskreis-Zuordnung gewÑhlt, aber kein Buchungskreis ausgewÑhlt
+.set TRANS -
+!EL055
+!EL052
+.formula U|xupi00 = 1
+!LOOP005: ==============================
+.continue ELOP005 ? _(F|defined(1|yinbukreis.U|xupi00))
+.continue EL056 ? _(1|yinbukreis.U|xupi00)
+.copy U|xupb00 = G|false
+.load 2 acctngmasterfiles "$,,gruppe==4;@gruppe=4"
+!LOOP006: ==============================
+.continue ELOP006 ? _(G|mehr)
+.formula U|xupi01 = '2|bkzuord' >> 1
+.continue EL057 ? _(xupi00 = xupi01)
+.copy U|xupb00 = G|true
+!EL057
+.load 2 acctngmasterfiles
+.continue LOOP006
+!ELOP006: ==============================
+.continue EL058 ? _(_(U|xupb00))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Buchungskreis 'xupi00' nicht konfiguriert
+.set TRANS -
+!EL058
+!EL056
+.formula U|xupi00 = xupi00 + 1
+.continue LOOP005
+!ELOP005: ==============================
+.formula U|xbudat = 1|ybudat
+.input "allpstart/PRUEF.BUDAT"
+.continue EL059 ? _(_(U|xbbuchbar))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : 'xtfehl'
+.set TRANS -
+!EL059
+.copy U|xupb00 = G|true
+.load 3 cotype "$,,@gruppe=5;gruppe==5"
+.continue EL060 ? _((F|defined(3|ysperre)) & (F|defined(3|ybusperr)) & (F|defined(3|ysperrab)))
+.continue EL061 ? _((3|ysperre) & ((F|empty(3|ybusperr)) ; (F|empty(3|ysperreab))))
+.copy U|xupb00 = G|false
+!EL061
+!EL060
+.continue EL062 ? _(U|xupb00)
+.copy U|xupb00 = G|false
+.continue EL063 ? _((1|ybuartk = "F") & (F|empty(1|ykkstelle)))
+.copy U|xupb00 = G|false
+.load 1 line
+!LOOP007: ==============================
+.continue ELOP007 ? _((G|mehr) & (_(U|xupb00)))
+.continue EL064 ? _((1|ykonto / "K*") ; (1|ykonto / "L*") ; (1|ykonto / "M*"))
+.copy U|xupb00 = G|true
+!EL064
+.load 1 line
+.continue LOOP007
+!ELOP007: ==============================
+.load 1 header
+.continue EL065 ? _(U|xupb00)
+.continue EL066 ? _(_(F|empty(1|yzbed)))
+.formula U|xupt00 = '1|yterm'
+.continue EL067 ? _((_(F|empty(1|yzbed))) & (_(U|xupt00  = "")))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Es darf nur Zahlungsbedingung oder FÑlligkeit gefÅllt sein!
+.set TRANS -
+.continue FI067
+!EL067
+.continue EL068 ? _(1|yzbed / "(09)*")
+.formula U|xupt00 = "$,,@gruppe=8;nummer==" + '1|yzbed'
+.continue FI068
+!EL068
+.formula U|xupt00 = "$,,@gruppe=8;such==" + '1|yzbed'
+!FI068
+.load 2 company 'xupt00'
+.continue EL069 ? _(_(G|mehr))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : unbekannte Zahlungsbedingung
+.set TRANS -
+.continue FI069
+!EL069
+.load 2 company
+.continue EL070 ? _(G|mehr)
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Zahlungsbedingung nicht eindeutig, bitte Identnummer statt Suchwort verwenden
+.set TRANS -
+!EL070
+!FI069
+!FI067
+!EL066
+!EL065
+.load 2 company "$,,gruppe==18;@gruppe=18"
+.continue EL071 ? _((_(F|empty(1|yewbu))) & (_(1|yewbu = 2|inland)))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC005
+!RET001
+.formula xprocsp = xprocsp - 1
+!EL071
+.continue EL072 ? _(F|empty(1|yklm))
+.continue EL073 ? _(F|empty(1|yvrgstrgl))
+.continue EL074 ? _('1|ybuchtyp(L=":")' = "(FinancialEntryInvoice)")
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set trans +
+Transaktionsdatensatz '1|nummer    ' : Bei Rechnungsbuchungen muss eine Vorgangssteuerregel eingetragen sein.
+.set trans -
+!EL074
+.continue FI073
+!EL073
+.formula U|xupt00 = "$,,nummer==" + 1|yvrgstrgl    ?  F|regmatch(1|yvrgstrgl, "(09).*")
+.formula U|xupt00 = "$,,such=="   + 1|yvrgstrgl    ? _F|regmatch(1|yvrgstrgl, "(09).*")
+.load 2 group "156:1" 'U|xupt00'
+.continue EL075 ? _(_(G|mehr))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set trans +
+Transaktionsdatensatz '1|nummer    ' : Angegebene Vorgangssteuerregel nicht gefunden.
+.set trans -
+!EL075
+!FI073
+.continue FI072
+!EL072
+.assign U|xupklm = 1|yklm
+.continue EL076 ? _(_(G|mehr))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set trans +
+Transaktionsdatensatz '1|nummer    ' : Eingetragenes Personenkonto nicht gefunden.
+.set trans -
+!EL076
+!FI072
+.formula U|xupi00 = 0
+.load 1 line
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC002
+!RET002
+.formula xprocsp = xprocsp - 1
+!LOOP008: ==============================
+.continue ELOP008 ? _(G|mehr)
+.formula U|xupi00 = U|xupi00 + 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC003
+!RET003
+.formula xprocsp = xprocsp - 1
+.continue EL077 ? _(_(1|yktonpruef))
+.continue EL078 ? _(_(F|empty(1|ykonto)))
+.continue EL079 ? _(1|ykonto / "(09)*")
+.formula U|xupt00 = "$,,gruppe==1;@gruppe=1;nummer==" + 1|ykonto
+.load 2 account 'U|xupt00'
+.continue EL080 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC006
+!RET004
+.formula xprocsp = xprocsp - 1
+.continue EL081 ? _(2|gv)
+.continue EL082 ? _(2|kost)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC001
+!RET005
+.formula xprocsp = xprocsp - 1
+!EL082
+.continue FI081
+!EL081
+.continue EL083 ? _(_(F|empty(1|ykstelle)))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Zu Bilanzkonto in Zeile 'xupi00' darf kein Kostenobjekt angegeben werden
+.set TRANS -
+!EL083
+!FI081
+.continue EL084 ? _(_(F|empty(1|ytstrgl)))
+.load 2 group "58:25" 'F|expr("$,,nummer==" + 1|ytstrgl)'   ?  F|regmatch(1|ytstrgl, "(09).*")
+.load 2 group "58:25" 'F|expr("$,,such=="   + 1|ytstrgl)'   ? _F|regmatch(1|ytstrgl, "(09).*")
+.continue EL085 ? _(_(G|mehr))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set trans +
+Transaktionsdatensatz '1|nummer    ' : Unbekannte Steuerregel in Zeile 'U|xupi00'.
+.set trans -
+!EL085
+!EL084
+.continue FI080
+!EL080
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Konto unbekannt in Zeile 'xupi00'
+.set TRANS -
+!FI080
+.continue FI079
+!EL079
+.continue EL086 ? _((1|ykonto / "K *") ; (1|ykonto / "L *") ; (1|ykonto / "M *"))
+.continue EL087 ? _(_(F|empty(1|ystschl)))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : SteuerschlÅsselangabe bei Kunde / Lieferant '1|ykonto' in Zeile 'xupi00' nicht zulÑssig
+.set TRANS -
+!EL087
+.formula U|xupt00 = 1|ykonto >$ " "
+.formula U|xupt00 = "$,,gruppe=1;nummer==" + U|xupt00
+.continue EL088 ? _(1|ykonto / "K *")
+.load 2 customer 'U|xupt00'
+!EL088
+.continue EL089 ? _(1|ykonto / "L *")
+.load 2 supplier 'U|xupt00'
+!EL089
+.continue EL090 ? _(1|ykonto / "M *")
+.load 2 employee 'U|xupt00'
+!EL090
+.continue EL091 ? _(_(G|mehr))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Kunde / Lieferant / Mitarbeiter '1|ykonto' unbekannt in Zeile 'xupi00'
+.set TRANS -
+!EL091
+.continue FI086
+!EL086
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Konto unbekannt in Zeile 'xupi00'
+.set TRANS -
+!FI086
+!FI079
+.continue FI078
+!EL078
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Konto fehlt in Zeile 'xupi00'
+.set TRANS -
+!FI078
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC004
+!RET006
+.formula xprocsp = xprocsp - 1
+!EL077
+.load 1 line
+.continue LOOP008
+!ELOP008: ==============================
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC007
+!RET007
+.formula xprocsp = xprocsp - 1
+.continue FI063
+!EL063
+.continue EL092 ? _(F|empty(1|ykkstelle))
+.formula U|xupi00 = 0
+.load 1 line
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC002
+!RET008
+.formula xprocsp = xprocsp - 1
+!LOOP009: ==============================
+.continue ELOP009 ? _(G|mehr)
+.formula U|xupi00 = U|xupi00 + 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC003
+!RET009
+.formula xprocsp = xprocsp - 1
+.continue EL093 ? _(_(F|empty(1|ykonto)))
+.continue EL094 ? _(_(F|empty(1|yleiart)))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Leistungsart in Zeile 'xupi00' nicht zulÑssig in statistischer Standardbuchung
+.set TRANS -
+!EL094
+.continue EL095 ? _(_(1|ymge = 0))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Mengenangabe in Zeile 'xupi00' nicht zulÑssig in statistischer Standardbuchung
+.set TRANS -
+!EL095
+.formula U|xupt00 = "$,,gruppe==1;@gruppe=1;nummer==" + 1|ykonto    ?  1|ykonto / "(09)*"
+.formula U|xupt00 = "$,,gruppe==1;@gruppe=1;such=="   + 1|ykonto    ? _1|ykonto / "(09)*"
+.load 2 account 'U|xupt00'
+.continue EL096 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC006
+!RET010
+.formula xprocsp = xprocsp - 1
+.continue EL097 ? _(_('2|stata(L=":")' = "(CostAccounting)"))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Konto '1|ykonto' in Zeile 'xupi00' ist kein statistisches Konto
+.set TRANS -
+!EL097
+.continue EL098 ? _(2|kost)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC001
+!RET011
+.formula xprocsp = xprocsp - 1
+!EL098
+.continue FI096
+!EL096
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Konto unbekannt in Zeile 'xupi00'
+.set TRANS -
+!FI096
+.continue FI093
+!EL093
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Konto fehlt in Zeile 'xupi00'
+.set TRANS -
+!FI093
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC004
+!RET012
+.formula xprocsp = xprocsp - 1
+.load 1 line
+.continue LOOP009
+!ELOP009: ==============================
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET013" 
+.continue PROC007
+!RET013
+.formula xprocsp = xprocsp - 1
+.continue FI092
+!EL092
+.input "allpstart/LART.KONFIG.INI"  ? _F|defined(U|xydbgrlart)
+.formula U|xupt00 = "$,,nummer==" + 1|ykkstelle + ";@filingmode=(Active)"   ?  1|ykkstelle / "(09)*"
+.formula U|xupt00 = "$,,such=="   + 1|ykkstelle + ";@filingmode=(Active)"   ? _1|ykkstelle / "(09)*"
+.load 2 group "5:2" 'U|xupt00'
+.continue EL099 ? _(_(G|mehr))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Leistende Kostenstelle unbekannt
+.set TRANS -
+.continue FI099
+!EL099
+.formula U|xupt02 = 2|id
+.continue EL100 ? _(_(2|bu))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Leistende Kostenstelle '1|ykkstelle' muss bebuchbar sein
+.set TRANS -
+!EL100
+!FI099
+.formula U|xupi00 = 0
+.load 1 line
+.continue EL101 ? _(G|mehr)
+.copy U|xupb01 = G|false
+.copy U|xupb02 = G|true     ? 1|ymge > 0
+.formula U|xupt04 = 1|yvfvk
+!EL101
+!LOOP010: ==============================
+.continue ELOP010 ? _(G|mehr)
+.formula U|xupi00 = U|xupi00 + 1
+.continue EL102 ? _(U|xyprjmkonfig^ybvorzpruef)
+.continue EL103 ? _(U|xupb02)
+.continue EL104 ? _(1|ymge < 0)
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Vorzeichen in Menge wechselt in Zeile 'xupi00'
+.set TRANS -
+!EL104
+.continue FI103
+!EL103
+.continue EL105 ? _(1|ymge > 0)
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Vorzeichen in Menge wechselt in Zeile 'xupi00'
+.set TRANS -
+!EL105
+!FI103
+!EL102
+.continue EL106 ? _(_(1|yvfvk = U|xupt04))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Kennung fix/variabel/voll wechselt in Zeile 'xupi00'
+.set TRANS -
+!EL106
+.continue EL107 ? _(1|ymge = 0)
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Menge = 0  in Zeile 'xupi00'
+.set TRANS -
+!EL107
+.continue EL108 ? _(F|empty(1|yleiart))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Leistungsart fehlt in Zeile 'xupi00'
+.set TRANS -
+.continue FI108
+!EL108
+.formula U|xtsel = "$,,nummer==" + 1|yleiart    ?  1|yleiart / "(09)*"
+.formula U|xtsel = "$,,such=="   + 1|yleiart    ? _1|yleiart / "(09)*"
+.load 2 group 'U|xydbgrlart' 'U|xtsel'
+.continue EL109 ? _(_(G|mehr))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Leistungsart '1|yleiart' in Zeile 'xupi00' unbekannt
+.set TRANS -
+.continue FI109
+!EL109
+.continue EL110 ? _((((F|empty(2|ykoartf)) ; (F|empty(2|yekoartf))) & ((1|yvfvk = "FI") ; (1|yvfvk = "VO"))) ; (((F|empty(2|ykoartv)) ; (F|empty(2|yekoartv))) & (1|yvfvk = "VA")))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : in Leistungsart '1|yleiart' in Zeile 'xupi00' fehlen Be- bzw. Entlastungskonten
+.set TRANS -
+.continue FI110
+!EL110
+.continue EL111 ? _((F|empty(1|ykstelle)) & (F|empty(1|ytprojekt)))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Kostenobjekt in Zeile 'xupi00' fehlt
+.set TRANS -
+.continue FI111
+!EL111
+.formula U|xupt00 = 1|ybudat:8
+.continue EL112 ? _(F|empty(U|xupt00))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Buchungsdatum fehlt
+.set TRANS -
+.continue FI112
+!EL112
+.continue EL113 ? _(F|empty(1|yvfvk))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Kennung voll/fix/variabel fehlt in Zeile 'xupi00'
+.set TRANS -
+.continue FI113
+!EL113
+.continue EL114 ? _(F|empty(1|ykstelle))
+.assign U|xuppprojekt = 1|ytprojekt
+.continue EL115 ? _((F|empty(U|xuppprojekt)) ; (_(G|mehr)))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set trans +
+Transaktionsdatensatz '1|nummer    ' : Projekt '1|ytprojekt' in Zeile 'U|xupi00' unbekannt
+.set trans -
+.continue FI115
+!EL115
+.continue EL116 ? _(_(U|xuppprojekt^bebuchbar))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Projekt '1|ytprojekt' in Zeile 'U|xupi00' muss bebuchbar sein
+.set TRANS -
+.continue FI116
+!EL116
+.load 3 add 2|ykoartf   ?  1|yvfvk = "FI" ; 1|yvfvk = "VO"
+.load 3 add 2|ykoartv   ?  1|yvfvk = "VA"
+.continue EL117 ? _(G|mehr)
+.continue EL118 ? _((3|kost) & (F|empty(3|kstelle)))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set trans +
+Transaktionsdatensatz '1|nummer    ' : das Konto '3|nummer' in der Leistungsart '1|yleiart' muss eine Kostenstelle eingetragen haben oder
+                                       es darf nicht die Eigenschaft Kostenrechnungszwang haben
+.set trans -
+!EL118
+.load 3
+.continue FI117
+!EL117
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : in Leistungsart '1|yleiart' in Zeile 'xupi00' fehlen Be- bzw. Entlastungskonten
+.set TRANS -
+!FI117
+!FI116
+!FI115
+.continue FI114
+!EL114
+.formula U|xtsel = "$,,nummer==" + 1|ykstelle   ?  1|ykstelle / "(09)*"
+.formula U|xtsel = "$,,such=="   + 1|ykstelle   ? _1|ykstelle / "(09)*"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 3 group "5:2.4.8" 'U|xtsel'
+.continue EL119 ? _(_(G|mehr))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Kostenobjekt in Zeile 'xupi00' unbekannt
+.set TRANS -
+.continue FI119
+!EL119
+.formula U|xupt05 = 3|id
+.copy U|xupb00 = G|true
+.continue EL120 ? _(F|defined(3|bu))
+.copy U|xupb00 = 3|bu
+!EL120
+.continue EL121 ? _(_(U|xupb00))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Kostenobjekt '1|ykstelle' in Zeile 'xupi00' muss bebuchbar sein
+.set TRANS -
+!EL121
+!FI119
+!FI114
+.continue EL122 ? _(_(U|xupberror))
+.formula U|xupd00 = 1|ybudat
+.formula U|xupd08 = U|xupd00
+.formula U|xupi01 = F|month(U|xd08)
+.formula U|xupt01 = "v"     ?  1|yvfvk = "VA"
+.formula U|xupt01 = "f"     ? _1|yvfvk = "VA"
+.formula U|xupt00 = F|getfy(U|xupd08)
+.formula U|xtsel = "$,,ybkore==(Yes);ybstd==(No);ygjahr=" + U|xupt00 + ";ykstelle=" + U|xupt02 + ";yleiart=" + 2|id
+.load 3 group 'U|xydbgrversatz' 'U|xtsel'
+.continue EL123 ? _(_(G|mehr))
+.formula U|xtsel = "$,,ybkore==(Yes);ybstd==(Yes);ygjahr=" + U|xupt00 + ";yleiart=" + 2|id
+.load 3 group 'U|xydbgrversatz' 'U|xtsel'
+.continue EL124 ? _(_(G|mehr))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : fÅr Leistungsart '1|yleiart' in Zeile 'xupi00' existiert kein gÅltiger Verrechnungssatz
+.set TRANS -
+!EL124
+!EL123
+.continue EL125 ? _(G|mehr)
+.load 3 line '3|selzeile'
+.copy U|xupb00 = G|false
+.formula U|xupt03 = "yvs" + U|xupt01 + F|tostring(U|xupi01)
+.copy U|xupb00 = G|true     ? 3|.U|xupt03 = 0
+.continue EL126 ? _(U|xupb00)
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Verrechnungssatz fÅr Leistungsart in Zeile 'xupi00' hat den Wert 0,00
+.set TRANS -
+!EL126
+!EL125
+.load 3 cotype "$,,gruppe==5;@gruppe=5"
+.continue EL127 ? _(F|defined(3|ysperre))
+.continue EL128 ? _(3|ysperre)
+.copy U|xupb00 = G|false
+.formula U|xupt00 = "formula U|xupb00 = G|true   ? 2|ykoart" + 'U|xupt01'+"^"+'3|ybusperr'
+.'U|xupt00'
+.continue EL129 ? _(U|xupb00)
+.continue EL130 ? _(_(3|ysperreab = ""))
+.copy U|xupb00 = G|false
+.formula U|xupt00 = "formula U|xupb00 = G|true   ? U|xupd00 < 2|ykoart"+'U|xupt01'+"^"+'3|ysperreab'
+.'U|xupt00'
+.continue EL131 ? _(_(U|xupb00))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Belastungskonto [ '1|yvfv' ] zu Leistungsart in Zeile 'xupi00' gesperrt
+.set TRANS -
+!EL131
+.continue FI130
+!EL130
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Belastungskonto [ '1|yvfv' ] zu Leistungsart in Zeile 'xupi00' gesperrt
+.set TRANS -
+!FI130
+!EL129
+.copy U|xupb00 = G|false
+.formula U|xupt00 = "formula U|xupb00 = G|true   ? 2|yekoart"+'U|xupt01'+"^"+'3|ybusperr'
+.'U|xupt00'
+.continue EL132 ? _(U|xupb00)
+.continue EL133 ? _(_(3|ysperreab = ""))
+.copy U|xupb00 = G|false
+.formula U|xupt00 = "formula U|xupb00 = G|true   ? U|xupd00 < 2|yekoart"+'U|xupt01'+"^"+'3|ysperreab'
+.'U|xupt00'
+.continue EL134 ? _(_(U|xupb00))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Entlastungskonto [ '1|yvfv' ] zu Leistungsart in Zeile 'xupi00' gesperrt
+.set TRANS -
+!EL134
+.continue FI133
+!EL133
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Entlastungskonto [ '1|yvfv' ] zu Leistungsart in Zeile 'xupi00' gesperrt
+.set TRANS -
+!FI133
+!EL132
+!EL128
+!EL127
+.continue EL135 ? _(F|defined(3|ybbukto))
+.continue EL136 ? _(3|ybbukto)
+.input BBKONTEN.KONFIG.INI
+.continue EL137 ? _(1|yvfvk = "VA")
+.load 6 add 2|ykoartv
+.continue FI137
+!EL137
+.load 6 add 2|ykoartf
+!FI137
+.continue EL138 ? _(1|yvfvk = "VA")
+.load 7 add 2|yekoartv
+.continue FI138
+!EL138
+.load 7 add 2|yekoartf
+!FI138
+.formula U|xupt00 = "$,,@gruppe="+'xygrbkonto'+";such==KST"+'m|ykkstelle'
+.load 4 'T|hdatname.xydbbkonto' 'xupt00'
+.continue EL139 ? _(G|mehr)
+.copy U|xupb01 = G|false
+.load 4 line
+.continue EL140 ? _(4|ybnegativ)
+.copy U|xupb01 = G|true
+!EL140
+!LOOP011: ==============================
+.continue ELOP011 ? _(G|mehr)
+.continue EL141 ? _(4|id = 7|id)
+.continue EL142 ? _(4|ybnegativ)
+.copy U|xupb01 = G|false
+.continue FI142
+!EL142
+.copy U|xupb01 = G|true
+!FI142
+!EL141
+.load 4 line
+.continue LOOP011
+!ELOP011: ==============================
+.continue EL143 ? _(_(xupb01))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+.continue EL144 ? _(1|yvfvk = "VA")
+Transaktionsdatensatz '1|nummer    ' : das variable Entlastungskonto der Leistungsart in Zeile 'xiup00'
+                                       ist mit der leistenden Kostenstelle nicht bebuchbar
+.continue FI144
+!EL144
+Transaktionsdatensatz '1|nummer    ' : das fixe Entlastungskonto der Leistungsart in Zeile 'xiup00'
+                                       ist mit der leistenden Kostenstelle nicht bebuchbar
+!FI144
+.set TRANS -
+!EL143
+.load 4 object 'xupt05'
+.continue EL145 ? _(4|gruppe = 8)
+.formula U|xupi01 = 0
+.load 4 line
+!LOOP012: ==============================
+.continue ELOP012 ? _(G|mehr)
+.formula U|xupi01 = xupi01 + 1
+.type text xupktr.xupi01
+.formula U|xupktr.xupi01 = '4|kstelle^id'
+.load 4 line
+.continue LOOP012
+!ELOP012: ==============================
+.continue FI145
+!EL145
+.formula U|xupi01 = 1
+.type text xupktr.xupi01
+.formula U|xupktr.xupi01 = 'xupt05'
+!FI145
+.formula U|xupi01 = 1
+!LOOP013: ==============================
+.continue ELOP013 ? _(F|defined(xupktr.xupi01))
+.copy U|xupb01 = G|false
+.formula U|xupt00 = "load 4 object 'xupktr"+'xupi01'+"'"
+.'xupt00'
+.continue EL146 ? _(4|gruppe = 2)
+.formula U|xupt00 = "$,,@gruppe="+'xygrbkonto'+";such==KST"
+.continue EL147 ? _('4|nummer'/"*F")
+.formula U|xupt00 = xupt00 + ('4|nummer'<<"F")
+.continue FI147
+!EL147
+.continue EL148 ? _('4|nummer'/"*V")
+.formula U|xupt00 = xupt00 + ('4|nummer'<<"V")
+.continue FI148
+!EL148
+.formula U|xupt00 = xupt00 + '4|nummer'
+!FI148
+!FI147
+.continue FI146
+!EL146
+.formula U|xupt00 = "$,,such==KTRALLE;@gruppe="+'xygrbkonto'
+!FI146
+.load 4 'T|hdatname.xydbbkonto' 'xupt00'
+.continue EL149 ? _(G|mehr)
+.continue EL150 ? _(4|ybnegativ)
+.copy U|xupb01 = G|true
+!EL150
+.load 4 line
+!LOOP014: ==============================
+.continue ELOP014 ? _(G|mehr)
+.continue EL151 ? _('4|ykonto^id' = '6|id')
+.continue EL152 ? _(4|ybnegativ)
+.copy U|xupb01 = G|false
+.continue FI152
+!EL152
+.copy U|xupb01 = G|true
+!FI152
+!EL151
+.load 4 line
+.continue LOOP014
+!ELOP014: ==============================
+.continue EL153 ? _(_(xupb01))
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+.continue EL154 ? _(1|yvfvk = "VA")
+Transaktionsdatensatz '1|nummer    ' : das variable Belastungskonto der Leistungsart in Zeile 'xiup00'
+                                       ist mit der leistenden Kostenstelle nicht bebuchbar
+.continue FI154
+!EL154
+Transaktionsdatensatz '1|nummer    ' : das fixe Belastungskonto der Leistungsart in Zeile 'xiup00'
+                                       ist mit der leistenden Kostenstelle nicht bebuchbar
+!FI154
+.set TRANS -
+!EL153
+.continue FI149
+!EL149
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Zeile 'xiup00' Kein Datensatz bebuchbare Konten fÅr Kostenobjekt in Zeile 'xupi00' vorhanden
+.set TRANS -
+!FI149
+.formula U|xupi01 = xupi01 + 1
+.continue LOOP013
+!ELOP013: ==============================
+.continue FI139
+!EL139
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Zeile 'xiup00' Kein Datensatz bebuchbare Konten fÅr leistende Kostenstelle vorhanden
+.set TRANS -
+!FI139
+!EL136
+!EL135
+!EL122
+!FI113
+!FI112
+!FI111
+!FI110
+!FI109
+!FI108
+.load 1 line
+.continue LOOP010
+!ELOP010: ==============================
+!FI092
+!FI063
+.continue FI062
+!EL062
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Buchungssperre ist installiert, aber Sperrfelder sind nicht definiert
+                                       Fortsetzung der PrÅfung nicht mîglich!
+.set TRANS -
+!FI062
+.continue FI049
+!EL049
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Buchungsart nicht ausgefÅllt
+.set TRANS -
+!FI049
+.continue FI048
+!EL048
+.copy U|xupberror = G|true
+.output addedto 'U|xuperrorprot'
+.set TRANS +
+Transaktionsdatensatz '1|nummer    ' : Transaktionsdatensatz enthÑlt keine Buchungszeilen
+.set TRANS -
+!FI048
+.select lock add 1|id
+.continue EL155 ? _(U|xupberror)
+.set TRANS +
+.formula H|yfehler = "Fehlerprotokoll beachten!"
+.set TRANS -
+.formula H|yftext = U|xuperrorprot
+.formula H|ystatusk = "BIE"
+.continue FI155
+!EL155
+.set TRANS +
+.formula h|yfehler  = "Daten ok"
+.set TRANS -
+.formula H|yftext    = ""
+.formula H|ystatusk = "BIG"
+!FI155
+.rewrite
+.select --
+.system 'F|formatstr("rm -f {1}", U|xuperrorprot)' background
+.continue

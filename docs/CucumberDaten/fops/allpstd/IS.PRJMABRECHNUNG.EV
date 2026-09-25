@@ -1,0 +1,5066 @@
+..!interpreter english declaration noabbrev
+.. at 2017-03-21, 08:29
+.set trans -
+..========================================================================
+..==  Name              : IS.PRJMABRECHNUNG.EV
+..==  Pfad              : allpstd
+..==  Funktion          : Abrechnung von Leistungsmeldungen
+..==  Erstellungsdatum  : 28.01.2010
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF"
+..====================================================
+.type text    xtsys xtsel xtcmd xtln xtname xtvtext xtdatei xtftext xtlndatei xtprojleistkatid
+.type text    xtfarbeok xtfarbefehl xtindex xtabrechnung xttyp xtid xtzid xtaufgabe xtkatartk xttext
+.type text    xykoobjekt xytaufrufernr xytzeitstempel xtsperrstempel
+.type BGL     xt1
+.type BT      xtbtext
+.type GD19    xdvon xdbis
+.type GD      xddat xdkonddat
+.type P0      xpkunde
+.type P2      xpart
+.type P3:2    xpaupos
+.type TAZ1    xpape
+.type TAZ7    xeinh
+.type integer xizeile xisort xidatei xi1
+.type real    xrlmgenauigkeit
+.type bool    xbok xbmehr xbbuch xbvk xbausel xbprsel xyberlaubt xbnurml xbzeilenraus
+.'F|expr("type P" + U|xydbgrtpposition + " xptppos")
+.'F|expr("type P" + U|xydbgrprojekt    + " xpprojekt")
+.'F|expr("type P" + U|xydbgraufgabe    + " xpaufgabe")
+.type integer   xprocsp      ? _F|defined(U|xprocsp)
+.formula U|xprocsp = 0
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- IFOP_und_weiter -----
+.input 'F|foppath("IFOP.IS.PRJMABRECHNUNG.EV")'     ? F|fileexists(F|foppath("IFOP.IS.PRJMABRECHNUNG.EV"))
+.continue
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Farbe_Fehler -----
+.colour -BACKGROUND 'U|xtfarbefehl' 'M|aktzeile'
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Sperre_entfernen -----
+.select screen header
+.select screen line
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL001 ? _(_(M|ysperre))
+.continue EL002 ? _((_(F|empty(M|ytleistmeld))) & (M|ytleistmeld^ysperre))
+.select lock add M|ytleistmeld
+.continue EL003 ? _(G|mehr)
+.assign H|ysperre = G|FALSE
+.rewrite
+.continue FI003
+!EL003
+.set TRANS +
+.box Hinweis
+Die Leistungsmeldung 'M|ytleistmeld'/'M|ytleistmeld^such' konnte nicht freigegeben werden.
+Bitte Sperre manuell entfernen.
+.set TRANS -
+!FI003
+!EL002
+.continue EL004 ? _((_(F|empty(M|ytmzeitmeld))) & (M|ytmzeitmeld^ysperre))
+.select lock add M|ytmzeitmeld
+.continue EL005 ? _(G|mehr)
+.assign H|ysperre = G|FALSE
+.rewrite
+.continue FI005
+!EL005
+.set TRANS +
+.box Hinweis
+Die Meldung der Maschinenzeit 'M|ytmzeitmeld'/'M|ytmzeitmeld^such' konnte nicht freigegeben werden.
+Bitte Sperre manuell entfernen.
+.set TRANS -
+!FI005
+!EL004
+.continue EL006 ? _((_(F|empty(M|ytmatmeld))) & (M|ytmatmeld^ysperre))
+.select lock add M|ytmatmeld
+.continue EL007 ? _(G|mehr)
+.assign H|ysperre = G|FALSE
+.rewrite
+.continue FI007
+!EL007
+.set TRANS +
+.box Hinweis
+Die Materialmeldung 'M|ytmatmeld'/'M|ytmatmeld^such' konnte nicht freigegeben werden.
+Bitte Sperre manuell entfernen.
+.set TRANS -
+!FI007
+!EL006
+.continue EL008 ? _((_(F|empty(M|ytsubmeld))) & (M|ytsubmeld^ysperre))
+.select lock add M|ytsubmeld
+.continue EL009 ? _(G|mehr)
+.assign H|ysperre = G|FALSE
+.rewrite
+.continue FI009
+!EL009
+.set TRANS +
+.box Hinweis
+Die Submeldung 'M|ytsubmeld'/'M|ytsubmeld^such' konnte nicht freigegeben werden.
+Bitte Sperre manuell entfernen.
+.set TRANS -
+!FI009
+!EL008
+!EL001
+.select screen line
+.continue LOOP001
+!ELOP001: ==============================
+.continue 'xprocst.xprocsp'
+!PROC004: ----- Kopffelder_leeren -----
+.formula M|yabrechnung = ""
+.formula M|yabrname    = ""
+.formula M|yaufgabe    = ""
+.formula M|ykunde      = ""
+.formula M|ykunde2     = ""
+.formula M|yprojekt    = ""
+.formula M|yvorvp      = ""
+.formula M|yvornum     = ""
+.formula M|ybupos      = ""
+.formula M|ystatus     = ""
+.formula M|yftext      = ""
+.formula M|ywert       = 0
+.continue 'xprocst.xprocsp'
+!PROC005: ----- Tabelle_leeren -----
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC003
+!RET001
+.formula xprocsp = xprocsp - 1
+.make screen line --O
+.continue 'xprocst.xprocsp'
+!PROC006: ----- Abrechnungsnummer_in_LM_schreiben -----
+.select lock add M|ytleistmeld
+.continue EL010 ? _(G|mehr)
+.formula H|yabrechnung  = M|yabrechnung^nummer  ? _M|ybvk
+.formula M|ytabrechnung = M|yabrechnung^nummer  ? _M|ybvk
+.formula H|yprjmid      = M|yprjmpid     ?  F|empty(H|ylsposid) & M|yabrpos^kotyp = G|LIKO
+.formula H|yprjmid      = ""             ? _F|empty(H|ylsposid) & M|yabrpos^kotyp = G|LIKO
+.formula H|yprjmid      = M|yprjmpid     ?  F|empty(H|yreposid) & M|yabrpos^kotyp = G|REKO
+.formula H|yprjmid      = ""             ? _F|empty(H|yreposid) & M|yabrpos^kotyp = G|REKO
+.formula H|ysort   = M|aktzeile ?  M|ymark
+.formula H|ysort   = 0          ? _M|ymark
+.rewrite
+.continue FI010
+!EL010
+.set TRANS +
+.box Fehler
+Die Leistungsmeldung 'M|ytleistmeld' konnte nicht zur Bearbeitung geîffnet werden.
+.set TRANS -
+.copy M|ymark = G|TRUE
+!FI010
+.continue 'xprocst.xprocsp'
+!PROC007: ----- Abrechnungsnummer_aus_LM_entfernen -----
+.select lock object 'M|ytleistmeld^id'
+.continue EL011 ? _(G|mehr)
+.continue EL012 ? _(M|ybvk)
+.formula H|yabrechnung  = ""    ?  M|ymark
+.formula M|ytabrechnung = ""    ?  M|ymark
+.formula H|yprjmid      = M|yprjmpid
+.continue FI012
+!EL012
+.formula H|yabrechnung  = ""
+.formula M|ytabrechnung = ""
+!FI012
+.formula H|ysort   = M|aktzeile ?  M|ymark
+.formula H|ysort   = 0          ? _M|ymark
+.rewrite
+.continue FI011
+!EL011
+.set TZRANS +
+.box Fehler
+Die Leistungsmeldung 'M|ytleistmeld' konnte nicht zur Bearbeitung geîffnet werden.
+.set TRANS -
+.copy M|ymark = G|FALSE
+.error
+.end 1         ? G|evtart = "zeileloevor"
+!FI011
+.continue 'xprocst.xprocsp'
+!PROC008: ----- LM_gebucht -----
+.continue EL013 ? _(U|xybistkost)
+.formula U|xbok = G|TRUE
+.select screen header
+.select screen line
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.continue EL014 ? _(((_(F|empty(M|ytleistmeld))) & (F|empty(M|ytleistmeld^ytransaktion))) ; ((_(F|empty(M|ytmzeitmeld))) & (F|empty(M|ytmzeitmeld^ytransaktion))))
+.colour -BACKGROUND "255 220 60" ytleistmeld 'M|aktzeile'
+.formula U|xbok = G|false
+.continue FI014
+!EL014
+.colour -BACKGROUND "-1 -1 -1" ytleistmeld 'M|aktzeile'
+!FI014
+.select screen line
+.continue LOOP002
+!ELOP002: ==============================
+!EL013
+.continue 'xprocst.xprocsp'
+!PROC009: ----- Abrechnungswert_ermitteln -----
+.input "is/ABASFARBEN.DEF"  ? _F|defined(U|xabasred)
+.formula M|ywert     = 0
+.formula M|yfaktwert = 0
+.formula M|ymenge    = 0
+.select screen header
+.select screen line
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.continue EL015 ? _(M|ymark)
+.formula M|ywert     = M|ywert     + M|ytwert
+.formula M|yfaktwert = M|yfaktwert + M|ytfaktwert
+.formula M|ymenge    = M|ymenge    + M|ytmenge
+!EL015
+.colour -BACKGROUND "-1 -1 -1"   ytwert 'M|aktzeile'    ?  M|ytwert = M|ytfaktwert
+.colour -BACKGROUND 'U|xabasred' ytwert 'M|aktzeile'    ? _M|ytwert = M|ytfaktwert
+.select screen line
+.continue LOOP003
+!ELOP003: ==============================
+.colour -BACKGROUND "-1 -1 -1"   ywert 0    ?  M|ywert = M|yfaktwert
+.colour -BACKGROUND 'U|xabasred' ywert 0    ? _M|ywert = M|yfaktwert
+.continue 'xprocst.xprocsp'
+!PROC010: ----- Wert_ermitteln -----
+.assign  U|xpprojekt        = M|ytprojekt^id
+.assign  U|xpaufgabe        = M|ytaufgabe^id
+.assign  U|xdkonddat        = M|ytlnadatum
+.formula U|xtprojleistkatid = M|ytprojekt^yprojleistkatid
+.assign U|xpkunde = 0|yprojekt^ykunde^id
+.assign U|xpaupos = M|yaupos^id
+.assign U|xptppos = M|yaupos^id
+.input 'U|xtupartpreis'
+.formula M|ytpreis    = U|xpapreis
+.formula M|ytfaktwert = U|xpapreis * M|ytmenge
+.continue EL016 ? _(_(U|xttyp = "MM"))
+.formula M|ytpreis    = U|xyhpreis
+.formula M|ytfaktwert = U|xyhpreis * M|ytmenge
+.continue FI016
+!EL016
+.formula M|ytpreis    = U|xpapreis
+.formula M|ytfaktwert = U|xpapreis * M|ytmenge
+!FI016
+.formula M|ytwert = M|ytfaktwert        ? M|ytwert = 0 ; G|evtvar = "yrabdr"
+.continue 'xprocst.xprocsp'
+!PROC011: ----- Zeile_fuellen -----
+.make screen line +O        ?  G|evtart = "buttonnach" ; G|evtvar = "yabrechnung"
+.copy M|ysperre = G|FALSE
+.copy M|ysperre = G|TRUE    ?  M|ybzeigen
+.continue EL017 ? _(U|xttyp = "MM")
+.continue EL018 ? _((1|ysperre) & (_(F|empty(1|yaufrufernr))) & (_(M|ybzeigen)))
+.formula U|xytaufrufernr = 1|yaufrufernr
+.input "allpstart/GET.CALLERNO"
+.copy    M|ysperre = G|TRUE    ? U|xytzeitstempel = 1|yaufruferzp
+!EL018
+.continue FI017
+!EL017
+.continue EL019 ? _((0|ysperre) & (_(F|empty(0|yaufrufernr))) & (_(M|ybzeigen)))
+.formula U|xytaufrufernr = 0|yaufrufernr
+.input "allpstart/GET.CALLERNO"
+.copy    M|ysperre = G|TRUE    ? U|xytzeitstempel = 0|yaufruferzp
+!EL019
+!FI017
+.continue BRK001 ? _(U|xttyp = "LM")
+.continue EL020 ? _((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition))
+.copy M|ysperre = G|TRUE  ?  0|ytpposid <> M|yabrpos^id & (_F|empty(0|ytpposid) & _0|ytpposid = "(0,0,0)")
+.continue FI020
+!EL020
+.copy M|ysperre = G|TRUE  ? _F|empty(0|ylsposid) & _0|ylsposid = M|yabrpos^id
+.copy M|ysperre = G|TRUE  ? _F|empty(0|yreposid) & _0|yreposid = M|yabrpos^id
+.copy M|ysperre = G|TRUE  ? _F|empty(0|yprjmid)  & _0|yprjmid  = M|yprjmpid
+!FI020
+.continue EL021 ? _(_(F|empty(0|yabrechnung)))
+.assign M|ytabrechnung = 0|yabrechnung
+.load 9 group 'U|xydbgrabrechnung' '0|yabrechnung'
+.assign M|ytabrname    = 9|namebspr     ? G|mehr
+.load 9
+!EL021
+.copy   M|ytaufgabe       = 0|yaufgabe
+.copy   M|ytpvorgang      = 0|ypvorgang
+.copy   M|ytarbpaket      = M|ytpvorgang^yarbpaket
+.copy   M|ytstatus        = M|ytaufgabe^ystatus
+.assign M|ytaubez         = 0|yaufgabe^namebspr
+.assign M|ytleistmeld     = 0|id
+.assign M|ytlnbez         = 0|namebspr
+.copy   M|ytpersonal      = 0|ypersonal
+.assign M|ytpersname      = 0|ypersonal^namebspr
+.assign M|ytverantw       = 0|yverantw^id
+.copy   M|ytprojleit      = 0|yprojekt^yprojleit    ? _F|empty(0|yprojekt)
+.copy   M|ytlndatum       = 0|yedatum
+.copy   M|ytlnadatum      = 0|yadatum
+.copy   M|ytlnazeit       = 0|yazeit
+.copy   M|ytlnezeit       = 0|yezeit
+.copy   M|ytlnedatum      = 0|yedatum
+.assign M|ytfaktzeit      = 0|yfaktzeit
+.assign M|ytarbzeit       = 0|yarbzeit
+.assign M|ytmenge         = 0|yfaktzeit
+.assign M|yteinh          = 'U|xypmstunden(L="0")'
+.assign M|ytlsrelev       = 0|ylsrelev
+.assign M|ytarchiv        = 0|yarchiv
+.assign M|ytnachtrag      = 0|ynachtrag
+.assign M|ytbueberstunden = 0|ybueberstunden
+.assign M|ytleiort        = 0|yleiort
+.copy   M|ytprojekt       = 0|yprojekt
+.copy   M|ytkunde         = 0|ykunde
+.copy   M|yttaetschl      = 0|ytaetschl
+.assign M|ytlsnum         = 0|ylsnum
+.assign M|ytlspos         = 0|ylsposid
+.assign M|ytrenum         = 0|yrenum
+.assign M|ytrepos         = 0|yreposid
+.assign M|yttppos         = 0|ytpposid
+.copy   M|ytbfahrtkosten     = 0|ybfahrtkosten
+.copy   M|ytfahrtkostenwert  = 0|yfahrtkostenwert
+.copy   M|ytfahrtkostenwaehr = 0|yfahrtkostenwaehr
+.copy   M|ytbspesen          = 0|ybspesen
+.copy   M|ytspesenwert       = 0|yspesenwert
+.copy   M|ytspesenwaehr      = 0|yspesenwaehr
+.copy   M|ytbuebernachtung   = 0|ybuebernachtung
+.copy   M|ytuebernachtwert   = 0|yuebernachtwert
+.copy   M|ytuebernachtwaehr  = 0|yuebernachtwaehr
+.copy   M|ytbabrechfrei      = 0|ybabrechfrei
+.copy   M|ytabrechfreibz     = 0|yabrechfreibz
+.continue EL022 ? _(_(F|empty(0|ybeschint)))
+.select from '0|ybeschint'
+.formula M|ylnbeschint = 0|ybeschint
+!EL022
+.continue EL023 ? _(_(F|empty(0|ybeschext)))
+.select from '0|ybeschext'
+.formula M|ylnbeschext = 0|ybeschext
+!EL023
+.continue EL024 ? _(_(F|empty(0|ytueberstunden)))
+.select from '0|ytueberstunden'
+.formula M|yttueberstunden = 0|ytueberstunden
+!EL024
+.continue EL025 ? _(_(F|empty(0|ylmabrtext)))
+.select from '0|ylmabrtext'
+.formula M|ytabrtext = 0|ylmabrtext
+!EL025
+.assign  M|ytbmeldpreis = G|TRUE        ? _F|empty(0|ylmpreis)
+.formula M|ytpreis    = 0|ylmpreis
+.formula M|ytfaktwert = 0|ylmpreis * M|ytmenge
+.formula M|ytwert     = 0|ylmwert
+.formula U|xpart      = 0|yvkartikel^id
+.formula U|xpaartikel = 0|yvkartikel^id
+.formula U|xtkatartk  = "PQ"
+.continue EL026 ? _(F|empty(0|ylmpreis))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC010
+!RET002
+.formula xprocsp = xprocsp - 1
+!EL026
+.continue EL027 ? _(M|ybvk)
+.copy M|ymark = G|TRUE   ?  F|empty(0|yprjmid) &  0|ylsposid = M|yabrpos^id &  M|yabrpos^kotyp = G|LIKO
+.copy M|ymark = G|TRUE   ?  F|empty(0|yprjmid) &  0|yreposid = M|yabrpos^id &  M|yabrpos^kotyp = G|REKO
+.copy M|ymark = G|TRUE   ?  0|yprjmid = M|yprjmpid &  F|empty(0|ylsposid) &  M|yabrpos^kotyp = G|LIKO
+.copy M|ymark = G|TRUE   ?  0|yprjmid = M|yprjmpid &  F|empty(0|yreposid) &  M|yabrpos^kotyp = G|REKO
+.copy M|ymark = G|TRUE   ?  0|yprjmid = M|yprjmpid &  F|empty(0|ylsposid) & F|empty(0|yreposid) & F|empty(M|yabrpos)
+.copy M|ymark = G|TRUE   ?  0|yaufgabe^yvorpos = M|yaupos^id
+.copy M|ymark = G|TRUE   ?  0|ytpposid = M|yabrpos^id
+.copy M|ymark = G|FALSE  ? _0|ylsrelev & F|empty(0|yprjmid) &  0|ylsposid = M|yabrpos^id &  M|yabrpos^kotyp <> G|LIKO
+.copy M|ymark = G|FALSE  ? _0|ylsrelev & F|empty(0|yprjmid) &  0|yreposid = M|yabrpos^id &  M|yabrpos^kotyp <> G|REKO
+.copy M|ymark = G|FALSE  ? _0|ylsrelev & 0|yprjmid <> M|yprjmpid &  F|empty(0|ylsposid) &  M|yabrpos^kotyp = G|LIKO
+.copy M|ymark = G|FALSE  ? _0|ylsrelev & 0|yprjmid <> M|yprjmpid &  F|empty(0|yreposid) &  M|yabrpos^kotyp = G|REKO
+.copy M|ymark = G|FALSE  ?  0|yarchiv & F|empty(0|yprjmid) &  0|ylsposid = M|yabrpos^id &  M|yabrpos^kotyp <> G|LIKO
+.copy M|ymark = G|FALSE  ?  0|yarchiv & F|empty(0|yprjmid) &  0|yreposid = M|yabrpos^id &  M|yabrpos^kotyp <> G|REKO
+.copy M|ymark = G|FALSE  ?  0|yarchiv & 0|yprjmid <> M|yprjmpid &  F|empty(0|ylsposid) &  M|yabrpos^kotyp = G|LIKO
+.copy M|ymark = G|FALSE  ?  0|yarchiv & 0|yprjmid <> M|yprjmpid &  F|empty(0|yreposid) &  M|yabrpos^kotyp = G|REKO
+.continue EL028 ? _((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition))
+.copy M|ymark = G|TRUE        ?  F|empty(0|ytpposid) & _M|ysperre
+.copy M|ymark = G|TRUE        ?  0|ytpposid =  M|yabrpos^id
+.copy M|ymark = G|FALSE       ?  0|ytpposid <> M|yabrpos^id & _M|yballe & (_F|empty(0|ytpposid) & _0|ytpposid = "(0,0,0)")
+!EL028
+.protection ymark 'M|aktzeile'  ? _M|ymark & 0|yarchiv
+.continue FI027
+!EL027
+.continue EL029 ? _(((F|empty(M|yabrechnung)) & (F|empty(0|yabrechnung)) & (_(M|ysperre))) ; ((_(F|empty(M|yabrechnung))) & (0|yabrechnung = M|yabrechnung^nummer)) ; (((G|evtvar = "ytleistmeld") ; (G|evtvar = "ylnanfuegen")) & ((F|empty(0|yabrechnung)) ; (F|empty(M|yabrechnung))) & (_(M|ysperre)) & (false)))
+.copy M|ymark = G|TRUE
+!EL029
+.continue EL030 ? _((_(M|ytlsrelev)) ; (((_(F|empty(0|ylsposid))) ; (_(F|empty(0|yreposid)))) & (_(M|ybvk))) ; (0|yarchiv))
+.copy M|ymark = G|FALSE
+.protection ymark 'M|aktzeile'
+!EL030
+!FI027
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(U|xttyp = "MZ")
+.continue EL031 ? _((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition))
+.copy M|ysperre = G|TRUE      ?  0|ymztpposid <> M|yabrpos^id & (_F|empty(0|ymztpposid) & _0|ymztpposid = "(0,0,0)")
+.continue FI031
+!EL031
+.copy M|ysperre = G|TRUE      ? _F|empty(0|ymzlsposid) & _0|ymzlsposid = M|yabrpos^id
+.copy M|ysperre = G|TRUE      ? _F|empty(0|ymzreposid) & _0|ymzreposid = M|yabrpos^id
+.copy M|ysperre = G|TRUE      ? _F|empty(0|ymzprjmid)  & _0|ymzprjmid  = M|yprjmpid
+!FI031
+.continue EL032 ? _(_(F|empty(0|ymzabrechnung)))
+.assign M|ytabrechnung = 0|ymzabrechnung
+.load 9 group 'U|xydbgrabrechnung' '0|ymzabrechnung'
+.assign M|ytabrname    = 9|namebspr     ? G|mehr
+.load 9
+!EL032
+.copy   M|ytaufgabe    = 0|yaufgabe
+.copy   M|ytpvorgang   = 0|ypvorgang
+.copy   M|ytarbpaket   = M|ytpvorgang^yarbpaket
+.copy   M|ytstatus     = M|ytaufgabe^ystatus
+.assign M|ytaubez      = 0|yaufgabe^namebspr
+.assign M|ytmzeitmeld  = 0|id
+.assign M|ytlnbez      = 0|namebspr                     ?  F|empty(0|ymaschvkart)
+.assign M|ytlnbez      = 0|ymaschvkart^namebspr         ? _F|empty(0|ymaschvkart)
+.copy   M|ytpersonal   = 0|ypersonal
+.assign M|ytpersname   = 0|ypersonal^namebspr
+.copy   M|ytverantw    = 0|yverantw
+.copy   M|ytprojleit   = 0|yprojekt^yprojleit           ? _F|empty(0|yprojekt)
+.assign M|ytlndatum    = 0|yedatum
+.assign M|ytlnadatum   = 0|yadatum
+.assign M|ytlnazeit    = 0|yazeit
+.assign M|ytlnezeit    = 0|yezeit
+.assign M|ytlnedatum   = 0|yedatum
+.assign M|ytfaktzeit   = 0|yfaktzeit
+.assign M|ytarbzeit    = 0|yarbzeit
+.assign M|ytmenge      = 0|ymaschzeit
+.assign M|yteinh       = 'U|xypmstunden(L="0")'
+.assign M|ytlsrelev    = 0|ylsrelev
+.assign M|ytarchiv     = 0|yarchiv
+.assign M|ytnachtrag   = 0|ynachtrag
+.copy   M|ytleiort     = 0|yleiort
+.copy   M|ytprojekt    = 0|yprojekt
+.copy   M|ytkunde      = 0|ykunde
+.copy   M|yttaetschl   = 0|ytaetschl
+.assign M|ytlsnum      = 0|ymzlsnum
+.assign M|ytlspos      = 0|ymzlsposid
+.assign M|ytrenum      = 0|ymzrenum
+.assign M|ytrepos      = 0|ymzreposid
+.assign M|yttppos      = 0|ymztpposid
+.protection ytlsrelev 'M|aktzeile'
+.continue EL033 ? _(_(F|empty(0|ybeschint)))
+.select from '0|ybeschint'
+.formula M|ylnbeschint = 0|ybeschint
+!EL033
+.continue EL034 ? _(_(F|empty(0|ybeschext)))
+.select from '0|ybeschext'
+.formula M|ylnbeschext = 0|ybeschext
+!EL034
+.continue EL035 ? _(_(F|empty(0|ymzabrtext)))
+.select from '0|ymzabrtext'
+.formula M|ytabrtext = 0|ymzabrtext
+!EL035
+.assign  M|ytbmeldpreis = G|TRUE        ? _F|empty(0|ymzpreis)
+.formula M|ytpreis    = 0|ymzpreis
+.formula M|ytfaktwert = 0|ymzpreis * M|ytmenge
+.formula M|ytwert     = 0|ymzwert
+.formula U|xpart      = 0|ymaschvkart^id
+.formula U|xpaartikel = 0|ymaschvkart^id
+.formula U|xtkatartk  = "ML"
+.continue EL036 ? _(F|empty(0|ymzpreis))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC010
+!RET003
+.formula xprocsp = xprocsp - 1
+!EL036
+.continue EL037 ? _(M|ybvk)
+.copy M|ymark = G|TRUE   ?  F|empty(0|ymzprjmid) &  0|ymzlsposid = M|yabrpos^id &  M|yabrpos^kotyp = G|LIKO
+.copy M|ymark = G|TRUE   ?  F|empty(0|ymzprjmid) &  0|ymzreposid = M|yabrpos^id &  M|yabrpos^kotyp = G|REKO
+.copy M|ymark = G|TRUE   ?  0|ymzprjmid = M|yprjmpid &  F|empty(0|ymzlsposid) &  M|yabrpos^kotyp = G|LIKO
+.copy M|ymark = G|TRUE   ?  0|ymzprjmid = M|yprjmpid &  F|empty(0|ymzreposid) &  M|yabrpos^kotyp = G|REKO
+.copy M|ymark = G|TRUE   ?  0|ymzprjmid = M|yprjmpid &  F|empty(0|ymzlsposid) & F|empty(0|ymzreposid) & F|empty(M|yabrpos)
+.copy M|ymark = G|TRUE   ?  0|yaufgabe^yvorpos = M|yaupos^id
+.copy M|ymark = G|TRUE   ?  0|ymztpposid = M|yabrpos^id
+.continue EL038 ? _((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition))
+.copy M|ymark = G|TRUE        ?  F|empty(0|ymztpposid) & _M|ysperre
+.copy M|ymark = G|TRUE        ?  0|ymztpposid =  M|yabrpos^id
+.copy M|ymark = G|FALSE       ?  0|ymztpposid <> M|yabrpos^id & _M|yballe & (_F|empty(0|ymztpposid) & _0|ymztpposid = "(0,0,0)")
+!EL038
+.protection ymark 'M|aktzeile'  ? _M|ymark & 0|yarchiv
+.continue FI037
+!EL037
+.continue EL039 ? _(((F|empty(M|yabrechnung)) & (F|empty(0|ymzabrechnung)) & (_(M|ysperre))) ; ((_(F|empty(M|yabrechnung))) & (0|ymzabrechnung = M|yabrechnung^nummer)) ; (((G|evtvar = "ytmzeitmeld") ; (G|evtvar = "ylnanfuegen")) & ((F|empty(0|ymzabrechnung)) ; (F|empty(M|yabrechnung))) & (_(M|ysperre)) & (false)))
+.copy M|ymark = G|TRUE
+!EL039
+.continue EL040 ? _((_(M|ytlsrelev)) ; (((_(F|empty(0|ymzlsposid))) ; (_(F|empty(0|ymzreposid)))) & (_(M|ybvk))) ; (0|yarchiv))
+.copy M|ymark = G|FALSE
+.protection ymark 'M|aktzeile'
+!EL040
+!FI037
+.protection ylnbeschext 'M|aktzeile'
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(U|xttyp = "MM")
+.continue EL041 ? _((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition))
+.copy M|ysperre = G|TRUE      ?  1|ytmmtpposid <> M|yabrpos^id & (_F|empty(1|ytmmtpposid) & _1|ytmmtpposid = "(0,0,0)")
+.continue FI041
+!EL041
+.copy M|ysperre = G|TRUE      ? _F|empty(1|ytmmlsposid) & _1|ytmmlsposid = M|yabrpos^id
+.copy M|ysperre = G|TRUE      ? _F|empty(1|ytmmreposid) & _1|ytmmreposid = M|yabrpos^id
+.copy M|ysperre = G|TRUE      ? _F|empty(1|ytmmprjmid)  & _1|ytmmprjmid  = M|yprjmpid
+!FI041
+.continue EL042 ? _(_(F|empty(1|ytmmabrechnung)))
+.assign M|ytabrechnung = 1|ytmmabrechnung
+.load 9 group 'U|xydbgrabrechnung' '1|ytmmabrechnung'
+.assign M|ytabrname    = 9|namebspr     ? G|mehr
+.load 9
+!EL042
+.copy   M|ytaufgabe    = 0|yaufgabe
+.copy   M|ytpvorgang   = 0|ypvorgang
+.copy   M|ytarbpaket   = M|ytpvorgang^yarbpaket
+.copy   M|ytstatus     = M|ytaufgabe^ystatus
+.assign M|ytaubez      = 0|yaufgabe^namebspr
+.assign M|ytmatmeld    = 1|id
+.assign M|ytmatmeldzid = 1|zid
+.assign M|ytlnbez      = 1|yteil^namebspr
+.copy   M|ytpersonal   = 0|ypersonal
+.assign M|ytpersname   = 0|ypersonal^namebspr
+.assign M|ytverantw    = 0|yverantw^id
+.copy   M|ytprojleit   = 0|yprojekt^yprojleit       ? _F|empty(0|yprojekt)
+.assign M|ytlndatum    = 0|yedatum
+.assign M|ytlnadatum   = 0|yadatum
+.assign M|ytlnazeit    = 0|yazeit
+.assign M|ytlnezeit    = 0|yezeit
+.assign M|ytlnedatum   = 0|yedatum
+.assign M|ytmenge      = 1|ymge
+.copy   M|yteinh       = 1|yeinh
+.assign M|ytlsrelev    = 0|ylsrelev
+.assign M|ytarchiv     = 0|yarchiv
+.assign M|ytnachtrag   = 0|ynachtrag
+.assign M|ytleiort     = 0|yleiort
+.copy   M|ytprojekt    = 0|yprojekt
+.copy   M|ytkunde      = 0|ykunde
+.copy   M|yttaetschl   = 0|ytaetschl
+.assign M|ytlsnum      = 1|ytmmlsnum
+.assign M|ytlspos      = 1|ytmmlsposid
+.assign M|ytrenum      = 1|ytmmrenum
+.assign M|ytrepos      = 1|ytmmreposid
+.assign M|yttppos      = 1|ytmmtpposid
+.protection ytlsrelev 'M|aktzeile'
+.continue EL043 ? _(_(F|empty(1|ytmmabrtext)))
+.select from '1|ytmmabrtext'
+.formula M|ytabrtext = U|xtftext
+!EL043
+.assign  M|ytbmeldpreis = G|TRUE        ? _F|empty(1|ytmmpreis)
+.formula M|ytpreis    = 1|ytmmpreis
+.formula M|ytfaktwert = 1|ytmmpreis * M|ytmenge
+.formula M|ytwert     = 1|ytmmwert
+.formula U|xpart      = 1|yteil^id
+.formula U|xpaartikel = 1|yteil^id
+.formula U|xtkatartk  = "MAT"
+.continue EL044 ? _(F|empty(1|ytmmpreis))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC010
+!RET004
+.formula xprocsp = xprocsp - 1
+!EL044
+.continue EL045 ? _(M|ybvk)
+.copy M|ymark = G|TRUE   ?  F|empty(1|ytmmprjmid) &  1|ytmmlsposid = M|yabrpos^id &  M|yabrpos^kotyp = G|LIKO
+.copy M|ymark = G|TRUE   ?  F|empty(1|ytmmprjmid) &  1|ytmmreposid = M|yabrpos^id &  M|yabrpos^kotyp = G|REKO
+.copy M|ymark = G|TRUE   ?  1|ytmmprjmid = M|yprjmpid &  F|empty(1|ytmmlsposid) &  M|yabrpos^kotyp = G|LIKO
+.copy M|ymark = G|TRUE   ?  1|ytmmprjmid = M|yprjmpid &  F|empty(1|ytmmreposid) &  M|yabrpos^kotyp = G|REKO
+.copy M|ymark = G|TRUE   ?  1|ytmmprjmid = M|yprjmpid &  F|empty(1|ytmmlsposid) & F|empty(1|ytmmreposid) & F|empty(M|yabrpos)
+.copy M|ymark = G|TRUE   ?  0|yaufgabe^yvorpos = M|yaupos^id
+.copy M|ymark = G|TRUE   ?  1|ytmmtpposid = M|yabrpos^id
+.continue EL046 ? _((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition))
+.copy M|ymark = G|TRUE        ?  F|empty(1|ytmmtpposid) & _M|ysperre
+.copy M|ymark = G|TRUE        ?  1|ytmmtpposid =  M|yabrpos^id
+.copy M|ymark = G|FALSE       ?  1|ytmmtpposid <> M|yabrpos^id & _M|yballe & (_F|empty(1|ytmmtpposid) & _1|ytmmtpposid = "(0,0,0)")
+!EL046
+.protection ymark 'M|aktzeile'  ? _M|ymark & 0|yarchiv
+.continue FI045
+!EL045
+.continue EL047 ? _(((F|empty(M|yabrechnung)) & (F|empty(1|ytmmabrechnung)) & (_(M|ysperre))) ; ((_(F|empty(M|yabrechnung))) & (1|ytmmabrechnung = M|yabrechnung^nummer)) ; (((G|evtvar = "ytmzeitmeld") ; (G|evtvar = "ylnanfuegen")) & ((F|empty(1|ytmmabrechnung)) ; (F|empty(M|yabrechnung))) & (_(M|ysperre)) & (false)))
+.copy M|ymark = G|TRUE
+!EL047
+.continue EL048 ? _((_(M|ytlsrelev)) ; (((_(F|empty(1|ytmmlsposid))) ; (_(F|empty(1|ytmmreposid)))) & (_(M|ybvk))) ; (0|yarchiv))
+.copy M|ymark = G|FALSE
+.protection ymark 'M|aktzeile'
+!EL048
+!FI045
+.protection ylnbeschext 'M|aktzeile'
+.colour -BACKGROUND "-1 -1 -1"             'M|aktzeile'         ?  U|xybistkost
+.colour -BACKGROUND "-1 -1 -1" ytleistmeld 'M|aktzeile'         ?  U|xybistkost
+.protection ytleistmeld 'M|aktzeile'
+.protection ytmzeitmeld 'M|aktzeile'
+.protection ytmatmeld   'M|aktzeile'
+.protection ytsubmeld   'M|aktzeile'
+.continue EL049 ? _(M|ysperre)
+.protection ymark 'M|aktzeile'
+.continue FI049
+!EL049
+.select lock add 1|id
+.continue EL050 ? _(G|mehr)
+.copy    H|ysperre     = G|TRUE
+.copy    H|ysperrzp    = G|zeitpunkt
+.formula H|ysperrzeich = G|bzeichen
+.formula H|yaufrufernr = G|aufrufernr
+.formula H|yaufruferzp = U|xtsperrstempel
+.rewrite
+.copy    M|ysperre     = G|FALSE
+.continue FI050
+!EL050
+.protection -LINE 'M|aktzeile'
+.formula M|ysperre  = G|TRUE
+!FI050
+!FI049
+.continue ESAC001
+!BRK003
+.continue BRK004 ? _(U|xttyp = "SM")
+.copy M|ysperre  = G|TRUE     ? _F|empty(0|ytsmlsposid) & _0|ytsmlsposid = M|yabrpos^id
+.copy M|ysperre  = G|TRUE     ? _F|empty(0|ytsmreposid) & _0|ytsmreposid = M|yabrpos^id
+.copy M|ysperre  = G|TRUE     ? _F|empty(0|ytsmprjmid)  & _0|ytsmprjmid  = M|yprjmpid
+.continue EL051 ? _((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition))
+.copy M|ysperre  = G|TRUE   ?  0|ytsmtpposid <> M|yabrpos^id & _M|yballe & (_F|empty(0|ytsmtpposid) & _0|ytsmtpposid = "(0,0,0)")
+.continue FI051
+!EL051
+.copy M|ysperre  = G|TRUE   ? _F|empty(0|ytsmlsposid) & _0|ytsmlsposid = M|yabrpos^id
+.copy M|ysperre  = G|TRUE   ? _F|empty(0|ytsmreposid) & _0|ytsmreposid = M|yabrpos^id
+.copy M|ysperre  = G|TRUE   ? _F|empty(0|ytsmprjmid)  & _0|ytsmprjmid  = M|yprjmpid
+!FI051
+.continue EL052 ? _(_(F|empty(0|ytsmabrechnung)))
+.assign M|ytabrechnung = 0|ytsmabrechnung
+.load 9 group 'U|xydbgrabrechnung' '0|ytsmabrechnung'
+.assign M|ytabrname    = 9|namebspr         ? G|mehr
+.load 9
+!EL052
+.copy   M|ytpvorgang   = 0|ytpvorgang
+.copy   M|ytarbpaket   = M|ytpvorgang^yarbpaket
+.assign M|ytsubmeld    = 0|id
+.assign M|ytsubmeldzid = 0|zid
+.assign M|ytlnbez      = 0|ytpvorgang^namebspr
+.assign M|ytpersname   = 0|ytsubpersname
+.assign M|ytlndatum    = 0|ytdatum
+.assign M|ytlnadatum   = 0|ytdatum
+.assign M|ytlnedatum   = 0|ytdatum
+.assign M|ytmenge      = 0|ymge
+.copy   M|yteinh       = 0|yeinh
+.copy   M|ytprojekt    = 0|yprojekt
+.assign M|ytlsnum      = 0|ytsmlsnum
+.assign M|ytlspos      = 0|ytsmlsposid
+.assign M|ytrenum      = 0|ytsmrenum
+.assign M|ytrepos      = 0|ytsmreposid
+.assign M|yttppos      = 0|ytsmtpposid
+.assign M|ytlsrelev    = 0|ylsrelev     ?  F|defined(0|ylsrelev)
+.assign M|ytlsrelev    = G|TRUE         ? _F|defined(0|ylsrelev)
+.protection ytlsrelev 'M|aktzeile'
+.continue EL053 ? _(_(F|empty(0|ytftbeschreib)))
+.select from '0|ytftbeschreib'
+.formula M|ylnbeschext = 0|ytftbeschreib
+!EL053
+.continue EL054 ? _(_(F|empty(0|ytsmabrtext)))
+.select from '0|ytsmabrtext'
+.formula M|ytabrtext = 0|ytsmabrtext
+!EL054
+.assign  M|ytbmeldpreis = G|TRUE        ? _F|empty(0|ytsmpreis)
+.formula M|ytpreis    = 0|ytsmpreis
+.formula M|ytfaktwert = 0|ytsmpreis * M|ytmenge
+.formula M|ytwert     = 0|ytsmwert
+.formula U|xpart      = 0|yteil^id
+.formula U|xpaartikel = 0|yteil^id
+.formula U|xtkatartk  = "MAT"
+.continue EL055 ? _(F|empty(0|ytsmpreis))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC010
+!RET005
+.formula xprocsp = xprocsp - 1
+!EL055
+.continue EL056 ? _(M|ybvk)
+.copy M|ymark = G|TRUE   ?  F|empty(0|ytsmprjmid) &  0|ytsmlsposid = M|yabrpos^id &  M|yabrpos^kotyp = G|LIKO
+.copy M|ymark = G|TRUE   ?  F|empty(0|ytsmprjmid) &  0|ytsmreposid = M|yabrpos^id &  M|yabrpos^kotyp = G|REKO
+.copy M|ymark = G|TRUE   ?  0|ytsmprjmid = M|yprjmpid &  F|empty(0|ytsmlsposid) &  M|yabrpos^kotyp = G|LIKO
+.copy M|ymark = G|TRUE   ?  0|ytsmprjmid = M|yprjmpid &  F|empty(0|ytsmreposid) &  M|yabrpos^kotyp = G|REKO
+.copy M|ymark = G|TRUE   ?  0|ytsmprjmid = M|yprjmpid &  F|empty(0|ytsmlsposid) & F|empty(0|ytsmreposid) & F|empty(M|yabrpos)
+.copy M|ymark = G|TRUE   ? M|ytabrechnung = M|yabrechnung^nummer & F|empty(0|ytsmprjmid) &  F|empty(0|ytsmlsposid) &  M|yabrpos^kotyp = G|LIKO
+.copy M|ymark = G|TRUE   ? M|ytabrechnung = M|yabrechnung^nummer & F|empty(0|ytsmprjmid) &  F|empty(0|ytsmreposid) &  M|yabrpos^kotyp = G|REKO
+.copy M|ymark = G|TRUE   ? M|ytabrechnung = M|yabrechnung^nummer & F|empty(0|ytsmprjmid) &  F|empty(0|ytsmlsposid) &  F|empty(0|ytsmreposid)
+.copy M|ymark = G|TRUE   ?  0|ytsmtpposid = M|yabrpos^id
+.continue EL057 ? _((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition))
+.copy M|ymark = G|TRUE        ?  F|empty(0|ytsmtpposid) & _M|ysperre
+.copy M|ymark = G|TRUE        ?  0|ytsmtpposid =  M|yabrpos^id
+.copy M|ymark = G|FALSE       ?  0|ytsmtpposid <> M|yabrpos^id & _M|yballe & (_F|empty(0|ytsmtpposid) & _0|ytsmtpposid = "(0,0,0)")
+!EL057
+.continue FI056
+!EL056
+.continue EL058 ? _(((F|empty(M|yabrechnung)) & (F|empty(0|ytsmabrechnung)) & (_(M|ysperre))) ; ((_(F|empty(M|yabrechnung))) & (0|ytsmabrechnung = M|yabrechnung^nummer)) ; (((G|evtvar = "ytmzeitmeld") ; (G|evtvar = "ylnanfuegen")) & ((F|empty(0|ytsmabrechnung)) ; (F|empty(M|yabrechnung))) & (_(M|ysperre)) & (false)))
+.copy M|ymark = G|TRUE
+!EL058
+.continue EL059 ? _((_(M|ytlsrelev)) ; (((_(F|empty(0|ytsmlsposid))) ; (_(F|empty(0|ytsmreposid)))) & (_(M|ybvk))))
+.copy M|ymark = G|FALSE
+.protection ymark 'M|aktzeile'
+!EL059
+!FI056
+.colour -BACKGROUND "-1 -1 -1"             'M|aktzeile'         ?  U|xybistkost
+.colour -BACKGROUND "-1 -1 -1" ytleistmeld 'M|aktzeile'         ?  U|xybistkost
+.protection ytleistmeld 'M|aktzeile'
+.protection ytmzeitmeld 'M|aktzeile'
+.protection ytmatmeld   'M|aktzeile'
+.protection ytsubmeld   'M|aktzeile'
+.continue EL060 ? _(M|ysperre)
+.protection ymark 'M|aktzeile'
+.continue FI060
+!EL060
+.select lock add 0|id
+.continue EL061 ? _(G|mehr)
+.copy    H|ysperre     = G|TRUE
+.copy    H|ysperrzp    = G|zeitpunkt
+.formula H|ysperrzeich = G|bzeichen
+.formula H|yaufrufernr = G|aufrufernr
+.formula H|yaufruferzp = U|xtsperrstempel
+.rewrite
+.copy    M|ysperre     = G|FALSE
+.continue FI061
+!EL061
+.protection -LINE 'M|aktzeile'
+.formula M|ysperre  = G|TRUE
+!FI061
+!FI060
+.continue ESAC001
+!BRK004
+!ESAC001: =====   ENDCASE   =====
+.continue EL062 ? _(_(U|xttyp = "LM"))
+.protection ytbfahrtkosten     'M|aktzeile'
+.protection ytfahrtkostenwert  'M|aktzeile'
+.protection ytfahrtkostenwaehr 'M|aktzeile'
+.protection ytbspesen          'M|aktzeile'
+.protection ytspesenwert       'M|aktzeile'
+.protection ytspesenwaehr      'M|aktzeile'
+.protection ytbuebernachtung   'M|aktzeile'
+.protection ytuebernachtwert   'M|aktzeile'
+.protection ytuebernachtwaehr  'M|aktzeile'
+.protection ytbabrechfrei      'M|aktzeile'
+.protection ytabrechfreibz     'M|aktzeile'
+!EL062
+.colour -BACKGROUND "-1 -1 -1"             'M|aktzeile'         ?  U|xybistkost
+.colour -BACKGROUND "-1 -1 -1" ytleistmeld 'M|aktzeile'         ?  U|xybistkost
+.colour -BACKGROUND "-1 -1 -1" ytmzeitmeld 'M|aktzeile'         ?  U|xybistkost
+.colour -BACKGROUND "-1 -1 -1" ytmatmeld   'M|aktzeile'         ?  U|xybistkost
+.colour -BACKGROUND "-1 -1 -1" ytsubmeld   'M|aktzeile'         ?  U|xybistkost
+.protection ytleistmeld 'M|aktzeile'
+.protection ytmzeitmeld 'M|aktzeile'
+.protection ytmatmeld   'M|aktzeile'
+.protection ytsubmeld   'M|aktzeile'
+.continue EL063 ? _((M|ymark) & ((F|empty(M|ytlspos)) ; (M|ytlspos^id = M|yabrpos^id)) & ((F|empty(M|ytrepos)) ; (M|ytrepos^id = M|yabrpos^id)))
+.protection -RESET ytbmeldpreis 'M|aktzeile'
+.protection -RESET ytmenge      'M|aktzeile'
+.protection -RESET ytpreis      'M|aktzeile'
+.protection -RESET ytwert       'M|aktzeile'
+.protection -RESET ytlsrelev    'M|aktzeile'    ? _F|empty(M|ytleistmeld)
+.continue EL064 ? _(_(F|defined(U|xbiserllmaendfakt)))
+.type bool xbiserllmaendfakt
+.copy U|xbiserllmaendfakt = G|true
+.continue EL065 ? _((_(F|empty(F|sysinfo(10)^ykonfigprjm^ypmerllmaendfakt))) & (F|sysinfo(18)^allppro))
+.input "allppro/FOP.PRJM.UP.GETPERMISSIONS"     ? _F|defined(U|xypermissions)
+.copy U|xbiserllmaendfakt = F|defined(F|map(U|xypermissions, 'F|sysinfo(10)^ykonfigprjm^ypmerllmaendfakt^id'))
+!EL065
+!EL064
+.continue EL066 ? _(_(U|xbiserllmaendfakt))
+.protection ytlsrelev 'M|aktzeile'
+.protection ytmenge   'M|aktzeile'
+!EL066
+.continue FI063
+!EL063
+.protection ytbmeldpreis 'M|aktzeile'
+.protection ytmenge      'M|aktzeile'
+.protection ytpreis      'M|aktzeile'
+.protection ytwert       'M|aktzeile'
+.protection ytlsrelev    'M|aktzeile'
+!FI063
+.continue EL067 ? _((U|xttyp = "LM") ; (U|xttyp = "MZ"))
+.continue EL068 ? _(M|ysperre)
+.protection ymark 'M|aktzeile'
+.continue FI068
+!EL068
+.select lock add 0|id
+.continue EL069 ? _(G|mehr)
+.copy    H|ysperre     = G|TRUE
+.copy    H|ysperrzp    = G|zeitpunkt
+.formula H|ysperrzeich = G|bzeichen
+.formula H|yaufrufernr = G|aufrufernr
+.formula H|yaufruferzp = U|xtsperrstempel
+.rewrite
+.copy    M|ysperre     = G|FALSE
+.continue FI069
+!EL069
+.protection -LINE 'M|aktzeile'
+.formula M|ysperre  = G|TRUE
+!FI069
+!FI068
+!EL067
+.continue 'xprocst.xprocsp'
+!PROC012: ----- Rechtepruefung -----
+.assign U|xyberlaubt = G|TRUE
+.continue EL070 ? _(_(M|yballekst))
+.assign U|xbmehr = G|FALSE
+.formula U|xtindex = ""
+.formula U|xtindex = F|nextelem(U|xtkst, xtindex)
+!LOOP004: ==============================
+.continue ELOP004 ? _((_(F|empty(U|xtindex))) & (_(U|xbmehr)))
+.assign U|xbmehr = G|TRUE       ? _F|empty(0|yprojekt) &                        0|yprojekt^yverantwkst^id = U|xtkst.xtindex
+.assign U|xbmehr = G|TRUE       ?  F|empty(0|yprojekt) & _F|empty(0|yaufgabe) & 0|yaufgabe^yverantwkst^id = U|xtkst.xtindex
+.assign U|xbmehr = G|TRUE       ?  F|empty(0|yprojekt) &  F|empty(0|yaufgabe) & 0|ykstelle^id             = U|xtkst.xtindex
+.formula U|xtindex = F|nextelem(U|xtkst, xtindex)
+.continue LOOP004
+!ELOP004: ==============================
+.continue FI070
+!EL070
+.assign U|xbmehr = G|mehr
+!FI070
+.continue EL071 ? _(U|xbmehr)
+.continue EL072 ? _(_(F|empty(0|yprojekt)))
+.continue EL073 ? _(U|xypmrepruefkst)
+.formula U|xykoobjekt = 0|yprojekt^yverantwkst^id
+.input 'U|xypmrepruefkstprog'
+!EL073
+.continue EL074 ? _((_(U|xyberlaubt)) & (_(F|empty(0|yprojekt^yteilprojektzu))))
+.formula U|xykoobjekt = 0|yprojekt^yteilprojektzu^yverantwkst^id
+.input 'U|xypmrepruefkstprog'
+!EL074
+.continue EL075 ? _(U|xypmrepruefktr)
+.formula U|xykoobjekt = 0|yprojekt^yktr^id
+.input 'U|xypmrepruefktrprog'
+!EL075
+.continue EL076 ? _(U|xypmrepruefind)
+.input 'U|xypmrepruefindprog'
+!EL076
+!EL072
+.continue EL077 ? _(F|defined(0|yaufgabe))
+.continue EL078 ? _((F|empty(0|yprojekt)) & (_(F|empty(0|yaufgabe))))
+.continue EL079 ? _(U|xypmrepruefkst)
+.formula U|xykoobjekt = 0|yaufgabe^yverantwkst^id
+.input 'U|xypmrepruefkstprog'
+!EL079
+.continue EL080 ? _(U|xypmrepruefktr)
+.formula U|xykoobjekt = 0|yaufgabe^yktr^id
+.input 'U|xypmrepruefktrprog'
+!EL080
+.continue EL081 ? _(U|xypmrepruefind)
+.input 'U|xypmrepruefindprog'
+!EL081
+!EL078
+.continue EL082 ? _((F|empty(0|yprojekt)) & (F|empty(0|yaufgabe)))
+.continue EL083 ? _(U|xypmrepruefkst)
+.formula U|xykoobjekt = 0|ykstelle^id
+.input 'U|xypmrepruefkstprog'
+!EL083
+.continue EL084 ? _(U|xypmrepruefktr)
+.formula U|xykoobjekt = 0|ykstelle^id
+.input 'U|xypmrepruefktrprog'
+!EL084
+.continue EL085 ? _(U|xypmrepruefind)
+.input 'U|xypmrepruefindprog'
+!EL085
+!EL082
+!EL077
+.continue FI071
+!EL071
+.assign U|xyberlaubt = G|FALSE
+!FI071
+.continue 'xprocst.xprocsp'
+!PROC013: ----- Pruefung_anzeigen -----
+.continue BRK005 ? _(U|xttyp = "LM")
+.assign U|xbok = G|FALSE
+.assign U|xbok = G|TRUE      ?  M|yballe
+.assign U|xbok = G|TRUE      ?  F|empty(0|ylsposid) & F|empty(0|yreposid) & F|empty(0|yprjmid)
+.assign U|xbok = G|TRUE      ?  M|yabrpos^kotyp = G|LIKO & 0|ylsposid = M|yabrpos^id
+.assign U|xbok = G|TRUE      ?  M|yabrpos^kotyp = G|REKO & 0|yreposid = M|yabrpos^id
+.assign U|xbok = G|TRUE      ?  0|yprjmid = M|yprjmpid
+.assign U|xbok = G|TRUE      ?  M|yballe
+.continue EL086 ? _(M|ybvk)
+.assign U|xbok = G|FALSE   ? _0|ylsrelev & _M|yblsrelev & (M|yabrpos^kotyp = G|LIKO & 0|ylsposid <> M|yabrpos^id)
+.assign U|xbok = G|FALSE   ? _0|ylsrelev & _M|yblsrelev & (M|yabrpos^kotyp = G|REKO & 0|yreposid <> M|yabrpos^id)
+.continue FI086
+!EL086
+.assign U|xbok = G|FALSE   ? _M|yballe & _F|empty(0|ylsposid)
+.assign U|xbok = G|FALSE   ? _M|yballe & _F|empty(0|yreposid)
+.assign U|xbok = G|FALSE   ? _M|yballe & 0|yarchiv
+!FI086
+.continue EL087 ? _((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition))
+.assign U|xbok = G|TRUE      ?  0|ytpposid =  M|yabrpos^id ; F|empty(0|ytpposid)
+.assign U|xbok = G|FALSE     ?  0|ytpposid <> M|yabrpos^id & _M|yballe & (_F|empty(0|ytpposid) & _0|ytpposid = "(0,0,0)")
+!EL087
+.continue ESAC002
+!BRK005
+.continue BRK006 ? _(U|xttyp = "MZ")
+.assign U|xbok = G|FALSE
+.assign U|xbok = G|TRUE      ?  M|yballe
+.assign U|xbok = G|TRUE      ?  F|empty(0|ymzlsposid) & F|empty(0|ymzreposid) & F|empty(0|ymzprjmid)
+.assign U|xbok = G|TRUE      ?  M|yabrpos^kotyp = G|LIKO & 0|ymzlsposid = M|yabrpos^id
+.assign U|xbok = G|TRUE      ?  M|yabrpos^kotyp = G|REKO & 0|ymzreposid = M|yabrpos^id
+.assign U|xbok = G|TRUE      ?  0|ymzprjmid = M|yprjmpid
+.assign U|xbok = G|TRUE      ?  M|yballe
+.continue EL088 ? _(M|ybvk)
+.assign U|xbok = G|FALSE   ? G|evtvar = "yabrechnung" & (M|yabrpos^kotyp = G|LIKO & 0|ymzlsposid = M|yabrpos^id)
+.assign U|xbok = G|FALSE   ? G|evtvar = "yabrechnung" & (M|yabrpos^kotyp = G|REKO & 0|ymzreposid = M|yabrpos^id)
+.continue FI088
+!EL088
+.assign U|xbok = G|FALSE   ? _M|yballe & _F|empty(0|ymzlsposid)
+.assign U|xbok = G|FALSE   ? _M|yballe & _F|empty(0|ymzreposid)
+.assign U|xbok = G|FALSE   ? _M|yballe & 0|yarchiv
+!FI088
+.continue EL089 ? _((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition))
+.assign U|xbok = G|TRUE      ?  0|ymztpposid =  M|yabrpos^id ; F|empty(0|ymztpposid)
+.assign U|xbok = G|FALSE     ?  0|ymztpposid <> M|yabrpos^id & _M|yballe & (_F|empty(0|ymztpposid) & _0|ymztpposid = "(0,0,0)")
+!EL089
+.continue ESAC002
+!BRK006
+.continue BRK007 ? _(U|xttyp = "MM")
+.assign U|xbok = G|FALSE
+.assign U|xbok = G|TRUE      ?  M|yballe
+.assign U|xbok = G|TRUE      ?  F|empty(1|ytmmlsposid) & F|empty(1|ytmmreposid) & F|empty(1|ytmmprjmid)
+.assign U|xbok = G|TRUE      ?  M|yabrpos^kotyp = G|LIKO & 1|ytmmlsposid = M|yabrpos^id
+.assign U|xbok = G|TRUE      ?  M|yabrpos^kotyp = G|REKO & 1|ytmmreposid = M|yabrpos^id
+.assign U|xbok = G|TRUE      ?  1|ytmmprjmid = M|yprjmpid
+.assign U|xbok = G|TRUE      ?  M|yballe
+.continue EL090 ? _(M|ybvk)
+.assign U|xbok = G|FALSE   ? G|evtvar = "yabrechnung" & (M|yabrpos^kotyp = G|LIKO & 1|ytmmlsposid = M|yabrpos^id)
+.assign U|xbok = G|FALSE   ? G|evtvar = "yabrechnung" & (M|yabrpos^kotyp = G|REKO & 1|ytmmreposid = M|yabrpos^id)
+.continue FI090
+!EL090
+.assign U|xbok = G|FALSE   ? _M|yballe & _F|empty(1|ytmmlsposid)
+.assign U|xbok = G|FALSE   ? _M|yballe & _F|empty(1|ytmmreposid)
+.assign U|xbok = G|FALSE   ? _M|yballe & 0|yarchiv
+!FI090
+.continue EL091 ? _((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition))
+.assign U|xbok = G|TRUE      ?  1|ytmmtpposid =  M|yabrpos^id ; F|empty(1|ytmmtpposid)
+.assign U|xbok = G|FALSE     ?  1|ytmmtpposid <> M|yabrpos^id & _M|yballe & (_F|empty(1|ytmmtpposid) & _1|ytmmtpposid = "(0,0,0)")
+!EL091
+.continue ESAC002
+!BRK007
+.continue BRK008 ? _(U|xttyp = "SM")
+.assign U|xbok = G|FALSE
+.assign U|xbok = G|TRUE      ?  M|yballe
+.assign U|xbok = G|TRUE      ?  F|empty(0|ytsmlsposid) & F|empty(0|ytsmreposid) & F|empty(0|ytsmprjmid)
+.assign U|xbok = G|TRUE      ?  M|yabrpos^kotyp = G|LIKO & 0|ytsmlsposid = M|yabrpos^id
+.assign U|xbok = G|TRUE      ?  M|yabrpos^kotyp = G|REKO & 0|ytsmreposid = M|yabrpos^id
+.assign U|xbok = G|TRUE      ?  0|ytsmprjmid = M|yprjmpid
+.assign U|xbok = G|TRUE      ?  M|yballe
+.continue EL092 ? _(M|ybvk)
+.assign U|xbok = G|FALSE   ? G|evtvar = "yabrechnung" & (M|yabrpos^kotyp = G|LIKO & 0|ytsmlsposid = M|yabrpos^id)
+.assign U|xbok = G|FALSE   ? G|evtvar = "yabrechnung" & (M|yabrpos^kotyp = G|REKO & 0|ytsmreposid = M|yabrpos^id)
+.continue FI092
+!EL092
+.assign U|xbok = G|FALSE   ? _M|yballe & _F|empty(0|ytsmlsposid)
+.assign U|xbok = G|FALSE   ? _M|yballe & _F|empty(0|ytsmreposid)
+!FI092
+.continue EL093 ? _((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition))
+.assign U|xbok = G|TRUE      ?  0|ytsmtpposid =  M|yabrpos^id ; F|empty(0|ytsmtpposid)
+.assign U|xbok = G|FALSE     ?  0|ytsmtpposid <> M|yabrpos^id & _M|yballe & _M|yballe & (_F|empty(0|ytsmtpposid) & _0|ytsmtpposid = "(0,0,0)")
+!EL093
+.continue ESAC002
+!BRK008
+!ESAC002: =====   ENDCASE   =====
+.continue 'xprocst.xprocsp'
+!PROC014: ----- Leistungsmeldung_anfuegen -----
+.formula U|xytaufrufernr = G|aufrufernr
+.input "allpstart/GET.CALLERNO"
+.formula U|xtsperrstempel = U|xytzeitstempel
+.assign U|xbok = G|TRUE
+.select screen header
+.select screen line
+.assign U|xbmehr = G|mehr
+!LOOP005: ==============================
+.continue ELOP005 ? _(U|xbmehr)
+.continue BRK009 ? _(U|xttyp = "LM")
+.continue EL094 ? _((M|ytleistmeld^id = 0|id) & (M|aktzeile <> G|evtzeile))
+.continue EL095 ? _((_(G|evtart = "buttonnach")) & (_(G|evtvar = "yabrechnung")))
+.select screen line 'G|evtzeile'
+.set TRANS +
+.box Hinweis
+Die Leistungsmeldung 'M|ytleistmeld' ist bereits in Tabellenzeile 'M|aktzeile' eingetragen.
+.set TRANS -
+.formula M|ytleistmeld = ""
+!EL095
+.assign U|xbmehr = G|FALSE
+.assign U|xbok   = G|FALSE
+.continue FI094
+!EL094
+.select screen line
+.assign U|xbmehr = G|mehr
+!FI094
+.continue ESAC003
+!BRK009
+.continue BRK010 ? _(U|xttyp = "MZ")
+.continue EL096 ? _((M|ytmzeitmeld^id = 0|id) & (M|aktzeile <> G|evtzeile))
+.continue EL097 ? _((_(G|evtart = "buttonnach")) & (_(G|evtvar = "yabrechnung")))
+.select screen line 'G|evtzeile'
+.set TRANS +
+.box Hinweis
+Die Leistungsmeldung 'M|ytleistmeld' ist bereits in Tabellenzeile 'M|aktzeile' eingetragen.
+.set TRANS -
+.formula M|ytleistmeld = ""
+!EL097
+.assign U|xbmehr = G|FALSE
+.assign U|xbok   = G|FALSE
+.continue FI096
+!EL096
+.select screen line
+.assign U|xbmehr = G|mehr
+!FI096
+.continue ESAC003
+!BRK010
+.continue BRK011 ? _(U|xttyp = "MM")
+.continue EL098 ? _((M|ytmatmeldzid = 1|zid) & (M|aktzeile <> G|evtzeile))
+.continue EL099 ? _((_(G|evtart = "buttonnach")) & (_(G|evtvar = "yabrechnung")))
+.select screen line 'G|evtzeile'
+.set TRANS +
+.box Hinweis
+Die Leistungsmeldung 'M|ytleistmeld' ist bereits in Tabellenzeile 'M|aktzeile' eingetragen.
+.set TRANS -
+.formula M|ytleistmeld = ""
+!EL099
+.assign U|xbmehr = G|FALSE
+.assign U|xbok   = G|FALSE
+.continue FI098
+!EL098
+.select screen line
+.assign U|xbmehr = G|mehr
+!FI098
+.continue ESAC003
+!BRK011
+.continue BRK012 ? _(U|xttyp = "SM")
+.continue EL100 ? _((M|ytsubmeldzid = 0|zid) & (M|aktzeile <> G|evtzeile))
+.continue EL101 ? _((_(G|evtart = "buttonnach")) & (_(G|evtvar = "yabrechnung")))
+.select screen line 'G|evtzeile'
+.set TRANS +
+.box Hinweis
+Die Leistungsmeldung 'M|ytleistmeld' ist bereits in Tabellenzeile 'M|aktzeile' eingetragen.
+.set TRANS -
+.formula M|ytleistmeld = ""
+!EL101
+.assign U|xbmehr = G|FALSE
+.assign U|xbok   = G|FALSE
+.continue FI100
+!EL100
+.select screen line
+.assign U|xbmehr = G|mehr
+!FI100
+.continue ESAC003
+!BRK012
+.select screen line
+.assign U|xbmehr = G|mehr
+!ESAC003: =====   ENDCASE   =====
+.continue LOOP005
+!ELOP005: ==============================
+.continue EL102 ? _(U|xbok)
+.select screen line 'U|xizeile'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC011
+!RET006
+.formula xprocsp = xprocsp - 1
+.continue EL103 ? _(U|xybistkost)
+.continue EL104 ? _(((U|xttyp = "LM") & (F|empty(M|ytleistmeld^ytransaktion))) ; ((U|xttyp = "MZ") & (F|empty(M|ytmzeitmeld^ytransaktion))) ; ((U|xttyp = "MM") & (F|empty(M|ytmatmeld^yleistmeld^ytransaktion))))
+.colour -BACKGROUND "255 220 60" ytleistmeld 'M|aktzeile'       ? U|xttyp = "LM"
+.colour -BACKGROUND "255 220 60" ytmzeitmeld 'M|aktzeile'       ? U|xttyp = "MZ"
+.colour -BACKGROUND "255 220 60" ytmatmeld   'M|aktzeile'       ? U|xttyp = "MM"
+.copy U|xbok = G|FALSE
+.continue FI104
+!EL104
+.colour -BACKGROUND "-1 -1 -1" ytleistmeld 'M|aktzeile'         ? U|xttyp = "LM"
+.colour -BACKGROUND "-1 -1 -1" ytmzeitmeld 'M|aktzeile'         ? U|xttyp = "MZ"
+.colour -BACKGROUND "-1 -1 -1" ytmatmeld   'M|aktzeile'         ? U|xttyp = "MM"
+!FI104
+!EL103
+!EL102
+.continue 'xprocst.xprocsp'
+!PROC015: ----- Leistungsmeldungen_laden -----
+.select screen header
+.select screen line 'M|tzeilen'                 ?  G|evtvar = "yabrechnung" & M|ybvk
+.formula M|select = M|select + ";ylsrelev=1"    ? _M|yblsrelev
+.formula M|select = M|select + ";yarchiv=0"     ? _M|yballe
+.formula M|select = M|select + ";@ordnung=yaufgabe,ysort,ypersonal,yadatum,yazeit"
+.formula M|select = M|select + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrlnachweis' 'M|select'
+!LOOP006: ==============================
+.continue ELOP006 ? _(G|mehr)
+.assign U|xyberlaubt = G|TRUE
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC012
+!RET007
+.formula xprocsp = xprocsp - 1
+.continue EL105 ? _(U|xyberlaubt)
+.continue EL106 ? _((M|ybleistmeld) & (_(U|xbnurml)))
+.formula U|xttyp = "LM"
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC013
+!RET008
+.formula xprocsp = xprocsp - 1
+.continue EL107 ? _(U|xbok)
+.continue EL108 ? _(G|evtvar = "ylnanfuegen")
+.formula U|xizeile = M|tzeilen
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC014
+!RET009
+.formula xprocsp = xprocsp - 1
+.continue FI108
+!EL108
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC011
+!RET010
+.formula xprocsp = xprocsp - 1
+!FI108
+!EL107
+!EL106
+.continue EL109 ? _((M|ybmzeitmeld) & (0|ymaschzeit <> 0))
+.formula U|xttyp = "MZ"
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC013
+!RET011
+.formula xprocsp = xprocsp - 1
+.continue EL110 ? _(U|xbok)
+.continue EL111 ? _(G|evtvar = "ylnanfuegen")
+.formula U|xizeile = M|tzeilen
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC014
+!RET012
+.formula xprocsp = xprocsp - 1
+.continue FI111
+!EL111
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET013" 
+.continue PROC011
+!RET013
+.formula xprocsp = xprocsp - 1
+!FI111
+!EL110
+!EL109
+.continue EL112 ? _((M|ybmatmeld) & (_(U|xbnurml)))
+.formula U|xtsel = "$,,yleistmeld==" + 0|id + ";@filingmode=(Active)"
+.load 1 group 'xydbgrmatmeldung' 'U|xtsel'
+!LOOP007: ==============================
+.continue ELOP007 ? _(G|mehr)
+.formula U|xttyp = "MM"
+.load 1 line
+!LOOP008: ==============================
+.continue ELOP008 ? _(G|mehr)
+.formula U|xttyp = "MM"
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET014" 
+.continue PROC013
+!RET014
+.formula xprocsp = xprocsp - 1
+.continue EL113 ? _(U|xbok)
+.continue EL114 ? _(G|evtvar = "ylnanfuegen")
+.formula U|xizeile = M|tzeilen
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET015" 
+.continue PROC014
+!RET015
+.formula xprocsp = xprocsp - 1
+.continue FI114
+!EL114
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET016" 
+.continue PROC011
+!RET016
+.formula xprocsp = xprocsp - 1
+!FI114
+!EL113
+.load 1 line
+.continue LOOP008
+!ELOP008: ==============================
+.load 1 continue
+.continue LOOP007
+!ELOP007: ==============================
+!EL112
+!EL105
+.load 0 continue
+.continue LOOP006
+!ELOP006: ==============================
+.continue 'xprocst.xprocsp'
+!PROC016: ----- Submeldungen_laden -----
+.select screen header
+.select screen line 'M|tzeilen'                 ?  G|evtvar = "yabrechnung" & M|ybvk
+.formula M|select = M|select + ";@filingmode=(Active);@rows=(Yes)"
+.load 0 group 'U|xydbgrsubmeldung' 'M|select'
+!LOOP009: ==============================
+.continue ELOP009 ? _(G|mehr)
+.formula U|xttyp = "SM"
+.formula U|xizeile = M|tzeilen
+.load 0 line '0|selzeile'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET017" 
+.continue PROC013
+!RET017
+.formula xprocsp = xprocsp - 1
+.continue EL115 ? _(U|xbok)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET018" 
+.continue PROC014
+!RET018
+.formula xprocsp = xprocsp - 1
+!EL115
+.load 0 continue
+.continue LOOP009
+!ELOP009: ==============================
+.load 3 continue
+.continue 'xprocst.xprocsp'
+!PROC017: ----- Tabelle_aus_Datei_fuellen -----
+.formula U|xtsys = "sort -t# +0n -1 +1 -2 +5 -6 -o " + U|xtdatei + " " + U|xtdatei
+.system 'U|xtsys' BACKGROUND
+.select screen header
+.select screen line 'M|tzeilen'         ? G|evtvar = "yabrechnung" & M|ybvk
+.file -TEST -OPEN U|xidatei 'U|xtdatei'
+.file -READ U|xidatei xisort # xtaufgabe # xtid # xttyp # xtzid #
+!LOOP010: ==============================
+.continue ELOP010 ? _(G|mehr)
+.load 0 object 'U|xtid'         ? _U|xttyp = "MM"
+.load 1 object 'U|xtid'         ?  U|xttyp = "MM"
+.continue EL116 ? _(G|mehr)
+.load 0 add 1|yleistmeld        ? U|xttyp = "MM"
+.load 1 line 'U|xtzid'          ? U|xttyp = "MM" & _F|empty(U|xtzid)
+.load 0 line 'U|xtzid'          ? U|xttyp = "SM" & _F|empty(U|xtzid)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET019" 
+.continue PROC012
+!RET019
+.formula xprocsp = xprocsp - 1
+.continue EL117 ? _(U|xyberlaubt)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET020" 
+.continue PROC013
+!RET020
+.formula xprocsp = xprocsp - 1
+.continue EL118 ? _(U|xbok)
+.continue EL119 ? _((G|evtvar = "yabrechnung") & (_(U|xbvk)))
+.formula U|xizeile = M|tzeilen
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET021" 
+.continue PROC014
+!RET021
+.formula xprocsp = xprocsp - 1
+.continue FI119
+!EL119
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET022" 
+.continue PROC011
+!RET022
+.formula xprocsp = xprocsp - 1
+!FI119
+!EL118
+!EL117
+!EL116
+.file -READ U|xidatei xisort # xtaufgabe # xtid # xttyp # xtzid #
+.continue LOOP010
+!ELOP010: ==============================
+.continue 'xprocst.xprocsp'
+!PROC018: ----- Tabelle_laden -----
+.protection        -ALL         ?  M|ybzeigen
+.formula U|xytaufrufernr = G|aufrufernr
+.input "allpstart/GET.CALLERNO"
+.formula U|xtsperrstempel = U|xytzeitstempel
+.input 'U|xtupkstarray'
+.continue EL120 ? _((M|ybvk) & (_(G|evtvar = "ylnanfuegen")))
+.assign U|xbvk = G|TRUE
+.formula U|xtabrechnung = ""
+.file -TEMPNAME U|xtdatei
+.output NEW 'U|xtdatei'
+.input DATEI.F
+.continue EL121 ? _(_(F|empty(M|yabrpos)))
+.continue EL122 ? _((M|yabrpos^dnr    <> U|xydbtpposition) & (M|yabrpos^gruppe <> U|xygrtpposition))
+.formula U|xtsel = "$,,ylsposid==" + M|yabrpos^id       ? M|yabrpos^kotyp = G|LIKO
+.formula U|xtsel = "$,,yreposid==" + M|yabrpos^id       ? M|yabrpos^kotyp = G|REKO
+.continue FI122
+!EL122
+.formula U|xtsel = "$,,ytpposid==" + M|yabrpos^id
+!FI122
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP011: ==============================
+.continue ELOP011 ? _(G|mehr)
+.continue EL123 ? _((F|empty(0|yprjmid)) ; ((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition)))
+'0|ysort' # '0|yaufgabe^such' # '0|id' # LM # # 1 #
+.formula U|xtabrechnung = 0|yabrechnung         ?  F|empty(U|xtabrechnung)
+!EL123
+.load 0 continue
+.continue LOOP011
+!ELOP011: ==============================
+!EL121
+.continue EL124 ? _((M|yabrpos^dnr    <> U|xydbtpposition) & (M|yabrpos^gruppe <> U|xygrtpposition) & (_(F|empty(M|yprjmpid))))
+.formula U|xtsel = "$,,yprjmid==" + M|yprjmpid
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP012: ==============================
+.continue ELOP012 ? _(G|mehr)
+'0|ysort' # '0|yaufgabe^such' # '0|id' # LM # # 1 #
+.formula U|xtabrechnung = 0|yabrechnung         ?  F|empty(U|xtabrechnung)
+.load 0 continue
+.continue LOOP012
+!ELOP012: ==============================
+!EL124
+.continue EL125 ? _(_(F|empty(M|yabrpos)))
+.continue EL126 ? _((M|yabrpos^dnr    <> U|xydbtpposition) & (M|yabrpos^gruppe <> U|xygrtpposition))
+.formula U|xtsel = "$,,ymzlsposid==" + M|yabrpos^id     ? M|yabrpos^kotyp = G|LIKO
+.formula U|xtsel = "$,,ymzreposid==" + M|yabrpos^id     ? M|yabrpos^kotyp = G|REKO
+.continue FI126
+!EL126
+.formula U|xtsel = "$,,ymztpposid==" + M|yabrpos^id
+!FI126
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP013: ==============================
+.continue ELOP013 ? _(G|mehr)
+.continue EL127 ? _((F|empty(0|ymzprjmid)) ; ((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition)))
+'0|ymzsort' # '0|yaufgabe^such' # '0|id' # MZ # # 2 #
+.formula U|xtabrechnung = 0|ymzabrechnung       ?  F|empty(U|xtabrechnung)
+!EL127
+.load 0 continue
+.continue LOOP013
+!ELOP013: ==============================
+!EL125
+.continue EL128 ? _((M|yabrpos^dnr    <> U|xydbtpposition) & (M|yabrpos^gruppe <> U|xygrtpposition) & (_(F|empty(M|yprjmpid))))
+.formula U|xtsel = "$,,ymzprjmid==" + M|yprjmpid
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrlnachweis' 'U|xtsel'
+!LOOP014: ==============================
+.continue ELOP014 ? _(G|mehr)
+'0|ymzsort' # '0|yaufgabe^such' # '0|id' # MZ # # 2 #
+.formula U|xtabrechnung = 0|ymzabrechnung       ?  F|empty(U|xtabrechnung)
+.load 0 continue
+.continue LOOP014
+!ELOP014: ==============================
+!EL128
+.continue EL129 ? _(_(F|empty(M|yabrpos)))
+.continue EL130 ? _((M|yabrpos^dnr    <> U|xydbtpposition) & (M|yabrpos^gruppe <> U|xygrtpposition))
+.formula U|xtsel = "$,,ytmmlsposid==" + M|yabrpos^id    ? M|yabrpos^kotyp = G|LIKO
+.formula U|xtsel = "$,,ytmmreposid==" + M|yabrpos^id    ? M|yabrpos^kotyp = G|REKO
+.continue FI130
+!EL130
+.formula U|xtsel = "$,,ytmmtpposid==" + M|yabrpos^id
+!FI130
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active);@zeilen=(1)"
+.load 0 group 'U|xydbgrmatmeldung' 'U|xtsel'
+!LOOP015: ==============================
+.continue ELOP015 ? _(G|mehr)
+.load 0 line '0|selzeile'
+.continue EL131 ? _((F|empty(0|ytmmprjmid)) ; ((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition)))
+'0|ytmmsort' # '0|yleistmeld^yaufgabe^such' # '0|id' # MM # '0|zid' # 3 #
+.formula U|xtabrechnung = 0|ytmmabrechnung      ?  F|empty(U|xtabrechnung)
+!EL131
+.load 0 continue
+.continue LOOP015
+!ELOP015: ==============================
+!EL129
+.continue EL132 ? _((M|yabrpos^dnr    <> U|xydbtpposition) & (M|yabrpos^gruppe <> U|xygrtpposition) & (_(F|empty(M|yprjmpid))))
+.formula U|xtsel = "$,,ytmmprjmid==" + M|yprjmpid
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active);@zeilen=(1)"
+.load 0 group 'U|xydbgrmatmeldung' 'U|xtsel'
+!LOOP016: ==============================
+.continue ELOP016 ? _(G|mehr)
+.load 0 line '0|selzeile'
+'0|ytmmsort' # '0|yleistmeld^yaufgabe^such' # '0|id' # MM # '0|zid' # 3 #
+.formula U|xtabrechnung = 0|ytmmabrechnung      ?  F|empty(U|xtabrechnung)
+.load 0 continue
+.continue LOOP016
+!ELOP016: ==============================
+!EL132
+.continue EL133 ? _(_(F|empty(M|yabrpos)))
+.continue EL134 ? _((M|yabrpos^dnr    <> U|xydbtpposition) & (M|yabrpos^gruppe <> U|xygrtpposition))
+.formula U|xtsel = "$,,ytsmlsposid==" + M|yabrpos^id    ? M|yabrpos^kotyp = G|LIKO
+.formula U|xtsel = "$,,ytsmreposid==" + M|yabrpos^id    ? M|yabrpos^kotyp = G|REKO
+.continue FI134
+!EL134
+.formula U|xtsel = "$,,ytsmtpposid==" + M|yabrpos^id
+!FI134
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active);@zeilen=(1)"
+.load 0 group 'U|xydbgrsubmeldung' 'U|xtsel'
+!LOOP017: ==============================
+.continue ELOP017 ? _(G|mehr)
+.load 0 line '0|selzeile'
+.continue EL135 ? _((F|empty(0|ytsmprjmid)) ; ((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition)))
+'0|ytsmsort' #  # '0|id' # SM # '0|zid' # 4 #
+.formula U|xtabrechnung = 0|ytsmabrechnung      ?  F|empty(U|xtabrechnung)
+!EL135
+.load 0 continue
+.continue LOOP017
+!ELOP017: ==============================
+!EL133
+.continue EL136 ? _((M|yabrpos^dnr    <> U|xydbtpposition) & (M|yabrpos^gruppe <> U|xygrtpposition) & (_(F|empty(M|yprjmpid))))
+.formula U|xtsel = "$,,ytsmprjmid==" + M|yprjmpid
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active);@zeilen=(1)"
+.load 0 group 'U|xydbgrsubmeldung' 'U|xtsel'
+!LOOP018: ==============================
+.continue ELOP018 ? _(G|mehr)
+.load 0 line '0|selzeile'
+'0|ytsmsort' #  # '0|id' # SM # '0|zid' # 4 #
+.formula U|xtabrechnung = 0|ytsmabrechnung      ?  F|empty(U|xtabrechnung)
+.load 0 continue
+.continue LOOP018
+!ELOP018: ==============================
+!EL136
+.continue EL137 ? _((M|yabrpos^dnr    <> U|xydbtpposition) & (M|yabrpos^gruppe <> U|xygrtpposition))
+.assign M|yabrechnung = U|xtabrechnung          ?  F|empty(M|yabrechnung)
+!EL137
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET023" 
+.continue PROC017
+!RET023
+.formula xprocsp = xprocsp - 1
+!EL120
+.continue EL138 ? _(((_(M|ybvk)) ; (G|evtvar = "ylnanfuegen") ; (M|tzeilen = 0) ; ((G|evtvar = "yabrechnung") & (_(F|empty(M|yabrechnung))))) & (_(M|ybzeigen)))
+.assign U|xbvk = G|FALSE
+.assign U|xbausel = G|TRUE      ? _F|empty(M|yvornum) ; _F|empty(M|yvorvp) ; _F|empty(M|yverantw)
+.assign U|xbprsel = G|TRUE      ? _F|empty(M|yprojleit) ; _F|empty(M|yprojverantw) ; _F|empty(yprojekttyp)
+.assign U|xbausel = G|FALSE     ? _F|empty(M|yaufgabe) ; _F|empty(M|yprojekt) ; _F|empty(M|yselabr) ; _F|empty(M|ystdvondatum) ; _F|empty(M|ystdbisdatum)
+.assign U|xbprsel = G|FALSE     ? _F|empty(M|yaufgabe) ; _F|empty(M|yprojekt) ; _F|empty(M|yselabr) ; _F|empty(M|ystdvondatum) ; _F|empty(M|ystdbisdatum)
+.continue EL139 ? _((M|ybvk) & ((_(F|empty(M|yaunum))) ; (_(F|empty(M|yaupos)))) & (_(G|evtvar = "ylnanfuegen")) & (_(G|evtvar = "yabrechnung")) & (F|empty(M|yabrechnung)))
+.continue EL140 ? _((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ytppos==" + M|yaupos^id
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 4 group 'U|xydbgrpvorgang' 'U|xtsel'
+!LOOP019: ==============================
+.continue ELOP019 ? _(G|mehr)
+.continue EL141 ? _(_(F|empty(4|yrefid)))
+.load 3 group 'U|xydbgraufgabe' '4|yrefid'
+.continue EL142 ? _(G|mehr)
+.formula M|select = "$,,"
+.formula M|select = M|select + ";yaufgabe==" + 3|id
+.formula M|select = M|select + ";yadatum=!"  + M|ystdbisdatum:8
+.formula M|select = M|select + ";yedatum="   + M|ystdvondatum:8 + "!"
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET024" 
+.continue PROC015
+!RET024
+.formula xprocsp = xprocsp - 1
+!EL142
+!EL141
+.load 4 continue
+.continue LOOP019
+!ELOP019: ==============================
+.continue EL143 ? _((M|yaupos^yartex^yprjmprkatartk = "ML") & (_(F|empty(M|yaupos))))
+.assign U|xbnurml = G|TRUE
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yteilprojekt==" + M|yaupos^yteilprojekt^id
+.formula U|xtsel = U|xtsel + ";ytpverrechanf==`"
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 7 group 'U|xydbgrtpposition' 'U|xtsel'
+!LOOP020: ==============================
+.continue ELOP020 ? _(G|mehr)
+.continue EL144 ? _(7|id <> M|yaupos^id)
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ytppos==" + 7|id
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 6 group 'U|xydbgrpvorgang' 'U|xtsel'
+!LOOP021: ==============================
+.continue ELOP021 ? _(G|mehr)
+.continue EL145 ? _(_(F|empty(6|yrefid)))
+.load 3 group 'U|xydbgraufgabe' '6|yrefid'
+.assign U|xbmehr = G|mehr
+.continue EL146 ? _(G|mehr)
+.formula M|select = "$,,"
+.formula M|select = M|select + ";yaufgabe=="   + 3|id
+.formula M|select = M|select + ";yadatum=!"    + M|ystdbisdatum:8
+.formula M|select = M|select + ";yedatum="     + M|ystdvondatum:8 + "!"
+.formula M|select = M|select + ";ymaschvkart=" + M|yaupos^yartex^id
+.formula M|select = M|select + ";ymaschzeit<>0"
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET025" 
+.continue PROC015
+!RET025
+.formula xprocsp = xprocsp - 1
+!EL146
+!EL145
+.load 6 continue
+.continue LOOP021
+!ELOP021: ==============================
+!EL144
+.load 7 continue
+.continue LOOP020
+!ELOP020: ==============================
+.assign U|xbnurml = G|FALSE
+!EL143
+.continue FI140
+!EL140
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yvornum==" + M|yaunum            ? _F|empty(M|yaunum)
+.formula U|xtsel = U|xtsel + ";yvorpos==" + M|yaupos^id         ? _F|empty(M|yaupos)
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 3 group 'U|xydbgraufgabe' 'U|xtsel'
+!LOOP022: ==============================
+.continue ELOP022 ? _(G|mehr)
+.formula M|select = "$,,"
+.formula M|select = M|select + ";yaufgabe==" + 3|id
+.formula M|select = M|select + ";yadatum=!"  + M|ystdbisdatum:8
+.formula M|select = M|select + ";yedatum="   + M|ystdvondatum:8 + "!"
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET026" 
+.continue PROC015
+!RET026
+.formula xprocsp = xprocsp - 1
+.load 3 continue
+.continue LOOP022
+!ELOP022: ==============================
+.continue EL147 ? _((M|yaupos^artex^yprjmprkatartk = "ML") & (_(F|empty(M|yaupos))))
+.assign U|xbnurml = G|TRUE
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yvornum==" + M|yaupos^kopf^nummer
+.formula U|xtsel = U|xtsel + ";yvorpos<>" + M|yaupos^id
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 3 group 'U|xydbgraufgabe' 'U|xtsel'
+!LOOP023: ==============================
+.continue ELOP023 ? _(G|mehr)
+.formula M|select = "$,,"
+.formula M|select = M|select + ";yaufgabe=="   + 3|id
+.formula M|select = M|select + ";yadatum=!"    + M|ystdbisdatum:8
+.formula M|select = M|select + ";yedatum="     + M|ystdvondatum:8 + "!"
+.formula M|select = M|select + ";ymaschvkart=" + M|yaupos^artex^id
+.formula M|select = M|select + ";ymaschzeit<>0"
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET027" 
+.continue PROC015
+!RET027
+.formula xprocsp = xprocsp - 1
+.load 3 continue
+.continue LOOP023
+!ELOP023: ==============================
+.assign U|xbnurml = G|FALSE
+!EL147
+.continue EL148 ? _((M|ybsubmeld) & (_(F|empty(M|yaupos))))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yvornum==" + M|yaupos^kopf^nummer
+.formula U|xtsel = U|xtsel + ";yvorpos==" + M|yaupos^id
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 3 group 'U|xydbgrpvorgang' 'U|xtsel'
+!LOOP024: ==============================
+.continue ELOP024 ? _(G|mehr)
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";ytpvorgang==" + 3|id
+.formula U|xtsel = U|xtsel + ";ytdatum="     + M|ystdvondatum:8 + "!" + M|ystdbisdatum:8
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active);@rows=(Yes)"
+.select screen header
+.select screen line 'M|tzeilen'                 ?  G|evtvar = "yabrechnung" & M|ybvk
+.load 0 group 'U|xydbgrsubmeldung' 'U|xtsel'
+!LOOP025: ==============================
+.continue ELOP025 ? _(G|mehr)
+.formula U|xttyp = "SM"
+.formula U|xizeile = M|tzeilen
+.load 0 line '0|selzeile'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET028" 
+.continue PROC013
+!RET028
+.formula xprocsp = xprocsp - 1
+.continue EL149 ? _(U|xbok)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET029" 
+.continue PROC014
+!RET029
+.formula xprocsp = xprocsp - 1
+!EL149
+.load 0 continue
+.continue LOOP025
+!ELOP025: ==============================
+.load 3 continue
+.continue LOOP024
+!ELOP024: ==============================
+.assign U|xbnurml = G|FALSE
+!EL148
+!FI140
+.continue FI139
+!EL139
+.continue EL150 ? _(_(M|ybselect))
+.continue EL151 ? _(((G|evtvar = "yabrechnung") & (_(F|empty(M|yabrechnung)))) ; ((G|evtvar = "bstart") & (_(F|empty(M|yabrechnung)))))
+.file -TEMPNAME U|xtdatei
+.output NEW 'U|xtdatei'
+.input DATEI.F
+.formula M|select = "$,,yabrechnung=" + M|yabrechnung^nummer
+.formula M|select = M|select + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrlnachweis' 'M|select'
+!LOOP026: ==============================
+.continue ELOP026 ? _(G|mehr)
+'0|ysort' # '0|yaufgabe^such' # '0|id' # LM # # 1 #
+.load 0 continue
+.continue LOOP026
+!ELOP026: ==============================
+.formula M|select = "$,,ymzabrechnung=" + M|yabrechnung^nummer
+.formula M|select = M|select + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrlnachweis' 'M|select'
+!LOOP027: ==============================
+.continue ELOP027 ? _(G|mehr)
+'0|ymzsort' # '0|yaufgabe^such' # '0|id' # MZ # # 2 #
+.load 0 continue
+.continue LOOP027
+!ELOP027: ==============================
+.formula M|select = "$,,ytmmabrechnung=" + M|yabrechnung^nummer
+.formula M|select = M|select + ";@filingmode=(Active);@zeilen=(1)"
+.load 0 group 'U|xydbgrmatmeldung' 'M|select'
+!LOOP028: ==============================
+.continue ELOP028 ? _(G|mehr)
+.load 0 line '0|selzeile'
+'0|ytmmsort' # '0|yleistmeld^yaufgabe^such' # '0|id' # MM # '0|zid' # 3 #
+.load 0 continue
+.continue LOOP028
+!ELOP028: ==============================
+.formula M|select = "$,,ytsmabrechnung=" + M|yabrechnung^nummer
+.formula M|select = M|select + ";@filingmode=(Active);@zeilen=(1)"
+.load 0 group 'U|xydbgrsubmeldung' 'M|select'
+!LOOP029: ==============================
+.continue ELOP029 ? _(G|mehr)
+.load 0 line '0|selzeile'
+'0|ytsmsort' #  # '0|id' # SM # '0|zid' # 4 #
+.load 0 continue
+.continue LOOP029
+!ELOP029: ==============================
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET030" 
+.continue PROC017
+!RET030
+.formula xprocsp = xprocsp - 1
+.continue FI151
+!EL151
+.continue EL152 ? _(U|xbausel)
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt=" + M|yprojekt^id               ? _F|empty(M|yprojekt)
+.formula U|xtsel = U|xtsel + ";yvorpos==" + M|yvorvp^id                 ? _F|empty(M|yvorvp)
+.formula U|xtsel = U|xtsel + ";yvornum==" + M|yvornum                   ? _F|empty(M|yvornum)
+.formula U|xtsel = U|xtsel + ";yverantw=" + M|yverantw^id               ? _F|empty(M|yverantw)
+.formula U|xtsel = U|xtsel + ";ykunde="   + M|ykunde^id                 ? _F|empty(M|ykunde)
+.formula U|xtsel = U|xtsel + ";ykunde2="  + M|ykunde2^id                ? _F|empty(M|ykunde2)
+.formula U|xtsel = U|xtsel + ";ypvorgang^yarbpaket=="  + M|yarbpaket^id ? _F|empty(M|yarbpaket)
+.formula U|xtsel = U|xtsel + ";ystatusk^katego="    + M|ystatusk + "!"          ? _F|empty(M|ystatusk)
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 3 group 'U|xydbgraufgabe' 'U|xtsel'
+!LOOP030: ==============================
+.continue ELOP030 ? _(G|mehr)
+.formula M|select = "$,,"
+.formula M|select = M|select + ";yaufgabe=="    + 3|id
+.formula M|select = M|select + ";ytaetschl=="   + M|ytaetschl^id        ? _F|empty(M|ytaetschl)
+.formula M|select = M|select + ";yadatum=!"     +'M|ystdbisdatum'
+.formula M|select = M|select + ";yedatum="      +'M|ystdvondatum' + "!"
+.formula M|select = M|select + ";ypersonal=="   + M|ypersonal^id        ? _F|empty(M|ypersonal)
+.formula M|select = M|select + ";yabrechnung==" + M|yselabr^nummer      ? _F|empty(M|yselabr)
+.formula M|select = M|select + ";ylsrelev=1"                            ? _M|yblsrelev
+.formula M|select = M|select + ";yprojekt^yprojleit=="    + M|yprojleit^id      ? _F|empty(M|yprojleit)
+.formula M|select = M|select + ";yprojekt^yprojverantw==" + M|yprojverantw^id   ? _F|empty(M|yprojverantw)
+.formula M|select = M|select + ";yprojekt^yprojekttyp=="  + M|yprojekttyp^id    ? _F|empty(M|yprojekttyp)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET031" 
+.continue PROC015
+!RET031
+.formula xprocsp = xprocsp - 1
+.load 3 continue
+.continue LOOP030
+!ELOP030: ==============================
+.continue FI152
+!EL152
+.continue EL153 ? _(U|xbprsel)
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojleit=="    + M|yprojleit^id         ? _F|empty(M|yprojleit)
+.formula U|xtsel = U|xtsel + ";yprojverantw==" + M|yprojverantw^id      ? _F|empty(M|yprojverantw)
+.formula U|xtsel = U|xtsel + ";yprojekttyp=="  + M|yprojekttyp^id       ? _F|empty(M|yprojekttyp)
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 3 group 'U|xydbgrprojekt' 'U|xtsel'
+!LOOP031: ==============================
+.continue ELOP031 ? _(G|mehr)
+.formula M|select = "$,,"
+.formula M|select = M|select + ";yprojekt="     + 3|id
+.formula M|select = M|select + ";ykunde=="      + M|ykunde^id           ? _F|empty(M|ykunde)
+.formula M|select = M|select + ";ykunde2=="     + M|ykunde2^id          ? _F|empty(M|ykunde2)
+.formula M|select = M|select + ";yaufgabe=="    + M|yaufgabe^id         ? _F|empty(M|yaufgabe)
+.formula M|select = M|select + ";ytaetschl=="   + M|ytaetschl^id        ? _F|empty(M|ytaetschl)
+.formula M|select = M|select + ";yadatum=!"     +'M|ystdbisdatum'
+.formula M|select = M|select + ";yedatum="      +'M|ystdvondatum' + "!"
+.formula M|select = M|select + ";ypersonal=="   + M|ypersonal^id        ? _F|empty(M|ypersonal)
+.formula M|select = M|select + ";yabrechnung==" + M|yselabr^nummer      ? _F|empty(M|yselabr)
+.formula M|select = M|select + ";ylsrelev=1"                            ? _M|yblsrelev
+.formula M|select = M|select + ";yaufgabe^yverantw==" + M|yverantw^id           ? _F|empty(M|yverantw)
+.formula M|select = M|select + ";yaufgabe^yvornum="   + M|yvornum               ? _F|empty(M|yvornum)
+.formula M|select = M|select + ";yaufgabe^yvorpos="   + M|yvorvp^id             ? _F|empty(M|yvorvp)
+.formula M|select = M|select + ";yaufgabe^ystatus^katego=" + M|ystatusk + "!"   ? _F|empty(M|ystatusk)
+.formula M|select = M|select + ";ypvorgang^yarbpaket=="    + M|yarbpaket^id     ? _F|empty(M|yarbpaket)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET032" 
+.continue PROC015
+!RET032
+.formula xprocsp = xprocsp - 1
+.load 3 continue
+.continue LOOP031
+!ELOP031: ==============================
+.continue FI153
+!EL153
+.formula M|select = "$,,"
+.formula M|select = M|select + ";yprojekt=="    + M|yprojekt^id         ? _F|empty(M|yprojekt)
+.formula M|select = M|select + ";ykunde=="      + M|ykunde^id           ? _F|empty(M|ykunde)
+.formula M|select = M|select + ";ykunde2=="     + M|ykunde2^id          ? _F|empty(M|ykunde2)
+.formula M|select = M|select + ";yaufgabe=="    + M|yaufgabe^id         ? _F|empty(M|yaufgabe)
+.formula M|select = M|select + ";ytaetschl=="   + M|ytaetschl^id        ? _F|empty(M|ytaetschl)
+.formula M|select = M|select + ";yadatum=!"     +'M|ystdbisdatum'
+.formula M|select = M|select + ";yedatum="      +'M|ystdvondatum' + "!"
+.formula M|select = M|select + ";ypersonal=="   + M|ypersonal^id        ? _F|empty(M|ypersonal)
+.formula M|select = M|select + ";yabrechnung==" + M|yselabr^nummer      ? _F|empty(M|yselabr)
+.formula M|select = M|select + ";ylsrelev=1"                            ? _M|yblsrelev
+.formula M|select = M|select + ";yprojekt^yprojleit=="    + M|yprojleit^id      ? _F|empty(M|yprojleit)
+.formula M|select = M|select + ";yprojekt^yprojverantw==" + M|yprojverantw^id   ? _F|empty(M|yprojverantw)
+.formula M|select = M|select + ";yprojekt^yprojekttyp=="  + M|yprojekttyp^id    ? _F|empty(M|yprojekttyp)
+.formula M|select = M|select + ";yaufgabe^yverantw==" + M|yverantw^id           ? _F|empty(M|yverantw)
+.formula M|select = M|select + ";yaufgabe^yvornum="   + M|yvornum               ? _F|empty(M|yvornum)
+.formula M|select = M|select + ";yaufgabe^yvorpos="   + M|yvorvp^id             ? _F|empty(M|yvorvp)
+.formula M|select = M|select + ";yaufgabe^ystatus^katego=" + M|ystatusk + "!"   ? _F|empty(M|ystatusk)
+.formula M|select = M|select + ";ypvorgang^yarbpaket=="    + M|yarbpaket^id     ? _F|empty(M|yarbpaket)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET033" 
+.continue PROC015
+!RET033
+.formula xprocsp = xprocsp - 1
+!FI153
+!FI152
+.continue EL154 ? _((M|ybsubmeld) & (F|empty(M|yaufgabe)))
+.continue EL155 ? _((_(F|empty(M|yvornum))) ; (_(F|empty(M|yvorvp))) ; (U|xbausel))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt="   + M|yprojekt^id             ? _F|empty(M|yprojekt)
+.formula U|xtsel = U|xtsel + ";yvorpos=="   + M|yvorvp^id               ? _F|empty(M|yvorvp)
+.formula U|xtsel = U|xtsel + ";yvornum=="   + M|yvornum                 ? _F|empty(M|yvornum)
+.formula U|xtsel = U|xtsel + ";yverantw="   + M|yverantw^id             ? _F|empty(M|yverantw)
+.formula U|xtsel = U|xtsel + ";ypersonal==" + M|ypersonal^id            ? _F|empty(M|ypersonal)
+.formula U|xtsel = U|xtsel + ";yprojekt^ykunde=="  + M|ykunde^id        ? _F|empty(M|ykunde)  & F|empty(M|yprojekt)
+.formula U|xtsel = U|xtsel + ";yprojekt^ykunde2==" + M|ykunde2^id       ? _F|empty(M|ykunde2) & F|empty(M|yprojekt)
+.formula U|xtsel = U|xtsel + ";ytaetschl="  + M|ytaetschl^id            ? _F|empty(M|ytaetschl)
+.formula U|xtsel = U|xtsel + ";yarbpaket==" + M|yarbpaket^id            ? _F|empty(M|yarbpaket)
+.formula U|xtsel = U|xtsel + ";ystatusk^katego="    + M|ystatusk + "!"  ? _F|empty(M|ystatusk)
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 3 group 'U|xydbgrpvorgang' 'U|xtsel'
+!LOOP032: ==============================
+.continue ELOP032 ? _(G|mehr)
+.formula M|select = "$,,"
+.formula M|select = M|select + ";ytpvorgang=="           + 3|id
+.formula M|select = M|select + ";ytdatum="               + M|ystdvondatum:8 + "!" + M|ystdbisdatum:8
+.formula M|select = M|select + ";ytsmabrechnung=="       + M|yselabr^nummer                             ? _F|empty(M|yselabr)
+.formula M|select = M|select + ";yprojekt^yprojleit=="    + M|yprojleit^id      ? _F|empty(M|yprojleit)
+.formula M|select = M|select + ";yprojekt^yprojverantw==" + M|yprojverantw^id   ? _F|empty(M|yprojverantw)
+.formula M|select = M|select + ";yprojekt^yprojekttyp=="  + M|yprojekttyp^id    ? _F|empty(M|yprojekttyp)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET034" 
+.continue PROC016
+!RET034
+.formula xprocsp = xprocsp - 1
+.load 3 continue
+.continue LOOP032
+!ELOP032: ==============================
+.continue FI155
+!EL155
+.continue EL156 ? _(F|empty(M|yprojekt))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojleit=="    + M|yprojleit^id         ? _F|empty(M|yprojleit)
+.formula U|xtsel = U|xtsel + ";yprojverantw==" + M|yprojverantw^id      ? _F|empty(M|yprojverantw)
+.formula U|xtsel = U|xtsel + ";yprojekttyp=="  + M|yprojekttyp^id       ? _F|empty(M|yprojekttyp)
+.formula U|xtsel = U|xtsel + ";ykunde=="       + M|ykunde^id            ? _F|empty(M|ykunde)
+.formula U|xtsel = U|xtsel + ";ykunde2=="      + M|ykunde2^id           ? _F|empty(M|ykunde2)
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 3 group 'U|xydbgrprojekt' 'U|xtsel'
+.continue FI156
+!EL156
+.load 3 add M|yprojekt
+!FI156
+!LOOP033: ==============================
+.continue ELOP033 ? _(G|mehr)
+.formula M|select = "$,,"
+.formula M|select = M|select + ";yprojekt="     + 3|id
+.formula M|select = M|select + ";ytdatum="               + M|ystdvondatum:8 + "!" + M|ystdbisdatum:8
+.formula M|select = M|select + ";ytsmabrechnung=="       + M|yselabr^nummer         ? _F|empty(M|yselabr)
+.formula M|select = M|select + ";ytpvorgang^ytaetschl=="   + M|ytaetschl^id         ? _F|empty(M|ytaetschl)
+.formula M|select = M|select + ";ytpvorgang^ypersonal=="   + M|ypersonal^id         ? _F|empty(M|ypersonal)
+.formula M|select = M|select + ";ytpvorgang^yverantw==" + M|yverantw^id             ? _F|empty(M|yverantw)
+.formula M|select = M|select + ";ytpvorgang^yvornum="   + M|yvornum                 ? _F|empty(M|yvornum)
+.formula M|select = M|select + ";ytpvorgang^yvorpos="   + M|yvorvp^id               ? _F|empty(M|yvorvp)
+.formula M|select = M|select + ";ytpvorgang^ystatus^katego=" + M|ystatusk + "!"     ? _F|empty(M|ystatusk)
+.formula M|select = M|select + ";ytpvorgang^yarbpaket=="     + M|yarbpaket^id       ? _F|empty(M|yarbpaket)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET035" 
+.continue PROC016
+!RET035
+.formula xprocsp = xprocsp - 1
+.load 3 continue
+.continue LOOP033
+!ELOP033: ==============================
+!FI155
+!EL154
+!FI151
+.continue EL157 ? _(M|ybteilprojekte)
+.continue EL158 ? _((_(F|empty(M|yprojekt))) & (M|ybteilprojekte))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yteilprojektzu=="        + M|yprojekt^id
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 4 group 'U|xydbgrprojekt' 'U|xtsel'
+!LOOP034: ==============================
+.continue ELOP034 ? _(G|mehr)
+.continue EL159 ? _(U|xbausel)
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt=" + 4|id
+.formula U|xtsel = U|xtsel + ";yvorpos==" + M|yvorvp^id                 ? _F|empty(M|yvorvp)
+.formula U|xtsel = U|xtsel + ";yvornum==" + M|yvornum                   ? _F|empty(M|yvornum)
+.formula U|xtsel = U|xtsel + ";yverantw=" + M|yverantw^id               ? _F|empty(M|yverantw)
+.formula U|xtsel = U|xtsel + ";ykunde=="  + M|ykunde^id                 ? _F|empty(M|ykunde)
+.formula U|xtsel = U|xtsel + ";ykunde2==" + M|ykunde2^id                ? _F|empty(M|ykunde2)
+.formula U|xtsel = U|xtsel + ";ypvorgang^yarbpaket=="  + M|yarbpaket^id ? _F|empty(M|yarbpaket)
+.formula U|xtsel = U|xtsel + ";ystatusk^katego="    + M|ystatusk + "!"          ? _F|empty(M|ystatusk)
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 3 group 'U|xydbgraufgabe' 'U|xtsel'
+!LOOP035: ==============================
+.continue ELOP035 ? _(G|mehr)
+.formula M|select = "$,,"
+.formula M|select = M|select + ";yaufgabe=="    + 3|id
+.formula M|select = M|select + ";ytaetschl=="   + M|ytaetschl^id        ? _F|empty(M|ytaetschl)
+.formula M|select = M|select + ";yadatum=!"     + M|ystdbisdatum:8
+.formula M|select = M|select + ";yedatum="      + M|ystdvondatum:8 + "!"
+.formula M|select = M|select + ";ypersonal=="   + M|ypersonal^id        ? _F|empty(M|ypersonal)
+.formula M|select = M|select + ";yabrechnung==" + M|yselabr^nummer      ? _F|empty(M|yselabr)
+.formula M|select = M|select + ";ylsrelev=1"                            ? _M|yblsrelev
+.formula M|select = M|select + ";yprojekt^yprojleit=="    + M|yprojleit^id      ? _F|empty(M|yprojleit)
+.formula M|select = M|select + ";yprojekt^yprojverantw==" + M|yprojverantw^id   ? _F|empty(M|yprojverantw)
+.formula M|select = M|select + ";yprojekt^yprojekttyp=="  + M|yprojekttyp^id    ? _F|empty(M|yprojekttyp)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET036" 
+.continue PROC015
+!RET036
+.formula xprocsp = xprocsp - 1
+.load 3 continue
+.continue LOOP035
+!ELOP035: ==============================
+.continue FI159
+!EL159
+.continue EL160 ? _(U|xbprsel)
+.formula M|select = "$,,"
+.formula M|select = M|select + ";yprojekt="     + 4|id
+.formula M|select = M|select + ";ykunde=="      + M|ykunde^id           ? _F|empty(M|ykunde)
+.formula M|select = M|select + ";ykunde2=="     + M|ykunde2^id          ? _F|empty(M|ykunde2)
+.formula M|select = M|select + ";yaufgabe=="    + M|yaufgabe^id         ? _F|empty(M|yaufgabe)
+.formula M|select = M|select + ";ytaetschl=="   + M|ytaetschl^id        ? _F|empty(M|ytaetschl)
+.formula M|select = M|select + ";yadatum=!"     +'M|ystdbisdatum'
+.formula M|select = M|select + ";yedatum="      +'M|ystdvondatum' + "!"
+.formula M|select = M|select + ";ypersonal=="   + M|ypersonal^id        ? _F|empty(M|ypersonal)
+.formula M|select = M|select + ";yabrechnung==" + M|yselabr^nummer      ? _F|empty(M|yselabr)
+.formula M|select = M|select + ";ylsrelev=1"                            ? _M|yblsrelev
+.formula M|select = M|select + ";yaufgabe^yverantw==" + M|yverantw^id           ? _F|empty(M|yverantw)
+.formula M|select = M|select + ";yaufgabe^yvornum="   + M|yvornum               ? _F|empty(M|yvornum)
+.formula M|select = M|select + ";yaufgabe^yvorpos="   + M|yvorvp^id             ? _F|empty(M|yvorvp)
+.formula M|select = M|select + ";yaufgabe^ystatus^katego=" + M|ystatusk + "!"   ? _F|empty(M|ystatusk)
+.formula M|select = M|select + ";ypvorgang^yarbpaket=="    + M|yarbpaket^id     ? _F|empty(M|yarbpaket)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET037" 
+.continue PROC015
+!RET037
+.formula xprocsp = xprocsp - 1
+.continue FI160
+!EL160
+.formula M|select = "$,,"
+
+.formula M|select = M|select + ";yprojekt=="    + 4|id
+.formula M|select = M|select + ";ykunde=="      + M|ykunde^id           ? _F|empty(M|ykunde)
+.formula M|select = M|select + ";ykunde2=="     + M|ykunde2^id          ? _F|empty(M|ykunde2)
+.formula M|select = M|select + ";yaufgabe=="    + M|yaufgabe^id         ? _F|empty(M|yaufgabe)
+.formula M|select = M|select + ";ytaetschl=="   + M|ytaetschl^id        ? _F|empty(M|ytaetschl)
+.formula M|select = M|select + ";yadatum=!"     +'M|ystdbisdatum'
+.formula M|select = M|select + ";yedatum="      +'M|ystdvondatum' + "!"
+.formula M|select = M|select + ";ypersonal=="   + M|ypersonal^id        ? _F|empty(M|ypersonal)
+.formula M|select = M|select + ";yabrechnung==" + M|yselabr^nummer      ? _F|empty(M|yselabr)
+.formula M|select = M|select + ";ylsrelev=1"                            ? _M|yblsrelev
+.formula M|select = M|select + ";yprojekt^yprojleit=="    + M|yprojleit^id      ? _F|empty(M|yprojleit)
+.formula M|select = M|select + ";yprojekt^yprojverantw==" + M|yprojverantw^id   ? _F|empty(M|yprojverantw)
+.formula M|select = M|select + ";yprojekt^yprojekttyp=="  + M|yprojekttyp^id    ? _F|empty(M|yprojekttyp)
+.formula M|select = M|select + ";yaufgabe^yverantw==" + M|yverantw^id           ? _F|empty(M|yverantw)
+.formula M|select = M|select + ";yaufgabe^yvornum="   + M|yvornum               ? _F|empty(M|yvornum)
+.formula M|select = M|select + ";yaufgabe^yvorpos="   + M|yvorvp^id             ? _F|empty(M|yvorvp)
+.formula M|select = M|select + ";yaufgabe^ystatus^katego=" + M|ystatusk + "!"   ? _F|empty(M|ystatusk)
+.formula M|select = M|select + ";ypvorgang^yarbpaket=="    + M|yarbpaket^id     ? _F|empty(M|yarbpaket)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET038" 
+.continue PROC015
+!RET038
+.formula xprocsp = xprocsp - 1
+!FI160
+!FI159
+.continue EL161 ? _((M|ybsubmeld) & (F|empty(M|yaufgabe)))
+.continue EL162 ? _((_(F|empty(M|yvornum))) ; (_(F|empty(M|yvorvp))) ; (U|xbausel))
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojekt="   + 4|id
+.formula U|xtsel = U|xtsel + ";yvorpos=="   + M|yvorvp^id               ? _F|empty(M|yvorvp)
+.formula U|xtsel = U|xtsel + ";yvornum=="   + M|yvornum                 ? _F|empty(M|yvornum)
+.formula U|xtsel = U|xtsel + ";yverantw="   + M|yverantw^id             ? _F|empty(M|yverantw)
+.formula U|xtsel = U|xtsel + ";ypersonal==" + M|ypersonal^id            ? _F|empty(M|ypersonal)
+.formula U|xtsel = U|xtsel + ";yprojekt^ykunde=="  + M|ykunde^id        ? _F|empty(M|ykunde)  & F|empty(M|yprojekt)
+.formula U|xtsel = U|xtsel + ";yprojekt^ykunde2==" + M|ykunde2^id       ? _F|empty(M|ykunde2) & F|empty(M|yprojekt)
+.formula U|xtsel = U|xtsel + ";ytaetschl="  + M|ytaetschl^id            ? _F|empty(M|ytaetschl)
+.formula U|xtsel = U|xtsel + ";yarbpaket==" + M|yarbpaket^id            ? _F|empty(M|yarbpaket)
+.formula U|xtsel = U|xtsel + ";ystatusk^katego="    + M|ystatusk + "!"  ? _F|empty(M|ystatusk)
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 3 group 'U|xydbgrpvorgang' 'U|xtsel'
+!LOOP036: ==============================
+.continue ELOP036 ? _(G|mehr)
+.formula M|select = "$,,"
+.formula M|select = M|select + ";ytpvorgang=="           + 3|id
+.formula M|select = M|select + ";ytdatum="               + M|ystdvondatum:8 + "!" + M|ystdbisdatum:8
+.formula M|select = M|select + ";ytsmabrechnung=="       + M|yselabr^nummer                             ? _F|empty(M|yselabr)
+.formula M|select = M|select + ";yprojekt^yprojleit=="    + M|yprojleit^id      ? _F|empty(M|yprojleit)
+.formula M|select = M|select + ";yprojekt^yprojverantw==" + M|yprojverantw^id   ? _F|empty(M|yprojverantw)
+.formula M|select = M|select + ";yprojekt^yprojekttyp=="  + M|yprojekttyp^id    ? _F|empty(M|yprojekttyp)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET039" 
+.continue PROC016
+!RET039
+.formula xprocsp = xprocsp - 1
+.load 3 continue
+.continue LOOP036
+!ELOP036: ==============================
+.continue FI162
+!EL162
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";yprojleit=="    + M|yprojleit^id         ? _F|empty(M|yprojleit)
+.formula U|xtsel = U|xtsel + ";yprojverantw==" + M|yprojverantw^id      ? _F|empty(M|yprojverantw)
+.formula U|xtsel = U|xtsel + ";yprojekttyp=="  + M|yprojekttyp^id       ? _F|empty(M|yprojekttyp)
+.formula U|xtsel = U|xtsel + ";ykunde=="       + M|ykunde^id            ? _F|empty(M|ykunde)
+.formula U|xtsel = U|xtsel + ";ykunde2=="      + M|ykunde2^id           ? _F|empty(M|ykunde2)
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 3 group 'U|xydbgrprojekt' 'U|xtsel'
+!LOOP037: ==============================
+.continue ELOP037 ? _(G|mehr)
+.formula M|select = "$,,"
+.formula M|select = M|select + ";yprojekt="     + 3|id
+.formula M|select = M|select + ";ytdatum="               + M|ystdvondatum:8 + "!" + M|ystdbisdatum:8
+.formula M|select = M|select + ";ytsmabrechnung=="       + M|yselabr^nummer         ? _F|empty(M|yselabr)
+.formula M|select = M|select + ";ytpvorgang^ytaetschl=="   + M|ytaetschl^id         ? _F|empty(M|ytaetschl)
+.formula M|select = M|select + ";ytpvorgang^ypersonal=="   + M|ypersonal^id         ? _F|empty(M|ypersonal)
+.formula M|select = M|select + ";ytpvorgang^yverantw==" + M|yverantw^id             ? _F|empty(M|yverantw)
+.formula M|select = M|select + ";ytpvorgang^yvornum="   + M|yvornum                 ? _F|empty(M|yvornum)
+.formula M|select = M|select + ";ytpvorgang^yvorpos="   + M|yvorvp^id               ? _F|empty(M|yvorvp)
+.formula M|select = M|select + ";ytpvorgang^ystatus^katego=" + M|ystatusk + "!"     ? _F|empty(M|ystatusk)
+.formula M|select = M|select + ";ytpvorgang^yarbpaket=="     + M|yarbpaket^id       ? _F|empty(M|yarbpaket)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET040" 
+.continue PROC016
+!RET040
+.formula xprocsp = xprocsp - 1
+.load 3 continue
+.continue LOOP037
+!ELOP037: ==============================
+!FI162
+!EL161
+.load 4 continue
+.continue LOOP034
+!ELOP034: ==============================
+!EL158
+!EL157
+.continue FI150
+!EL150
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET041" 
+.continue PROC015
+!RET041
+.formula xprocsp = xprocsp - 1
+!FI150
+!FI139
+!EL138
+.continue EL163 ? _(_(G|evtvar = "ylnanfuegen"))
+.continue EL164 ? _(F|empty(M|yabrechnung))
+.formula M|yftext = ""
+.continue FI164
+!EL164
+.continue EL165 ? _(F|empty(M|yabrechnung^yftext))
+.formula M|yftext = ""
+.continue FI165
+!EL165
+.file -TEMPNAME U|xtftext
+.output NEW 'U|xtftext'
+.input DATEI.F
+.input -TEXT 'M|yabrechnung^yftext'
+.formula M|yftext = U|xtftext
+!FI165
+!FI164
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET042" 
+.continue PROC008
+!RET042
+.formula xprocsp = xprocsp - 1
+!EL163
+.continue 'xprocst.xprocsp'
+!PROC019: ----- Abrechnungsdatensatz_eintragen -----
+.continue EL166 ? _((_(F|empty(M|ytleistmeld))) ; (_(F|empty(M|ytmzeitmeld))))
+.continue EL167 ? _(((_(F|empty(M|ytleistmeld))) & (M|ytleistmeld^yabrechnung   <> 0|nummer)) ; ((_(F|empty(M|ytmzeitmeld))) & (M|ytmzeitmeld^ymzabrechnung <> 0|nummer)))
+.continue EL168 ? _(((_(F|empty(M|ytleistmeld))) & (F|empty(M|ytleistmeld^yabrechnung)) & (F|empty(M|ytleistmeld^ylsposid)) & (F|empty(M|ytleistmeld^yreposid))) ; ((_(F|empty(M|ytmzeitmeld))) & (F|empty(M|ytmzeitmeld^ymzabrechnung)) & (F|empty(M|ytmzeitmeld^ymzlsposid)) & (F|empty(M|ytmzeitmeld^ymzreposid))) ; (M|ybvk))
+.select lock add M|ytleistmeld  ? _F|empty(M|ytleistmeld)
+.select lock add M|ytmzeitmeld  ? _F|empty(M|ytmzeitmeld)
+.continue EL169 ? _(G|mehr)
+.formula H|yabrechnung   = 0|nummer     ? _F|empty(M|ytleistmeld)
+.formula H|ymzabrechnung = 0|nummer     ? _F|empty(M|ytmzeitmeld)
+.formula H|ysort         = M|aktzeile   ? _F|empty(M|ytleistmeld)
+.formula H|ymzsort       = M|aktzeile   ? _F|empty(M|ytmzeitmeld)
+.rewrite
+.assign M|ytabrechnung = H|yabrechnung          ? _F|empty(M|ytleistmeld)
+.assign M|ytabrechnung = H|ymzabrechnung        ? _F|empty(M|ytmzeitmeld)
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI169
+!EL169
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET043" 
+.continue PROC002
+!RET043
+.formula xprocsp = xprocsp - 1
+!FI169
+.continue FI168
+!EL168
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET044" 
+.continue PROC002
+!RET044
+.formula xprocsp = xprocsp - 1
+!FI168
+.continue FI167
+!EL167
+.continue EL170 ? _(((_(F|empty(M|ytleistmeld))) & (M|ytleistmeld^ysort   <> M|aktzeile)) ; ((_(F|empty(M|ytmzeitmeld))) & (M|ytmzeitmeld^ymzsort <> M|aktzeile)))
+.select lock add M|ytleistmeld  ? _F|empty(M|ytleistmeld)
+.select lock add M|ytmzeitmeld  ? _F|empty(M|ytmzeitmeld)
+.continue EL171 ? _(G|mehr)
+.formula H|ysort         = M|aktzeile   ? _F|empty(M|ytleistmeld)
+.formula H|ymzsort       = M|aktzeile   ? _F|empty(M|ytmzeitmeld)
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI171
+!EL171
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET045" 
+.continue PROC002
+!RET045
+.formula xprocsp = xprocsp - 1
+!FI171
+!EL170
+!FI167
+!EL166
+.continue EL172 ? _(_(F|empty(M|ytmatmeld)))
+.select add M|ytmatmeld
+.continue EL173 ? _(G|mehr)
+.select line 'M|ytmatmeldzid'
+.continue EL174 ? _(G|mehr)
+.continue EL175 ? _(H|ytmmabrechnung <> 0|nummer)
+.select lock add M|ytmatmeld
+.continue EL176 ? _(G|mehr)
+.select lock line 'M|ytmatmeldzid'
+.continue EL177 ? _(G|mehr)
+.continue EL178 ? _(((F|empty(H|ytmmabrechnung)) & (F|empty(H|ytmmlsposid)) & (F|empty(H|ytmmreposid))) ; (M|ybvk))
+.formula H|ytmmabrechnung = 0|nummer
+.formula H|ytmmsort       = M|aktzeile
+.rewrite
+.assign M|ytabrechnung = H|ytmmabrechnung
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI178
+!EL178
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET046" 
+.continue PROC002
+!RET046
+.formula xprocsp = xprocsp - 1
+!FI178
+.continue FI177
+!EL177
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET047" 
+.continue PROC002
+!RET047
+.formula xprocsp = xprocsp - 1
+!FI177
+.continue FI176
+!EL176
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET048" 
+.continue PROC002
+!RET048
+.formula xprocsp = xprocsp - 1
+!FI176
+.continue FI175
+!EL175
+.continue EL179 ? _(H|ytmmsort <> M|aktzeile)
+.select lock add M|ytmatmeld
+.continue EL180 ? _(G|mehr)
+.select lock line 'M|ytmatmeldzid'
+.continue EL181 ? _(G|mehr)
+.formula H|ytmmsort       = M|aktzeile
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI181
+!EL181
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET049" 
+.continue PROC002
+!RET049
+.formula xprocsp = xprocsp - 1
+!FI181
+.continue FI180
+!EL180
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET050" 
+.continue PROC002
+!RET050
+.formula xprocsp = xprocsp - 1
+!FI180
+!EL179
+!FI175
+.continue FI174
+!EL174
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET051" 
+.continue PROC002
+!RET051
+.formula xprocsp = xprocsp - 1
+!FI174
+.continue FI173
+!EL173
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET052" 
+.continue PROC002
+!RET052
+.formula xprocsp = xprocsp - 1
+!FI173
+!EL172
+.continue EL182 ? _(_(F|empty(M|ytsubmeld)))
+.select add M|ytsubmeld
+.continue EL183 ? _(G|mehr)
+.select line 'M|ytsubmeldzid'
+.continue EL184 ? _(G|mehr)
+.continue EL185 ? _(H|ytsmabrechnung <> 0|nummer)
+.select lock add M|ytsubmeld
+.continue EL186 ? _(G|mehr)
+.select lock line 'M|ytsubmeldzid'
+.continue EL187 ? _(G|mehr)
+.continue EL188 ? _(((F|empty(H|ytsmabrechnung)) & (F|empty(H|ytsmlsposid)) & (F|empty(H|ytsmreposid))) ; (M|ybvk))
+.formula H|ytsmabrechnung = 0|nummer
+.formula H|ytsmsort       = M|aktzeile
+.rewrite
+.assign M|ytabrechnung = H|ytsmabrechnung
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI188
+!EL188
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET053" 
+.continue PROC002
+!RET053
+.formula xprocsp = xprocsp - 1
+!FI188
+.continue FI187
+!EL187
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET054" 
+.continue PROC002
+!RET054
+.formula xprocsp = xprocsp - 1
+!FI187
+.continue FI186
+!EL186
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET055" 
+.continue PROC002
+!RET055
+.formula xprocsp = xprocsp - 1
+!FI186
+.continue FI185
+!EL185
+.continue EL189 ? _(H|ytsmsort <> M|aktzeile)
+.select lock add M|ytsubmeld
+.continue EL190 ? _(G|mehr)
+.select lock line 'M|ytsubmeldzid'
+.continue EL191 ? _(G|mehr)
+.formula H|ytsmsort       = M|aktzeile
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI191
+!EL191
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET056" 
+.continue PROC002
+!RET056
+.formula xprocsp = xprocsp - 1
+!FI191
+.continue FI190
+!EL190
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET057" 
+.continue PROC002
+!RET057
+.formula xprocsp = xprocsp - 1
+!FI190
+!EL189
+!FI185
+.continue FI184
+!EL184
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET058" 
+.continue PROC002
+!RET058
+.formula xprocsp = xprocsp - 1
+!FI184
+.continue FI183
+!EL183
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET059" 
+.continue PROC002
+!RET059
+.formula xprocsp = xprocsp - 1
+!FI183
+!EL182
+.continue 'xprocst.xprocsp'
+!PROC020: ----- Abrechnungsdatensatz_anlegen -----
+.continue EL192 ? _(_(M|ybzeigen))
+.continue EL193 ? _((M|yabrpos^dnr    <> U|xydbtpposition) & (M|yabrpos^gruppe <> U|xygrtpposition))
+.continue EL194 ? _(F|empty(M|yabrechnung))
+.assign U|xbok = G|FALSE
+.select screen header
+.select screen line
+!LOOP038: ==============================
+.continue ELOP038 ? _((G|mehr) & (_(U|xbok)))
+.continue EL195 ? _(M|ymark)
+.assign U|xbok = G|TRUE
+!EL195
+.select screen line
+.continue LOOP038
+!ELOP038: ==============================
+.continue EL196 ? _(U|xbok)
+.set trans +
+.box -BUTTON ok:cancel -TITLE Hinweis
+Es wird ein neuer Abrechnungsdatensatz angelegt.
+.set trans -
+.continue EL197 ? _(G|box = G|boxyes)
+.continue EL198 ? _((F|empty(M|yabrechnung)) & ((M|yabrpos^dnr    <> U|xydbtpposition) & (M|yabrpos^gruppe <> U|xygrtpposition)))
+.file -TEMPNAME U|xtftext
+.output NEW 'U|xtftext'
+.input DATEI.F
+.continue EL199 ? _(_(F|empty(M|yftext)))
+.input -TEXT 'M|yftext'
+!EL199
+.formula U|xtcmd "make " + G|hdatname.xydbabrechnung + " group" + 'U|xygrabrechnung'
+.'U|xtcmd'
+.formula H|such      = "A" + G|sekundenz
+.formula H|name      = M|yabrname
+.formula H|yftext    = U|xtftext
+.formula H|yfaktwert = M|yfaktwert
+.formula H|ywert     = M|ywert
+.formula H|ymenge    = M|ymenge
+.assign  H|ybuebwert = M|ybuebwert
+.assign  H|ybuebmge  = M|ybuebmge
+.rewrite
+.assign M|yabrechnung = H|id
+.select -
+!EL198
+.load 0 object 'M|yabrechnung^id'       ? _F|empty(M|yabrechnung)
+.select screen header
+.select screen line
+!LOOP039: ==============================
+.continue ELOP039 ? _(G|mehr)
+.continue EL200 ? _(M|ymark)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET060" 
+.continue PROC019
+!RET060
+.formula xprocsp = xprocsp - 1
+!EL200
+.select screen line
+.continue LOOP039
+!ELOP039: ==============================
+.continue FI197
+!EL197
+.error
+.end 1
+!FI197
+!EL196
+.continue FI194
+!EL194
+.select lock object 'M|yabrechnung^id'
+.continue EL201 ? _(G|mehr)
+.file -TEMPNAME U|xtftext
+.output NEW 'U|xtftext'
+.input DATEI.F
+.continue EL202 ? _(_(F|empty(M|yftext)))
+.input -TEXT 'M|yftext'
+!EL202
+.formula H|name      = M|yabrname
+.formula H|yftext    = U|xtftext
+.formula H|yfaktwert = M|yfaktwert
+.formula H|ywert     = M|ywert
+.formula H|ymenge    = M|ymenge
+.assign  H|ybuebwert = M|ybuebwert
+.assign  H|ybuebmge  = M|ybuebmge
+.rewrite
+.select -
+.continue FI201
+!EL201
+.set TRANS +
+.box Fehler
+Der Abrechnungsdatensatz konnte nicht gespeichert werden.
+.set TRANS -
+!FI201
+.load 0 object 'M|yabrechnung^id'
+.select screen header
+.select screen line
+!LOOP040: ==============================
+.continue ELOP040 ? _(G|mehr)
+.continue EL203 ? _(M|ymark)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET061" 
+.continue PROC019
+!RET061
+.formula xprocsp = xprocsp - 1
+.continue FI203
+!EL203
+.continue EL204 ? _(_(M|ybvk))
+.continue EL205 ? _(((_(F|empty(M|ytleistmeld))) & (M|ytleistmeld^yabrechnung = 0|nummer)) ; ((_(F|empty(M|ytmzeitmeld))) & (M|ytmzeitmeld^ymzabrechnung = 0|nummer)))
+.select lock add M|ytleistmeld          ? _F|empty(M|ytleistmeld)
+.select lock add M|ytmzeitmeld          ? _F|empty(M|ytmzeitmeld)
+.continue EL206 ? _(G|mehr)
+.formula H|yabrechnung   = ""           ? _F|empty(M|ytleistmeld)
+.formula H|ymzabrechnung = ""           ? _F|empty(M|ytmzeitmeld)
+.formula H|ysort         = 0            ? _F|empty(M|ytleistmeld)
+.formula H|ymzsort       = 0            ? _F|empty(M|ytmzeitmeld)
+.rewrite
+.assign M|ytabrechnung = ""
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI206
+!EL206
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET062" 
+.continue PROC002
+!RET062
+.formula xprocsp = xprocsp - 1
+!FI206
+!EL205
+.continue EL207 ? _(_(F|empty(M|ytmatmeld)))
+.select add M|ytmatmeld
+.continue EL208 ? _(G|mehr)
+.select line 'M|ytmatmeldzid'
+.continue EL209 ? _(G|mehr)
+.continue EL210 ? _(H|ytmmabrechnung = 0|nummer)
+.select lock add M|ytmatmeld
+.continue EL211 ? _(G|mehr)
+.select lock line 'M|ytmatmeldzid'
+.continue EL212 ? _(G|mehr)
+.formula H|ytmmabrechnung = ""
+.formula H|ytmmsort       = 0
+.rewrite
+.assign M|ytabrechnung    = ""
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI212
+!EL212
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET063" 
+.continue PROC002
+!RET063
+.formula xprocsp = xprocsp - 1
+!FI212
+.continue FI211
+!EL211
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET064" 
+.continue PROC002
+!RET064
+.formula xprocsp = xprocsp - 1
+!FI211
+!EL210
+.continue FI209
+!EL209
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET065" 
+.continue PROC002
+!RET065
+.formula xprocsp = xprocsp - 1
+!FI209
+.continue FI208
+!EL208
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET066" 
+.continue PROC002
+!RET066
+.formula xprocsp = xprocsp - 1
+!FI208
+!EL207
+.continue EL213 ? _(_(F|empty(M|ytsubmeld)))
+.select add M|ytsubmeld
+.continue EL214 ? _(G|mehr)
+.select line 'M|ytsubmeldzid'
+.continue EL215 ? _(G|mehr)
+.continue EL216 ? _(H|ytsmabrechnung = 0|nummer)
+.select lock add M|ytsubmeld
+.continue EL217 ? _(G|mehr)
+.select lock line 'M|ytsubmeldzid'
+.continue EL218 ? _(G|mehr)
+.formula H|ytsmabrechnung = ""
+.formula H|ytsmsort       = 0
+.rewrite
+.assign M|ytabrechnung    = ""
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI218
+!EL218
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET067" 
+.continue PROC002
+!RET067
+.formula xprocsp = xprocsp - 1
+!FI218
+.continue FI217
+!EL217
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET068" 
+.continue PROC002
+!RET068
+.formula xprocsp = xprocsp - 1
+!FI217
+!EL216
+.continue FI215
+!EL215
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET069" 
+.continue PROC002
+!RET069
+.formula xprocsp = xprocsp - 1
+!FI215
+.continue FI214
+!EL214
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET070" 
+.continue PROC002
+!RET070
+.formula xprocsp = xprocsp - 1
+!FI214
+!EL213
+!EL204
+!FI203
+.select screen line
+.continue LOOP040
+!ELOP040: ==============================
+!FI194
+.continue FI193
+!EL193
+.select lock add M|yabrpos
+.continue EL219 ? _(G|mehr)
+.continue EL220 ? _(M|ybuebwert)
+.continue EL221 ? _((H|yartex^gruppe = 1) ; (H|yartex^gruppe = 5))
+.formula H|ylimge  = M|ywert
+.formula H|yliwert = M|ywert * H|ypreis
+.continue FI221
+!EL221
+.continue EL222 ? _(H|yartex^gruppe = 4)
+.formula H|ylimge  = M|ywert            ? 'H|yartex^zptyp(L="0")' =  "(7)"
+.formula H|yliwert = M|ywert * H|ypreis ? 'H|yartex^zptyp(L="0")' =  "(7)"
+.formula H|yliwert = M|ywert            ? 'H|yartex^zptyp(L="0")' <> "(7)"
+.continue FI222
+!EL222
+.formula H|yliwert = M|ywert
+!FI222
+!FI221
+.continue FI220
+!EL220
+.formula H|ylimge  = M|ymenge
+.formula H|yliwert = M|ymenge * H|ypreis
+!FI220
+.rewrite
+.load 0 add M|yabrpos
+.select screen header
+.select screen line
+!LOOP041: ==============================
+.continue ELOP041 ? _(G|mehr)
+.continue EL223 ? _(M|ymark)
+.continue EL224 ? _((_(F|empty(M|ytleistmeld))) ; (_(F|empty(M|ytmzeitmeld))))
+.continue EL225 ? _(((_(F|empty(M|ytleistmeld))) & (M|ytleistmeld^ytpposid   <> 0|id)) ; ((_(F|empty(M|ytmzeitmeld))) & (M|ytmzeitmeld^ymztpposid <> 0|id)))
+.continue EL226 ? _(((_(F|empty(M|ytleistmeld))) & (F|empty(M|ytleistmeld^ytpposid))) ; ((_(F|empty(M|ytmzeitmeld))) & (F|empty(M|ytmzeitmeld^ymztpposid))) ; (M|ybvk))
+.select lock add M|ytleistmeld  ? _F|empty(M|ytleistmeld)
+.select lock add M|ytmzeitmeld  ? _F|empty(M|ytmzeitmeld)
+.continue EL227 ? _(G|mehr)
+.formula H|ytpverrechanfid   = 0|ytpverrechanf  ? _F|empty(M|ytleistmeld)
+.formula H|ytpinauposid      = 0|yorig          ? _F|empty(M|ytleistmeld)
+.formula H|ytpposid          = 0|id             ? _F|empty(M|ytleistmeld)
+.formula H|ymztpverrechanfid = 0|ytpverrechanf  ? _F|empty(M|ytmzeitmeld)
+.formula H|ymztpinauposid    = 0|yorig          ? _F|empty(M|ytmzeitmeld)
+.formula H|ymztpposid        = 0|id             ? _F|empty(M|ytmzeitmeld)
+.formula H|ysort             = M|aktzeile       ? _F|empty(M|ytleistmeld)
+.formula H|ymzsort           = M|aktzeile       ? _F|empty(M|ytmzeitmeld)
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI227
+!EL227
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET071" 
+.continue PROC002
+!RET071
+.formula xprocsp = xprocsp - 1
+!FI227
+.continue FI226
+!EL226
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET072" 
+.continue PROC002
+!RET072
+.formula xprocsp = xprocsp - 1
+!FI226
+.continue FI225
+!EL225
+.continue EL228 ? _(((_(F|empty(M|ytleistmeld))) & (M|ytleistmeld^ysort   <> M|aktzeile)) ; ((_(F|empty(M|ytmzeitmeld))) & (M|ytmzeitmeld^ymzsort <> M|aktzeile)))
+.select lock add M|ytleistmeld  ? _F|empty(M|ytleistmeld)
+.select lock add M|ytmzeitmeld  ? _F|empty(M|ytmzeitmeld)
+.continue EL229 ? _(G|mehr)
+.formula H|ysort         = M|aktzeile   ? _F|empty(M|ytleistmeld)
+.formula H|ymzsort       = M|aktzeile   ? _F|empty(M|ytmzeitmeld)
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI229
+!EL229
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET073" 
+.continue PROC002
+!RET073
+.formula xprocsp = xprocsp - 1
+!FI229
+!EL228
+!FI225
+!EL224
+.continue EL230 ? _(_(F|empty(M|ytmatmeld)))
+.select add M|ytmatmeld
+.continue EL231 ? _(G|mehr)
+.select line 'M|ytmatmeldzid'
+.continue EL232 ? _(G|mehr)
+.continue EL233 ? _(H|ytmmtpposid <> 0|id)
+.select lock add M|ytmatmeld
+.continue EL234 ? _(G|mehr)
+.select lock line 'M|ytmatmeldzid'
+.continue EL235 ? _(G|mehr)
+.continue EL236 ? _((F|empty(H|ytmmtpposid)) ; (M|ybvk))
+.formula H|ytmmtpposid = 0|id
+.formula H|ytmmsort    = M|aktzeile
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI236
+!EL236
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET074" 
+.continue PROC002
+!RET074
+.formula xprocsp = xprocsp - 1
+!FI236
+.continue FI235
+!EL235
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET075" 
+.continue PROC002
+!RET075
+.formula xprocsp = xprocsp - 1
+!FI235
+.continue FI234
+!EL234
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET076" 
+.continue PROC002
+!RET076
+.formula xprocsp = xprocsp - 1
+!FI234
+.continue FI233
+!EL233
+.continue EL237 ? _(H|ytmmsort <> M|aktzeile)
+.select lock add M|ytmatmeld
+.continue EL238 ? _(G|mehr)
+.select lock line 'M|ytmatmeldzid'
+.continue EL239 ? _(G|mehr)
+.formula H|ytmmsort       = M|aktzeile
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI239
+!EL239
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET077" 
+.continue PROC002
+!RET077
+.formula xprocsp = xprocsp - 1
+!FI239
+.continue FI238
+!EL238
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET078" 
+.continue PROC002
+!RET078
+.formula xprocsp = xprocsp - 1
+!FI238
+!EL237
+!FI233
+.continue FI232
+!EL232
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET079" 
+.continue PROC002
+!RET079
+.formula xprocsp = xprocsp - 1
+!FI232
+.continue FI231
+!EL231
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET080" 
+.continue PROC002
+!RET080
+.formula xprocsp = xprocsp - 1
+!FI231
+!EL230
+.continue EL240 ? _(_(F|empty(M|ytsubmeld)))
+.select add M|ytsubmeld
+.continue EL241 ? _(G|mehr)
+.select line 'M|ytsubmeldzid'
+.continue EL242 ? _(G|mehr)
+.continue EL243 ? _(H|ytsmtpposid <> 0|id)
+.select lock add M|ytsubmeld
+.continue EL244 ? _(G|mehr)
+.select lock line 'M|ytsubmeldzid'
+.continue EL245 ? _(G|mehr)
+.continue EL246 ? _((F|empty(H|ytsmtpposid)) ; (M|ybvk))
+.formula H|ytsmtpposid = 0|id
+.formula H|ytsmsort    = M|aktzeile
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI246
+!EL246
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET081" 
+.continue PROC002
+!RET081
+.formula xprocsp = xprocsp - 1
+!FI246
+.continue FI245
+!EL245
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET082" 
+.continue PROC002
+!RET082
+.formula xprocsp = xprocsp - 1
+!FI245
+.continue FI244
+!EL244
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET083" 
+.continue PROC002
+!RET083
+.formula xprocsp = xprocsp - 1
+!FI244
+.continue FI243
+!EL243
+.continue EL247 ? _(H|ytsmsort <> M|aktzeile)
+.select lock add M|ytsubmeld
+.continue EL248 ? _(G|mehr)
+.select lock line 'M|ytsubmeldzid'
+.continue EL249 ? _(G|mehr)
+.formula H|ytsmsort       = M|aktzeile
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI249
+!EL249
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET084" 
+.continue PROC002
+!RET084
+.formula xprocsp = xprocsp - 1
+!FI249
+.continue FI248
+!EL248
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET085" 
+.continue PROC002
+!RET085
+.formula xprocsp = xprocsp - 1
+!FI248
+!EL247
+!FI243
+.continue FI242
+!EL242
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET086" 
+.continue PROC002
+!RET086
+.formula xprocsp = xprocsp - 1
+!FI242
+.continue FI241
+!EL241
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET087" 
+.continue PROC002
+!RET087
+.formula xprocsp = xprocsp - 1
+!FI241
+!EL240
+.continue FI223
+!EL223
+.continue EL250 ? _((_(F|empty(M|ytleistmeld))) ; (_(F|empty(M|ytmzeitmeld))))
+.continue EL251 ? _(((_(F|empty(M|ytleistmeld))) & (M|ytleistmeld^ytpposid   = 0|id)) ; ((_(F|empty(M|ytmzeitmeld))) & (M|ytmzeitmeld^ymztpposid = 0|id)))
+.continue EL252 ? _(((_(F|empty(M|ytleistmeld))) & (F|empty(M|ytleistmeld^ytpposid))) ; ((_(F|empty(M|ytmzeitmeld))) & (F|empty(M|ytmzeitmeld^ymztpposid))) ; (M|ybvk))
+.select lock add M|ytleistmeld  ? _F|empty(M|ytleistmeld)
+.select lock add M|ytmzeitmeld  ? _F|empty(M|ytmzeitmeld)
+.continue EL253 ? _(G|mehr)
+.formula H|ytpposid   = ""              ? _F|empty(M|ytleistmeld)
+.formula H|ymztpposid = ""              ? _F|empty(M|ytmzeitmeld)
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.formula H|ytpverrechanfid   = ""       ? _F|empty(M|ytleistmeld)
+.formula H|ytpinauposid      = ""       ? _F|empty(M|ytleistmeld)
+.formula H|ytpposid          = ""       ? _F|empty(M|ytleistmeld)
+.formula H|ymztpverrechanfid = ""       ? _F|empty(M|ytmzeitmeld)
+.formula H|ymztpinauposid    = ""       ? _F|empty(M|ytmzeitmeld)
+.formula H|ymztpposid        = ""       ? _F|empty(M|ytmzeitmeld)
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI253
+!EL253
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET088" 
+.continue PROC002
+!RET088
+.formula xprocsp = xprocsp - 1
+!FI253
+.continue FI252
+!EL252
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET089" 
+.continue PROC002
+!RET089
+.formula xprocsp = xprocsp - 1
+!FI252
+!EL251
+!EL250
+.continue EL254 ? _(_(F|empty(M|ytmatmeld)))
+.select add M|ytmatmeld
+.continue EL255 ? _(G|mehr)
+.select line 'M|ytmatmeldzid'
+.continue EL256 ? _(G|mehr)
+.continue EL257 ? _(H|ytmmtpposid = 0|id)
+.select lock add M|ytmatmeld
+.continue EL258 ? _(G|mehr)
+.select lock line 'M|ytmatmeldzid'
+.continue EL259 ? _(G|mehr)
+.continue EL260 ? _((F|empty(H|ytmmtpposid)) ; (M|ybvk))
+.formula H|ytmmtpposid = ""
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI260
+!EL260
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET090" 
+.continue PROC002
+!RET090
+.formula xprocsp = xprocsp - 1
+!FI260
+.continue FI259
+!EL259
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET091" 
+.continue PROC002
+!RET091
+.formula xprocsp = xprocsp - 1
+!FI259
+.continue FI258
+!EL258
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET092" 
+.continue PROC002
+!RET092
+.formula xprocsp = xprocsp - 1
+!FI258
+!EL257
+.continue FI256
+!EL256
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET093" 
+.continue PROC002
+!RET093
+.formula xprocsp = xprocsp - 1
+!FI256
+.continue FI255
+!EL255
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET094" 
+.continue PROC002
+!RET094
+.formula xprocsp = xprocsp - 1
+!FI255
+!EL254
+.continue EL261 ? _(_(F|empty(M|ytsubmeld)))
+.select add M|ytsubmeld
+.continue EL262 ? _(G|mehr)
+.select line 'M|ytsubmeldzid'
+.continue EL263 ? _(G|mehr)
+.continue EL264 ? _(H|ytsmtpposid = 0|id)
+.select lock add M|ytsubmeld
+.continue EL265 ? _(G|mehr)
+.select lock line 'M|ytsubmeldzid'
+.continue EL266 ? _(G|mehr)
+.continue EL267 ? _((F|empty(H|ytsmtpposid)) ; (M|ybvk))
+.formula H|ytsmtpposid = ""
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI267
+!EL267
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET095" 
+.continue PROC002
+!RET095
+.formula xprocsp = xprocsp - 1
+!FI267
+.continue FI266
+!EL266
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET096" 
+.continue PROC002
+!RET096
+.formula xprocsp = xprocsp - 1
+!FI266
+.continue FI265
+!EL265
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET097" 
+.continue PROC002
+!RET097
+.formula xprocsp = xprocsp - 1
+!FI265
+!EL264
+.continue FI263
+!EL263
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET098" 
+.continue PROC002
+!RET098
+.formula xprocsp = xprocsp - 1
+!FI263
+.continue FI262
+!EL262
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET099" 
+.continue PROC002
+!RET099
+.formula xprocsp = xprocsp - 1
+!FI262
+!EL261
+!FI223
+.select screen line
+.continue LOOP041
+!ELOP041: ==============================
+.continue FI219
+!EL219
+.set TRANS +
+.box Hinweis
+Die Teilprojektposition 'M|yabrpos^nummer' kann nicht bearbeitete werden.
+Speichern nicht mîglich.
+.set TRANS -
+.error  ? G|evtart = "maskpruef"
+.end 1  ? G|evtart = "maskpruef"
+!FI219
+!FI193
+!EL192
+.continue 'xprocst.xprocsp'
+!PROC021: ----- schreibeLMTexte -----
+.continue EL268 ? _(_(F|empty(M|ytleistmeld)))
+.continue EL269 ? _(F|empty(M|ylnbeschext))
+.formula H|ybeschext = ""
+.continue FI269
+!EL269
+.select from 'M|ylnbeschext'
+.formula H|ybeschext = M|ylnbeschext
+!FI269
+.continue EL270 ? _(F|empty(M|ylnbeschint))
+.formula H|ybeschint = ""
+.continue FI270
+!EL270
+.select from 'M|ylnbeschint'
+.formula H|ybeschint = M|ylnbeschint
+!FI270
+!EL268
+.continue EL271 ? _(F|empty(M|ytabrtext))
+.formula H|ylmabrtext = ""  ? _F|empty(M|ytleistmeld)
+.formula H|ymzabrtext = ""  ? _F|empty(M|ytmzeitmeld)
+.continue FI271
+!EL271
+.select from 'M|ytabrtext'
+.formula H|ylmabrtext = M|ytabrtext ? _F|empty(M|ytleistmeld)
+.formula H|ymzabrtext = M|ytabrtext ? _F|empty(M|ytmzeitmeld)
+!FI271
+.continue 'xprocst.xprocsp'
+!PROC022: ----- MeldungenSpeichern -----
+.continue EL272 ? _((_(F|empty(M|ytleistmeld))) ; (_(F|empty(M|ytmzeitmeld))))
+.continue EL273 ? _(((_(F|empty(M|ytleistmeld))) & ((M|ytleistmeld^yfaktzeit  <> M|ytmenge) ; (M|ytleistmeld^ylmpreis   <> M|ytpreis) ; ((M|ytleistmeld^ylmpreis   <> 0) & (_(M|ytbmeldpreis))) ; (M|ytleistmeld^ylmwert    <> M|ytwert) ; (_(F|empty(M|ylnbeschext))) ; (_(F|empty(M|ytabrtext))))) ; ((_(F|empty(M|ytmzeitmeld))) & ((M|ytmzeitmeld^ymaschzeit <> M|ytmenge) ; (M|ytmzeitmeld^ymzpreis   <> M|ytpreis) ; ((M|ytmzeitmeld^ymzpreis   <> 0) & (_(M|ytbmeldpreis))) ; (M|ytmzeitmeld^ymzwert    <> M|ytwert))) ; (_(F|empty(M|ytabrtext))))
+.select lock add M|ytleistmeld  ? _F|empty(M|ytleistmeld)
+.select lock add M|ytmzeitmeld  ? _F|empty(M|ytmzeitmeld)
+.continue EL274 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET100" 
+.continue PROC021
+!RET100
+.formula xprocsp = xprocsp - 1
+.formula H|yfaktzeit  = M|ytmenge       ? _F|empty(M|ytleistmeld)
+.formula H|ylmpreis   = 0               ? _F|empty(M|ytleistmeld) & _M|ytbmeldpreis
+.formula H|ylmpreis   = M|ytpreis       ? _F|empty(M|ytleistmeld) &  M|ytbmeldpreis
+.formula H|ylmwert    = M|ytwert        ? _F|empty(M|ytleistmeld)
+.formula H|ymzsort    = M|aktzeile      ? _F|empty(M|ytmzeitmeld)
+.formula H|ymaschzeit = M|ytmenge       ? _F|empty(M|ytmzeitmeld)
+.formula H|ymzpreis   = 0               ? _F|empty(M|ytmzeitmeld) & _M|ytbmeldpreis
+.formula H|ymzpreis   = M|ytpreis       ? _F|empty(M|ytmzeitmeld) &  M|ytbmeldpreis
+.formula H|ymzwert    = M|ytwert        ? _F|empty(M|ytmzeitmeld)
+.rewrite
+!EL274
+!EL273
+!EL272
+.continue EL275 ? _(_(F|empty(M|ytmatmeld)))
+.select add M|ytmatmeld
+.continue EL276 ? _(G|mehr)
+.select line 'M|ytmatmeldzid'
+.continue EL277 ? _(G|mehr)
+.continue EL278 ? _((H|ymge      <> M|ytmenge) ; (H|ytmmpreis <> M|ytpreis) ; ((H|ytmmpreis   <> 0) & (_(M|ytbmeldpreis))) ; (H|ytmmwert  <> M|ytwert) ; (_(F|empty(M|ytabrtext))))
+.select lock add M|ytmatmeld
+.continue EL279 ? _(G|mehr)
+.select lock line 'M|ytmatmeldzid'
+.continue EL280 ? _(G|mehr)
+.continue EL281 ? _(F|empty(M|ytabrtext))
+.formula H|ytmmabrtext = ""
+.continue FI281
+!EL281
+.select from 'M|ytabrtext'
+.formula H|ytmmabrtext = M|ytabrtext
+!FI281
+.formula H|ymge       = M|ytmenge
+.formula H|ytmmpreis  = 0               ? _M|ytbmeldpreis
+.formula H|ytmmpreis  = M|ytpreis       ?  M|ytbmeldpreis
+.formula H|ytmmwert   = M|ytwert
+.rewrite
+!EL280
+!EL279
+!EL278
+!EL277
+!EL276
+!EL275
+.continue EL282 ? _(_(F|empty(M|ytsubmeld)))
+.select add M|ytsubmeld
+.continue EL283 ? _(G|mehr)
+.select line 'M|ytsubmeldzid'
+.continue EL284 ? _(G|mehr)
+.continue EL285 ? _((H|ymge      <> M|ytmenge) ; (H|ytsmpreis <> M|ytpreis) ; ((H|ytsmpreis   <> 0) & (_(M|ytbmeldpreis))) ; (H|ytsmwert  <> M|ytwert) ; (_(F|empty(M|ytabrtext))))
+.select lock add M|ytsubmeld
+.continue EL286 ? _(G|mehr)
+.select lock line 'M|ytsubmeldzid'
+.continue EL287 ? _(G|mehr)
+.continue EL288 ? _(F|empty(M|ylnbeschext))
+.formula H|ytftbeschreib = ""
+.continue FI288
+!EL288
+.select from 'M|ylnbeschext'
+.formula H|ytftbeschreib = M|ylnbeschext
+!FI288
+.continue EL289 ? _(F|empty(M|ytabrtext))
+.formula H|ytsmabrtext   = ""
+.continue FI289
+!EL289
+.select from 'M|ytabrtext'
+.formula H|ytsmabrtext = M|ytabrtext
+!FI289
+.formula H|ymge       = M|ytmenge
+.formula H|ytsmpreis  = 0               ? _M|ytbmeldpreis
+.formula H|ytsmpreis  = M|ytpreis       ?  M|ytbmeldpreis
+.formula H|ytsmwert   = M|ytwert
+.rewrite
+!EL287
+!EL286
+!EL285
+!EL284
+!EL283
+!EL282
+.continue 'xprocst.xprocsp'
+!PROC023: ----- AbrechnungSpeichern -----
+.input "allpstart/FOP.PRJM.UP.LOADCONFIG"
+.continue EL290 ? _((_(5|ypmabrechproj)) & (_(M|ybzeigen)) & (_(F|empty(M|yabrechprojekt))))
+.copy U|xbok = G|TRUE
+.select screen header
+.select screen line
+!LOOP042: ==============================
+.continue ELOP042 ? _(G|mehr)
+.continue EL291 ? _((M|ymark) & (((_(F|empty(M|ytleistmeld))) & (M|yabrechprojekt^id <> M|ytleistmeld^yprojekt^id)) ; ((_(F|empty(M|ytmzeitmeld))) & (M|yabrechprojekt^id <> M|ytmzeitmeld^yprojekt^id)) ; ((_(F|empty(M|ytmatmeld))) & (M|yabrechprojekt^id <> M|ytmatmeld^yleistmeld^yprojekt^id)) ; ((_(F|empty(M|ytsubmeld))) & (M|yabrechprojekt^id <> M|ytsubmeld^yprojekt^id))))
+.colour -BACKGROUND 'U|xtfarbefehl' 'M|aktzeile'
+.copy U|xbok = G|FALSE
+!EL291
+.select screen line
+.continue LOOP042
+!ELOP042: ==============================
+.continue EL292 ? _(_(U|xbok))
+.set TRANS +
+.box Fehler
+"Abrechnung auf andere Projekte erlauben" in der ProjectSuite Konfiguration ist nicht gesetzt.
+Alle abzurechnenden Leistungsmeldungen mÅssen zum Projekt 'F|trim(F|tostring(M|yabrechprojekt))' gehîren.
+.set TRANS -
+.error
+.end 1
+!EL292
+!EL290
+.continue EL293 ? _(M|ybvk)
+.continue EL294 ? _(_(M|ybzeigen))
+.continue EL295 ? _((G|FALSE) & (U|xybistkost))
+.select screen header
+.select screen line
+!LOOP043: ==============================
+.continue ELOP043 ? _(G|mehr)
+.continue EL296 ? _((M|ymark) & (((_(F|empty(M|ytleistmeld))) & (F|empty(M|ytleistmeld^ytransaktion))) ; ((_(F|empty(M|ytmzeitmeld))) & (F|empty(M|ytmzeitmeld^ytransaktion))) ; ((_(F|empty(M|ytmatmeld))) & (F|empty(M|ytmatmeld^yleistmeld^ytransaktion)))))
+.set TRANS +
+.box Hinweis
+Es sind noch nicht alle Leistungsmeldungen gebucht.
+Bei aktivierter stundenbasierter Leistungsverrechnung sollten alle Leistungs-
+meldungen gebucht sein, bevor sie abgerechnet werden.
+.set TRANS -
+.error
+.end 1
+!EL296
+.select screen line
+.continue LOOP043
+!ELOP043: ==============================
+!EL295
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET101" 
+.continue PROC020
+!RET101
+.formula xprocsp = xprocsp - 1
+.select screen header
+.select screen line
+!LOOP044: ==============================
+.continue ELOP044 ? _(G|mehr)
+.continue EL297 ? _(M|ymark)
+.continue EL298 ? _((_(F|empty(M|ytleistmeld))) ; (_(F|empty(M|ytmzeitmeld))))
+.continue EL299 ? _(((M|ytleistmeld^yprjmid = M|yprjmpid) ; ((_(F|empty(M|ytleistmeld^ylsposid))) & (M|yabrpos^kotyp = G|LIKO)) ; ((_(F|empty(M|ytleistmeld^yreposid))) & (M|yabrpos^kotyp = G|REKO))) ; ((M|ytmzeitmeld^ymzprjmid = M|yprjmpid) ; (((_(F|empty(M|ytmzeitmeld^ymzlsposid))) & (M|yabrpos^kotyp = G|LIKO)) ; ((_(F|empty(M|ytmzeitmeld^ymzreposid))) & (M|yabrpos^kotyp = G|REKO)))) ; ((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition)))
+.continue EL300 ? _(true)
+.continue FI300
+!EL300
+.continue EL301 ? _(((_(F|empty(M|ytleistmeld))) & ((M|ytleistmeld^ysort      <> M|aktzeile) ; (M|ytleistmeld^yfaktzeit  <> M|ytmenge) ; (M|ytleistmeld^ylmpreis   <> M|ytpreis) ; ((M|ytleistmeld^ylmpreis   <> 0) & (_(M|ytbmeldpreis))) ; (M|ytleistmeld^ylmwert    <> M|ytwert) ; (_(F|empty(M|ylnbeschext))) ; (_(F|empty(M|ytabrtext))))) ; ((_(F|empty(M|ytmzeitmeld))) & ((M|ytmzeitmeld^ymzsort    <> M|aktzeile) ; (M|ytmzeitmeld^ymaschzeit <> M|ytmenge) ; (M|ytmzeitmeld^ymzpreis   <> M|ytpreis) ; ((M|ytmzeitmeld^ymzpreis   <> 0) & (_(M|ytbmeldpreis))) ; (M|ytmzeitmeld^ymzwert    <> M|ytwert))) ; (_(F|empty(M|ytabrtext))))
+.select lock add M|ytleistmeld  ? _F|empty(M|ytleistmeld)
+.select lock add M|ytmzeitmeld  ? _F|empty(M|ytmzeitmeld)
+.continue EL302 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET102" 
+.continue PROC021
+!RET102
+.formula xprocsp = xprocsp - 1
+.formula H|ysort      = M|aktzeile      ? _F|empty(M|ytleistmeld)
+.formula H|yfaktzeit  = M|ytmenge       ? _F|empty(M|ytleistmeld)
+.formula H|ylmpreis   = 0               ? _F|empty(M|ytleistmeld) & _M|ytbmeldpreis
+.formula H|ylmpreis   = M|ytpreis       ? _F|empty(M|ytleistmeld) &  M|ytbmeldpreis
+.formula H|ylmwert    = M|ytwert        ? _F|empty(M|ytleistmeld)
+.formula H|ymzsort    = M|aktzeile      ? _F|empty(M|ytmzeitmeld)
+.formula H|ymaschzeit = M|ytmenge       ? _F|empty(M|ytmzeitmeld)
+.formula H|ymzpreis   = 0               ? _F|empty(M|ytmzeitmeld) & _M|ytbmeldpreis
+.formula H|ymzpreis   = M|ytpreis       ? _F|empty(M|ytmzeitmeld) &  M|ytbmeldpreis
+.formula H|ymzwert    = M|ytwert        ? _F|empty(M|ytmzeitmeld)
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI302
+!EL302
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET103" 
+.continue PROC002
+!RET103
+.formula xprocsp = xprocsp - 1
+!FI302
+!EL301
+!FI300
+.copy U|xbok = G|false
+.continue EL303 ? _((_(F|empty(M|ytleistmeld))) & ((M|ytleistmeld^ysort      <> M|aktzeile) ; (M|ytleistmeld^yfaktzeit  <> M|ytmenge) ; (M|ytleistmeld^ylmpreis   <> M|ytpreis) ; ((M|ytleistmeld^ylmpreis   <> 0) & (_(M|ytbmeldpreis))) ; (M|ytleistmeld^ylmwert    <> M|ytwert) ; (_(F|empty(M|ylnbeschext)))))
+.copy U|xbok = G|true
+!EL303
+.continue EL304 ? _((_(F|empty(M|ytleistmeld))) & (_(F|empty(M|ytleistmeld^yprjmid))) & (((_(F|empty(M|ytleistmeld^ylsposid))) & (M|yabrpos^kotyp = G|LIKO)) ; ((_(F|empty(M|ytleistmeld^yreposid))) & (M|yabrpos^kotyp = G|REKO))))
+.copy U|xbok = G|true
+!EL304
+.continue EL305 ? _((_(F|empty(M|ytmzeitmeld))) & ((M|ytmzeitmeld^ymzsort    <> M|aktzeile) ; (M|ytmzeitmeld^ymaschzeit <> M|ytmenge) ; (M|ytmzeitmeld^ymzpreis   <> M|ytpreis) ; ((M|ytmzeitmeld^ymzpreis   <> 0) & (_(M|ytbmeldpreis))) ; (M|ytmzeitmeld^ymzwert    <> M|ytwert)))
+.copy U|xbok = G|true
+!EL305
+.continue EL306 ? _((_(F|empty(M|ytmzeitmeld))) & (_(F|empty(M|ytmzeitmeld^ymzprjmid))) & (((_(F|empty(M|ytmzeitmeld^ymzlsposid))) & (M|yabrpos^kotyp = G|LIKO)) ; ((_(F|empty(M|ytmzeitmeld^ymzreposid))) & (M|yabrpos^kotyp = G|REKO))))
+.copy U|xbok = G|true
+!EL306
+.continue EL307 ? _((U|xbok) ; (_(F|empty(M|ytabrtext))))
+.select lock add M|ytleistmeld  ? _F|empty(M|ytleistmeld)
+.select lock add M|ytmzeitmeld  ? _F|empty(M|ytmzeitmeld)
+.continue EL308 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET104" 
+.continue PROC021
+!RET104
+.formula xprocsp = xprocsp - 1
+.formula H|yprjmid    = ""              ? _F|empty(M|ytleistmeld) & _F|empty(H|ylsposid)   & M|yabrpos^kotyp = G|LIKO
+.formula H|yprjmid    = ""              ? _F|empty(M|ytleistmeld) & _F|empty(H|yreposid)   & M|yabrpos^kotyp = G|REKO
+.formula H|ysort      = M|aktzeile      ? _F|empty(M|ytleistmeld)
+.formula H|yfaktzeit  = M|ytmenge       ? _F|empty(M|ytleistmeld)
+.formula H|ylmpreis   = 0               ? _F|empty(M|ytleistmeld) & _M|ytbmeldpreis
+.formula H|ylmpreis   = M|ytpreis       ? _F|empty(M|ytleistmeld) &  M|ytbmeldpreis
+.formula H|ylmwert    = M|ytwert        ? _F|empty(M|ytleistmeld)
+.formula H|ymzprjmid  = ""              ? _F|empty(M|ytmzeitmeld) & _F|empty(H|ymzlsposid) & M|yabrpos^kotyp = G|LIKO
+.formula H|ymzprjmid  = ""              ? _F|empty(M|ytmzeitmeld) & _F|empty(H|ymzreposid) & M|yabrpos^kotyp = G|REKO
+.formula H|ymzsort    = M|aktzeile      ? _F|empty(M|ytmzeitmeld)
+.formula H|ymaschzeit = M|ytmenge       ? _F|empty(M|ytmzeitmeld)
+.formula H|ymzpreis   = 0               ? _F|empty(M|ytmzeitmeld) & _M|ytbmeldpreis
+.formula H|ymzpreis   = M|ytpreis       ? _F|empty(M|ytmzeitmeld) &  M|ytbmeldpreis
+.formula H|ymzwert    = M|ytwert        ? _F|empty(M|ytmzeitmeld)
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI308
+!EL308
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET105" 
+.continue PROC002
+!RET105
+.formula xprocsp = xprocsp - 1
+!FI308
+!EL307
+.continue FI299
+!EL299
+.continue EL309 ? _(((_(F|empty(M|ytleistmeld))) & (F|empty(M|ytleistmeld^yabrechnung)) & (F|empty(M|ytleistmeld^ylsposid)) & (F|empty(M|ytleistmeld^yreposid))) ; ((_(F|empty(M|ytmzeitmeld))) & (F|empty(M|ytmzeitmeld^ymzabrechnung)) & (F|empty(M|ytmzeitmeld^ymzlsposid)) & (F|empty(M|ytmzeitmeld^ymzreposid))) ; (M|ybvk))
+.select lock add M|ytleistmeld          ? _F|empty(M|ytleistmeld)
+.select lock add M|ytmzeitmeld          ? _F|empty(M|ytmzeitmeld)
+.continue EL310 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET106" 
+.continue PROC021
+!RET106
+.formula xprocsp = xprocsp - 1
+.formula H|yprjmid    = M|yprjmpid      ? _F|empty(M|ytleistmeld)
+.formula H|ysort      = M|aktzeile      ? _F|empty(M|ytleistmeld)
+.formula H|yfaktzeit  = M|ytmenge       ? _F|empty(M|ytleistmeld)
+.formula H|ylmpreis   = 0               ? _F|empty(M|ytleistmeld) & _M|ytbmeldpreis
+.formula H|ylmpreis   = M|ytpreis       ? _F|empty(M|ytleistmeld) &  M|ytbmeldpreis
+.formula H|ylmwert    = M|ytwert        ? _F|empty(M|ytleistmeld)
+.formula H|ymzprjmid  = M|yprjmpid      ? _F|empty(M|ytmzeitmeld)
+.formula H|ymzsort    = M|aktzeile      ? _F|empty(M|ytmzeitmeld)
+.formula H|ymaschzeit = M|ytmenge       ? _F|empty(M|ytmzeitmeld)
+.formula H|ymzpreis   = 0               ? _F|empty(M|ytmzeitmeld) & _M|ytbmeldpreis
+.formula H|ymzpreis   = M|ytpreis       ? _F|empty(M|ytmzeitmeld) &  M|ytbmeldpreis
+.formula H|ymzwert    = M|ytwert        ? _F|empty(M|ytmzeitmeld)
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI310
+!EL310
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET107" 
+.continue PROC002
+!RET107
+.formula xprocsp = xprocsp - 1
+!FI310
+.continue FI309
+!EL309
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET108" 
+.continue PROC002
+!RET108
+.formula xprocsp = xprocsp - 1
+!FI309
+!FI299
+!EL298
+.continue EL311 ? _(_(F|empty(M|ytmatmeld)))
+.select add M|ytmatmeld
+.continue EL312 ? _(G|mehr)
+.select line 'M|ytmatmeldzid'
+.continue EL313 ? _(G|mehr)
+.continue EL314 ? _((H|ytmmprjmid = M|yprjmpid) ; (((_(F|empty(H|ytmmlsposid))) & (M|yabrpos^kotyp = G|LIKO)) ; ((_(F|empty(H|ytmmreposid))) & (M|yabrpos^kotyp = G|REKO))) ; ((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition)))
+.continue EL315 ? _((H|ytmmsort  <> M|aktzeile) ; (H|ymge      <> M|ytmenge) ; (H|ytmmpreis <> M|ytpreis) ; ((H|ytmmpreis   <> 0) & (_(M|ytbmeldpreis))) ; (H|ytmmwert  <> M|ytwert) ; (_(F|empty(M|ytabrtext))))
+.select lock add M|ytmatmeld
+.continue EL316 ? _(G|mehr)
+.select lock line 'M|ytmatmeldzid'
+.continue EL317 ? _(G|mehr)
+.continue EL318 ? _(F|empty(M|ytabrtext))
+.formula H|ytmmabrtext = ""
+.continue FI318
+!EL318
+.output NEW 'U|xtftext'
+.input DATEI.F
+.input -TEXT 'M|ytabrtext'
+.formula H|ytmmabrtext = U|xtftext
+!FI318
+.formula H|ytmmsort   = M|aktzeile
+.formula H|ymge       = M|ytmenge
+.formula H|ytmmpreis  = 0               ? _M|ytbmeldpreis
+.formula H|ytmmpreis  = M|ytpreis       ?  M|ytbmeldpreis
+.formula H|ytmmwert   = M|ytwert
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI317
+!EL317
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET109" 
+.continue PROC002
+!RET109
+.formula xprocsp = xprocsp - 1
+!FI317
+.continue FI316
+!EL316
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET110" 
+.continue PROC002
+!RET110
+.formula xprocsp = xprocsp - 1
+!FI316
+!EL315
+.continue FI314
+!EL314
+.select lock add M|ytmatmeld
+.continue EL319 ? _(G|mehr)
+.select lock line 'M|ytmatmeldzid'
+.continue EL320 ? _(G|mehr)
+.continue EL321 ? _(F|empty(M|ytabrtext))
+.formula H|ytmmabrtext = ""
+.continue FI321
+!EL321
+.output NEW 'U|xtftext'
+.input DATEI.F
+.input -TEXT 'M|ytabrtext'
+.formula H|ytmmabrtext = U|xtftext
+!FI321
+.formula H|ytmmprjmid = M|yprjmpid
+.formula H|ytmmsort   = M|aktzeile
+.formula H|ymge       = M|ytmenge
+.formula H|ytmmpreis  = 0               ? _M|ytbmeldpreis
+.formula H|ytmmpreis  = M|ytpreis       ?  M|ytbmeldpreis
+.formula H|ytmmwert   = M|ytwert
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI320
+!EL320
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET111" 
+.continue PROC002
+!RET111
+.formula xprocsp = xprocsp - 1
+!FI320
+.continue FI319
+!EL319
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET112" 
+.continue PROC002
+!RET112
+.formula xprocsp = xprocsp - 1
+!FI319
+!FI314
+.continue FI313
+!EL313
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET113" 
+.continue PROC002
+!RET113
+.formula xprocsp = xprocsp - 1
+!FI313
+.continue FI312
+!EL312
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET114" 
+.continue PROC002
+!RET114
+.formula xprocsp = xprocsp - 1
+!FI312
+!EL311
+.continue EL322 ? _(_(F|empty(M|ytsubmeld)))
+.select add M|ytsubmeld
+.continue EL323 ? _(G|mehr)
+.select line 'M|ytsubmeldzid'
+.continue EL324 ? _(G|mehr)
+.continue EL325 ? _((H|ytsmprjmid = M|yprjmpid) ; (((_(F|empty(H|ytsmlsposid))) & (M|yabrpos^kotyp = G|LIKO)) ; ((_(F|empty(H|ytsmreposid))) & (M|yabrpos^kotyp = G|REKO))) ; ((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition)))
+.continue EL326 ? _((H|ytsmsort  <> M|aktzeile) ; (H|ymge      <> M|ytmenge) ; (H|ytsmpreis <> M|ytpreis) ; ((H|ytsmpreis   <> 0) & (_(M|ytbmeldpreis))) ; (H|ytsmwert  <> M|ytwert) ; (_(F|empty(M|ytabrtext))))
+.select lock add M|ytsubmeld
+.continue EL327 ? _(G|mehr)
+.select lock line 'M|ytsubmeldzid'
+.continue EL328 ? _(G|mehr)
+.continue EL329 ? _(F|empty(M|ylnbeschext))
+.formula H|ytftbeschreib = ""
+.continue FI329
+!EL329
+.select from 'M|ylnbeschext'
+.formula H|ytftbeschreib = M|ylnbeschext
+!FI329
+.continue EL330 ? _(F|empty(M|ytabrtext))
+.formula H|ytsmabrtext   = ""
+.continue FI330
+!EL330
+.select from 'M|ytabrtext'
+.formula H|ytsmabrtext = M|ytabrtext
+!FI330
+.formula H|ytsmsort   = M|aktzeile
+.formula H|ymge       = M|ytmenge
+.formula H|ytsmpreis  = 0               ? _M|ytbmeldpreis
+.formula H|ytsmpreis  = M|ytpreis       ?  M|ytbmeldpreis
+.formula H|ytsmwert   = M|ytwert
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI328
+!EL328
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET115" 
+.continue PROC002
+!RET115
+.formula xprocsp = xprocsp - 1
+!FI328
+.continue FI327
+!EL327
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET116" 
+.continue PROC002
+!RET116
+.formula xprocsp = xprocsp - 1
+!FI327
+!EL326
+.continue FI325
+!EL325
+.select lock add M|ytsubmeld
+.continue EL331 ? _(G|mehr)
+.select lock line 'M|ytsubmeldzid'
+.continue EL332 ? _(G|mehr)
+.continue EL333 ? _(F|empty(M|ylnbeschext))
+.formula H|ytftbeschreib = ""
+.continue FI333
+!EL333
+.select from 'M|ylnbeschext'
+.formula H|ytftbeschreib = M|ylnbeschext
+!FI333
+.continue EL334 ? _(F|empty(M|ytabrtext))
+.formula H|ytsmabrtext   = ""
+.continue FI334
+!EL334
+.select from 'M|ytabrtext'
+.formula H|ytsmabrtext = M|ytabrtext
+!FI334
+.formula H|ytsmprjmid = M|yprjmpid
+.formula H|ytsmsort   = M|aktzeile
+.formula H|ymge       = M|ytmenge
+.formula H|ytsmpreis  = 0               ? _M|ytbmeldpreis
+.formula H|ytsmpreis  = M|ytpreis       ?  M|ytbmeldpreis
+.formula H|ytsmwert   = M|ytwert
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI332
+!EL332
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET117" 
+.continue PROC002
+!RET117
+.formula xprocsp = xprocsp - 1
+!FI332
+.continue FI331
+!EL331
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET118" 
+.continue PROC002
+!RET118
+.formula xprocsp = xprocsp - 1
+!FI331
+!FI325
+.continue FI324
+!EL324
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET119" 
+.continue PROC002
+!RET119
+.formula xprocsp = xprocsp - 1
+!FI324
+.continue FI323
+!EL323
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET120" 
+.continue PROC002
+!RET120
+.formula xprocsp = xprocsp - 1
+!FI323
+!EL322
+.continue FI297
+!EL297
+.continue EL335 ? _((M|yabrpos^dnr    <> U|xydbtpposition) & (M|yabrpos^gruppe <> U|xygrtpposition))
+.continue EL336 ? _(_(F|empty(M|ytleistmeld)))
+.continue EL337 ? _(((_(F|empty(M|ytleistmeld^yprjmid))) & (F|empty(M|ytleistmeld^ylsposid)) & (F|empty(M|ytleistmeld^yreposid))) ; ((F|empty(M|ytleistmeld^yprjmid)) & (((_(F|empty(M|ytleistmeld^ylsposid))) & (M|yabrpos^kotyp = G|LIKO)) ; ((_(F|empty(M|ytleistmeld^yreposid))) & (M|yabrpos^kotyp = G|REKO)))))
+.select lock add M|ytleistmeld
+.continue EL338 ? _(G|mehr)
+.formula H|yprjmid     = ""
+.formula H|yprjmid     = M|yprjmpid     ? _F|empty(H|ylsnum) & M|yabrpos^kotyp = G|LIKO
+.formula H|yprjmid     = M|yprjmpid     ? _F|empty(H|yrenum) & M|yabrpos^kotyp = G|REKO
+.rewrite
+.formula M|ytabrechnung = ""
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI338
+!EL338
+.set TRANS +
+.box Fehler
+Die Leistungsmeldung 'M|ytleistmeld' kann nicht bearbeitet werden. Das Speichern wird abgebrochen.
+.set TRANS -
+.colour -BACKGROUND 'U|xtfarbefehl' 'M|aktzeile'
+.error
+.end 1
+!FI338
+!EL337
+!EL336
+.continue EL339 ? _(_(F|empty(M|ytmzeitmeld)))
+.continue EL340 ? _(((_(F|empty(M|ytmzeitmeld^ymzprjmid))) & (F|empty(M|ytmzeitmeld^ymzlsposid)) & (F|empty(M|ytmzeitmeld^ymzreposid))) ; ((F|empty(M|ytmzeitmeld^ymzprjmid)) & (((_(F|empty(M|ytmzeitmeld^ymzlsposid))) & (M|yabrpos^kotyp = G|LIKO)) ; ((_(F|empty(M|ytmzeitmeld^ymzreposid))) & (M|yabrpos^kotyp = G|REKO)))))
+.select lock add M|ytmzeitmeld
+.continue EL341 ? _(G|mehr)
+.formula H|ymzprjmid   = ""
+.formula H|ymzprjmid   = M|yprjmpid     ? _F|empty(H|ymzlsnum) & M|yabrpos^kotyp = G|LIKO
+.formula H|ymzprjmid   = M|yprjmpid     ? _F|empty(H|ymzrenum) & M|yabrpos^kotyp = G|REKO
+.rewrite
+.formula M|ytabrechnung = ""
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI341
+!EL341
+.set TRANS +
+.box Fehler
+Die Maschinenzeitmeldung 'M|ytmzeitmeld' kann nicht bearbeitet werden. Das Speichern wird abgebrochen.
+.set TRANS -
+.colour -BACKGROUND 'U|xtfarbefehl' 'M|aktzeile'
+.error
+.end 1
+!FI341
+!EL340
+!EL339
+.continue EL342 ? _(_(F|empty(M|ytmatmeld)))
+.select add M|ytmatmeld
+.continue EL343 ? _(G|mehr)
+.select line 'M|ytmatmeldzid'
+.continue EL344 ? _(G|mehr)
+.continue EL345 ? _(((_(F|empty(H|ytmmprjmid))) & (F|empty(H|ytmmlsposid)) & (F|empty(H|ytmmreposid))) ; ((F|empty(H|ytmmprjmid)) & (((_(F|empty(H|ytmmlsposid))) & (M|yabrpos^kotyp = G|LIKO)) ; ((_(F|empty(H|ytmmreposid))) & (M|yabrpos^kotyp = G|REKO)))))
+.select lock add M|ytmatmeld
+.continue EL346 ? _(G|mehr)
+.select lock line 'M|ytmatmeldzid'
+.continue EL347 ? _(G|mehr)
+.formula H|ytmmprjmid   = ""
+.formula H|ytmmprjmid   = M|yprjmpid    ? _F|empty(H|ytmmlsnum) & M|yabrpos^kotyp = G|LIKO
+.formula H|ytmmprjmid   = M|yprjmpid    ? _F|empty(H|ytmmrenum) & M|yabrpos^kotyp = G|REKO
+.rewrite
+.formula M|ytabrechnung = ""
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI347
+!EL347
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET121" 
+.continue PROC002
+!RET121
+.formula xprocsp = xprocsp - 1
+!FI347
+.continue FI346
+!EL346
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET122" 
+.continue PROC002
+!RET122
+.formula xprocsp = xprocsp - 1
+!FI346
+!EL345
+.continue FI344
+!EL344
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET123" 
+.continue PROC002
+!RET123
+.formula xprocsp = xprocsp - 1
+!FI344
+.continue FI343
+!EL343
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET124" 
+.continue PROC002
+!RET124
+.formula xprocsp = xprocsp - 1
+!FI343
+!EL342
+.continue EL348 ? _(_(F|empty(M|ytsubmeld)))
+.select add M|ytsubmeld
+.continue EL349 ? _(G|mehr)
+.select line 'M|ytsubmeldzid'
+.continue EL350 ? _(G|mehr)
+.continue EL351 ? _(((_(F|empty(H|ytsmprjmid))) & (F|empty(H|ytsmlsposid)) & (F|empty(H|ytsmreposid))) ; ((F|empty(H|ytsmprjmid)) & (((_(F|empty(H|ytsmlsposid))) & (M|yabrpos^kotyp = G|LIKO)) ; ((_(F|empty(H|ytsmreposid))) & (M|yabrpos^kotyp = G|REKO)))))
+.select lock add M|ytsubmeld
+.continue EL352 ? _(G|mehr)
+.select lock line 'M|ytsubmeldzid'
+.continue EL353 ? _(G|mehr)
+.formula H|ytsmprjmid   = ""
+.formula H|ytsmprjmid   = M|yprjmpid    ? _F|empty(H|ytsmlsnum) & M|yabrpos^kotyp = G|LIKO
+.formula H|ytsmprjmid   = M|yprjmpid    ? _F|empty(H|ytsmrenum) & M|yabrpos^kotyp = G|REKO
+.rewrite
+.formula M|ytabrechnung = ""
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI353
+!EL353
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET125" 
+.continue PROC002
+!RET125
+.formula xprocsp = xprocsp - 1
+!FI353
+.continue FI352
+!EL352
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET126" 
+.continue PROC002
+!RET126
+.formula xprocsp = xprocsp - 1
+!FI352
+!EL351
+.continue FI350
+!EL350
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET127" 
+.continue PROC002
+!RET127
+.formula xprocsp = xprocsp - 1
+!FI350
+.continue FI349
+!EL349
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET128" 
+.continue PROC002
+!RET128
+.formula xprocsp = xprocsp - 1
+!FI349
+!EL348
+!EL335
+!FI297
+.select screen line
+.continue LOOP044
+!ELOP044: ==============================
+!EL294
+.continue FI293
+!EL293
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET129" 
+.continue PROC020
+!RET129
+.formula xprocsp = xprocsp - 1
+.select screen header
+.select screen line
+!LOOP045: ==============================
+.continue ELOP045 ? _(G|mehr)
+.continue EL354 ? _(M|ymark)
+.continue EL355 ? _((_(F|empty(M|ytleistmeld))) ; (_(F|empty(M|ytmzeitmeld))))
+.continue EL356 ? _(((_(F|empty(M|ytleistmeld))) & ((M|ytleistmeld^ysort      <> M|aktzeile) ; (M|ytleistmeld^yfaktzeit  <> M|ytmenge) ; (M|ytleistmeld^ylmpreis   <> M|ytpreis) ; ((M|ytleistmeld^ylmpreis   <> 0) & (_(M|ytbmeldpreis))) ; (M|ytleistmeld^ylmwert    <> M|ytwert) ; (_(F|empty(M|ylnbeschext))) ; (_(F|empty(M|ytabrtext))))) ; ((_(F|empty(M|ytmzeitmeld))) & ((M|ytmzeitmeld^ymzsort    <> M|aktzeile) ; (M|ytmzeitmeld^ymaschzeit <> M|ytmenge) ; (M|ytmzeitmeld^ymzpreis   <> M|ytpreis) ; ((M|ytmzeitmeld^ymzpreis   <> 0) & (_(M|ytbmeldpreis))) ; (M|ytmzeitmeld^ymzwert    <> M|ytwert))) ; (_(F|empty(M|ytabrtext))))
+.select lock add M|ytleistmeld  ? _F|empty(M|ytleistmeld)
+.select lock add M|ytmzeitmeld  ? _F|empty(M|ytmzeitmeld)
+.continue EL357 ? _(G|mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET130" 
+.continue PROC021
+!RET130
+.formula xprocsp = xprocsp - 1
+.formula H|ysort      = M|aktzeile      ? _F|empty(M|ytleistmeld)
+.formula H|yfaktzeit  = M|ytmenge       ? _F|empty(M|ytleistmeld)
+.formula H|ylmpreis   = 0               ? _F|empty(M|ytleistmeld) & _M|ytbmeldpreis
+.formula H|ylmpreis   = M|ytpreis       ? _F|empty(M|ytleistmeld) &  M|ytbmeldpreis
+.formula H|ylmwert    = M|ytwert        ? _F|empty(M|ytleistmeld)
+.formula H|ymzsort    = M|aktzeile      ? _F|empty(M|ytmzeitmeld)
+.formula H|ymaschzeit = M|ytmenge       ? _F|empty(M|ytmzeitmeld)
+.formula H|ymzpreis   = 0               ? _F|empty(M|ytmzeitmeld) & _M|ytbmeldpreis
+.formula H|ymzpreis   = M|ytpreis       ? _F|empty(M|ytmzeitmeld) &  M|ytbmeldpreis
+.formula H|ymzwert    = M|ytwert        ? _F|empty(M|ytmzeitmeld)
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI357
+!EL357
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET131" 
+.continue PROC002
+!RET131
+.formula xprocsp = xprocsp - 1
+!FI357
+!EL356
+!EL355
+.continue EL358 ? _(_(F|empty(M|ytmatmeld)))
+.select add M|ytmatmeld
+.continue EL359 ? _(G|mehr)
+.select line 'M|ytmatmeldzid'
+.continue EL360 ? _(G|mehr)
+.continue EL361 ? _((H|ytmmsort  <> M|aktzeile) ; (H|ymge      <> M|ytmenge) ; (H|ytmmpreis <> M|ytpreis) ; ((H|ytmmpreis   <> 0) & (_(M|ytbmeldpreis))) ; (H|ytmmwert  <> M|ytwert) ; (_(F|empty(M|ytabrtext))))
+.select lock add M|ytmatmeld
+.continue EL362 ? _(G|mehr)
+.select lock line 'M|ytmatmeldzid'
+.continue EL363 ? _(G|mehr)
+.continue EL364 ? _(F|empty(M|ytabrtext))
+.formula H|ytmmabrtext = ""
+.continue FI364
+!EL364
+.output NEW 'U|xtftext'
+.input DATEI.F
+.input -TEXT 'M|ytabrtext'
+.formula H|ytmmabrtext = U|xtftext
+!FI364
+.formula H|ytmmsort   = M|aktzeile
+.formula H|ymge       = M|ytmenge
+.formula H|ytmmpreis  = 0               ? _M|ytbmeldpreis
+.formula H|ytmmpreis  = M|ytpreis       ?  M|ytbmeldpreis
+.formula H|ytmmwert   = M|ytwert
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI363
+!EL363
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET132" 
+.continue PROC002
+!RET132
+.formula xprocsp = xprocsp - 1
+!FI363
+.continue FI362
+!EL362
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET133" 
+.continue PROC002
+!RET133
+.formula xprocsp = xprocsp - 1
+!FI362
+!EL361
+.continue FI360
+!EL360
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET134" 
+.continue PROC002
+!RET134
+.formula xprocsp = xprocsp - 1
+!FI360
+.continue FI359
+!EL359
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET135" 
+.continue PROC002
+!RET135
+.formula xprocsp = xprocsp - 1
+!FI359
+!EL358
+.continue EL365 ? _(_(F|empty(M|ytsubmeld)))
+.select add M|ytsubmeld
+.continue EL366 ? _(G|mehr)
+.select line 'M|ytsubmeldzid'
+.continue EL367 ? _(G|mehr)
+.continue EL368 ? _((H|ytsmsort  <> M|aktzeile) ; (H|ymge      <> M|ytmenge) ; (H|ytsmpreis <> M|ytpreis) ; ((H|ytsmpreis   <> 0) & (_(M|ytbmeldpreis))) ; (H|ytsmwert  <> M|ytwert) ; (_(F|empty(M|ytabrtext))))
+.select lock add M|ytsubmeld
+.continue EL369 ? _(G|mehr)
+.select lock line 'M|ytsubmeldzid'
+.continue EL370 ? _(G|mehr)
+.continue EL371 ? _(F|empty(M|ylnbeschext))
+.formula H|ytftbeschreib = ""
+.continue FI371
+!EL371
+.select from 'M|ylnbeschext'
+.formula H|ytftbeschreib = M|ylnbeschext
+!FI371
+.continue EL372 ? _(F|empty(M|ytabrtext))
+.formula H|ytsmabrtext   = ""
+.continue FI372
+!EL372
+.select from 'M|ytabrtext'
+.formula H|ytsmabrtext = M|ytabrtext
+!FI372
+.formula H|ytsmsort   = M|aktzeile
+.formula H|ymge       = M|ytmenge
+.formula H|ytsmpreis  = 0               ? _M|ytbmeldpreis
+.formula H|ytsmpreis  = M|ytpreis       ?  M|ytbmeldpreis
+.formula H|ytsmwert   = M|ytwert
+.rewrite
+.colour -BACKGROUND 'U|xtfarbeok' 'M|aktzeile'
+.continue FI370
+!EL370
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET136" 
+.continue PROC002
+!RET136
+.formula xprocsp = xprocsp - 1
+!FI370
+.continue FI369
+!EL369
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET137" 
+.continue PROC002
+!RET137
+.formula xprocsp = xprocsp - 1
+!FI369
+!EL368
+.continue FI367
+!EL367
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET138" 
+.continue PROC002
+!RET138
+.formula xprocsp = xprocsp - 1
+!FI367
+.continue FI366
+!EL366
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET139" 
+.continue PROC002
+!RET139
+.formula xprocsp = xprocsp - 1
+!FI366
+!EL365
+!EL354
+.select screen line
+.continue LOOP045
+!ELOP045: ==============================
+!FI293
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.file -TEMPNAME U|xtdatei
+.file -TEMPNAME U|xtftext
+.input "is/PREISAUSKUNFT"
+.formula U|xtfarbeok   = "50 240 50"
+.formula U|xtfarbefehl = "240 50 50"
+.continue BRK013 ? _(G|evtart = "maskein")
+.input 'U|xtupprjmsel'
+.copy M|ybleistmeld = G|TRUE
+.copy M|ybuebmge    = G|TRUE
+.copy M|ybuebwert   = G|FALSE
+.formula U|xdvon        = "<M+1M-1Y"
+.formula M|ystdvondatum = U|xdvon
+.formula U|xdbis        = ">M"
+.formula m|ystdbisdatum = U|xdbis
+.continue ESAC004
+!BRK013
+.continue BRK014 ? _(G|evtart = "maskpruef")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET140" 
+.continue PROC023
+!RET140
+.formula xprocsp = xprocsp - 1
+.continue ESAC004
+!BRK014
+.continue BRK015 ? _(G|evtart = "maskende")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET141" 
+.continue PROC003
+!RET141
+.formula xprocsp = xprocsp - 1
+.formula U|xtdatei = "rmtmp/X." + M|yprjmpid + ".TMP"
+.continue EL373 ? _(G|evttaste = "Abbruch")
+.system 'F|expr("touch " +  U|xtdatei)' BACKGROUND
+.continue FI373
+!EL373
+.system 'F|expr("rm " +  U|xtdatei)' BACKGROUND         ? F|fileexists(U|xtdatei)
+!FI373
+.end 1         ? M|ybmaskezu
+.continue ESAC004
+!BRK015
+.continue BRK016 ? _(G|evtart = "buttonvor")
+.continue BRK017 ? _(G|evtvar = "ybutableer")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET142" 
+.continue PROC005
+!RET142
+.formula xprocsp = xprocsp - 1
+.continue ESAC005
+!BRK017
+.continue BRK018 ? _(G|evtvar = "ybupos")
+.input 'xtupyvor'
+.continue ESAC005
+!BRK018
+!ESAC005: =====   ENDCASE   =====
+.continue ESAC004
+!BRK016
+.continue BRK019 ? _(G|evtart = "buttonnach")
+.continue BRK020 ? _(G|evtvar = "ybutableer")
+.continue EL374 ? _(M|ybvk)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET143" 
+.continue PROC018
+!RET143
+.formula xprocsp = xprocsp - 1
+!EL374
+.continue EL375 ? _(_(F|empty(M|yabrechnung)))
+.add M|yabrechnung
+.assign  M|ybuebwert = D|ybuebwert
+.assign  M|ybuebmge  = D|ybuebmge
+.formula M|yfaktwert = D|yfaktwert
+.formula M|ywert     = D|ywert
+.formula M|ymenge    = D|ymenge
+.add
+.input "is/ABASFARBEN.DEF"  ? _F|defined(U|xabasred)
+.colour -BACKGROUND "-1 -1 -1"   ywert 0    ?  M|ywert = M|yfaktwert
+.colour -BACKGROUND 'U|xabasred' ywert 0    ? _M|ywert = M|yfaktwert
+.continue FI375
+!EL375
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET144" 
+.continue PROC009
+!RET144
+.formula xprocsp = xprocsp - 1
+!FI375
+.continue ESAC006
+!BRK020
+.continue BRK021 ? _(G|evtvar = "ybuselect")
+.select group 'U|xydbgrlnachweis' "%!,,@lesen=nein"
+.continue EL376 ? _(G|selkrit = "")
+.formula M|select = "!"
+.continue FI376
+!EL376
+.formula M|select = "$" + (G|selrohl<<-1) + G|selkrit
+.assign M|ybselect = G|TRUE
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET145" 
+.continue PROC004
+!RET145
+.formula xprocsp = xprocsp - 1
+!FI376
+.continue ESAC006
+!BRK021
+.continue BRK022 ? _(G|evtvar = "ybuspeichern")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET146" 
+.continue PROC023
+!RET146
+.formula xprocsp = xprocsp - 1
+.continue ESAC006
+!BRK022
+.continue BRK023 ? _(G|evtvar = "ybubuchen")
+.continue EL377 ? _(U|xybistkost)
+.formula U|xbbuch = G|false
+.select screen header
+.select screen line
+!LOOP046: ==============================
+.continue ELOP046 ? _(G|mehr)
+.continue EL378 ? _((M|ymark) & (((_(F|empty(M|ytleistmeld))) & (F|empty(M|ytleistmeld^ytransaktion))) ; ((_(F|empty(M|ytmzeitmeld))) & (F|empty(M|ytmzeitmeld^ytransaktion)))))
+.formula U|xbbuch = G|TRUE
+.select lock add M|ytleistmeld  ? _F|empty(M|ytleistmeld)
+.select lock add M|ytmzeitmeld  ? _F|empty(M|ytmzeitmeld)
+.continue EL379 ? _(G|mehr)
+.load 9 object 'H|id'
+.select -
+.set cancel --
+.input 'U|xtupbuchen'
+.set cancel +
+.continue FI379
+!EL379
+.set TRANS +
+.box Hinweis
+Die Leistungsmeldung 'M|ytleistmeld' wird gerade bearbeitet.
+.set TRANS -
+!FI379
+!EL378
+.select screen line
+.continue LOOP046
+!ELOP046: ==============================
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET147" 
+.continue PROC008
+!RET147
+.formula xprocsp = xprocsp - 1
+.continue EL380 ? _(U|xbbuch)
+.continue EL381 ? _(U|xbok)
+.set TRANS +
+.box Hinweis
+Die Leistungsmeldung wurden gebucht.
+.set TRANS -
+.continue FI381
+!EL381
+.set TRANS +
+.box Fehler
+Es konnten nicht alle Leistungsmeldungen gebucht werden.
+.set TRANS -
+.error
+.end 1
+!FI381
+.continue FI380
+!EL380
+.set TRANS +
+.box Fehler
+Leistungsmeldung(en) kînnen nicht erneut gebucht werden, Buchung ist bereits erfolgt
+.set TRANS -
+.error
+.end 1
+!FI380
+.continue FI377
+!EL377
+.error Die stundenbasierte Leistungsverrechnung ist nicht aktiviert.
+.continue
+!FI377
+.continue ESAC006
+!BRK023
+.continue BRK024 ? _(G|evtvar = "ylnanfuegen")
+.continue EL382 ? _(M|tzeilen = 1)
+.select screen line 'M|tzeilen'
+.continue EL383 ? _((F|empty(M|ytleistmeld)) & (F|empty(M|ytmzeitmeld)) & (F|empty(M|ytmatmeld)) & (F|empty(M|ytsubmeld)))
+.make screen line -O
+!EL383
+!EL382
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET148" 
+.continue PROC018
+!RET148
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET149" 
+.continue PROC009
+!RET149
+.formula xprocsp = xprocsp - 1
+.continue ESAC006
+!BRK024
+.continue BRK025 ? _(G|evtvar = "ysmanfuegen")
+.continue EL384 ? _(M|tzeilen = 1)
+.select screen line 'M|tzeilen'
+.continue EL385 ? _((F|empty(M|ytleistmeld)) & (F|empty(M|ytmzeitmeld)) & (F|empty(M|ytmatmeld)) & (F|empty(M|ytsubmeld)))
+.make screen line -O
+!EL385
+!EL384
+.formula U|xtsel = "%,,"
+.formula U|xtsel = U|xtsel + ";such="
+.formula U|xtsel = U|xtsel + ";namebspr="
+.formula U|xtsel = U|xtsel + ";yprojekt="   + M|yprojekt^id
+.formula U|xtsel = U|xtsel + ";ylieferant="
+.formula U|xtsel = U|xtsel + ";yvondatum<=" + M|ystdbisdatum:8
+.formula U|xtsel = U|xtsel + ";ybisdatum>=" + M|ystdvondatum:8
+.formula U|xtsel = U|xtsel + ";ytpvorgang="
+.formula U|xtsel = U|xtsel + ";ytsubpersname="
+.formula U|xtsel = U|xtsel + ";ytdatum="
+.formula U|xtsel = U|xtsel + ";ybestellnummer="
+.formula U|xtsel = U|xtsel + ";yteil="
+.formula U|xtsel = U|xtsel + ";yteilname="
+.formula U|xtsel = U|xtsel + ";yprjmprkatart="
+.formula U|xtsel = U|xtsel + ";ymge="
+.formula U|xtsel = U|xtsel + ";yeinh="
+.formula U|xtsel = U|xtsel + ";ytbeschreib="
+.formula U|xtsel = U|xtsel + ";ytsmabrechnung="
+.formula U|xtsel = U|xtsel + ";ytsmlsnum="
+.formula U|xtsel = U|xtsel + ";ytsmrenum="
+.formula U|xtsel = U|xtsel + ";.@filingmode=(Active)"
+.formula U|xtsel = U|xtsel + ";.@rows=(Yes)"
+.load 0 group 'U|xydbgrsubmeldung' 'U|xtsel'
+!LOOP047: ==============================
+.continue ELOP047 ? _(G|mehr)
+.formula U|xttyp = "SM"
+.formula U|xizeile = M|tzeilen
+.load 0 line '0|selzeile'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET150" 
+.continue PROC013
+!RET150
+.formula xprocsp = xprocsp - 1
+.continue EL386 ? _(U|xbok)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET151" 
+.continue PROC014
+!RET151
+.formula xprocsp = xprocsp - 1
+!EL386
+.load 0 continue
+.continue LOOP047
+!ELOP047: ==============================
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET152" 
+.continue PROC009
+!RET152
+.formula xprocsp = xprocsp - 1
+.continue ESAC006
+!BRK025
+.continue BRK026 ? _(G|evtvar = "yrabdr")
+.select screen header
+.select screen line
+!LOOP048: ==============================
+.continue ELOP048 ? _(G|mehr)
+.continue EL387 ? _((_(F|empty(M|ytleistmeld))) ; (_(F|empty(M|ytmzeitmeld))) ; (_(F|empty(M|ytmatmeld))) ; (_(F|empty(M|ytsubmeld))))
+.continue EL388 ? _((_(F|empty(M|ytleistmeld))) & (M|ytleistmeld^ysperre))
+.load 0 add M|ytleistmeld
+.formula U|xttyp      = "LM"
+.formula U|xpaartikel =  0|yvkartikel^id
+.formula U|xtkatartk  = "PQ"
+.formula M|ytpreis    = 0|ylmpreis
+.formula M|ytfaktwert = 0|ylmpreis * M|ytmenge
+.formula M|ytwert     = 0|ylmwert
+!EL388
+.continue EL389 ? _((_(F|empty(M|ytmzeitmeld))) & (M|ytmzeitmeld^ysperre))
+.load 0 add M|ytmzeitmeld
+.formula U|xttyp      = "MZ"
+.formula U|xpaartikel =  0|ymaschvkart^id
+.formula U|xtkatartk  = "ML"
+.formula M|ytpreis    = 0|ymzpreis
+.formula M|ytfaktwert = 0|ymzpreis * M|ytmenge
+.formula M|ytwert     = 0|ymzwert
+!EL389
+.continue EL390 ? _((_(F|empty(M|ytmatmeld))) & (M|ytmatmeld^ysperre))
+.load 1 add M|ytmatmeld
+.load 0 add 1|yleistmeld
+.load 1 line 'M|ytmatmeldzid'
+.formula U|xpaartikel =  1|yteil^id
+.formula U|xtkatartk  = "MM"
+.formula U|xttyp      = "MM"
+.formula M|ytpreis    = 1|ytmmpreis
+.formula M|ytfaktwert = 1|ytmmpreis * M|ytmenge
+.formula M|ytwert     = 1|ytmmwert
+!EL390
+.continue EL391 ? _((_(F|empty(M|ytsubmeld))) & (M|ytsubmeld^ysperre))
+.load 0 add M|ytsubmeld
+.load 0 line 'M|ytsubmeldzid'
+.formula M|ytpreis    = 0|ytsmpreis
+.formula M|ytfaktwert = 0|ytsmpreis * M|ytmenge
+.formula M|ytwert     = 0|ytsmwert
+.formula U|xpaartikel = 0|yteil^id
+.formula U|xtkatartk  = "PQ"
+!EL391
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET153" 
+.continue PROC010
+!RET153
+.formula xprocsp = xprocsp - 1
+.copy    M|ytbmeldpreis = G|TRUE
+.formula M|ytfaktwert   = M|ytmenge * M|ytpreis
+!EL387
+.select screen line
+.continue LOOP048
+!ELOP048: ==============================
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET154" 
+.continue PROC009
+!RET154
+.formula xprocsp = xprocsp - 1
+.continue ESAC006
+!BRK026
+.continue BRK027 ? _(G|evtvar = "ybumarkalle")
+.select screen header
+.select screen line
+!LOOP049: ==============================
+.continue ELOP049 ? _(G|mehr)
+.continue EL392 ? _(_(M|ymark))
+.copy M|ymark = G|TRUE
+.continue EL393 ? _((F|empty(M|ytleistmeld)) & (F|empty(M|ytmzeitmeld)) & (F|empty(M|ytmatmeld)) & (F|empty(M|ytsubmeld)))
+.copy M|ymark = G|FALSE
+.continue FI393
+!EL393
+.continue EL394 ? _((M|ymark) & ((F|empty(M|ytlspos)) ; (M|ytlspos^id = M|yabrpos^id)) & ((F|empty(M|ytrepos)) ; (M|ytrepos^id = M|yabrpos^id)))
+.protection -RESET ytbmeldpreis 'M|aktzeile'
+.protection -RESET ytmenge      'M|aktzeile'
+.protection -RESET ytpreis      'M|aktzeile'
+.protection -RESET ytwert       'M|aktzeile'
+.protection -RESET ytlsrelev    'M|aktzeile'    ? _F|empty(M|ytleistmeld)
+.continue FI394
+!EL394
+.protection ytbmeldpreis 'M|aktzeile'
+.protection ytmenge      'M|aktzeile'
+.protection ytpreis      'M|aktzeile'
+.protection ytwert       'M|aktzeile'
+.protection ytlsrelev    'M|aktzeile'
+!FI394
+.colour -BACKGROUND "-1 -1 -1" 'M|aktzeile'
+!FI393
+!EL392
+.select screen line
+.continue LOOP049
+!ELOP049: ==============================
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET155" 
+.continue PROC009
+!RET155
+.formula xprocsp = xprocsp - 1
+.continue ESAC006
+!BRK027
+.continue BRK028 ? _(G|evtvar = "ybumarkkeine")
+.select screen header
+.select screen line
+!LOOP050: ==============================
+.continue ELOP050 ? _(G|mehr)
+.continue EL395 ? _((M|ymark) & (_(F|protected(M|ymark, M|aktzeile))))
+.copy M|ymark = G|FALSE
+.continue EL396 ? _((M|ymark) & ((F|empty(M|ytlspos)) ; (M|ytlspos^id = M|yabrpos^id)) & ((F|empty(M|ytrepos)) ; (M|ytrepos^id = M|yabrpos^id)))
+.protection -RESET ytbmeldpreis 'M|aktzeile'
+.protection -RESET ytmenge      'M|aktzeile'
+.protection -RESET ytpreis      'M|aktzeile'
+.protection -RESET ytwert       'M|aktzeile'
+.protection -RESET ytlsrelev    'M|aktzeile'    ? _F|empty(M|ytleistmeld)
+.continue FI396
+!EL396
+.protection ytbmeldpreis 'M|aktzeile'
+.protection ytmenge      'M|aktzeile'
+.protection ytpreis      'M|aktzeile'
+.protection ytwert       'M|aktzeile'
+.protection ytlsrelev    'M|aktzeile'
+!FI396
+.colour -BACKGROUND "-1 -1 -1" 'M|aktzeile'
+!EL395
+.select screen line
+.continue LOOP050
+!ELOP050: ==============================
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET156" 
+.continue PROC009
+!RET156
+.formula xprocsp = xprocsp - 1
+.continue ESAC006
+!BRK028
+.continue BRK029 ? _(G|evtvar = "ybulnarchiv")
+.continue EL397 ? _(F|empty(M|ytleistmeld))
+.set TRANS +
+.box Hinweis
+Archivieren ist nur fÅr Leistungsmeldungen mîglich.
+.set TRANS -
+.continue FI397
+!EL397
+.continue EL398 ? _((F|empty(M|ytleistmeld^yabrechnung)) & (F|empty(M|ytleistmeld^ylsnum)) & (F|empty(M|ytleistmeld^yrenum)) & (_(M|ymark)))
+.continue EL399 ? _((M|ytlsrelev) & (G|FALSE))
+.set trans +
+.formula U|xttext = "Achtung"
+.box -button ok:cancel -title 'U|xttext'
+Leistungsmeldung ist lieferscheinrelevant.
+
+Leistungsmeldung wird auf nicht lieferscheinrelevant
+gesetzt und archiviert.
+.set trans -
+.continue       ? _G|box = G|boxyes
+!EL399
+.select lock add M|ytleistmeld
+.continue EL400 ? _(G|mehr)
+.copy H|yarchiv  = G|TRUE
+.copy M|ytarchiv = H|yarchiv
+.rewrite
+.select -
+.copy M|ysperre = G|TRUE
+.protection ymark 'M|aktzeile'
+.set TRANS +
+.box Hinweis
+Leistungsmeldung wurde archiviert.
+.set TRANS -
+.continue FI400
+!EL400
+.set TRANS +
+.box Hinweis
+Leistungsmeldung nicht gefunden.
+.set TRANS -
+!FI400
+.continue FI398
+!EL398
+.set TRANS +
+.box Hinweis
+Leistungsmeldung ist in Abrechnung
+enthalten oder bereits abgerechnet.
+
+Archivieren nicht mîglich.
+.set TRANS -
+!FI398
+!FI397
+.continue ESAC006
+!BRK029
+.continue BRK030 ? _(G|evtvar = "ylnbeschint")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET157" 
+.continue PROC022
+!RET157
+.formula xprocsp = xprocsp - 1
+.continue ESAC006
+!BRK030
+.continue BRK031 ? _(G|evtvar = "ylnbeschext")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET158" 
+.continue PROC022
+!RET158
+.formula xprocsp = xprocsp - 1
+.continue ESAC006
+!BRK031
+.continue BRK032 ? _(G|evtvar = "ytabrtext")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET159" 
+.continue PROC022
+!RET159
+.formula xprocsp = xprocsp - 1
+.continue ESAC006
+!BRK032
+!ESAC006: =====   ENDCASE   =====
+.continue ESAC004
+!BRK019
+.continue BRK033 ? _(G|evtart = "zeileeinvor")
+.continue EL401 ? _(M|ybzeigen)
+.error
+.end 1
+!EL401
+.continue ESAC004
+!BRK033
+.continue BRK034 ? _(G|evtart = "zeileloevor")
+.continue EL402 ? _((_(F|empty(M|ytleistmeld))) ; (_(F|empty(M|ytmzeitmeld))) ; (_(F|empty(M|ytmatmeld))) ; (_(F|empty(M|ytsubmeld))))
+.error
+.end 1
+!EL402
+.continue ESAC004
+!BRK034
+.continue BRK035 ? _(G|evtart = "feldfuell")
+.continue BRK036 ? _(G|evtvar = "yvorvp")
+.input 'U|xtupyvor'
+.continue ESAC007
+!BRK036
+.continue BRK037 ? _(G|evtvar = "ymark")
+.continue EL403 ? _(M|ysperre)
+.formula G|evtfeldneu = 'M|ymark'
+.error
+.end 1
+!EL403
+.continue ESAC007
+!BRK037
+.continue BRK038 ? _(G|evtvar = "yverantw")
+.input 'U|xtupyverantw'
+.continue
+.continue ESAC007
+!BRK038
+.continue BRK039 ? _(G|evtvar = "ytmatmeld")
+.continue EL404 ? _((_(F|empty(G|evtfeldneu))) & (_(G|evtfeldneu = "(0,0,0)")) & (_(F|regmatch(G|evtfeldneu, "\*.*"))) & (_(F|regmatch(G|evtfeldneu, "\$.*"))) & (_(F|regmatch(G|evtfeldneu, "\%.*"))))
+.formula G|evtfeldneu = "?"     ? G|evtfeldneu = "!"
+.continue EL405 ? _((F|regmatch(G|evtfeldneu, "\?")) ; (F|regmatch(G|evtfeldneu, "!,.*")) ; (F|regmatch(G|evtfeldneu, "\d.*")) ; (F|regmatch(G|evtfeldneu, "[a-zA-Z].*")))
+.formula U|xtsel = "$,,ytmmlsnum=`;ytmmrenum=`"
+.formula U|xtsel = U|xtsel + ";@noswd=" + G|evtfeldneu
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active);@rows=(Yes)"
+.select group 'U|xydbgrmatmeldung' 'U|xtsel'
+.continue EL406 ? _(G|mehr)
+.select line 'H|selzeile'
+.formula U|xtzid = H|zid
+.formula U|xtid  = H|id
+.select continue
+.continue EL407 ? _(G|mehr)
+.formula U|xtsel = "%,,yleistmeld=;yteil=;ymge=;yeinh=;ytmmabrechnung=;ytmmlsnum=`;ytmmrenum=`"
+.formula U|xtsel = U|xtsel + ";@noswd=" + G|evtfeldneu
+.formula U|xtsel = U|xtsel + ";@autostart=(Yes);@filingmode=(Active);.@rows=(Yes)"
+.select group 'U|xydbgrmatmeldung' 'U|xtsel'
+.continue EL408 ? _(G|mehr)
+.select line 'H|selzeile'
+.formula G|evtfeldneu   = H|id
+.formula M|ytmatmeldzid = H|zid
+.continue FI408
+!EL408
+.formula G|evtfeldneu = M|.evtvar^id
+!FI408
+.continue FI407
+!EL407
+.formula G|evtfeldneu   = U|xtid
+.formula M|ytmatmeldzid = U|xtzid
+!FI407
+.continue FI406
+!EL406
+.continue EL409 ? _((G|evtfeldneu = "!") ; (G|evtfeldneu = "?"))
+.set TRANS +
+.box Hinweis
+Keine Materialmeldung gefunden.
+.set TRANS -
+.formula G|evtfeldneu = ""
+.continue FI409
+!EL409
+.set TRANS +
+.box Hinweis
+'G|evtfeldneu': nicht gefunden
+.set TRANS -
+.error
+.end 1
+!FI409
+!FI406
+!EL405
+!EL404
+.continue ESAC007
+!BRK039
+.continue BRK040 ? _(G|evtvar = "ytsubmeld")
+.continue EL410 ? _((_(F|empty(G|evtfeldneu))) & (_(G|evtfeldneu = "(0,0,0)")) & (_(F|regmatch(G|evtfeldneu, "\*.*"))) & (_(F|regmatch(G|evtfeldneu, "\$.*"))) & (_(F|regmatch(G|evtfeldneu, "\%.*"))))
+.formula G|evtfeldneu = "?"     ? G|evtfeldneu = "!"
+.continue EL411 ? _((F|regmatch(G|evtfeldneu, "\?")) ; (F|regmatch(G|evtfeldneu, "!,.*")) ; (F|regmatch(G|evtfeldneu, "\d.*")) ; (F|regmatch(G|evtfeldneu, "[a-zA-Z].*")))
+.formula U|xtsel = "$,,ytsmlsnum=`;ytsmrenum=`"
+.formula U|xtsel = U|xtsel + ";@noswd=" + G|evtfeldneu
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active);@rows=(Yes)"
+.select group 'U|xydbgrsubmeldung' 'U|xtsel'
+.continue EL412 ? _(G|mehr)
+.select line 'H|selzeile'
+.formula U|xtzid = H|zid
+.formula U|xtid  = H|id
+.select continue
+.continue EL413 ? _(G|mehr)
+.formula U|xtsel = "%,,yprojekt=;ylieferant=;yteil=;ymge=;yeinh=;ytsmabrechnung=;ytsmlsnum=`;ytsmrenum=`"
+.formula U|xtsel = U|xtsel + ";@noswd=" + G|evtfeldneu
+.formula U|xtsel = U|xtsel + ";@autostart=(Yes);@filingmode=(Active);.@rows=(Yes)"
+.select group 'U|xydbgrsubmeldung' 'U|xtsel'
+.continue EL414 ? _(G|mehr)
+.select line 'H|selzeile'
+.formula G|evtfeldneu   = H|id
+.formula M|ytsubmeldzid = H|zid
+.continue FI414
+!EL414
+.formula G|evtfeldneu = M|.evtvar^id
+!FI414
+.continue FI413
+!EL413
+.formula G|evtfeldneu   = U|xtid
+.formula M|ytsubmeldzid = U|xtzid
+!FI413
+.continue FI412
+!EL412
+.continue EL415 ? _((G|evtfeldneu = "!") ; (G|evtfeldneu = "?"))
+.set TRANS +
+.box Hinweis
+Keine Submeldung gefunden.
+.set TRANS -
+.formula G|evtfeldneu = ""
+.continue FI415
+!EL415
+.set TRANS +
+.box Hinweis
+'G|evtfeldneu': nicht gefunden
+.set TRANS -
+.error
+.end 1
+!FI415
+!FI412
+!EL411
+!EL410
+.continue ESAC007
+!BRK040
+!ESAC007: =====   ENDCASE   =====
+.continue ESAC004
+!BRK035
+.continue BRK041 ? _(G|evtart = "feldaus")
+.copy U|xbzeilenraus = G|true
+.continue EL416 ? _(M|aktzeile = 0)
+.input 'U|xtupprjmsel'
+!EL416
+.continue BRK042 ? _(G|evtvar = "yabrechnung")
+.assign  M|ybselect = G|FALSE
+.assign  M|select   = ""
+.formula M|yabrname = M|yabrechnung^namebspr
+.formula M|yftext   = ""
+.assign  M|ybuebwert = M|yabrechnung^ybuebwert  ? _F|empty(M|yabrechnung)
+.assign  M|ybuebmge  = M|yabrechnung^ybuebmge   ? _F|empty(M|yabrechnung)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET160" 
+.continue PROC005
+!RET160
+.formula xprocsp = xprocsp - 1
+.continue EL417 ? _((_(F|empty(M|yabrechnung))) ; (M|ybvk))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET161" 
+.continue PROC018
+!RET161
+.formula xprocsp = xprocsp - 1
+.continue FI417
+!EL417
+.continue EL418 ? _(_(F|empty(M|yabrechnung)))
+.add M|yabrechnung
+.assign  M|ybuebwert = D|ybuebwert
+.assign  M|ybuebmge  = D|ybuebmge
+.formula M|yfaktwert = D|yfaktwert
+.formula M|ywert     = D|ywert
+.formula M|ymenge    = D|ymenge
+.add
+.input "is/ABASFARBEN.DEF"  ? _F|defined(U|xabasred)
+.colour -BACKGROUND "-1 -1 -1"   ywert 0    ?  M|ywert = M|yfaktwert
+.colour -BACKGROUND 'U|xabasred' ywert 0    ? _M|ywert = M|yfaktwert
+!EL418
+!FI417
+.continue ESAC008
+!BRK042
+.continue BRK043 ? _(G|evtvar = "yprojekt")
+.assign  M|ybselect = G|false
+.assign  M|select   = ""
+.formula M|yftext   = ""
+.continue EL419 ? _(_(F|empty(M|yprojekt)))
+.assign  M|ykunde   = M|yprojekt^ykunde^id
+.assign  M|ykunde2  = M|yprojekt^ykunde2^id
+!EL419
+.continue ESAC008
+!BRK043
+.continue BRK044 ? _(G|evtvar = "yabrpos")
+.assign  M|yabrnum = M|yabrpos^kopf     ? _F|empty(M|yabrpos^kopf)
+.assign  M|yabrnum = M|yabrpos^nummer   ?  F|empty(M|yabrpos^kopf)
+.assign  M|yabrtyp = M|yabrpos^kotyp    ? _F|empty(M|yabrpos^kotyp)
+.assign  M|ybselect = G|FALSE
+.assign  M|select   = ""
+.formula M|yftext   = ""
+.continue EL420 ? _((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition))
+.formula M|yabrtename = M|yabrpos^yartex^id
+.continue EL421 ? _(_(F|empty(M|yabrpos^yartex)))
+.assign U|xeinh = 'M|yabrpos^yartex^le(L="0")'
+.continue EL422 ? _((G|mehr) & ('U|xeinh' <> 'G|inland'))
+.assign M|ybuebmge    = G|TRUE
+.assign M|ybuebwert   = G|FALSE
+.continue FI422
+!EL422
+.assign M|ybuebmge    = G|FALSE
+.assign M|ybuebwert   = G|TRUE
+!FI422
+!EL421
+.continue FI420
+!EL420
+.formula M|yabrtename = M|yabrpos^artex^id
+.continue EL423 ? _(_(F|empty(M|yabrpos^artex)))
+.assign U|xeinh = 'M|yabrpos^artex^le(L="0")'
+.continue EL424 ? _((G|mehr) & ('U|xeinh' <> 'G|inland'))
+.assign M|ybuebmge    = G|TRUE
+.assign M|ybuebwert   = G|FALSE
+.continue FI424
+!EL424
+.assign M|ybuebmge    = G|FALSE
+.assign M|ybuebwert   = G|TRUE
+!FI424
+!EL423
+!FI420
+.continue ESAC008
+!BRK044
+.continue BRK045 ? _(G|evtvar = "yaupos")
+.assign M|yaunum = M|yaupos^kopf        ? _F|empty(M|yaupos^kopf)
+.assign M|yaunum = M|yaupos^nummer      ?  F|empty(M|yaupos^kopf)
+.assign M|ybselect = G|FALSE
+.assign M|select   = ""
+.formula M|yftext  = ""
+.continue ESAC008
+!BRK045
+.continue BRK046 ? _(G|evtvar = "yvorvp")
+.assign M|yvortyp = M|yvorvp^kotyp
+.assign  M|ybselect = G|FALSE
+.assign  M|select   = ""
+.formula M|yftext   = ""
+.continue ESAC008
+!BRK046
+.continue BRK047 ? _(G|evtvar = "ystdvondatum")
+.formula U|xdbis     = ">" + 'F|year(M|ystdvondatum)' + "Y" + 'F|month(M|ystdvondatum)' + "M"
+.formula M|ystdbisdatum = U|xdbis
+.continue ESAC008
+!BRK047
+.continue BRK048 ? _(G|evtvar = "ystdbisdatum")
+.continue EL425 ? _(M|ystdbisdatum < M|ystdvondatum)
+.formula U|xdbis     = ">" + 'F|year(M|ystdvondatum)' + "Y" + 'F|month(M|ystdvondatum)' + "M"
+.formula M|ystdbisdatum = U|xdbis
+!EL425
+.cursor yvkauftrag 0      ? F|defined(M|yvkauftrag)
+.continue ESAC008
+!BRK048
+.continue BRK049 ? _(G|evtvar = "select")
+.continue EL426 ? _((M|select = "") ; (M|select = "!"))
+.assign M|ybselect = G|FALSE
+.continue FI426
+!EL426
+.assign M|ybselect = G|TRUE
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET162" 
+.continue PROC004
+!RET162
+.formula xprocsp = xprocsp - 1
+!FI426
+.continue EL427 ? _(true)
+.continue FI427
+!EL427
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET163" 
+.continue PROC005
+!RET163
+.formula xprocsp = xprocsp - 1
+!FI427
+.continue ESAC008
+!BRK049
+.continue BRK050 ? _(G|evtvar = "ybuebmge")
+.assign M|ybuebwert = G|FALSE   ? M|ybuebmge
+.continue ESAC008
+!BRK050
+.continue BRK051 ? _(G|evtvar = "ybuebwert")
+.assign M|ybuebmge  = G|FALSE   ? M|ybuebwert
+.continue ESAC008
+!BRK051
+.continue BRK052 ? _(G|evtvar = "ywert")
+.input "is/ABASFARBEN.DEF"  ? _F|defined(U|xabasred)
+.colour -BACKGROUND "-1 -1 -1"   ywert 0    ?  M|ywert = M|yfaktwert
+.colour -BACKGROUND 'U|xabasred' ywert 0    ? _M|ywert = M|yfaktwert
+.continue ESAC008
+!BRK052
+.continue BRK053 ? _(G|evtvar = "ymark")
+.continue EL428 ? _((F|empty(M|ytleistmeld)) & (F|empty(M|ytmzeitmeld)) & (F|empty(M|ytmatmeld)) & (F|empty(M|ytsubmeld)))
+.copy M|ymark = G|FALSE
+.continue FI428
+!EL428
+.continue EL429 ? _((M|yabrpos^dnr    <> U|xydbtpposition) & (M|yabrpos^gruppe <> U|xygrtpposition))
+.continue EL430 ? _(F|empty(M|yabrechnung))
+.continue EL431 ? _(_(F|empty(M|ytabrechnung)))
+.continue EL432 ? _(M|ymark)
+.set trans +
+.formula U|xttext = "Achtung"
+.box -button ok:cancel -title 'U|xttext'
+Diese Leistungsmeldung ist bereits in einer anderen Abrechnung enthalten.
+Die Zuordnung der Leistungsmeldung wird jetzt entfernt.
+.set trans -
+.continue EL433 ? _(_(G|box = G|boxyes))
+.copy M|ymark = G|FALSE
+!EL433
+!EL432
+!EL431
+.continue FI430
+!EL430
+.continue EL434 ? _(M|ymark)
+.continue EL435 ? _((_(F|empty(M|ytabrechnung))) & (_(M|yabrechnung^nummer = M|ytabrechnung)))
+.set trans +
+.formula U|xttext = "Achtung"
+.box -button ok:cancel -title 'U|xttext'
+Diese Leistungsmeldung ist bereits in einer anderen Abrechnung enthalten.
+Die Zuordnung der Leistungsmeldung wird jetzt auf 'M|yabrechnung^nummer' geÑndert.
+.set trans -
+.continue EL436 ? _(_(G|box = G|boxyes))
+.copy M|ymark = G|FALSE
+!EL436
+!EL435
+!EL434
+!FI430
+!EL429
+!FI428
+.continue EL437 ? _((M|ymark) & ((F|empty(M|ytlspos)) ; (M|ytlspos^id = M|yabrpos^id)) & ((F|empty(M|ytrepos)) ; (M|ytrepos^id = M|yabrpos^id)))
+.protection -RESET ytbmeldpreis 'M|aktzeile'
+.protection -RESET ytmenge      'M|aktzeile'
+.protection -RESET ytpreis      'M|aktzeile'
+.protection -RESET ytwert       'M|aktzeile'
+.protection -RESET ytlsrelev    'M|aktzeile'    ? _F|empty(M|ytleistmeld)
+.continue EL438 ? _(_(F|defined(U|xbiserllmaendfakt)))
+.type bool xbiserllmaendfakt
+.copy U|xbiserllmaendfakt = G|TRUE
+.continue EL439 ? _((_(F|empty(F|sysinfo(10)^ykonfigprjm^ypmerllmaendfakt))) & (F|sysinfo(18)^allppro))
+.input "allppro/FOP.PRJM.UP.GETPERMISSIONS"     ? _F|defined(U|xypermissions)
+.copy U|xbiserllmaendfakt = F|defined(F|map(U|xypermissions, 'F|sysinfo(10)^ykonfigprjm^ypmerllmaendfakt^id'))
+!EL439
+!EL438
+.continue EL440 ? _(_(U|xbiserllmaendfakt))
+.protection ytlsrelev 'M|aktzeile'
+.protection ytmenge   'M|aktzeile'
+!EL440
+.continue FI437
+!EL437
+.protection ytbmeldpreis 'M|aktzeile'
+.protection ytmenge      'M|aktzeile'
+.protection ytpreis      'M|aktzeile'
+.protection ytwert       'M|aktzeile'
+.protection ytlsrelev    'M|aktzeile'
+!FI437
+.colour -BACKGROUND "-1 -1 -1" 'M|aktzeile'
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET164" 
+.continue PROC009
+!RET164
+.formula xprocsp = xprocsp - 1
+.continue ESAC008
+!BRK053
+.continue BRK054 ? _(G|evtvar = "ytleistmeld")
+.continue EL441 ? _(_(F|empty(M|ytleistmeld)))
+.formula U|xizeile = G|evtzeile
+.formula U|xttyp   = "LM"
+.load 0 add M|ytleistmeld
+.continue EL442 ? _((M|yabrpos^dnr    = U|xydbtpposition) & (M|yabrpos^gruppe = U|xygrtpposition))
+.continue EL443 ? _((0|ytpposid = M|yabrpos^id) ; (F|empty(0|ytpposid)) ; (0|ytpposid = "(0,0,0)"))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET165" 
+.continue PROC014
+!RET165
+.formula xprocsp = xprocsp - 1
+.continue FI443
+!EL443
+.set TRANS +
+.box Hinweis
+Die Leistungsmeldung 'M|ytleistmeld' ist bereits abgerechnet.
+.set TRANS -
+.formula M|ytleistmeld = ""
+!FI443
+.continue FI442
+!EL442
+.continue EL444 ? _(((F|empty(0|ylsposid)) & (F|empty(0|yreposid))) ; (((0|ylsposid = M|yabrpos^id) ; (0|yreposid = M|yabrpos^id)) & (M|ybvk)))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET166" 
+.continue PROC014
+!RET166
+.formula xprocsp = xprocsp - 1
+.continue FI444
+!EL444
+.set TRANS +
+.box Hinweis
+Die Leistungsmeldung 'M|ytleistmeld' ist bereits abgerechnet.
+.set TRANS -
+.formula M|ytleistmeld = ""
+!FI444
+!FI442
+!EL441
+.continue ESAC008
+!BRK054
+.continue BRK055 ? _(G|evtvar = "ytmzeitmeld")
+.continue EL445 ? _(_(F|empty(M|ytmzeitmeld)))
+.formula U|xizeile = G|evtzeile
+.formula U|xttyp   = "MZ"
+.load 0 add M|ytmzeitmeld
+.continue EL446 ? _(((F|empty(0|ymzlsposid)) & (F|empty(0|ymzreposid))) ; (((0|ymzlsposid = M|yabrpos^id) ; (0|ymzreposid = M|yabrpos^id)) & (M|ybvk)))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET167" 
+.continue PROC014
+!RET167
+.formula xprocsp = xprocsp - 1
+.continue FI446
+!EL446
+.set TRANS +
+.box Hinweis
+Die Maschinenzeit 'M|ytmzeitmeld' ist bereits abgerechnet.
+.set TRANS -
+.formula M|ytmzeitmeld = ""
+!FI446
+!EL445
+.continue ESAC008
+!BRK055
+.continue BRK056 ? _(G|evtvar = "ytmatmeld")
+.continue EL447 ? _((_(F|empty(M|ytmatmeld))) & (_(F|empty(M|ytmatmeldzid))))
+.formula U|xizeile = G|evtzeile
+.formula U|xttyp   = "MM"
+.load 1 add M|ytmatmeld
+.load 1 line 'M|ytmatmeldzid'
+.load 0 add 1|yleistmeld
+.continue EL448 ? _(((F|empty(1|ytmmlsposid)) & (F|empty(1|ytmmreposid))) ; (((1|ytmmlsposid = M|yabrpos^id) ; (1|ytmmreposid = M|yabrpos^id)) & (M|ybvk)))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET168" 
+.continue PROC014
+!RET168
+.formula xprocsp = xprocsp - 1
+.continue FI448
+!EL448
+.set TRANS +
+.box Hinweis
+Die Materialmeldung 'M|ytmatmeld' ist bereits abgerechnet.
+.set TRANS -
+.formula M|ytmatmeld    = ""
+.formula M|ytmatmeldzid = ""
+!FI448
+.continue FI447
+!EL447
+.formula M|ytmatmeld    = ""
+.formula M|ytmatmeldzid = ""
+!FI447
+.continue ESAC008
+!BRK056
+.continue BRK057 ? _(G|evtvar = "ytsubmeld")
+.continue EL449 ? _((_(F|empty(M|ytsubmeld))) & (_(F|empty(M|ytsubmeldzid))))
+.formula U|xizeile = G|evtzeile
+.formula U|xttyp   = "SM"
+.load 0 add M|ytsubmeld
+.load 0 line 'M|ytsubmeldzid'
+.continue EL450 ? _(((F|empty(0|ytsmlsposid)) & (F|empty(0|ytsmreposid))) ; (((0|ytsmlsposid = M|yabrpos^id) ; (0|ytsmreposid = M|yabrpos^id)) & (M|ybvk)))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET169" 
+.continue PROC014
+!RET169
+.formula xprocsp = xprocsp - 1
+.continue FI450
+!EL450
+.set TRANS +
+.box Hinweis
+Die Submeldung 'M|ytsubmeld' ist bereits abgerechnet.
+.set TRANS -
+.formula M|ytsubmeld    = ""
+.formula M|ytsubmeldzid = ""
+!FI450
+.continue FI449
+!EL449
+.formula M|ytsubmeld    = ""
+.formula M|ytsubmeldzid = ""
+!FI449
+.continue ESAC008
+!BRK057
+.continue BRK058 ? _(G|evtvar = "ytmenge")
+.formula M|ytfaktwert = M|ytmenge * M|ytpreis
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET170" 
+.continue PROC022
+!RET170
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET171" 
+.continue PROC009
+!RET171
+.formula xprocsp = xprocsp - 1
+.continue ESAC008
+!BRK058
+.continue BRK059 ? _(G|evtvar = "ytpreis")
+.formula M|ytfaktwert = M|ytmenge * M|ytpreis
+.copy M|ytbmeldpreis = G|TRUE
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET172" 
+.continue PROC022
+!RET172
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET173" 
+.continue PROC009
+!RET173
+.formula xprocsp = xprocsp - 1
+.continue ESAC008
+!BRK059
+.continue BRK060 ? _(G|evtvar = "ytwert")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET174" 
+.continue PROC022
+!RET174
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET175" 
+.continue PROC009
+!RET175
+.formula xprocsp = xprocsp - 1
+.continue ESAC008
+!BRK060
+.continue BRK061 ? _(G|evtvar = "ytlsrelev")
+.continue EL451 ? _(_(F|empty(M|ytleistmeld)))
+.formula U|xtid = M|ytleistmeld^id
+.select lock add M|ytleistmeld
+.continue EL452 ? _(G|mehr)
+.copy M|ymark     = G|FALSE         ? _M|ytlsrelev
+.copy H|ylsrelev  = M|ytlsrelev
+.continue EL453 ? _(H|ylsrelev)
+.assign  U|xrlmgenauigkeit = 'F|sysinfo(10)^ykonfigprjm^ypmlmgenaugkk'  ?  F|empty(H|yprojekt)
+.assign  U|xrlmgenauigkeit = 'H|yprojekt^ylmgenauigkeitk'               ? _F|empty(H|yprojekt)
+.formula H|yfaktzeit       = F|mround(H|yarbzeit,U|xrlmgenauigkeit,1)   ?  U|xrlmgenauigkeit <> 0
+.formula H|yfaktzeit       = H|yarbzeit                                 ?  U|xrlmgenauigkeit =  0
+.continue FI453
+!EL453
+.formula H|yfaktzeit = 0
+!FI453
+.rewrite
+!EL452
+.continue EL454 ? _(_(M|ymark))
+.protection ytbmeldpreis 'M|aktzeile'
+.protection ytmenge      'M|aktzeile'
+.protection ytpreis      'M|aktzeile'
+.protection ytwert       'M|aktzeile'
+.protection ytlsrelev    'M|aktzeile'
+!EL454
+.formula M|ytmenge   = M|ytleistmeld^yfaktzeit
+.assign  M|ytlsrelev = M|ytleistmeld^ylsrelev
+.select screen header
+.select screen line
+!LOOP051: ==============================
+.continue ELOP051 ? _(G|mehr)
+.continue EL455 ? _(_(F|empty(M|ytmzeitmeld)))
+.continue EL456 ? _(M|ytmzeitmeld^id = U|xtid)
+.assign  M|ymark      = G|FALSE         ? _M|ytmzeitmeld^ylsrelev
+.formula M|ytmenge    = M|ytmzeitmeld^ymaschzeit
+.assign  M|ytlsrelev  = M|ytmzeitmeld^ylsrelev
+.formula M|ytfaktwert = M|ytmenge * M|ytpreis
+.continue EL457 ? _(_(M|ymark))
+.protection ytbmeldpreis 'M|aktzeile'
+.protection ytmenge      'M|aktzeile'
+.protection ytpreis      'M|aktzeile'
+.protection ytwert       'M|aktzeile'
+.protection ytlsrelev    'M|aktzeile'
+!EL457
+!EL456
+!EL455
+.continue EL458 ? _(_(F|empty(M|ytmatmeld)))
+.continue EL459 ? _(M|ytmatmeld^yleistmeld^id = U|xtid)
+.assign  M|ymark      = G|FALSE         ? _M|ytmatmeld^yleistmeld^ylsrelev
+.assign  M|ytlsrelev  = M|ytmatmeld^yleistmeld^ylsrelev
+.formula M|ytfaktwert = M|ytmenge * M|ytpreis
+.continue EL460 ? _(_(M|ymark))
+.protection ytbmeldpreis 'M|aktzeile'
+.protection ytmenge      'M|aktzeile'
+.protection ytpreis      'M|aktzeile'
+.protection ytwert       'M|aktzeile'
+.protection ytlsrelev    'M|aktzeile'
+!EL460
+!EL459
+!EL458
+.select screen line
+.continue LOOP051
+!ELOP051: ==============================
+!EL451
+.select screen line 'G|evtzeile'
+.formula M|ytfaktwert = M|ytmenge * M|ytpreis
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET176" 
+.continue PROC009
+!RET176
+.formula xprocsp = xprocsp - 1
+.continue ESAC008
+!BRK061
+.continue BRK062 ? _(G|evtvar = "ytbfahrtkosten")
+.continue EL461 ? _(_(F|empty(M|ytleistmeld)))
+.select lock add M|ytleistmeld
+.continue EL462 ? _(G|mehr)
+.copy H|ybfahrtkosten = M|ytbfahrtkosten
+.rewrite
+.continue FI462
+!EL462
+.copy M|ytbfahrtkosten = M|ytleistmeld^ybfahrtkosten
+!FI462
+!EL461
+.continue ESAC008
+!BRK062
+.continue BRK063 ? _(G|evtvar = "ytfahrtkostenwert")
+.continue EL463 ? _(_(F|empty(M|ytleistmeld)))
+.select lock add M|ytleistmeld
+.continue EL464 ? _(G|mehr)
+.copy H|yfahrtkostenwert = M|ytfahrtkostenwert
+.rewrite
+.continue FI464
+!EL464
+.copy M|ytfahrtkostenwert = M|ytleistmeld^yfahrtkostenwert
+!FI464
+!EL463
+.continue ESAC008
+!BRK063
+.continue BRK064 ? _(G|evtvar = "ytfahrtkostenwaehr")
+.continue EL465 ? _(_(F|empty(M|ytleistmeld)))
+.select lock add M|ytleistmeld
+.continue EL466 ? _(G|mehr)
+.copy H|yfahrtkostenwaehr = M|ytfahrtkostenwaehr
+.rewrite
+.continue FI466
+!EL466
+.copy M|ytfahrtkostenwaehr = M|ytleistmeld^yfahrtkostenwaehr
+!FI466
+!EL465
+.continue ESAC008
+!BRK064
+.continue BRK065 ? _(G|evtvar = "ytbspesen")
+.continue EL467 ? _(_(F|empty(M|ytleistmeld)))
+.select lock add M|ytleistmeld
+.continue EL468 ? _(G|mehr)
+.copy H|ybspesen = M|ytbspesen
+.rewrite
+.continue FI468
+!EL468
+.copy M|ytbspesen = M|ytleistmeld^ybspesen
+!FI468
+!EL467
+.continue ESAC008
+!BRK065
+.continue BRK066 ? _(G|evtvar = "ytspesenwert")
+.continue EL469 ? _(_(F|empty(M|ytleistmeld)))
+.select lock add M|ytleistmeld
+.continue EL470 ? _(G|mehr)
+.copy H|yspesenwert = M|ytspesenwert
+.rewrite
+.continue FI470
+!EL470
+.copy M|ytspesenwert = M|ytleistmeld^yspesenwert
+!FI470
+!EL469
+.continue ESAC008
+!BRK066
+.continue BRK067 ? _(G|evtvar = "ytspesenwaehr")
+.continue EL471 ? _(_(F|empty(M|ytleistmeld)))
+.select lock add M|ytleistmeld
+.continue EL472 ? _(G|mehr)
+.copy H|yspesenwaehr = M|ytspesenwaehr
+.rewrite
+.continue FI472
+!EL472
+.copy M|ytspesenwaehr = M|ytleistmeld^yspesenwaehr
+!FI472
+!EL471
+.continue ESAC008
+!BRK067
+.continue BRK068 ? _(G|evtvar = "ytbuebernachtung")
+.continue EL473 ? _(_(F|empty(M|ytleistmeld)))
+.select lock add M|ytleistmeld
+.continue EL474 ? _(G|mehr)
+.copy H|ybuebernachtung = M|ytbuebernachtung
+.rewrite
+.continue FI474
+!EL474
+.copy M|ytbuebernachtung = M|ytleistmeld^ybuebernachtung
+!FI474
+!EL473
+.continue ESAC008
+!BRK068
+.continue BRK069 ? _(G|evtvar = "ytuebernachtwert")
+.continue EL475 ? _(_(F|empty(M|ytleistmeld)))
+.select lock add M|ytleistmeld
+.continue EL476 ? _(G|mehr)
+.copy H|yuebernachtwert = M|ytuebernachtwert
+.rewrite
+.continue FI476
+!EL476
+.copy M|ytuebernachtwert = M|ytleistmeld^yuebernachtwert
+!FI476
+!EL475
+.continue ESAC008
+!BRK069
+.continue BRK070 ? _(G|evtvar = "ytuebernachtwaehr")
+.continue EL477 ? _(_(F|empty(M|ytleistmeld)))
+.select lock add M|ytleistmeld
+.continue EL478 ? _(G|mehr)
+.copy H|yuebernachtwaehr = M|ytuebernachtwaehr
+.rewrite
+.continue FI478
+!EL478
+.copy M|ytuebernachtwaehr = M|ytleistmeld^yuebernachtwaehr
+!FI478
+!EL477
+.continue ESAC008
+!BRK070
+.continue BRK071 ? _(G|evtvar = "ytbabrechfrei")
+.formula M|ytabrechfreibz = G|bzeichen  ?  M|ytbabrechfrei
+.continue EL479 ? _(_(F|empty(M|ytleistmeld)))
+.select lock add M|ytleistmeld
+.continue EL480 ? _(G|mehr)
+.copy H|ybabrechfrei  = M|ytbabrechfrei
+.copy H|yabrechfreibz = M|ytabrechfreibz
+.rewrite
+.continue FI480
+!EL480
+.copy M|ytbabrechfrei  = M|ytleistmeld^ybabrechfrei
+.copy M|ytabrechfreibz = M|ytleistmeld^yabrechfreibz
+!FI480
+!EL479
+.continue ESAC008
+!BRK071
+.continue EL481 ? _(M|aktzeile = 0)
+.input 'U|xtupprjmsel'
+.copy    M|ybselect = G|FALSE
+.assign  M|select   = ""
+.formula M|yftext   = ""
+!EL481
+!ESAC008: =====   ENDCASE   =====
+.continue ESAC004
+!BRK041
+!ESAC004: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJMABRECHNUNG.EV")'     ? F|fileexists(F|foppath("IFOP.IS.PRJMABRECHNUNG.EV"))
+.continue

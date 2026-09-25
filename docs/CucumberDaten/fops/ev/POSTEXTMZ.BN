@@ -1,0 +1,108 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : POSTEXTMZ.BN
+.. Autor          : ss
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Program flow   : H-Puffer: Vorgangsposition
+..*****************************************************************************
+.set trans -
+.type text xtkom         ? _F|defined(U|xtkom)
+.type text xtvkbez       ? _F|defined(U|xtvkbez)
+.type text xta           ? _F|defined(U|xta)
+.type text xid           ? _F|defined(U|xid)
+.type text xtartikel     ? _F|defined(U|xtartikel)
+.type bool xblsposition  ? _F|defined(U|xblsposition)
+.type bool xbgefunden    ? _F|defined(U|xbgefunden)
+.type bool xmehr         ? _F|defined(U|xmehr)
+..
+.input "is/TABLEEREN"
+..
+.select add M|position
+.continue ENDE ? _G|mehr
+.continue ENDE ? H|gruppe = 4
+..
+!FOPKOPF: individual FOP for header fields
+.input "ev/FOPKOPFPOSTEXTMZ"
+..
+.formula U|xid = H|id
+.continue VK   ? M|ekvk = 3
+.continue EK   ? M|ekvk = 4
+..
+!VK
+.continue LIEFVK ? M|vtyp <> 5
+.continue LIEFVK ? F|equals(H|tlsart, "(ReturnPackingSlip)")
+.add orig
+.continue LIEFVK ? _G|mehr
+.continue LIEFVK ? D|kotyp <> 4
+.formula U|xid = D|id
+..
+!LIEFVK
+.continue XTKOM          ? M|vtyp <> 3
+.. Materialzuordnung fr die Kommissionierung eines Auftrages
+.add eres
+.copy U|xmehr = G|mehr
+.continue ENDE ? _U|xmehr
+.formula U|xid = D|id
+.add
+.formula U|xtkom = "$,reserv=" + U|xid + ";@ablageart=(Both)" ? M|mge >= 0
+.continue MZ
+..
+!XTKOM
+.formula U|xtkom = "$,,;charge<>`;@ablageart=(Both)"
+.formula U|xtkom = U|xtkom + ";artikel=" + M|kartikel^id ? _F|empty(M|kartikel)
+.formula U|xtkom = U|xtkom + ";abeweg=" + U|xid ? (M|vtyp=4 ; M|vtyp = 5) & H|mge >= 0
+.formula U|xtkom = U|xtkom + ";zbeweg=" + U|xid ? (M|vtyp=4 ; M|vtyp = 5) & H|mge >= 0 & M|ibuart = 1
+.formula U|xtkom = U|xtkom + ";zbeweg=" + U|xid ? (M|vtyp=4 ; M|vtyp = 5) & H|mge < 0
+.continue MZ
+..
+!EK
+.continue LIEFEK ? M|vtyp = 5
+.continue LIEFEK ? F|equals(H|tlsart, "(ReturnPackingSlip)")
+.add orig
+.continue LIEFEK ? _G|mehr
+.continue LIEFEK ? D|kotyp <> 4
+.formula U|xid = D|id
+..
+!LIEFEK
+.formula U|xtkom = "$,,;charge<>`;@ablageart=(Both)"
+.formula U|xtkom = U|xtkom + ";artikel=" + M|kartikel^id ? _F|empty(M|kartikel)
+.formula U|xtkom = U|xtkom + ";zbeweg=" + U|xid ? (M|vtyp = 4 ; M|vtyp = 5) & H|mge >= 0
+.formula U|xtkom = U|xtkom + ";abeweg=" + U|xid ? (M|vtyp = 4 ; M|vtyp = 5) & H|mge >= 0 & M|ibuart = 1
+.formula U|xtkom = U|xtkom + ";abeweg=" + U|xid ? (M|vtyp = 4 ; M|vtyp = 5) & H|mge < 0 
+.continue MZ
+..
+!MZ
+.formula U|xtkom = U|xtkom + ";einplan=FALSE"
+.load 3 mallocation 'U|xtkom'
+..
+!START
+.continue ENDE ? _G|mehr
+..
+.make screen line +O
+.formula U|xtvkbez = ""
+.add 3|artikel
+.continue OART ? _G|mehr
+.formula U|xtvkbez = 'D|vkbez.P|ksi'
+.formula U|xtvkbez = D|such ? F|empty(U|xtvkbez)
+..
+!OART
+.formula M|artikel   = 'U|xtvkbez'
+.formula M|artikelid = D|id
+.assign M|tbasisartikel = M|artikelid^basisartikel
+.formula M|tcharge   = 3|tcharge
+.copy M|charge  = 3|charge
+.formula M|zuomge    = 3|zuomge
+.formula M|zuomge    = -1 * 3|zuomge ? F|equals(H|tlsart, "(ReturnPackingSlip)")
+.copy M|einh    = 3|einh
+.formula M|platz     = 3|platz
+..
+..  individual FOP for table fields
+.input "ev/FOPZEILEPOSTEXTMZ"
+..
+.load 3 mallocation
+.continue START
+..
+!ENDE: individual FOP for fields after the table
+.input "ev/FOPENDEPOSTEXTMZ"
+.continue

@@ -1,0 +1,78 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Author         : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  : open node
+.. include fb/CASHMGMT.IS.COMMON.INIT
+.. include fb/LIQPLAN.ROW.FIND
+.. include fb/LIQPLAN.ALL.ROW.SUMS
+..*****************************************************************************
+..
+.set trans -
+..
+.type integer xicurrentrow ? _F|defined(U|xicurrentrow)
+..
+.formula U|xicurrentrow = M|aktzeile
+..
+.input "fb/CASHMGMT.IS.COMMON.INIT"
+.type text xtoutgrp ? _F|defined(U|xtoutgrp)
+.formula U|xitreelevel = M|tbaumstufe + 1
+.formula M|tbaumstat = "-"
+.formula U|xtoutgrp = U|xtout + ".GRP.OPEN"
+.. do grouping only once
+.continue LOOP ? F|fileexists(U|xtoutgrp)
+.type text xtoutgrperr ? _F|defined(U|xtoutgrperr)
+.type integer xiexitcode ? _F|defined(U|xiexitcode)
+.formula U|xtoutgrperr = U|xtout + ".ERR"
+.system 'F|expr("group_by.sh -n 18 -k 1 -k 2 -k 3 -k 4 -k 5 -s 6 " + U|xtout + " > " + U|xtoutgrp + " 2> " + U|xtoutgrperr)' background ?  M|icgetrennt
+.system 'F|expr("group_by.sh -n 18 -k 1      -k 3 -k 4 -k 5 -s 6 " + U|xtout + " > " + U|xtoutgrp + " 2> " + U|xtoutgrperr)' background ? _M|icgetrennt
+.formula U|xiexitcode = G|status
+.continue LOOP ? U|xiexitcode = 0 & F|filesize(U|xtoutgrperr) = 0
+.input -text 'U|xtoutgrperr'
+.end 'U|xiexitcode'
+..
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+.select from 'U|xtoutgrp' U|xttype # U|xbintercompany # U|xcategory # U|xepurchsales # U|xiperiod # U|xrvalue #
+.continue ROWSUMS ? _G|mehr
+.continue LOOP ?  U|xiperiod < 0
+.continue LOOP ?  U|xttype<>M|tpositions
+.continue LOOP ?  U|xbintercompany<>M|tic
+.continue LOOP ?  U|xepurchsales<>M|tekvks & _F|empty(M|tekvks)
+.copy U|xepurchsales = M|tekvks
+.input "fb/LIQPLAN.ROW.FIND"
+..*****************************************************************************
+!RFOUND: Row found
+..*****************************************************************************
+.. the purchasing values have to be multiplied by -1
+.copy U|xrvalue = -U|xrvalue ? U|xepurchsales = "(Purchasing)"
+.formula   M|twert.U|xiperiod = M|twert.U|xiperiod + U|xrvalue
+.formula   M|tbaumstufe = U|xitreelevel
+.copy      M|tkategorie = U|xcategory
+.formula   M|tbaumstat  = ""
+.continue LOOP
+..
+..*****************************************************************************
+!ROWSUMS
+..*****************************************************************************
+.type integer xxi ? _F|defined(U|xxi)
+.formula U|xxi = U|xicurrentrow
+.select screen line 'U|xxi'
+!L2
+.formula U|xxi = U|xxi + 1
+.continue E2 ? U|xxi > M|ozeilen
+.select screen line 'U|xxi'
+.continue E2 ?  M|tbaumstufe <> U|xitreelevel
+.formula M|twert1 = M|twert1 + M|twert0 ? M|tdetail
+.input "fb/LIQPLAN.ROW.SUM"
+.continue L2
+!E2
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.select screen line 'U|xicurrentrow'
+.continue

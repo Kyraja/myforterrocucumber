@@ -1,0 +1,91 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ATLASEXPORT.BSTART.BV
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Auflisten der Dateien im Export-Verzeichnis
+.. Functionality  : the infosystem does have 2 views
+..
+..  1)  All edi messages which still have status "2", i.e. an edi message
+..      type ATAUS was created, but no export file was prepared for processing
+..      with the customs software
+..      Theses edi messages are listed, and the infosystem is used to
+..      create the missing export files.
+..
+..  2)  All files in the export directory are listed. If file names
+..      follow a naming patter, their transaction and edi message id
+..      can easily be guessed.
+..
+..*****************************************************************************
+.set trans -
+..
+.type text   xtbrowser           ? _F|defined(xtbrowser)
+.type text   xtfopname           ? _F|defined(xtfopname)
+.type text   xtsystem            ? _F|defined(xtsystem)
+.type text   xtsedverz           ? _F|defined(xtsedverz)
+.type text   xtsel               ? _F|defined(xtsel)
+.type text   xAusland            ? _F|defined(xAusland)
+..
+.set trans +
+.formula T|xAusland = "Ausland"
+.set trans -
+..
+.. clear table
+.make screen line --
+..
+..
+.. show files or messages?
+.continue EDIMSG  ?  M|kbedi
+.continue FILES   ?  M|kbdateien
+.continue END
+..
+..
+!EDIMSG
+.formula M|select = "$,,;such=ATAUS;vorart=80;status=2"
+.formula M|select =  M|select  + ";nummer=" + M|kedi^nummer       ? _F|empty(M|kedi)
+.formula M|select =  M|select  + ";ideksvor=" + M|kvorgang^nummer ? _F|empty(M|kvorgang)
+.select edifact 'M|select'
+!NEXTEDI
+.continue END         ? _T|mehr
+.continue NEDI        ?  F|empty(H|ideksvor)
+..
+.formula T|xtsel = "$,,;laart=" + T|xAusland
+.formula T|xtsel = T|xtsel + ";nummer=" + H|ideksvor + ";kunde^nummer=" + H|idkundeab
+.formula T|xtsel = T|xtsel + ";uebertr=0"
+.formula T|xtsel = T|xtsel + ";@datenbank=3:1;@ablage=(3);@zeilen=(0)"
+.formula T|xtsel = M|kvorgang^id ? _F|empty(M|kvorgang)
+.load 1 sales 'T|xtsel'
+.continue NEDI    ? _T|mehr
+..
+.input 'M|tab'    ? _F|empty(M|tab)
+!NEDI
+.select edifact
+.continue NEXTEDI
+..
+..
+!FILES
+.. prepare ls-command: ls -1 atlas/senden/*400221 | sed 's/atlas\/senden\///g'
+.formula T|xtsedverz = M|kverz + "/"
+.formula T|xtsedverz = F|regreplaceall('T|xtsedverz',"/","\\/")
+.formula T|xtsedverz = "sed 's/" + T|xtsedverz +   "//g'"
+..
+.. list file names into file T|xtbrowser
+.file -tempname T|xtbrowser
+.formula T|xtsystem = "ls -1 " + 'M|kverz'  + "/*_" + 'M|kvorgang^nummer' + "*" +  " | " + T|xtsedverz + " > " + 'T|xtbrowser'
+.system 'T|xtsystem' background
+.continue ERRSYS  ? _T|mehr
+..
+!NEXTROW: loop files
+.select from 'T|xtbrowser' xtfopname
+.continue END         ? _T|mehr
+.input 'M|tab'    ? _F|empty(M|tab)
+.continue NEXTROW
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERRSYS
+.error Fehler beim Lesen von Verzeichnis: 'M|kverz'
+.end 1

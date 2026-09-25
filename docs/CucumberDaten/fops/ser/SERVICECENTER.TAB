@@ -1,0 +1,180 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SERVICECENTER.TAB
+.. Autor          : cl
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       :
+.. Functionality  :
+..
+..include ser/SERVICECENTER.EV
+..include ser/SERVICECENTER.KETTE
+..include ser/SERVICECENTER.OPEN
+..*****************************************************************************
+.set trans -
+.type bool xberst      ? _F|defined(xberst)
+.type bool xbzweit     ? _F|defined(xbzweit)
+.type bool xbtreffer   ? _F|defined(xbtreffer)
+.type bool xopen       ? _F|defined(xopen)
+.type text xtanfstatus ? _F|defined(U|xtanfstatus)
+.type text xtdat       ? _F|defined(U|xtdat)
+.type text xmerk       ? _F|defined(U|xmerk)
+..
+.continue ERROR1        ? (F|empty(datef) & F|empty(datet)) & M|beides
+.copy U|xberst    = G|FALSE
+.copy U|xbzweit   = G|FALSE
+.copy U|xbtreffer = G|FALSE
+.formula M|nettosum = "0"
+..
+.copy M|kunde  M|vorgang^kunde ?  (M|vorgang^dnr = 3 ; M|vorgang^dnr = 122) & _F|empty(M|vorgang)
+.continue ERROR                ? F|empty(M|kunde)   & M|vorgang^dnr <> 4 & F|empty(service) & F|empty(selvorgang)
+.input "SERVICECENTER.KETTE"   ? F|empty(M|vorgang) & F|empty(M|selvorgang)
+.continue PORTAL               ? F|empty(M|vorgang) & F|empty(M|selvorgang)
+..
+.continue SERVICE              ? M|vorgang^dnr = 122
+.continue VERKAUF              ? M|vorgang^dnr = 3 ; _F|empty(M|selvorgang)
+.continue EINKAUF              ? M|vorgang^dnr = 4
+..
+!SERVICE
+.formula M|grliste = ""
+.formula M|select  = "$,,;nummer="
+.formula M|select  = M|select+";id=" + M|vorgang^id
+.formula M|select  = M|select+";@ablageart=(Active)"                     ?  M|lebendig
+.formula M|select  = M|select+";@ablageart=(Both)"                       ?  M|beides
+.formula M|select  = M|select+";kunde=" + M|kunde^id
+.formula M|select  = M|select+";anferfd=" + 'M|datef' + "!" + 'M|datet'
+.formula M|select  = M|select+";serprod=" + M|service^id                 ? _F|empty(M|service)
+.formula M|grliste = "122:1"
+.continue GRUPPE
+..
+!VERKAUF
+.formula U|xmerk   = ""
+.formula M|grliste = ""
+.atext -language 'G|lsprache' U|xtdat 660 Verkauf                        ? _F|empty(M|service)
+.formula M|select  = "$,,"
+.formula M|select  = M|select+";@ablageart=(Both)"                       ?  M|beides
+.formula M|select  = M|select+";@ablageart=(Active)"                     ?  M|lebendig
+.formula M|select  = M|select+";kunde=" + M|kunde^id                     ? _F|empty(M|kunde)
+.formula M|select  = M|select+";betreuer=" + M|betreuer^id               ? _F|empty(M|betreuer)
+.formula M|select  = M|select+";frzeich/" + M|frzeich                    ? _F|empty(M|frzeich)
+.formula M|select  = M|select+";vom=" + 'M|datef' + "!" + 'M|datet'      ?  F|empty(M|service)
+.formula M|select  = M|select+";kopf^vom=" + 'M|datef' + "!" + 'M|datet' ? _F|empty(M|service)
+.formula M|select  = M|select+";id=" + M|vorgang^id                      ? _F|empty(M|vorgang)
+.formula M|select  = M|select+";typ=" + M|selvorgang                     ? _F|empty(M|selvorgang) & F|empty(M|vorgang) & F|empty(M|service)
+.formula M|select  = M|select+";kotypa=" + M|selvorgang                  ? _F|empty(M|selvorgang) & F|empty(M|vorgang) & _F|empty(M|service)
+.formula M|select  = M|select+";@gruppe=2"                               ? _F|empty(M|service)
+.formula M|select  = M|select+";serprod=" + M|service^id                 ? _F|empty(M|service)
+.formula M|select  = M|select+";kenn<>`"                                 ?  (F|equals(M|selvorgang, "(PackingSlip)") ; F|equals(M|selvorgang, "(Invoice)")) & F|empty(M|service)
+.formula M|select  = M|select+";kopf^kenn<>`"                            ?  (F|equals(M|selvorgang, "(PackingSlip)") ; F|equals(M|selvorgang, "(Invoice)")) & _F|empty(M|service)
+.formula M|grliste = "3:1"                                               ?  F|empty(M|service)
+.continue GRUPPE
+..
+!EINKAUF
+.formula M|grliste = ""
+.formula M|select  = "$,,;nummer="
+.formula M|select  = M|select+";id=" + M|vorgang^id                      ? _M|vorgang^dnr = 4
+.formula M|select  = M|select+";@ablageart=(Both)"                       ?  M|beides
+.formula M|select  = M|select+";@ablageart=(Active)"                     ?  M|lebendig
+.formula M|select  = M|select+";kunde=" + M|kunde^id
+.formula M|select  = M|select+";anferfd=" + 'M|datef' + "!" + 'M|datet'
+.formula M|select  = M|select+";@zeilen=ja;@bereich=ja;bextdl<>`"
+.formula M|grliste = "122:1"                                             ? F|empty(M|service)
+..
+.load 8 group 'M|grliste' 'M|select'
+.continue AUFZU            ? _G|mehr
+.load 8 line '8|selzeile'
+.continue AUFZU            ? _G|mehr
+.copy U|xbtreffer = G|TRUE ?  G|mehr
+.continue TREFFER
+..
+!LTREFFER
+.continue AUFZU            ? _G|mehr
+.load 8 line '8|selzeile'
+.continue AUFZU            ? _G|mehr
+..
+!TREFFER
+.atext -language 'G|lsprache' U|xtdat 661 Einkauf  ? _F|empty(M|service)
+.formula M|grliste = ""
+.formula M|select  = "$,,"
+.formula M|select  = M|select+";id=" + 8|bextdl^id
+.formula M|select  = M|select+";@ablageart=(Both)"                      ? M|beides
+.formula M|select  = M|select+";@ablageart=(Active)"                    ? M|lebendig
+.formula M|select  = M|select+";vom=" + 'M|datef' + "!" + 'M|datet'
+.formula M|grliste = "4:1"                                              ? F|empty(M|service)
+..
+.select purchasing '8|bextdl^id'
+.continue DATNAME  ? _H|ablagef
+.continue DATNAME  ?  H|ablagef & M|beides
+.load 8 continue
+.continue LTREFFER
+..
+!GRUPPE
+.select group 'M|grliste' 'M|select' ?  F|empty(M|service) ; (_F|empty(M|service) & M|grliste = "122:1")
+.continue DATNAME                    ?  F|empty(M|service) ; (_F|empty(M|service) & M|grliste = "122:1")
+..
+!SELSERP
+.select 'U|xtdat' 'M|select'
+..
+!LSELSERP
+.continue AUFZU                        ? _G|mehr
+.continue WEITER                       ? _F|empty(U|xmerk) & 'U|xmerk' = 'H|kopf^id'
+.reserve
+.formula U|xmerk = 'H|kopf^id'
+.select 'U|xtdat' 'H|kopf^id'
+.continue AUFZU                        ? _G|mehr
+..
+!DATNAME
+.continue AUFZU   ? _G|mehr
+.. VorgÑnger prÅfen
+.continue VORGOK  ? _F|equals(M|selvorgang, "(PackingSlip)") & _F|equals(M|selvorgang, "(Invoice)")
+.continue VORGOK  ? H|pos^okopf^typ = 33 ; H|pos^okopf^typ = 34 ; H|pos^okopf^typ = 35 ; H|pos^okopf^typ = 37
+.continue VORGOK  ? H|pos^okopf^pos^okopf^typ = 33 ; H|pos^okopf^pos^okopf^typ = 34 ; H|pos^okopf^pos^okopf^typ = 35 ; H|pos^okopf^pos^okopf^typ = 37
+.continue WEITER
+..
+!VORGOK
+.continue SEL     ? _F|defined(H|anferl)
+.. Serviceanfrage nicht beachten, wenn Erledigt-Datum vor "Datum von" aus Kopf
+.continue WEITER  ? _F|empty(H|anferl) & ('H|anferl:8' < 'M|datef:8') & _F|empty(M|datef)
+.formula U|xtanfstatus = F|value(H|anfstatus, "AS191")
+.continue WEITER  ?  M|lebendig & (U|xtanfstatus="(Completed)" ; U|xtanfstatus="(ReleasedForInvoicing)" ; U|xtanfstatus="(Confirmed)")
+..
+!SEL
+.continue BKOPF   ? M|grliste <> "3:1"
+.continue WEITER  ? H|ktyp = 3 ; H|ktyp = 31 ; H|ktyp = 36
+..
+!BKOPF
+.input 'M|bkopf'
+.load 8 continue   ? U|xbtreffer
+.continue LTREFFER ? U|xbtreffer
+..
+!WEITER
+.select continue
+.continue LSELSERP ? _F|empty(M|service) & _M|grliste = "122:1"
+.continue DATNAME
+..
+!AUFZU
+.continue                      ? M|tzeilen = 0
+.copy M|tfold = G|TRUE
+..
+!PORTAL
+.continue ENDE                 ? M|anzstufen = 0
+.formula U|xopen = G|TRUE
+.input "ser/SERVICECENTER.EV"  ? M|tzeilen > 0
+.select screen line
+.continue PORTAL               ?  G|mehr
+.continue ENDE
+..
+!ENDE
+.input "ser/SERVICECENTER.OPEN"
+.continue SELSERP ? _F|empty(M|service) & _M|grliste = "122:1" & F|empty(M|selvorgang)
+.continue
+..
+!ERROR
+.error -field M|kunde -message Bitte Kunde, Vorgang, Vorgangsnummer oder Serviceprodukt eintragen.
+.end 1
+..
+!ERROR1
+.error Bitte "Datum von-bis" eintragen.
+.cursor datef ? F|empty(M|datef)
+.cursor datet ? F|empty(M|datet)
+.end 1

@@ -1,0 +1,155 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDINFAKT.KBUPRUEFEN.BN
+.. Datum          : 18.09.2007
+.. Version        : 2008r1n00
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Zu jeder Vorgangsposition wird der Preis zu einem
+..                  Preisfindungsdatum neu ermitteln.
+..                  Zu jeder Gruppe Lieferscheinposition und zugeh”rigen
+..                  Rechnungspositione werden die Differenzen von
+..                  altem zu neuem Positionswert summiert.
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+.. Ablauf         : Aufruf aus Berichtsfuá-FOP bzw. eigenen Button
+..
+.. Functionality  : for each transaction row a new price is fetched for
+..                  a specific new price-finding date.
+..                  For each group of delivery note row + dependant invoice items
+..                  the differences between old and new value are summed up.
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+.. Program flow   : called from report footer fop, or from its own button
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.continue END     ?  M|kbistgepruef
+.continue END     ?  M|kbistnurdiff
+..
+.. system call
+.type text xtsys     ? _F|defined(xtsys)
+.type text xtselo    ? _F|defined(xtselo)
+.. files
+.type text xtaus     ? _F|defined(xtaus)
+.type text xtepi     ? _F|defined(xtepi)
+.type text xterg     ? _F|defined(xterg)
+.. used to retrieve values from epi
+.type real xvalue    ? _F|defined(xvalue)
+.type text xfilerow  ? _F|defined(xfilerow)
+.type text xvname    ? _F|defined(xvname)
+..
+.. current row is an invoice item
+.type bool xbinvoice    ? _F|defined(xbinvoice)
+.. new value on invoice items for one delivery note item
+.. must be calucated to match currency of delivery note
+.type real xriinewval   ? _F|defined(xriinewval)
+.. new value on delivery note
+.type real xrdnnewval   ? _F|defined(xrdnnewval)
+.. diff old/new for delivery note
+.type real xrdndiff     ? _F|defined(xrdndiff)
+.. diff old/new for invoice items
+.. must be calucated to match currency of delivery note
+.type real xriidiff     ? _F|defined(xriidiff)
+..
+.. load fields needed by "FIRMA.KURS.GET"
+.input "FIRMA.KURSX"
+..
+.select screen header
+..
+!NEXT
+.select screen line
+.continue MERKER  ? _T|mehr
+..
+.. there are 3 types of rows, they always appear in this order for each group
+.. * delivery note                      (M|tvorgang ist der Lieferschein M|tls)
+.. * invoice items (might be zero rows) (M|tvorgang ist eine Rechnung)
+.. * sum row                            (M|tvorgang ist leer)
+.continue SUM     ?  F|empty(M|tvorgang)
+.continue INVOICE ?  M|tvorgang^id <> M|tls^id
+..
+!DELNOTE: initialize fields if row is delivery note
+.formula T|xbinvoice = false
+.formula T|xrdnnewval = 0
+.formula T|xriinewval = 0
+.formula T|xrdndiff = 0
+.formula T|xriidiff = 0
+.continue SAVINGS
+..
+!INVOICE
+.formula T|xbinvoice = true
+.continue SAVINGS
+..
+!SAVINGS: diff old value to new value: make new offer with price at specific date for product
+.. find current "savings" price
+.input "is/PREISAUSKUNFT"     ? _F|defined(T|xpakl)
+.assign T|xpakl = M|tkunde^id
+.assign T|xpaklprg = M|trahmen^nummer
+.assign T|xpaartikel = M|tartikel^id
+.assign T|xpamge = M|tmenge
+.assign T|xpakonddat = M|kpreisdat
+.assign T|xpaland = M|tland^id  ? _F|empty(M|tland)
+.assign T|xpaland = M|trahmen^land^id  ?  F|empty(M|tland)
+.assign T|xpaignrahmen = G|FALSE
+.input "is/PREISAUSKUNFT"
+.assign M|tnwert = T|xpapwert
+.assign M|tnpreis = T|xpapreis
+..
+.. diff new and old value, remember diff, sum diff for invoice items
+.continue INVSAV  ?  T|xbinvoice
+.. delivery note: currency does match itself :)
+.formula M|tdiff      = M|tnwert - M|tawert
+.formula T|xrdnnewval = M|tnwert
+.formula T|xrdndiff   = M|tdiff
+.formula M|tstatus    = M|zeildifficon           ? _F|empty(M|tdiff)
+.continue NEXT
+!INVSAV: remember new values, sum for invoice items
+.formula M|tdiff      = M|tnwert - M|tawert
+.continue NEXT                                    ?  F|empty(M|tdiff)
+.formula M|tstatus    = M|zeildifficon
+.. remember+sum for comparisson with delivery note
+.. currency of items summed into T|xriinewval or T|xriidiff have to match currency of delivery note
+.formula T|xriinewval = T|xriinewval + M|tnwert                                                   ?  M|tland^id =  M|tls^land^id
+.formula T|xriinewval = T|xriinewval + F|fxamount(M|tls^land^id,M|tnwert,M|kpreisdat,M|tland^id)  ?  M|tland^id <> M|tls^land^id
+.formula T|xriidiff   = T|xriidiff   + M|tdiff                                                    ?  M|tland^id =  M|tls^land^id
+.formula T|xriidiff   = T|xriidiff   + F|fxamount(M|tls^land^id,M|tdiff,M|kpreisdat,M|tland^id)   ?  M|tland^id <> M|tls^land^id
+.continue NEXT
+..
+..
+!SUM: compare delivery slip value with invoice items
+.formula M|tnwert = T|xrdnnewval - T|xriinewval
+.. show difference
+.formula M|tdiff  = T|xrdndiff                   ?  T|xriinewval = 0
+.formula M|tdiff  = T|xriidiff                   ?  T|xriinewval > 0
+.continue NEXT                                    ?  F|empty(M|tdiff)
+.formula M|tstatus = M|ergdifficon
+..
+.. sum difference across all positions for all delivery slips
+.. * currency of customer (M|kland -> M|ksumme) and delivery slip (M|tland -> M|tdiff) might not match
+.. * currency of delivery slip and quotation do match
+.formula M|ksumme = M|ksumme + M|tdiff                                                ?  M|kland^id =  M|tland^id
+.formula M|ksumme = M|ksumme + F|fxamount(M|kland^id,M|tdiff,M|kpreisdat,M|tland^id)  ?  M|kland^id <> M|tland^id
+.continue NEXT
+..
+!MERKER
+.formula M|kbistgepruef = true
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERROR1
+.error Das Angebot zu Artikel 'H|artex^nummer' konnte nicht angelegt werden!
+.end 1
+..
+!ERROR2
+.error Das Angebot zu Artikel 'H|artex^nummer' konnte nicht ausgewertet werden!
+.end 1

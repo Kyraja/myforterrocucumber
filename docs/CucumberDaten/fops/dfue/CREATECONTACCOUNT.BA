@@ -1,0 +1,248 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : CREATECONTACCOUNT.BA
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type VP17  xpartner    ? _F|defined(U|xpartner)
+.type GL25  xwerk       ? _F|defined(U|xwerk)
+.type text  xselect     ? _F|defined(U|xselect)
+.type text  xsys        ? _F|defined(U|xsys)
+.type text  xbutext     ? _F|defined(U|xbutext)
+.type DVM2  xtmpfile    ? _F|defined(U|xtmpfile)
+.type text  xtout       ? _F|defined(U|xtout)
+.type text  xterr       ? _F|defined(U|xterr)
+.type GJ    xgety       ? _F|defined(U|xgety)
+.type bool  xbweiter    ? _F|defined(U|xbweiter)
+.type bool  xende       ? _F|defined(U|xende)
+.type DVM2  xtmpfile    ? _F|defined(U|xtmpfile)
+..
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+.copy U|xende = G|FALSE
+..
+.continue BSTART    ?   G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+.continue CHECKTAB  ?   G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bkonto"
+.continue END 
+..
+!BSTART: Kreislauf mit Partner und Werk selektieren
+.continue ERROR1 ? F|empty(M|kreislauf) ; F|empty(M|artikel)
+.continue ERROR9 ? F|empty(M|ktofuehr) & _M|all
+.formula M|select = "$,,;nummer=" + M|kreislauf^nummer + ";tpartner=;twerk=;@gruppe=2;@zeilen=ja;@ablageart=(Active)"
+.select containeraccount 'M|select'
+.continue ERROR2 ? _G|mehr
+.select line 'H|selzeile'
+.continue END    ? _G|mehr
+.continue SELZEILE
+..
+!BKONTO: prÅfen, ob BehÑlterkonto vorhanden; SchlÅssel: BehÑlter
+.formula U|xselect = "$,,;artikel==" + M|artikel^id + ";partner==" + U|xpartner^id + ";werk==" + U|xwerk
+.formula U|xselect = U|xselect + ";@gruppe=1;@ablageart=(Active)"
+.load 1 containeraccount 'U|xselect'
+.continue TAB ? _G|mehr
+..
+.formula U|xselect  = ""
+.formula U|xpartner = ""
+.formula U|xwerk    = ""
+.assign M|bhkonto = 1|id
+.continue EMPTYBHKONTO               ? F|empty(M|bhkonto)
+.copy M|tktofuehr = 1|ktofuehr
+.protection tmark 'M|aktzeile'
+.protection kontoanfang 'M|aktzeile'
+.protection pkontoanfang 'M|aktzeile'
+.formula M|vondat = M|bhkonto^vondat
+.protection vondat 'M|aktzeile'     
+..
+!EMPTYBHKONTO
+.formula M|select = "$,,;@gruppe=1;@ablageart=(Active)"
+.formula M|select = M|select + ";bhkto=" + 1|id
+.load 2 containeraccounting 'M|select'
+.continue SELECT ? _G|mehr
+.assign M|buchung = 2|id
+.copy U|xende = G|TRUE
+.formula M|pkontoanfang = M|bhkonto^abestand ? F|equals(M|tktofuehr, "(Internal)")
+.formula M|kontoanfang = M|bhkonto^abestandintern  ? F|equals(M|tktofuehr, "(BusinessPartner)")
+.formula M|endbestand = M|bhkonto^endbestand
+.formula M|endbestandintern = M|bhkonto^endbestandintern
+.formula M|aktkontostand = M|bhkonto^bestand
+.protection kontoanfang 'M|aktzeile'  
+.protection pkontoanfang 'M|aktzeile' 
+.continue SELECT 
+..
+!SELECT
+.select containeraccount
+.continue END  ? _G|mehr
+.select line 'H|selzeile'
+.continue END    ? _G|mehr
+..
+!SELZEILE
+.assign U|xpartner = H|tpartner^id
+.formula U|xwerk   = H|twerk
+.make screen line +o
+.assign M|partner = H|tpartner^id
+.formula M|werk   = H|twerk
+.formula M|vondat = "."
+.protection kontoanfang 'M|aktzeile'   ? F|equals(M|ktofuehr, "(Internal)") & _M|all
+.protection pkontoanfang 'M|aktzeile'  ? F|equals(M|ktofuehr, "(BusinessPartner)") & _M|all
+.continue BKONTO
+..
+!TAB
+.assign M|partner = U|xpartner^id
+.formula M|werk   = U|xwerk
+.continue SELECT
+..
+!CHECKTAB
+.continue ERROR9 ? F|empty(M|ktofuehr) 
+.select screen header
+..
+!LINE
+.select screen line
+.continue END         ? _G|mehr &  U|xende
+.continue ERROR3      ? _G|mehr & _U|xende 
+.continue SELHEADER   ?  G|mehr & M|tmark
+.continue LINE
+..
+!SELHEADER 
+.formula U|xgety = F|getfy(M|vondat)
+.continue ERROR8      ?  G|gjahr <> U|xgety
+.select screen header
+..
+!NEW: BehÑlterkonto anlegen
+.select screen line
+.continue END ? _G|mehr
+.continue NEW ? _M|tmark
+..
+.continue KTOSEL ? _F|empty(M|bhkonto)
+..
+.. BehÑlterkonto anlegen 
+.output new 'U|xtmpfile'
+.input "DATEI.F"
+..
+#!database=158:1
+#!action=NEW
+#!CHARSET=EKS
+artikel;such;partner;werk;ktofuehr
+'M|artikel^id';'M|partner^such';'M|partner^id';'M|werk';'M|ktofuehr'
+.output
+..
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR5  ? _G|mehr
+..
+!KTOSEL
+.formula M|select = "$,,"
+.formula M|select = M|select + ";@gruppe=1"
+.formula M|select = M|select + ";id="
+.formula M|select = M|select + ";artikel=" + M|artikel^id
+.formula M|select = M|select + ";partner= " + M|partner^id
+.formula M|select = M|select + ";ktofuehr=" + M|ktofuehr
+.formula M|select = M|select + ";werk=" + M|werk
+..
+.select containeraccount 'M|select'
+.continue ERROR4  ? _G|mehr
+..
+.formula M|bhkonto = H|id
+.copy M|tktofuehr = H|ktofuehr
+.copy M|tmark = G|FALSE       
+.protection tmark 'M|aktzeile'
+..
+.continue GPARTNER ? F|equals(M|tktofuehr, "(BusinessPartner)")
+..
+!INTERN
+.set trans +
+.formula M|hinweis = "Keine Buchung, da Anfangsbestand = 0!" ? M|pkontoanfang = 0 
+.set trans -
+.protection vondat 'M|aktzeile'                              ? M|pkontoanfang = 0
+.continue NEW                                                ? M|pkontoanfang = 0 
+.continue KTONEW 
+..
+!GPARTNER
+.set trans +
+.formula M|hinweis = "Keine Buchung, da Anfangsbestand = 0!" ? M|kontoanfang = 0
+.set trans -
+.protection vondat 'M|aktzeile'                              ? M|kontoanfang = 0
+.continue NEW                                                ? M|kontoanfang = 0
+..
+!KTONEW: Neu angelegtes BehÑlterkonto Ñndern und BehÑlterbuchung generieren
+.output new 'U|xtmpfile'
+#!database=158:1
+#!action=update
+#!CHARSET=EKS
+?num158;ktofuehr;vondat;abestandintern;>buchauslj                 ? F|equals(M|ktofuehr, "(BusinessPartner)") & _M|all
+?num158;ktofuehr;vondat;abestand;>buchauslj                       ? F|equals(M|ktofuehr, "(Internal)") & _M|all
+?num158;ktofuehr;vondat;abestandintern;abestand;>buchauslj        ? M|all
+?'H|id';'M|ktofuehr';'M|vondat';'M|kontoanfang';                  ? F|equals(M|ktofuehr, "(BusinessPartner)") & _M|all
+?'H|id';'M|ktofuehr';'M|vondat';'M|pkontoanfang';                 ? F|equals(M|ktofuehr, "(Internal)") & _M|all
+?'H|id';'M|ktofuehr';'M|vondat';'M|kontoanfang';'M|pkontoanfang'; ? M|all
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR6 ? _G|mehr
+..
+.formula M|select = "$,,;@gruppe=1;@ablageart=(Active)"
+.formula M|select = M|select + ";bhkto=" + H|id
+..
+.select containeraccounting 'M|select'
+.continue ERROR7  ? _G|mehr
+.assign M|buchung = H|id
+.copy U|xende = G|TRUE
+.formula M|vondat = M|bhkonto^vondat
+.formula M|kontoanfang = M|bhkonto^abestandintern 
+.formula M|pkontoanfang = M|bhkonto^abestand
+.formula M|aktkontostand = M|bhkonto^bestand
+.protection vondat 'M|aktzeile'
+.protection kontoanfang 'M|aktzeile'
+.protection pkontoanfang 'M|aktzeile'
+.formula M|endbestand = M|bhkonto^endbestand
+.formula M|endbestandintern = M|bhkonto^endbestandintern
+..
+.continue LINE
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR1
+.error Bitte BehÑlterkreislauf und BehÑlter fÅllen!
+.end 1
+..
+!ERROR2
+.error BehÑlterkreislauf nicht vorhanden!
+.end 1
+..
+!ERROR3
+.error Keine Zeile markiert!
+.end 1
+..
+!ERROR4
+.error Kein BehÑlterkonto gefunden!
+.end 1
+..
+!ERROR5
+.error Anlegen eines BehÑlterkontos gescheitert!
+.end 1
+..
+!ERROR6
+.protection -reset tmark 'M|aktzeile'
+.copy M|tmark = G|TRUE 
+.output terminal
+.set trans +
+Fehlerdatei:
+.set trans -
+.input 'U|xterr'
+.error Anlegen einer BehÑlterbuchung gescheitert!
+.end 1
+..
+!ERROR7
+.error Keine BehÑlterbuchung gefunden!
+.end 1
+..
+!ERROR8
+.error Datum muss in definierten GeschÑftsjahren liegen!
+.end 1
+..
+!ERROR9
+.error Bitte wÑhlen sie eine KontofÅhrung!
+.end 1

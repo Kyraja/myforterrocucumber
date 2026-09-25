@@ -1,0 +1,133 @@
+..!interpreter english declaration noabbrev
+..*****************************************************************************
+.. Name           : allpstart/FOP.PRJM.LM.BUCHEN
+.. Datum/Date     : 07.02.2013
+.. Version        : 
+.. Autor/Author   : ts
+.. Copyright      : (c) 1990 - 2015 alltrotec GmbH
+.. Beschreibung/
+.. Description    : erzeugt die Transaktion fÅr alle Leistungsmeldung mit Startum <= Datum - xystart
+..                  xystart wird als Parameter dem Programm Åbergeben
+..                  wird das Programm ohne Parameter aufgerufen, werden alle Leistungsmeldungen gebucht
+..
+...Includes       :
+..*****************************************************************************
+..
+.set trans -
+..
+.type text    xtsel             ? _F|defined(U|xtsel)
+.type text    xtsys             ? _F|defined(U|xtsys)
+.type text    xtedpdat          ? _F|defined(U|xtedpdat)
+.type text    xtedpout          ? _F|defined(U|xtedpout)
+.type text    xtedpmsg          ? _F|defined(U|xtedpmsg)
+.type text    xtedperr          ? _F|defined(U|xtedperr)
+.type GD      xdstart           ? _F|defined(U|xdstart)
+.type integer xi1               ? _F|defined(U|xi1)
+..
+..*****************************************************************************
+..
+.input "allpstart/PRJM.KONFIG.INI"
+..
+.continue START         ? _F|defined(U|xystart)
+.formula U|xi1     = 'U|xystart'
+.formula U|xdstart =  G|datum - U|xi1
+..
+!START
+.file -TEMPNAME U|xtedpdat
+.file -TEMPNAME U|xtedpout
+.file -TEMPNAME U|xtedpmsg
+.file -TEMPNAME U|xtedperr
+.input DATEI.F
+..
+.set trans +
+'G|txname                       '       Leistungsmeldungen buchen
+
+?verbuchen bis Startdatum: 'U|xdstart'  ? _F|empty(U|xdstart)
+
+Start: 'G|zeitpunkt'
+..
+.set trans -
+..
+
+..
+.output NEW 'U|xtedpdat'
+#!database='U|xydblnachweis'
+#!group='U|xygrlnachweis'
+#!action=VIEW
+#!charset=EKS
+#!EDP_LANGCODE='G|bsprache'
+id;ybubuchen;
+
+..
+.formula U|xtsel = "$,,ysperre==0;ytransaktion=`;ybsperre==0;@ablageart=(1)"
+.formula U|xtsel = U|xtsel + ";yadatum<=" + 'U|xdstart:8'       ? _F|empty(U|xdstart)
+.load 0 group 'U|xydbgrlnachweis' 'U|xtsel'
+!NEXTLM:
+.continue EDP   ? _G|mehr
+..
+'0|id';;
+..
+.load 0 continue
+.continue NEXTLM
+..
+!EDP:
+.formula U|xtsys = "edpimport.sh -p " + G|einmalpw
+.formula U|xtsys = U|xtsys + " -I " + U|xtedpdat
+.formula U|xtsys = U|xtsys + " -H " + U|xtedpmsg
+.formula U|xtsys = U|xtsys +" >"    + U|xtedpout
+.formula U|xtsys = U|xtsys +" 2>"   + U|xtedperr
+.system 'U|xtsys' BACKGROUND
+..
+.output TERMINAL
+..
+.continue ERR1          ? _G|mehr
+.continue ERR2          ?  F|filenotempty(U|xtedperr)
+..
+.continue END           ? _F|fileexists(U|xtedpmsg)
+.continue END           ? _F|filenotempty(U|xtedpmsg)
+..
+.set trans +
+>>> Hinweise beim verbuchen
+.set trans -
+.input 'U|xtedpmsg'
+
+..
+.continue END
+..
+..
+!END:
+..
+
+..
+.set trans +
+>>> Leistungsmeldungen verbucht
+.set trans -
+..
+.continue
+..
+..
+!ERR1:
+>>> Fehler beim verbuchen:
+Befehl: 'U|xtssys'
+..
+.continue
+..
+!ERR2:
+.set trans +
+..
+>>> Fehler beim verbuchen:
+EDP Befehl: 'U|xtsys'
+
+EDP Datei:         'U|xtedpdat'
+
+?EDP Hinweisdatei: 'U|xtedpmsg' ?  F|fileexists(U|xtedpmsg)
+.input 'U|xtedpmsg'             ?  F|fileexists(U|xtedpmsg)
+
+?EDP Fehlerdatei:  'U|xtedperr' ?  F|fileexists(U|xtedperr)
+.input 'U|xtedperr'             ?  F|fileexists(U|xtedperr)
+
+?EDP Ausgabedatei: 'U|xtedpout' ?  F|fileexists(U|xtedpout)
+.input 'U|xtedpout'             ?  F|fileexists(U|xtedpout)
+..
+.set trans -
+.continue

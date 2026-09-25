@@ -1,0 +1,135 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ENTRYCERTIFICATE.BA
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  :
+..
+..*****************************************************************************
+.set trans -
+.type text xhinweis ? _F|defined(U|xhinweis)
+.type text xtmpfile ? _F|defined(U|xtmpfile)
+.type text xtout    ? _F|defined(U|xtout)
+.type text xterr    ? _F|defined(U|xterr)
+..
+.file -tempname U|xtmpfile
+.file -tempname U|xtout
+.file -tempname U|xterr
+..
+.formula M|hinweis = ""
+.continue HEADER   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "erhalt"
+.continue HEADER   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "versand"
+.continue DIRECT   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "rueckausschl"
+.continue DIRECT   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "ausgeschlossen"
+.continue DIRECT   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "erhalten"
+.continue DIRECT   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "versendet"
+.continue END
+..
+!HEADER
+.select screen header
+.continue ERROR3 ? M|tzeilen = 0
+..
+!LINE
+.select screen line
+.continue REFRESH  ? _G|mehr
+.continue LINE     ?  F|empty(M|lskopf)
+..
+!DIRECT: Verkaufslieferscheine
+.select modificationlock nowait sales 'M|lskopf^id'
+.continue ERROR1    ? _G|mehr
+.continue ERROR2    ? _G|gesperrt
+.output new 'U|xtmpfile'
+.input DATEI.F
+#!database=3:23
+#!action=modify 
+#!charset=eks
+..
+.continue SPEICHERN ?  G|evtvar = "ausgeschlossen" ; G|evtvar = "rueckausschl"
+.continue ERHALT    ?  G|evtvar = "erhalt" ; G|evtvar = "erhalten"
+.continue VERSAND   ?  G|evtvar = "versand" ; G|evtvar = "versendet"
+.continue END
+..
+!SPEICHERN: LS ausschlie·en und Bemerkung setzen oder aufheben
+.select
+num3;glbausgeschl;glbbem
+?'M|lskopf^id';1;'M|bem' ? M|ausgeschlossen
+?'M|lskopf^id';0;'M|bem' ? M|rueckausschl
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR5 ? _G|mehr
+..
+.continue LINE  ? G|evtvar = "buspeichern"
+.continue REFRESH
+..
+!ERHALT: LS zurÅckerhalten setzen und Datum fÅllen
+.continue ERROR4 ? _H|glbversandt  & G|evtvar = "erhalten"
+.type text xhinweis ? _F|defined(U|xhinweis)
+.set trans +
+.formula U|xhinweis = "ZurÅckerhalten nur fÅr bereits versandte und nicht ausgeschlossene GelangensbestÑtigungen mîglich."
+.set trans -
+.formula M|hinweis = U|xhinweis    ? (_H|glbversandt ; H|glbausgeschl) & G|evtvar = "erhalt"
+.continue LINE   ? _H|glbversandt  & G|evtvar = "erhalt"
+.continue LINE   ?  H|glbausgeschl & G|evtvar = "erhalt"
+.select
+num3;glbrueck;glbrueckdatum
+'M|lskopf^id';1;.
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR5 ? _G|mehr
+..
+.continue LINE  ? G|evtvar = "erhalt"
+.continue REFRESH
+..
+!VERSAND: LS verschickt setzen und Datum fÅllen
+.set trans +
+.formula U|xhinweis = "Verschickt nur fÅr nicht ausgeschlossene GelangensbestÑtigungen mîglich."
+.set trans -
+.formula M|hinweis = U|xhinweis   ?  H|glbausgeschl & G|evtvar = "versand"
+.continue LINE                    ?  H|glbausgeschl & G|evtvar = "versand"
+.set trans +
+.formula U|xhinweis = "Auswahl enthÑlt bereits LS mit versandten GelangensbestÑtigungen." 
+.set trans -
+.formula M|hinweis = U|xhinweis   ?  H|glbversandt & G|evtvar = "versand"
+.continue LINE                    ?  H|glbversandt & G|evtvar = "versand"
+.select
+num3;glbversandt;glbversanddatum
+'M|lskopf^id';1;.
+.output
+.system 'F|formatstr("edpimport.sh -p {1} -I {2} >{3} 2>{4}", G|einmalpw, U|xtmpfile, U|xtout, U|xterr)' background
+.continue ERROR5 ? _G|mehr
+..
+.continue LINE  ? G|evtvar = "versand"
+.continue REFRESH
+..
+!REFRESH: Tabelle refreshen
+.select screen header
+.input "is/TABLEEREN"
+.input "vk/ENTRYCERTIFICATE.EV"
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR1
+.error Lieferschein nicht vorhanden!
+.end 1
+..
+!ERROR2
+.error Lieferschein kann nicht gesperrt werden!
+.end 1
+..
+!ERROR3
+.error Keine Zeilen vorhanden!                                    
+.end 1
+..
+!ERROR4
+.error Im LS ist "GelangensbestÑtigung versendet" nicht gesetzt!
+.copy M|erhalten = G|FALSE
+.end 1
+..
+!ERROR5
+.input 'U|xterr'
+.error ZurÅckschreiben in den Lieferschein gescheitert!
+.end 1

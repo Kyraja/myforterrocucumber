@@ -1,0 +1,100 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : VERWENDERSATZ.EV
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : amk
+.. Funktion       : Behandelt die Feldaustritts- und Zeilenereignisse.
+.. Ablauf         : Zentrales Ereignis-FOP
+..
+.. Functionality  : Handles field exit and row events.
+.. Program flow   : Central event FOP
+...Includes       :
+.. include st/SELECT.REPLACEMENT.PART
+..*****************************************************************************
+.set trans -
+..
+..------------------------------- Header --------------------------------------
+.continue ORINAME ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "original"
+.continue ERSNAME ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "ersatz"
+.continue CLRHEAD ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "klgruppe"
+.continue CLRHEAD ? G|evtartengl = "FIELD_FILL" & G|evtvar = "nurflstd"
+..-------------------------------- Table --------------------------------------
+.continue FORBID  ? G|evtartengl = "ROW_MOVED_BEFORE"
+..==============================================================================
+.continue END
+..
+!ORINAME: Initialize original
+.formula M|kbasisoriginal = ""
+.continue OEMPTY ? F|empty(M|original)
+.copy M|komplett = _F|empty(M|ersatz)
+.add M|original
+.continue ERROR1 ? _G|mehr
+.assign M|kbasisoriginal = M|original^basisartikel ? D|dnr = 2 & D|gruppe = 1
+.assign M|origversion = D|versionn
+.assign M|originalart = "(Product)"           ? D|dnr = 2 & D|gruppe = 1
+.assign M|originalart = "(MeansOfProduction)" ? D|dnr = 2 & D|gruppe = 2
+.assign M|originalart = "(Operation)"         ? D|dnr = 7 & D|gruppe = 0
+..
+.type ID2:1 xpart
+.type GD    xmaxprocure
+..
+.assign M|ersatz = ""
+.formula U|xmaxprocure = "."
+.assign U|xpart = M|original
+.continue ERSNAME ? _G|mehr
+..
+!FOLLOW
+.input "st/SELECT.REPLACEMENT.PART"
+.assign M|ersatz = U|xhit
+.continue ERSNAME
+..
+!OEMPTY: Clear details of original
+.copy M|komplett = G|FALSE
+.assign M|originalart = ""
+.assign M|origversion = ""
+.continue CLRHEAD
+..
+!ERSNAME: Initialize substitute
+.formula M|kbasisersatz = ""
+.continue EEMPTY ? F|empty(M|ersatz)
+.copy M|komplett = _F|empty(M|original)
+.add M|ersatz
+.continue ERROR2 ? _G|mehr
+.assign M|kbasisersatz = M|ersatz^basisartikel ? D|dnr = 2 & D|gruppe = 1
+.assign M|ersversion = D|versionn
+.assign M|ersatzart = "(Product)"           ? D|dnr = 2 & D|gruppe = 1
+.assign M|ersatzart = "(MeansOfProduction)" ? D|dnr = 2 & D|gruppe = 2
+.assign M|ersatzart = "(Operation)"         ? D|dnr = 7 & D|gruppe = 0
+.continue CLRHEAD
+..
+!EEMPTY: Clear details of substitution
+.copy M|komplett = G|FALSE
+.assign M|ersatzart = ""
+.assign M|ersversion = ""
+.continue CLRHEAD
+..
+!FORBID: Action is not allowed
+.error
+.end 1
+..
+!CLRHEAD: Protect and clear header items
+.protection kbuersetzen 0
+.formula M|bauteilzahl = 0
+.formula M|verwendzahl = 0
+.formula M|ersatzzahl = 0
+..
+!CLRTAB: Clear table
+.make screen line -- ? M|tzeilen > 0
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!ERROR1
+.error -message Das Element 'M|original^such' wurde nicht gefunden!
+.end 1
+..
+!ERROR2
+.error -message Das Element 'M|ersatz^such' wurde nicht gefunden!
+.end 1

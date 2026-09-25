@@ -1,0 +1,307 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BSTATUS.TAB
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       : Infosystem, BSTATUS, Tabellenzeigfop
+..                  im H-Puffer liegt die aktuelle Reservierung
+..
+...Includes
+.. include st/GETICONPART
+..*****************************************************************************
+.set trans -
+..
+.type bool    xreskrit   ? _F|defined(U|xreskrit)
+.type real0   xm         ? _F|defined(U|xm)
+.type real0   xrmge      ? _F|defined(U|xrmge)
+.type real0   xgbest     ? _F|defined(U|xgbest)
+.type text    xmarke     ? _F|defined(U|xmarke)
+.type text    xlgruppe   ? _F|defined(U|xlgruppe)
+.type text    xdispo     ? _F|defined(U|xdispo)
+.type text    xid        ? _F|defined(U|xid)
+.type integer xaktz      ? _F|defined(U|xaktz)
+.type integer xprevz     ? _F|defined(U|xprevz)
+.type GD      xprevterm  ? _F|defined(U|xprevterm)
+.type GD      xprevfterm ? _F|defined(U|xprevfterm)
+.type VPKS1   xtartid    ? _F|defined(xtartid)
+.type ID39:2  xtlgid     ? _F|defined(xtlgid)
+.type text    xticon     ? _F|defined(xticon)
+..
+.continue ? M|tzeilen > 0 & M|stufe = 0 & F|value(M|kvart, "AS310") = "(Reservation)" & 'M|kvorgang^id' <> 'H|id'
+.copy M|stop   = G|FALSE
+.. ist die RES aufgrund ihrer zugeordneten Beschaffungen kritisch?
+.formula U|xreskrit = _F|equals(H|krit, "(Uncritical)") & H|fbsterm > G|datum
+.continue END        ?  M|ansbstatus & (H|lfbeist ; (H|mge>0.0 & H|limge<=0.0);(H|mge<0.0 & H|limge>=0.0))
+.continue END        ?  M|nurkrit & _U|xreskrit
+.continue END        ? _H|relevant & M|brelevant
+.continue ZEILE      ?  M|ansbstatus
+..
+!VAR: zus„tzl. Bedingungen Varianten- und komplette Fertigungsliste
+.continue END        ? _M|bmitag   & H|elart = 3
+.continue END        ? _M|bmitfm   & H|elart = 2
+.continue END        ?  M|bvariante & _F|equals(H|dispoa, "(VariantRelated)")
+.continue ZEILE
+..
+!ZEILE
+.make screen line +O
+.formula M|tbaumstufe = M|stufe
+.copy M|elart       = H|elart
+.formula U|xlgruppe = 'H|lgruppe^id'
+.formula M|lgruppe  = U|xlgruppe
+.formula M|reserv   = H|id
+.. Make or Buy
+.copy M|elbsart     = H|elbsart ? H|elart = 1
+.copy M|umllg       = H|umllg   ? H|elart = 1 & _F|empty(H|umllg)
+.protection -field umllg 'M|aktzeile'  ? H|elart = 1 & _F|equals(M|elbsart,"(Relocation)") 
+.protection -field elbsart 'M|aktzeile'  ? H|elart = 1 & F|equals(H|dispoa,"(VariantRelated)") 
+.protection -field umllg 'M|aktzeile'    ? H|elart = 1 & F|equals(H|dispoa,"(VariantRelated)") 
+.protection -field elbsart 'M|aktzeile'  ? H|elart <> 1
+.protection -field umllg 'M|aktzeile'    ? H|elart <> 1
+.protection -field ersetzen 'M|aktzeile' ? H|elart <> 1
+.copy M|kompeig     = H|kompeig
+.formula M|laenge   = H|lge
+.copy M|icoattdispo = M|attdispo  ? H|dispofehler <> 0
+.copy M|ellme       = H|lme     ? M|laenge <> 0
+.formula M|breite   = H|breite
+.copy M|elbme       = H|bme     ? M|breite <> 0
+.formula M|anzahl   = H|anzahl
+.copy M|mle         = H|mle     ? M|anzahl <> 0
+.formula M|vorlauf  = 0
+.. wenn nur der kritischste Pfad oder nur alle kritischen Vorgaenge angezeigt werden sollen, darf
+.. die aktuelle STL-Stufe  in folgenden Faellen nicht weiter rueckwaerts-
+.. verfolgt, sondern es muss jetzt abgestiegen werden:
+.formula M|stop        = (M|nurkritpf & H|fbsterm > H|tfterm) ; (M|nurkrit & H|tfterm <= G|datum)
+..
+.reserve
+.select add H|elem^id
+.formula U|xid       = H|id
+.. set  no-language name for  Means of Production  or  Operation
+.formula M|elem      = H|id
+.assign M|tbasisartikel = H|basisartikel ? H|gruppe = 1
+.assign U|xtartid    = M|elem^id
+.assign U|xtlgid     = M|lgruppe
+.input "st/GETICONPART"
+.formula M|ticonz    = U|xticon
+.formula U|xgbest    = 0.0
+.continue NOTEIL                     ?  M|elart<>1 & M|elart<>4
+.copy M|wstoff       = H|wstoff      ? _F|empty(H|wstoff)
+.formula M|zeichn    = H|zeichn
+.copy M|bsart        = H|bsart
+.formula H|lgruppean = U|xlgruppe    ? U|xlgruppe <> ""
+.formula U|xgbest    = H|gbest
+..
+!NOTEIL
+.select
+.formula U|xrmge    = H|limge
+.formula U|xrmge    = H|mge          ? M|kvkopf^ablagef & M|ansasl
+.formula M|rmge     = U|xrmge
+.copy M|he          = H|le           ? M|elart <> 3
+.formula M|term     = H|tterm
+.formula M|rfterm   = H|fterm
+.formula M|baumge   = H|aumge
+.formula M|bplanmge = H|planmge
+.formula M|rwterm   = H|twterm
+.formula M|evbu     = H|bu
+.formula U|xdispo   = H|dispo
+.formula M|dispo    = U|xdispo
+.formula M|dispoa   = H|dispoa
+.assign M|dispoa    = "(MinimumStockLevelRelated)"   ? F|equals(H|dispoa, "(MinimumStockLevelRelatedNone)")
+.assign M|dispoa    = "(RemainingQuantitiesRelated)" ? F|equals(H|dispoa, "(RemainingQuantityRelatedNone)")
+.formula M|rfix     = H|fix
+.formula M|rverw    = H|verw
+.formula M|rverwerbtxt = H|verwerbtxt
+.assign M|projekt   = H|projekt
+.copy M|rlffert     = H|lffert
+.assign M|krit      = F|value(H|krit, "AS305")
+.formula M|ampelz   = G|icokrit   ? F|equals(H|krit, "(ProcessIsCritical)")
+.formula M|ampelz   = G|icovkrit  ? F|equals(H|krit, "(PathIsCritical)")
+.formula M|ampelz   = G|icoukrit  ? F|equals(H|krit, "(Uncritical)")
+.copy M|filter      = H|filter
+.copy M|filtervgl   = H|filtervgl
+.copy M|filtervgl2  = H|filtervgl2
+.copy M|relevant    = H|relevant
+.formula M|ampelz   = "icon:information" ? H|lfbeist
+..
+.continue RESTE     ? H|elart=1 ; H|elart=4
+.continue RESAG     ? H|elart=3
+.continue END
+..
+!RESTE: Artikelreservierung: zugeteilte Beschaffungen/Lagerbestaende zusammenstellen
+.reserve
+.formula U|xm = 0.0
+.. hier wird unterschieden zwischen ASL / BSTATUS und Variante
+.reserve application      ?   M|ansbstatus
+.reserve application +    ?   M|ansasl ; M|bvariante
+.formula U|xprevz     = 0
+.formula U|xprevterm  = ""
+.formula U|xprevfterm = ""
+..
+!BV
+.select application
+.continue FEHLMGE                          ?  G|bvkenn=""
+.make screen line +O                       ? _F|empty(M|vart)
+.formula M|tbaumstufe  = M|stufe
+.formula M|elem        = U|xid
+.assign U|xtartid      = M|elem
+.assign U|xtlgid       = M|lgruppe
+.input "st/GETICONPART"
+.formula M|ticonz      = U|xticon
+.protection -field elbsart 'M|aktzeile'  ? F|empty(M|reserv)
+.protection -field umllg 'M|aktzeile'    ? F|empty(M|reserv)
+.protection -field ersetzen 'M|aktzeile' ? F|empty(M|reserv) 
+.formula M|zug         = G|bvmge
+.formula U|xm          = U|xm+G|bvmge      ? G|bvmge<>0
+.formula U|xm          = U|xrmge           ? G|bvmge= 0
+.formula U|xmarke      = "BV"
+.continue LAGER                            ? G|bvkenn="L"
+.continue EIGEN                            ? G|bvkenn="S"
+.continue AFL                              ? F|equals(H|typa, "(Reservation)")
+..  Beschaffung
+.formula M|bmge        = H|limge           ? H|typ =  G|FEVOR
+.formula M|bmge        = H|limge * H|lehe  ? H|typ <> G|FEVOR
+.formula M|aumge       = H|aumge
+.formula M|planmge     = H|planmge
+.formula M|eterm       = H|tterm
+.formula M|bfterm      = H|fterm
+.formula M|bwterm      = H|twterm
+.formula M|vorlauf     = H|vorlauf         ? H|typ <> G|FEVOR
+.formula M|vorgang     = H|id
+.copy M|abda = G|FALSE
+.copy M|abda = G|TRUE ?  M|stufe = 0 & _M|kvkopf^druck & M|kvkopf^dnr = 3 & M|kvkopf^typ = 3
+.continue NOKOTYP     ? _F|defined(H|kotyp)
+.copy M|abda = G|TRUE ?  H|kotyp = 3 & H|dnr = 4 & _F|empty(H|abnrpo)
+.copy M|abda = G|TRUE ?  H|kotyp = 3 & H|dnr = 3 & _H|kopf^druck
+!NOKOTYP
+.copy M|icoattdispo    = M|attdispo        ? H|dispofehler <> 0 
+.formula M|bdispo      = H|dispo
+.formula M|bdispoa     = H|dispoa
+.assign M|bdispoa      = "(MinimumStockLevelRelated)"   ? F|equals(H|dispoa, "(MinimumStockLevelRelatedNone)")
+.assign M|bdispoa      = "(RemainingQuantitiesRelated)" ? F|equals(H|dispoa, "(RemainingQuantityRelatedNone)")
+.formula M|bfix        = H|fix
+.formula M|bverw       = H|verw
+.formula M|bverwerbtxt = H|verwerbtxt
+.assign M|beschprojekt = H|projekt
+.copy M|blffert        = H|lffert
+.. bkrit zeigt fuer die Beschaffungen an, ob diese fuer die aktuell
+.. aufgeloeste Auftragsfertigungsliste kritisch oder unkritisch ist.
+.. Das ist etwas anderes, als anzuzeigen, ob die Beschaffung an sich
+.. kritisch oder unkritisch ist
+.formula M|bkrit     = ""
+.formula M|bkrit     = "*"             ? U|xreskrit
+.formula M|bkrit     = "^"             ? U|xreskrit & H|fterm > G|datum & _F|empty(H|lres)
+.formula M|bampelz   = G|icokrit       ? M|bkrit = "*"
+.formula M|bampelz   = G|icovkrit      ? M|bkrit = "^"
+.formula M|bampelz   = G|icoukrit      ? M|bkrit = ""
+.continue BV1                          ? F|empty(H|eres)
+.. die aktuelle Zeile kann weiter verfolgt werden
+.formula M|bstl      = -1
+.formula M|aufzu     = "icon:folder_closed"
+.continue BV1                          ? U|xprevterm > M|eterm ; (U|xprevterm = M|eterm & U|xprevfterm > M|bfterm)
+.formula U|xprevz    = M|aktzeile
+.assign U|xprevterm  = M|eterm
+.assign U|xprevfterm = M|bfterm
+..
+!BV1:
+.formula M|aufzu = "icon:plus_black"   ? M|ansasl & F|empty(M|aufzu) & M|elem^ozeilen > 0
+.continue FV                           ? H|typ=G|FEVOR
+..
+.assign M|vart = "(ExternalProcurement)" ? F|equals(H|bsart, "(ExternalProcurement)")
+.assign M|vart = "(Relocation)"          ? F|equals(H|bsart, "(Relocation)")
+.assign M|vart = "(Subcontracting)"      ? F|equals(H|bsart, "(Subcontracting)")
+.add H|kopf
+.formula M|vkopf = D|id               ?  G|mehr
+.formula M|aterm = H|sterm            ? _G|mehr
+.formula M|aterm = D|vom              ?  G|mehr
+.add
+.continue BV
+..
+!FV: Fertigungsvorschlag
+.assign M|vart = "(InhouseProduction)"
+.add H|ba
+.formula M|vkopf = D|id               ? G|mehr
+.formula M|aterm = H|sterm
+.add
+.continue BV
+!AFL
+.continue BV ?  _F|equals(H|kompeig, "(Coproduct)")
+.assign M|vorgang = H|id
+.assign M|vkopf = H|vor^ba^id   ? _F|empty(H|vor^ba)
+.assign M|vart = "(CombinedProduction)"
+.copy M|aterm = H|sterm
+.copy M|eterm = H|tterm 
+.continue BV
+..
+!LAGER: Lagerbestand
+.formula M|bkrit   = ""
+.formula M|bkrit   = "*"              ? U|xreskrit
+.formula M|bmge    = U|xgbest
+.formula M|bampelz = G|icokrit        ? M|bkrit = "*"
+.formula M|bampelz = G|icoukrit       ? M|bkrit = ""
+.assign M|vart = "(Warehouse)"
+.copy M|bfix = G|TRUE
+.continue 'U|xmarke'
+..
+!EIGEN: Eigene Zuordnung
+.formula M|bmge = 0.0
+.. S
+.assign M|vart = "(ManualAllocation)"
+.copy M|bfix = G|TRUE
+.continue 'U|xmarke'
+..
+!NICHT: Keine Zuordnung
+.formula M|zug  = 0.0
+.formula M|bmge = 0.0
+.formula M|vart = ""
+.copy M|bfix    = G|FALSE
+.continue 'U|xmarke'
+..
+!FEHLMGE: pruefen, ob alles abgedeckt ist, sonst Fehlmenge
+.formula U|xm = (U|xrmge - U|xm):3
+.continue BVENDE         ? U|xm <= 0.0
+..
+.. Fehlmenge
+.make screen line +O                  ? _F|empty(M|vart)
+.formula M|tbaumstufe = M|stufe
+.formula M|zug = U|xm                 ? _M|ansbstatus
+.assign M|vart = "(EmptyEntry)"
+.assign M|vart = "(Shortage)"         ? _F|empty(M|icoattdispo)
+.formula U|xmarke = "BVENDE"
+.continue NICHT                       ? U|xdispo=""
+.continue LAGER                       ? (U|xdispo="C" ; U|xdispo="c")
+.continue 'U|xmarke'
+..
+!BVENDE
+.select
+.continue END                         ? U|xprevz=0
+.. in der Zeile xprevz steht die kritischste Beschaffung
+.formula U|xaktz  = M|aktzeile
+.select screen line 'U|xprevz'
+.copy M|pfad = G|TRUE
+.select screen line 'U|xaktz'
+.continue END
+..
+!RESAG: Arbeitsgangreservierung
+.assign M|vart     = "(InhouseProduction)"
+.formula M|aterm   = H|sterm
+.formula M|eterm   = H|tterm
+.formula M|rfterm  = H|fterm
+.formula M|rwterm  = H|twterm
+.formula M|aumge   = H|aumge
+.formula M|planmge = H|planmge
+.formula M|bfix    = H|fix
+.formula M|bkrit   = ""
+.formula M|bkrit   = "*"                ? U|xreskrit
+.formula M|bampelz = G|icokrit          ? M|bkrit = "*"
+.formula M|bampelz = G|icoukrit         ? M|bkrit = ""
+.add H|as
+.continue END                           ? _G|mehr
+.formula M|vkopf = D|id
+.copy M|bfix = G|TRUE
+.continue END
+..
+!END
+.continue                               ? M|ansbstatus
+.continue                               ? M|tzeilen = 0
+.formula M|aufzu = "icon:plus_black"    ? M|ansasl & F|empty(M|aufzu) & M|elem^ozeilen > 0
+.continue

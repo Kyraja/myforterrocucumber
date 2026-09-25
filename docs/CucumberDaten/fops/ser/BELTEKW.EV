@@ -1,0 +1,106 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : BELTEKW.EV
+.. Datum          : 19.02.2007
+.. Version        : 2007r1n00
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Event Handling fÅr Kopf-Felder
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+.. Ablauf         : allgemeine Events
+..
+.. Functionality  : Event Handling for header fields
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+.. Program flow   : general EFOP calls
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.type integer   xitag     ? _defined(xitag)
+.type text  xtsel
+..
+.. ----------- ----- Events -------- -------------------------------------------
+.continue TECH    ? T|evtartengl="FIELD_EXIT"    & T|evtvar = "ktechniker"
+.continue TEAM    ? T|evtartengl="FIELD_EXIT"    & T|evtvar = "kteamnr"
+.continue KW      ? T|evtartengl="FIELD_EXIT"    & T|evtvar = "kkw"
+.continue TAG     ? T|evtartengl="FIELD_EXIT"    & T|evtvar = "kdatum"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue FORBID  ? T|evtartengl = "ROW_MOVE_BEFORE"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue
+..
+!TAG: ein Tagesdatum / date
+.continue TABINIT                                  ? 'M|kdatum' = ""
+.assign M|kkw    = M|kdatum
+.assign T|xitag  = M|kdatum // 7
+.assign M|kvon   = M|kdatum                    ? T|xitag = 1
+.assign M|kvon   = M|kdatum - (T|xitag - 1)
+.assign M|kbis   = M|kdatum                    ? T|xitag = 7
+.assign M|kbis   = M|kdatum + (7 - T|xitag)
+.continue TABINIT
+..
+!KW: Kalenderwoche / week
+.assign M|kvon = ""                            ? 'M|kkw' = ""
+.assign M|kbis = ""                            ? 'M|kkw' = ""
+.assign M|kdatum=""                            ? 'M|kkw' = ""
+.continue TABINIT                                  ? 'M|kkw' = ""
+.assign M|kdatum = M|kkw
+.assign T|xitag  = M|kdatum // 7
+.assign M|kvon   = M|kdatum                    ? T|xitag = 1
+.assign M|kvon   = M|kdatum - (T|xitag - 1)
+.assign M|kbis   = M|kdatum                    ? T|xitag = 7
+.assign M|kbis   = M|kdatum + (7 - T|xitag)
+.continue TABINIT
+..
+!TECH: try to find team for service person
+.assign M|ktechname = ""                       ? M|ktechniker = ""
+.continue TABINIT                                  ? M|ktechniker = ""
+.assign M|ktechname = M|ktechniker^sucherw     ? M|ktechniker^mitarb  = ""
+.assign M|ktechname = M|ktechniker^mitarb^sucherw  ? M|ktechniker^mitarb <> ""
+.assign M|kteamnr   = ""
+.formula T|xtsel       = "$,,;@gruppe=2;mitarbrolle=" + M|ktechniker^id
+.load 0 serviceemployees 'xtsel'
+.continue TABINIT ? _T|mehr
+!TLOOP: next tech in team
+.load 0 line
+.continue TLOOPX  ? _T|mehr
+.continue TLOOP   ?  0|mitarbrolle^id <> M|ktechniker^id
+.continue TLOOP   ? _F|empty(0|gltbis)  &  0|gltbis < M|kvon
+.continue TLOOP   ? _F|empty(0|gltvon)  &  0|gltvon > M|kbis
+.continue TECHOK
+!TLOOPX: next team
+.load 0 continue
+.continue TABINIT ? _T|mehr
+.continue TLOOP
+!TECHOK
+.load 0 header
+.assign M|kteamnr   = 0|id
+.load 0
+.continue TABINIT
+..
+!TEAM: show name for team
+.assign M|ktechniker= ""
+.assign M|ktechname = ""
+.continue TABINIT
+..
+!TABINIT: a key field was changed, remove old rows
+.make screen line -- ? M|tzeilen > 0
+.continue END
+..
+!FORBID: an event was triggered, which is not allowed
+.error
+.end 1
+..
+..*****************************************************************************
+!END
+.continue
+..

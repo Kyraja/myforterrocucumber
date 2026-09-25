@@ -1,0 +1,104 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : CASHMGMT.SELECT.OI.CATDIST.BY.ENTRY
+.. Author         : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  : Distribute outstanding item values by entry values
+.. include fb/CASHMGMT.SELECT.WRITE
+..*****************************************************************************
+..
+.set trans -
+..
+.type R xxrfactor ? _F|defined(U|xxrfactor)
+.type R xxrvalue  ? _F|defined(U|xxrvalue)
+..
+.continue NODIST ? _F|equals(0|optyp, "(Invoice)") ; F|empty(0|rebu)
+.continue DIST
+..
+..*****************************************************************************
+!DIST
+..*****************************************************************************
+.type R xxrsumpwert          ? _F|defined(U|xxrsumpwert)
+.type R xxrentrylen          ? _F|defined(U|xxrentrylen)
+.type R xxrnocat             ? _F|defined(U|xxrnocat)
+.type bool xxbdebit          ? _F|defined(U|xxbdebit)             
+.type integer xxicatmaxindex ? _F|defined(U|xxicatmaxindex)
+.type integer xxi            ? _F|defined(U|xxi)
+..
+.copy U|xxbdebit = F|equals(0|bush, "(Debit)")
+.formula U|xxrnocat = 0
+.formula U|xxicatmaxindex = -1
+.formula U|xxrsumpwert = 0
+.formula U|xxrentrylen = 0
+.load 9 add 0|rebu
+..*****************************************************************************
+!L1
+..*****************************************************************************
+.load 9 line
+.continue E1 ? _G|mehr
+.copy U|xxrentrylen = U|xxrentrylen + 9|betrag ? 9|soll = U|xxbdebit
+.continue L1 ? 9|konto^id<>0|konto^id
+.copy U|xxrsumpwert = U|xxrsumpwert + F|condexpr(9|soll = U|xxbdebit, 9|betrag, 9|betrag * -1)
+.continue L1
+!E1
+.copy U|xxrfactor = U|xxrsumpwert / U|xxrentrylen
+.load 9 header
+..*****************************************************************************
+!RLOOP
+..*****************************************************************************
+.load 9 line
+.continue LFIN  ? _G|mehr
+.continue RLOOP ? 9|konto^dnr<>5
+.continue RLOOP ? 9|soll = U|xxbdebit
+.continue NOCAT ? F|empty(9|konto^lqkategorie)
+.. find map entry
+.formula U|xxi = 0
+!RLOOP2
+.continue NFOUND ? U|xxi > U|xxicatmaxindex
+.continue FOUND  ? U|xxcat.U|xxi = F|value(9|konto^lqkategorie, "AZS20302")
+.formula U|xxi = U|xxi + 1
+.continue RLOOP2
+!FOUND
+.copy U|xxtcatvalue.U|xxi = U|xxtcatvalue.U|xxi + (9|betrag * U|xxrfactor)
+.continue RLOOP
+!NFOUND
+.type AZS20302 U|xxcat.U|xxi ? _F|defined(U|xxcat.U|xxi)
+.type R U|xxtcatvalue.U|xxi  ? _F|defined(U|xxtcatvalue.U|xxi)
+.copy U|xxcat.U|xxi = 9|konto^lqkategorie
+.copy U|xxtcatvalue.U|xxi = 9|betrag
+.copy U|xxicatmaxindex = U|xxi
+.continue RLOOP
+!NOCAT
+.copy U|xxrnocat = U|xxrnocat + (9|betrag * U|xxrfactor)
+.continue RLOOP
+..
+..*****************************************************************************
+!LFIN
+..*****************************************************************************
+.. save value
+.copy U|xxrvalue = U|xrvalue
+.. first the ones without a category
+.copy U|xrvalue = U|xxrvalue * (U|xxrnocat/U|xxrsumpwert)
+.assign U|xcategory = ""
+.input "fb/CASHMGMT.SELECT.WRITE"
+.. now loop over categories
+.formula U|xxi = 0
+!CLOOP
+.continue END ? U|xxi > U|xxicatmaxindex
+.copy U|xrvalue = U|xxrvalue * (U|xxtcatvalue.U|xxi/U|xxrsumpwert)
+.copy U|xcategory = U|xxcat.U|xxi
+.input "fb/CASHMGMT.SELECT.WRITE"
+.formula U|xxi = U|xxi + 1
+.continue CLOOP
+..
+..*****************************************************************************
+!NODIST
+..*****************************************************************************
+.input "fb/CASHMGMT.SELECT.WRITE"
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

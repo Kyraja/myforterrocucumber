@@ -1,0 +1,109 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : VNKALKABW.BV.BSTART
+.. Autor          : jn
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       :
+.. Functionality  :
+.. Includes       :
+..  include vo/VNKALKABW.RESETHEADER
+..*****************************************************************************
+.set trans -
+.type date xdleer   ? _F|defined(U|xdleer)
+.type text xtselart ? _F|defined(U|xtselart)
+.type P2:1 xvar     ? _F|defined(U|xvar)
+..
+.select screen header
+.input "vo/VNKALKABW.RESETHEADER"
+.. Tabelle leeren
+.make screen line -- ? M|tzeilen > 0
+..
+.continue LOOP2 ? M|kart="" & ( M|bevon<>"" ; M|bebis<>"" ) & M|bselektion
+.continue BSEL  ? M|bselektion
+..
+.. test validation of date area
+.continue ERROR1    ? M|adatum > M|edatum & M|edatum <> U|xdleer & M|adatum <> U|xdleer
+.continue ERROR3    ? M|kart="" & M|bevon = "" & M|bebis = ""
+.continue RANGE     ? M|kart="" & ( M|bevon<>"" ; M|bebis<>"" )
+.. single product
+.. generating selection string
+.formula M|select = "$,,@ablageart=(Both)"
+.formula M|select = M|select + ";art="   + 'M|kart^id'   ? M|kart<>""
+.formula M|select = M|select + ";stand=" + 'M|adatum:8' + "!" + 'M|edatum:8'
+.formula M|select = M|select + ";typ="   + "(FinalCosting)"
+.formula M|select = M|select + ";herkunft^dnr=4"
+.formula M|select = M|select + ";herkunft^ablagef=1"      ? M|knurabgelegt
+..
+!BKOPF
+.input 'M|bkopf'
+.select costsheet 'M|select'
+..
+!HKB1
+.continue HKB1E  ? _G|mehr
+.input 'M|tab'
+.select costsheet
+.continue HKB1
+..
+!HKB1E
+.input 'M|bfuss'
+.continue
+..
+!RANGE: Schleife Åber Artikelbereich
+.formula U|xtselart = "$,,@numsuch=" + M|bevon + "!" + M|bebis + ";@gruppe=1"
+.assign U|xvar = U|xtselart + ";@lesen=(No)"
+.continue ERROR2 ? _G|mehr
+.continue DIGIE
+..
+!BSEL
+.formula U|xtselart = ""
+.formula U|xtselart = M|select
+.formula M|select   = ""
+..
+!DIGIE
+.input 'M|bkopf'
+..
+!TEIL
+.load 1 parts 'U|xtselart'
+..
+!LOOP
+.continue LOOPE       ? _G|mehr
+.continue HKB2E       ? 1|gruppe <> 1
+.formula M|select = "$,,@gruppe=1;@ablageart=(Both)"
+.formula M|select = M|select + ";art="   + '1|id'
+.formula M|select = M|select + ";stand=" + 'M|adatum:8' + "!" + 'M|edatum:8'
+.formula M|select = M|select + ";typ="   + "(FinalCosting)"
+.formula M|select = M|select + ";herkunft^dnr=4"
+.formula M|select = M|select + ";herkunft^ablagef=1"      ? M|knurabgelegt
+..
+!LOOP2
+.select costsheet 'M|select'
+..
+!HKB2
+.continue HKB2E  ? _G|mehr
+.input 'M|tab'
+.select costsheet
+.continue HKB2
+..
+!HKB2E
+.load 1 parts
+.continue LOOP
+..
+!LOOPE
+.input 'M|bfuss'
+.copy M|bselektion = G|FALSE
+.formula M|select = ""
+.continue
+..
+!ERROR1
+.error -field M|adatum -message Zeitraum ist ungÅltig. Bitte Ñndern.
+.end 1
+..
+!ERROR2: UngÅltiger Artikelbereich
+.error
+.cursor bevon
+.end 1
+..
+!ERROR3
+.error -field M|kart -message Bitte Artikel oder Artikelbereich eingeben.
+.end 1

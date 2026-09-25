@@ -1,0 +1,239 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : INTRASTATNACHRICHT.TAB
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       :
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type bool xbere      ? _F|defined(U|xbere)
+.type bool xbvre      ? _F|defined(U|xbvre)
+.type text xsel       ? _F|defined(U|xsel)
+.type text xekvk      ? _F|defined(U|xekvk)
+.type text xkuerzel   ? _F|defined(U|xkuerzel)
+.type bool xbedi      ? _F|defined(U|xbedi)
+.type bool xbedipos   ? _F|defined(U|xbedipos)
+.type bool xbfoundpos ? _F|defined(U|xbfoundpos)
+.type text xgewicht   ? _F|defined(U|xgewicht)
+.type text xintramge  ? _F|defined(U|xintramge)
+..
+.assign U|xbedi = G|FALSE
+.assign U|xbfoundpos = G|FALSE
+.continue ZEILE ? F|empty(M|edinachricht)
+.formula M|edinachricht = "" ? M|edinachricht^ablagef
+.continue ZEILE ? F|empty(M|edinachricht)
+.load 3 object 'M|edinachricht^id'
+.assign U|xbedi = G|mehr
+..
+!ZEILE
+.select line
+.continue END   ? _G|mehr
+.continue ZEILE ?  H|typ <> G|arpos
+.. Gutschriftspositionen mit orig = leer und ohne Lagerbewegung nicht anzeigen
+.continue ZEILE ? F|empty(H|orig) & _H|fakt & F|equals(H|treart, "(CreditNoteCommercial)")
+.. Gutschriftspositionen mit orig = Rechnung nicht anzeigen
+.continue ZEILE ? H|okotyp = 5 & F|equals(H|treart, "(CreditNoteCommercial)")
+.assign U|xbere = M|bere
+.assign U|xbvre = M|bvre
+..
+.. bestimmen ob zeile gueltig ist
+..
+.formula U|xekvk = "V" ? F|empty(U|xekvk) & M|kvorgang^dnr = 3
+.formula U|xekvk = "E" ? F|empty(U|xekvk) & M|kvorgang^dnr = 4
+.. E=Eingang, V=Versendung
+.formula U|xkuerzel = "E" ? U|xekvk = "E" & H|mge >= 0
+.formula U|xkuerzel = "E" ? U|xekvk = "V" & H|mge < 0
+.formula U|xkuerzel = "V" ? U|xekvk = "V" & H|mge >= 0
+.formula U|xkuerzel = "V" ? U|xekvk = "E" & H|mge < 0
+..
+.continue EDIPOS ? _F|defined(H|id^bsart)
+..
+.. was passiert, wenn Richtung geÑndert wird, weil Mengen < 0 sind?
+.. Artikel = Halbfabrikat & Vorgang = Einkauf mit Beschaffungsart = Umlagern
+.formula U|xkuerzel = "V" ? U|xekvk = "E" & F|equals(H|bsart, "(Relocation)") & _F|empty(H|lffert)
+.. Beistellungen: Vorgang = Einkauf mit Beschaffungsart = Umlagern
+.formula U|xkuerzel = "V" ? U|xekvk = "E" & F|equals(H|bsart, "(Relocation)") & _F|equals(H|pvstaat^laart, "(Domestic)")
+..
+!EDIPOS
+.assign U|xbedipos = G|FALSE
+.continue ZEIGEN ? _U|xbedi
+..
+.. Zeile aus der EDI-Nachricht holen
+..
+.load 3 line 'F|formatstr("$,,;text24=={1}", H|id)' ? M|kvorgang^dnr = 3
+.load 3 line 'F|formatstr("$,,;text25=={1}", H|id)' ? M|kvorgang^dnr = 4
+.assign U|xbedipos = G|mehr
+..
+!ZEIGEN
+.continue ZEILE ? _U|xbedi & M|bintrarel & _H|intrarel
+.continue ZEILE ?  U|xbedi & M|bintrarel & _U|xbedipos
+.continue ZEILE ?  M|bpos1 & U|xbfoundpos
+.continue ZEILEVORGANG ? (U|xkuerzel = "E" & U|xbere) ; (U|xkuerzel = "V" & U|xbvre)
+.continue ZEILE
+..
+!ZEILEVORGANG
+.assign U|xbfoundpos = G|TRUE
+.make screen line +O
+..
+.formula M|ekvk  = U|xekvk
+.formula M|zenrv = H|id     ? M|ekvk = "V"
+.formula M|zenre = H|id     ? M|ekvk = "E"
+..
+.formula M|vtyp  = U|xevtyp ? M|ekvk = "V"
+.formula M|etyp  = U|xevtyp ? M|ekvk = "E"
+..
+.copy M|intrarel = H|intrarel
+..
+.. ist EDI-Nachricht da, wird intrarel erst mal auf FALSE gesetzt und im 2.
+.. Durchlauf mit aktuellem Stand aus EDI-Nachricht Åberschrieben.
+.copy M|intrarel = G|FALSE ? _F|empty(M|edinachricht)
+..
+.copy M|artex = H|artex
+.copy M|le = M|artex^le
+.copy M|mge = H|mge
+..
+.. E=Eingang, V=Versendung
+.formula M|kuerzel = U|xkuerzel
+..
+.formula M|ikenn = 11  ? M|kuerzel = "E"
+.formula M|ikenn = 22  ? M|kuerzel = "V"
+.. Eingang = A / Versendung = D
+.formula M|iflow = "A" ? M|kuerzel = "E"
+.formula M|iflow = "D" ? M|kuerzel = "V"
+..
+.. Ursprungsregion = V ; Bestimmungsregion = E
+.copy M|iregion   = H|iregion
+.copy M|iregion   = F|sysinfo(10)^finlakenn ? M|zenrv^dnr = 3 & F|equals(M|zenrv^treart, "(CreditNoteCommercial)") & M|iflow = "A"
+.. IntrastatschlÅssel fÅr Ursprungsregion/Bestimmungsregion
+.formula M|iregschl    = M|iregion^ischl
+.. Bestimmumgsmitgliedsstaat = V ; Versenungsmitgliedsstaat = E
+.copy M|pvstaat   = H|pvstaat
+.formula M|pvschl = ("   " + H|pvstaat^iso2) >> 3
+.. Verkehrszweig: SchlÅssel (einstellig)
+.copy M|pvzweig   = H|pvzweig
+.formula M|schlvzweig  = (H|pvzweig^schl + " ") << 1
+.formula M|schlvzweig  = "3"            ? F|empty(M|schlvzweig)
+.. GeschÑftsart (zweistellig)
+.assign M|pgart     = H|pgart^nummer
+.assign M|pgart     = H|kopf^gart^nummer  ? F|empty(H|pgart)
+.. SchlÅssel der GeschÑftsart
+.formula M|schl        = (M|pgart^schl + "  ") << 2
+.. Warennummer
+.assign M|pahnum    = H|pahnum
+.formula M|nrpahnum    = H|pahnum^ahnum
+.. pahnumname max 80 Stellen
+.formula M|pahnumname = H|pahnum^namebspr << 80
+.. Ursprungsland (muss immer gefÅllt sein)
+.copy M|purland   = H|purland
+.copy M|purland   = H|artex^urland ? F|empty(M|purland)
+.. Wenn nicht im EK-Vorgang gefÅllt, dann wird Versendungsmitgliedstaat eingetragen
+.copy M|purland   = H|pvstaat  ?  F|empty(M|purland) & M|kuerzel = "E"
+.. Iso2-Code Ursprungsland (dreistellig)
+.formula M|purschl     = ("   " + M|purland^iso2) >> 3
+.. Menge in Sonderma·einheit (text17)
+.formula M|rintramge   = H|intramge
+.formula M|rintramge   = M|rintramge * -1    ?  M|rintramge < 0
+.formula U|xintramge = M|rintramge
+.formula M|intramge    = 'M|rintramge'
+.formula M|intramge    = 'F|round(M|rintramge)'
+.. Eigenmasse/Gewicht  (text16)
+.formula M|rgewicht    = H|gewicht * H|lehe * H|mge  ? _F|empty(H|gewicht)
+.formula M|rgewicht    = H|mge                       ?  F|empty(H|gewicht) & F|equals(H|he, "(KGM)")
+.formula M|rgewicht    = - M|rgewicht ? M|rgewicht < 0
+.formula U|xgewicht = M|rgewicht
+.formula M|gewicht     = 'M|rgewicht'
+.formula M|gewicht     = 'F|round(M|rgewicht)'
+.. Rechnungsbetrag (text18)
+.formula M|rnwert      = H|nwert
+.formula M|rnwert      = H|npwert ? F|empty(H|kopf^rechnustid) & H|kopf^brutto
+.formula M|rnwert      = M|rnwert * M|kkurs
+.formula M|rnwert      = M|rnwert * -1        ?  M|rnwert < 0
+.formula M|nwert       = 'F|round(M|rnwert)'
+.formula M|nwert       = "1" ? M|nwert = "0"
+.formula M|nwert = "0"  ?  M|schl = "21" ; M|schl = "22" ; M|schl = "23" ; M|schl = "31" ; M|schl = "32" ; M|schl = "33" ; M|schl = "34"
+.formula M|nwert = "0"  ?  M|schl = "41" ; M|schl = "63" ; M|schl = "64" ; M|schl = "66" ; M|schl = "71" ; M|schl = "72"
+.formula M|nwert = "0"  ?  M|schl = "93" ; M|schl = "99"
+.. Statistischer Wert (text19)
+.formula M|rswert      = H|swert
+.formula M|rswert      = H|npwert           ?   F|empty(H|kopf^rechnustid) & H|kopf^brutto & H|swert = 0
+.formula M|rswert      = H|nwert * M|kkurs  ? _(F|empty(H|kopf^rechnustid) & H|kopf^brutto) & H|swert = 0
+.formula M|rswert      = M|rswert * -1      ? M|rswert < 0
+.formula M|swert       = 'F|round(M|rswert)'
+.formula M|swert       = "1" ? M|swert = "0"
+..
+.continue FARBEN ? _U|xbedipos
+..
+.. Zeile aus der EDI-Nachricht zeigen
+..
+!EDIZEILE
+.copy M|intrarel = G|TRUE
+.formula M|ikenn      = 3|text4
+.. Versendungsland/Bestimmungsland
+.formula M|pvschl     = 3|text7
+.formula M|iregschl   = 3|text8
+.formula M|schl       = 3|text10
+.formula M|nrpahnum   = 3|text13
+.formula U|xtsel =  "$,,ahnum=" + 'M|nrpahnum' + ";@gruppe=3;@richtung=(Backwards)"
+.load 5 company 'U|xtsel'
+.formula M|pahnum     = 5|nummer              ? G|mehr
+.formula M|pahnumname = 5|namebspr << 80      ? G|mehr
+.load 5
+..
+.. SchlÅssel aus Art des GeschÑfts
+.formula U|xsel = "$,,schl==" + M|schl + ";@gruppe=3"
+.load 5 company 'U|xsel'
+.formula M|pgart = 5|id ? G|mehr
+.load 5
+..
+.formula M|purschl    = 3|text14
+.formula M|purland = "" ? F|empty(M|purschl)
+.continue SKIPLAND      ? F|empty(M|purschl)
+.formula U|xsel =  "$,,iso2=" + M|purschl
+.load 5 regions 'U|xsel'
+.formula M|purland = 5|id ?  G|mehr
+.formula M|iregion = ""   ? _G|mehr
+.load 5
+!SKIPLAND
+.formula M|gewicht    = 3|text16
+.formula M|intramge   = 3|text17
+.formula M|nwert      = 3|text18
+.formula M|swert      = 3|text19
+.formula M|schlvzweig = 3|text20
+..
+!FARBEN
+.continue ZEILE ? M|bfarben
+..
+.colour -background 'M|farbe' ikenn      'M|aktzeile'
+.colour -background 'M|farbe' pvschl     'M|aktzeile'
+.colour -background 'M|farbe' iregschl   'M|aktzeile'
+.colour -background 'M|farbe' schl       'M|aktzeile'
+.colour -background 'M|farbe' nrpahnum   'M|aktzeile'
+.colour -background 'M|farbe' purschl    'M|aktzeile'
+.colour -background 'M|farbe' intramge   'M|aktzeile'
+.colour -background 'M|farbe' gewicht    'M|aktzeile'
+.colour -background 'M|farbe' nwert      'M|aktzeile'
+.colour -background 'M|farbe' swert      'M|aktzeile'
+.colour -background 'M|farbe' schlvzweig 'M|aktzeile'
+.colour -background 'M|farbe' purland    'M|aktzeile' ? M|kvorgang^dnr = 3
+..
+.colour -background 'M|fehlfarbe' ikenn      'M|aktzeile' ? F|empty(M|ikenn)
+.colour -background 'M|fehlfarbe' pvschl     'M|aktzeile' ? F|empty(M|pvschl)
+.colour -background 'M|fehlfarbe' iregschl   'M|aktzeile' ? F|empty(M|iregschl)
+.colour -background 'M|fehlfarbe' schl       'M|aktzeile' ? F|empty(M|schl)
+.colour -background 'M|fehlfarbe' nrpahnum   'M|aktzeile' ? F|empty(M|nrpahnum)
+.colour -background 'M|fehlfarbe' purschl    'M|aktzeile' ? F|empty(M|purschl)
+.colour -background 'M|fehlfarbe' purland    'M|aktzeile' ? F|empty(M|purland) & M|kvorgang^dnr = 3
+.copy M|bnull = G|TRUE  
+.copy M|bnull = G|FALSE  ?  M|rintramge = 0 & M|rgewicht = 0 & M|artex^gruppe = 1
+.colour -background 'M|fehlfarbe' intramge   'M|aktzeile' ? ((M|rintramge = 0 & M|rgewicht = 0) ; U|xintramge = M|intramge) & M|artex^gruppe = 1
+.colour -background 'M|fehlfarbe' gewicht    'M|aktzeile' ? ((M|rgewicht = 0 & M|rintramge = 0) ; U|xgewicht = M|gewicht) & M|artex^gruppe = 1
+.colour -background 'M|fehlfarbe' nwert      'M|aktzeile' ? F|empty(M|nwert)
+.colour -background 'M|fehlfarbe' swert      'M|aktzeile' ? F|empty(M|nwert)
+.colour -background 'M|fehlfarbe' schlvzweig 'M|aktzeile' ? F|empty(M|schlvzweig)
+.continue ZEILE
+..*****************************************************************************
+!END
+.load 3
+.continue

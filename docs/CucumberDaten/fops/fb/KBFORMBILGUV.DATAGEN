@@ -1,0 +1,145 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : XML Datengenerator fuer die KBFORMBILGUV-Infosysteme wie fb/BILANZ, fb/GUV etc.
+..                  Zusatzfunktionalitaet gegenueber dem Standard: Summenzeilen werden
+..                  zusaetzlich unterhalb ihrer Kinder ausgegeben fuer alle Stufen, fuer die
+..                  gilt M|tbaumstufe <= U|xxmaxsumstufe (Default=1)
+.. Functionality  : XML data generator for the KBFORMBILGUV Infosystems like fb/BILANZ, fb/GUV etc.
+..                  Additional functionality to the standard: Sum rows are additionally
+..                  printed below their children if the tree level is <= U|xxmaxsumstufe (default=1)
+..*****************************************************************************
+..
+.set trans -
+..
+.input "is/XMLGEN.PRE.FOP"
+..
+.type text xpagename ? _F|defined(U|xpagename)
+.type integer lastrow ? _F|defined(U|lastrow)
+.type integer xindex ? _F|defined(U|xindex)
+..
+.. throw error if already defined!
+.type text xxtheadfop    ? _F|defined(U|xxtheadfop)
+.type text xxtrowfop     ? _F|defined(U|xxtrowfop)
+.type text xxtvname      ? _F|defined(U|xxtvname)
+.type text xxtdescr      ? _F|defined(U|xxtdescr)
+.type integer  xxltreelevel  ? _F|defined(U|xxltreelevel)
+.type text xxret         ? _F|defined(U|xxret)
+.type integer  xxitmp1       ? _F|defined(U|xxitmp1)
+.type integer  xxitmp2       ? _F|defined(U|xxitmp2)
+.type integer  xxicrow       ? _F|defined(U|xxicrow)
+.type bool xxbmehr       ? _F|defined(U|xxbmehr)
+.type B1   xxbsumrow     ? _F|defined(U|xxbsumrow)
+.type bool xxbwithraw    ? _F|defined(U|xxbwithraw)
+.type integer  xxmaxsumstufe ? _F|defined(U|xxmaxsumstufe)
+.type text xxstyle       ? _F|defined(U|xxstyle)
+..
+.formula U|xxltreelevel = -1
+.formula U|xxitmp1 = 0
+.formula U|xxitmp2 = 0
+..
+.formula U|xxmaxsumstufe = F|condexpr(F|defined(M|maxsumstufe), M|maxsumstufe, 1)
+..
+.file -tempname U|xxtheadfop
+.file -tempname U|xxtrowfop
+.output new 'U|xxtheadfop'
+.output new 'U|xxtrowfop'
+.load 6 metadata "M|"
+!IL
+.load 6 line
+.continue IE ? _G|mehr
+.continue IL ? _6|indaten
+.continue IL ?  6|vitbezf/"BU*"
+.formula   U|xxstyle = F|condexpr((6|vitbezf = "DVMR2" ; 6|vitbezf/"BT*"), "html", "none")
+.copy U|xxbwithraw = F|regmatch(6|vitbezf, "(R|M|V|P|A|I|GD|GW|GP|B).*") & _F|regmatch(6|vitbezf, "BGL.*")
+.formula   U|xxtvname=F|substr(6|vname, 3)
+.output addedto 'F|condexpr(6|vkt, U|xxtrowfop, U|xxtheadfop)'
+?              <Field name="'U|xxtvname'" abasType="'6|vitbezf'" style="'U|xxstyle'" value="'G|apostroph'M|'U|xxtvname'(L="0")'G|apostroph'">'G|apostroph'M|'U|xxtvname''G|apostroph'</Field>? U|xxbwithraw
+?              <Field name="'U|xxtvname'" abasType="'6|vitbezf'" style="'U|xxstyle'">'G|apostroph'M|'U|xxtvname''G|apostroph'</Field>? _U|xxbwithraw
+.output addedto 'U|xxtheadfop'
+.translate -language 'P|spr' -dictionary 3,4,7,5,8,0 -text 'F|condexpr(F|empty(6|extbez), 6|vbed, 6|extbez)' -variable U|xxtdescr
+              <Field name="txt'U|xxtvname'" abasType="T" style="none">'F|condexpr(F|empty(U|xxtdescr), F|condexpr(F|empty(6|extbez), 6|vbed, 6|extbez), U|xxtdescr)'</Field>
+.continue IL
+!IE
+.load 6
+.output terminal
+.text U|xpagename 'P|spr' Seite
+.formula U|lastrow = F|condexpr(G|evtzeile=0, M|tzeilen, 1)
+.formula U|xindex=0
+..
+.. XML Ausgabe immer in UTF-8 kodiert
+.output new 'U|xxmldata' -encoding "UTF-8"
+..
+<?xml version="1.0" encoding="UTF-8"?>
+<ABASData source="Screen">
+   <RecordSet caption="0">
+      <Record caption="'M|arb''M|such65'" lastrow="'U|lastrow'">
+.select screen header
+         <Head caption="0">
+.input "is/XMLGEN.COMMON.HVARS"
+              <Field name="maxsumstufe" abasType="'F|typeof(U|xxmaxsumstufe)'" style="none" value="'U|xxmaxsumstufe(L="0")'">'U|xxmaxsumstufe'</Field>
+.input 'U|xxtheadfop'
+         </Head>
+.continue TT1AUSGABE ? _(G|evtzeile > 0)
+.formula U|xindex=G|evtzeile
+.select screen line G|evtzeile
+.continue TT2AUSGABE
+!TT1AUSGABE
+.select screen line
+!TT2AUSGABE
+.copy U|xxbmehr = G|mehr
+.formula   U|xxitmp1 = F|condexpr(U|xxbmehr, M|tbaumstufe, 1)
+.formula   U|xxitmp2 = U|xxltreelevel
+.formula   U|xxicrow = F|condexpr(U|xxbmehr, M|aktzeile, -1)
+.. stay on same level or move deeper?
+.continue D1 ? U|xxitmp1 >= U|xxitmp2
+.. U|xxitmp < U|xxitmp2
+!L1
+.continue N1 ? U|xxitmp2 = U|xxitmp1
+.formula U|xxitmp2 = U|xxitmp2 - 1
+.select screen line 'U|xltlrow.U|xxitmp2'
+.formula U|xxret = "L1"
+.copy U|xxbsumrow = G|TRUE
+.continue PROW
+!N1
+.continue TTENDE ? _U|xxbmehr
+.select screen line 'U|xxicrow'
+!D1
+.continue TTENDE ? _U|xxbmehr
+.formula   U|xxret = "D2"
+.copy U|xxbsumrow = G|FALSE
+.continue PROW
+!D2
+.. for leaves output of additional sum row
+.continue D3 ? _F|empty(M|knum)
+.continue D3 ? _M|tblatt
+.formula   U|xxret = "D3"
+.copy U|xxbsumrow = G|TRUE
+.continue PROW
+!D3
+.continue TTENDE ? _U|xxbmehr
+.formula U|xxltreelevel = M|tbaumstufe
+.type integer xltlrow.xxltreelevel ? _F|defined(U|xltlrow.U|xxltreelevel)
+.. remember current row for current tree level
+.formula U|xltlrow.U|xxltreelevel = M|aktzeile
+.continue TTENDE ? (G|evtzeile > 0)
+.continue TT1AUSGABE
+!TTENDE
+      </Record>
+   </RecordSet>
+</ABASData>
+.input "is/XMLGEN.POST.FOP"
+.continue
+!PROW
+.continue 'U|xxret' ? U|xxbsumrow & M|tbaumstufe > U|xxmaxsumstufe
+.formula U|xindex=U|xindex+1 ? G|evtzeile = 0
+         <Row caption="'U|xindex'">
+              <Field name="zn" abasType="'F|typeof(U|xindex)'" style="none" value="'U|xindex(L="0")'">'U|xindex'</Field>
+              <Field name="page" abasType="'F|typeof(U|xpagename)'" style="none" >'U|xpagename'</Field>
+              <Field name="sumrow" abasType="'F|typeof(U|xxbsumrow)'" style="none" value="'U|xxbsumrow(L="0")'">'U|xxbsumrow'</Field>
+.input 'U|xxtrowfop'
+         </Row>
+.continue 'U|xxret'
+

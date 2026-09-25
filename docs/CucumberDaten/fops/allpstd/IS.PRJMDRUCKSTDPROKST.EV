@@ -1,0 +1,341 @@
+..!interpreter english declaration noabbrev
+.. at 2017-03-06, 13:56
+.set TRANS -
+..========================================================================
+..==  Name              : IS.PRJMDRUCKSTDPROKST.EV
+..==  Pfad              : allpstd
+..==  Funktion          :
+..==  Erstellungsdatum  : MAI 2011
+..==  Autor             : Andreas Otto, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2017 alltrotec GmbH
+..==
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"
+.input "allpstart/FOP.PRJM.UP.DEF
+..====================================================
+.type text  xtsys xtsel xtvon xtbis xtstammkst xtzuordkst xtstdzsel xtnumkst
+.type bool  xbdruckfehler xbzugeordnet xbmehr
+.type P5:2  xtindexkst
+.type date  xderster xdletzter
+.type integer   xprocsp      ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- Status_gruen -----
+.formula M|yticon = "icon:ball_green"
+.formula M|ytfehlertext =""
+.continue 'xprocst.xprocsp'
+!PROC002: ----- Status_gelb -----
+.formula M|yticon = "icon:ball_yellow"
+.formula M|ytfehlertext ="Stundenzettel-Datensatz fÅr dieses Personal in der gewÑhlten Periode (Monat/Jahr) nicht vorhanden."
+.continue 'xprocst.xprocsp'
+!PROC003: ----- Status_rot -----
+.formula M|yticon = "icon:ball_red"
+.formula M|ytfehlertext = "Es sind noch nicht alle Zeiten aller Kostenstellen fÅr dieses Personal in dieser Periode (Monat/Jahr) fÅr Lohnbuchhaltung freigegeben."
+.continue 'xprocst.xprocsp'
+!PROC004: ----- Tabelle_laden -----
+.continue EL001 ? _(true)
+.make screen line --o
+.formula U|xbdruckfehler = G|FALSE
+.formula U|xtindexkst = M|ykst1^nummer
+.input 'U|xtupkstarray' ? _F|empty(U|xtindexkst)
+.formula U|xtsel = "$,,yprjmperstyp= " + M|ypersonaltyp + ";@numsuch=" + M|ypersvon + "!" + M|ypersbis + ";kstelle=" + M|ykstvon + "!" + M|ykstbis
+.formula U|xtsel = U|xtsel + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrpersonal' 'U|xtsel'
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL002 ? _(F|empty(M|ykst1))
+.formula U|xbzugeordnet = G|FALSE
+.formula U|xtstammkst = 0|kstelle^nummer
+.continue EL003 ? _(F|defined(U|xtkst.xtstammkst))
+.formula U|xbzugeordnet = G|TRUE
+!EL003
+.continue EL004 ? _(_(U|xbzugeordnet))
+.formula xtsel = "$,,ypersonal=" + 0|id
+.load 2 group 'U|xydbgrkstellezuord' 'U|xtsel'
+!LOOP002: ==============================
+.continue ELOP002 ? _((G|mehr) & (_(U|xbzugeordnet)))
+.formula U|xtzuordkst = 2|ykstelle^nummer
+.continue EL005 ? _(F|defined(U|xtkst.xtzuordkst))
+.formula U|xderster  = F|fystartdate('M|yjahr',M|ymonat)
+.formula U|xdletzter = F|fyenddate('M|yjahr',M|ymonat)
+.continue EL006 ? _(F|empty(2|ybis))
+.continue EL007 ? _(F|empty(2|yvon))
+.formula U|xbzugeordnet=true
+.continue FI007
+!EL007
+.continue EL008 ? _(2|yvon<U|xdletzter)
+.formula U|xbzugeordnet=true
+!EL008
+!FI007
+.continue FI006
+!EL006
+.continue EL009 ? _(2|ybis>U|xderster)
+.continue EL010 ? _((2|yvon<U|xdletzter) ; (F|empty(2|yvon)))
+.formula U|xbzugeordnet=true
+!EL010
+!EL009
+!FI006
+!EL005
+.load 2 continue
+.continue LOOP002
+!ELOP002: ==============================
+!EL004
+!EL002
+.continue EL011 ? _((U|xbzugeordnet) ; (F|empty(M|ykst1)))
+.make screen line +o
+.formula M|ytpersnr   = 0|id
+.formula M|ytpersname = 0|name<<";"
+.assign  M|ytmanr     = 0|id
+.formula U|xtstdzsel = "$,,ymonat=" + 'M|ymonat' + ";yjahr=" + 'M|yjahr ' +";ypersonal=" + 0|id
+.formula U|xtstdzsel = U|xtstdzsel + ";@filingmode=(Active)"
+.load 1 group 'U|xydbgrstundenzettel' 'U|xtstdzsel'
+.continue EL012 ? _(G|mehr)
+.continue EL013 ? _((1|ybgedruckt) & (M|ybnichtgedruckt) & (G|evtvar="bstart"))
+.make screen line -o
+.continue FI013
+!EL013
+.continue EL014 ? _(1|ybgedruckt)
+.formula M|ytdruckicon = "icon:ok"
+.continue FI014
+!EL014
+.continue EL015 ? _(G|evtvar="budruck")
+.formula M|ytdruckicon = "icon:stop"
+.formula U|xbdruckfehler = true
+!EL015
+!FI014
+.load 1 line
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.type P5:2 xtidkst
+.assign U|xtidkst = 1|ykstelle^id ? _F|empty(1|ykstelle^id)
+.continue EL016 ? _( _F|empty(1|yprojekt^yverantwkst^id))
+.assign U|xtidkst = 1|yprojekt^yverantwkst^id
+!EL016
+.formula U|xtnumkst = U|xtidkst^nummer
+.continue EL017 ? _((F|defined(U|xtkst.xtnumkst)) ; (F|empty(M|ykst1)))
+.formula M|ytstdzettel = 1|id
+.formula M|yticon = "icon:ball_green" ? M|yticon=""
+.continue EL018 ? _(_1|ybfreigabe)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC003
+!RET001
+.formula xprocsp = xprocsp - 1
+!EL018
+!EL017
+.load 1 line
+.continue LOOP003
+!ELOP003: ==============================
+.continue EL019 ? _(F|empty(M|ytstdzettel))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC002
+!RET002
+.formula xprocsp = xprocsp - 1
+!EL019
+!FI013
+.continue FI012
+!EL012
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC002
+!RET003
+.formula xprocsp = xprocsp - 1
+!FI012
+.continue FI011
+!EL011
+!FI011
+.load 0 continue
+.continue LOOP001
+!ELOP001: ==============================
+.continue EL020 ? _(M|ybzohneraus)
+.select screen header
+.select screen line
+.formula U|xbmehr = G|mehr
+!LOOP004: ==============================
+.continue ELOP004 ? _(U|xbmehr)
+.continue EL021 ? _(F|empty(M|ytstdzettel))
+.formula U|xbmehr = G|FALSE
+.formula U|xbmehr = G|TRUE      ? _M|aktzeile = M|tzeilen
+.make screen line -o
+.continue FI021
+!EL021
+.select screen line
+.formula U|xbmehr = G|mehr
+!FI021
+.continue LOOP004
+!ELOP004: ==============================
+!EL020
+.continue EL022 ? _(U|xbdruckfehler)
+.box
+Es konnten ein oder mehrere Stundenzettel nicht als gedruckt gekennzeichnet werden!
+(siehe Icon in Tabelle)
+!EL022
+.continue FI001
+!EL001
+echterDrucker ausgewÑhlt wurde oder ein Druckverteiler
+Lade alles selektierte Personal und die entsprechenden Daten in die Tabelle
+1. Personal selektieren und Zeile anlegen
+2. Status setzen
+-Wenn Selektion fÅr "nur nicht gedruckte", dann die Zeilen mit dem Personal, welches bereits gedruckt Stundenzettel hat rausschmeissen
+Icon-Setzung:
+= ball_green, wenn alle Zeiten aller Kostenstellen fÅr dieses Personal in dieser Periode (Monat/Jahr) fÅr Lohnbuchhaltung freigegeben sind (Ermittlung Åber ZDB Stundenzettel Tabelle)
+= ball_yellow, wenn kein Stundenzettel-Datensatz fÅr das Personal in diesem Monat vorhanden ist
+= ball_red, wenn NICHT alle Zeiten aller Kostenstellen fÅr dieses Personal in dieser Periode (Monat/Jahr) fÅr Lohnbuchhaltung freigegeben sind (Ermittlung Åber ZDB Stundenzettel Tabelle)
+Fehlertexte analog zu Icon-Setzung:
+Wenn yticon = ball_green, dann KEIN Fehlertext
+Wenn yticon = ball_yellow, dann Text: "Stundenzettel-Datensatz fÅr dieses Personal in der gewÑhlten Periode (Monat/Jahr) nicht vorhanden."
+Wenn yticon = ball_red, dann Text: "Es sind noch nicht alle Zeiten aller Kostenstellen fÅr dieses Personal in dieser Periode (Monat/Jahr) fÅr Lohnbuchhaltung freigegeben."
+!FI001
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskein")
+.formula M|ymonat = F|month(G|datum) - 1
+.formula M|yjahr  = "."
+.formula M|yjahr = M|yjahr - 1  ? M|ymonat = 12
+.protection ypersbis 0
+.protection ykstbis  0
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "buttonnach")
+.continue BRK003 ? _(G|evtvar = "bstart")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC004
+!RET004
+.formula xprocsp = xprocsp - 1
+.continue ESAC002
+!BRK003
+.continue BRK004 ? _(G|evtvar = "budruck")
+.select screen header
+.select screen line
+!LOOP005: ==============================
+.continue ELOP005 ? _(G|mehr)
+.continue EL023 ? _(_F|empty(M|ytstdzettel))
+.continue EL024 ? _(M|ytstdzettel^ybgedruckt)
+.formula M|ytdruckicon = "icon:ok"
+.continue FI024
+!EL024
+.continue EL025 ? _(M|yticon="icon:ball_green")
+.formula M|ytdruckicon = "icon:stop"
+.output TERMINAL
+Stundenzettel in Zeile 'M|aktzeile' wurde nicht als gedruckt gekennzeichnet!
+.output NEW "WERF.WEG"
+!EL025
+!FI024
+!EL023
+.select screen line
+.continue LOOP005
+!ELOP005: ==============================
+.continue ESAC002
+!BRK004
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK002
+.continue BRK005 ? _(G|evtart = "feldpruef")
+.continue BRK006 ? _(G|evtvar = "ypersbis")
+.continue EL026 ? _((_(F|empty(M|ypersvon))) & (_(F|empty(M|ypersbis))))
+.continue EL027 ? _(F|regmatch(M|ypersvon, "[:alpha:].*"))
+.continue EL028 ? _(_(F|regmatch(M|ypersbis, "[:alpha:].*")))
+.set TRANS +
+.box
+Bitte fÅr Suche nach Suchwort oder Nummer entscheiden!
+("Personal von" enthÑlt bereits ein Personalsuchwort:  'M|ypersvon' )
+.set TRANS -
+.error
+.end 1
+!EL028
+.continue FI027
+!EL027
+.continue EL029 ? _(F|regmatch(M|ypersbis, "[:alpha:].*"))
+.set TRANS +
+.box
+Bitte fÅr Suche nach Suchwort oder Nummer entscheiden!
+("Personal von" enthÑlt bereits eine Personalnummer:  'M|ypersvon' )
+.set TRANS -
+.error
+.end 1
+!EL029
+!FI027
+!EL026
+.continue EL030 ? _((M|ypersvon > M|ypersbis) & (_(F|empty(M|ypersvon))) & (_(F|empty(M|ypersbis))))
+.formula M|ypersbis = M|ypersbis
+.formula U|xtvon = M|ypersvon
+.formula M|ypersvon = M|ypersbis
+.formula M|ypersbis = U|xtvon
+!EL030
+.continue ESAC003
+!BRK006
+.continue BRK007 ? _(G|evtvar = "ykstbis")
+.formula U|xtvon = "               " + 'M|ykstvon'
+.formula U|xtbis = "               " + 'M|ykstbis'
+.formula U|xtvon = U|xtvon>>15
+.formula U|xtbis = U|xtbis>>15
+.continue EL031 ? _(U|xtvon < U|xtbis)
+.formula M|ykstbis = M|ykstbis
+.formula U|xtvon = M|ykstvon^id
+.formula M|ykstvon = M|ykstbis^id
+.formula M|ykstbis = U|xtvon
+!EL031
+.continue ESAC003
+!BRK007
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC001
+!BRK005
+.continue BRK008 ? _(G|evtart = "feldaus")
+.continue BRK009 ? _(G|evtvar = "ymonat")
+.formula M|ymonat = 12  ? M|ymonat > 12
+.formula M|ymonat = 1   ? M|ymonat < 1
+.continue ESAC004
+!BRK009
+.continue BRK010 ? _(G|evtvar = "yjahr")
+.formula M|yjahr = "."  ? 'M|yjahr' > 'F|year(G|DATUM)'
+.continue ESAC004
+!BRK010
+.continue BRK011 ? _(G|evtvar = "ypersvon")
+.continue EL032 ? _(F|empty(M|ypersvon))
+.formula M|ypersbis = ""
+.protection ypersbis 0
+.continue FI032
+!EL032
+.formula M|ypersbis = M|ypersvon        ? F|empty(M|ypersbis) ; M|ypersbis < M|ypersvon
+.protection -RESET ypersbis 0
+!FI032
+.continue ESAC004
+!BRK011
+.continue BRK012 ? _(G|evtvar = "ykstvon")
+.continue EL033 ? _(F|empty(M|ykstvon))
+.formula M|ykstbis = ""
+.protection ykstbis 0
+.continue FI033
+!EL033
+.formula M|ykstbis = M|ykstvon          ? F|empty(M|ykstbis) ; M|ykstbis < M|ykstvon
+.protection -RESET ykstbis 0
+!FI033
+.continue ESAC004
+!BRK012
+.continue BRK013 ? _(G|evtvar = "ykst1")
+.input 'U|xtupprjmsel'
+.make screen line --O
+.continue ESAC004
+!BRK013
+.continue BRK014 ? _(G|evtvar = "yballekst")
+.input 'U|xtupprjmsel'
+.continue ESAC004
+!BRK014
+!ESAC004: =====   ENDCASE   =====
+.continue ESAC001
+!BRK008
+!ESAC001: =====   ENDCASE   =====
+.input 'F|foppath("IFOP.IS.PRJMDRUCKSTDPROKST.EV")' ? F|fileexists(F|foppath("IFOP.IS.PRJMDRUCKSTDPROKST.EV"))
+.continue

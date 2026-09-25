@@ -1,0 +1,84 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : INFOSYS.TEMPLATE.BV
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      :
+.. Funktion       : Erzeugt fuer neu angelegte oder leere Programme eine Datei samt
+..                  einkopierter Vorlage.
+..                  Ist kein Name angegeben, wird vom System einer vorgeschlagen.
+.. Ablauf         : Dieses FOP wird als Button-vor-EFOP auf den Programmedier-
+..                  tasten der Maske 12 (Infosystem) fuer die Kommandos "Neu" und
+..                  "Aendern" eingetragen.
+..
+.. Functionality  : Creates a file with a template for new or empty programs. If the
+..                  name of the program is missing, it will be suggested by the system.
+.. Program flow   : This program has to be placed as button before EFOP for the program edit
+..                  buttons of the mask 12 (Infosystem) and the commands "New" and "Edit".
+..*****************************************************************************
+.set trans -
+..
+.. Break while standard
+.continue END ? _F|isflagset(298) & M|lieferumfang
+..
+.. Declarations
+.type text XJAVAEXT:4 XCLASSEXT:5 XPOINT:1 XJAVASRC:8 XSLASH:1 XFOPTEMPLATE:15 XGROOVYEXT:6
+.type text xname xextension:4 xevttoken:5 xvname:14
+.type text xprogramvar xworkspace xbasename xboxtext
+.type DVM2 xtemplatefile
+..
+.. Initializations
+.formula U|XJAVAEXT = "java"
+.formula U|XGROOVYEXT = "groovy"
+.formula U|XCLASSEXT = "class"
+.formula U|XJAVASRC = ""
+.formula U|XPOINT = "."
+.formula U|XSLASH = "/"
+.formula U|XFOPTEMPLATE = "INFOSYS.TEMPLATE4FOP"
+..
+.. Get name for the program which will be edited by using the button and the event token
+.input "is/INFOSYS.PROGRAM4BUTTON"
+.formula U|xname = F|eval(F|formatstr("'{1}'", U|xprogramvar))
+..
+.. Do we have to create a name?
+.continue GETNAME ? F|empty(U|xname)
+..
+.. Finish while we have a JFOP name?
+.continue END ? F|isfopname(U|xname, TRUE)
+.formula U|xname = F|regreplace('U|xname', " .*", "")
+.formula U|xbasename = U|xname
+.continue CUT ? F|regmatch(U|xname, F|expr(".*\" + U|XSLASH + ".*"))
+..
+!TEST: do not overwrite an existing program
+.continue END ? F|filenotempty(U|xname)
+.continue CREATE
+..
+!CUT: cut workspace and base name of FOP
+.formula U|xworkspace = U|xname <$ U|XSLASH
+.formula U|xbasename = U|xname >$ U|XSLASH
+.continue TEST
+..
+!CREATE: Create a matching template
+.input "INFOSYS.GEN.TEMPLATE4FOP"
+..
+.. Move template to program
+.continue END ? F|empty(U|xtemplatefile)
+.system 'F|expr("mv -f " + U|xtemplatefile + " " + U|xname)' background
+.continue END
+..
+!GETNAME: Suggesting a name in consideration of the known convention
+.input "INFOSYS.GEN.PROGRAMNAME"
+.continue END ? F|empty(U|xbasename)
+.formula U|xname = U|xbasename
+.continue ASSIGN ? F|empty(M|arb)
+.formula U|xworkspace = M|arb
+.formula U|xname = U|xworkspace + U|XSLASH + U|xname
+..
+!ASSIGN
+.formula M|.U|xprogramvar = U|xname
+.continue TEST
+..*****************************************************************************
+!END
+.end 0
+..*****************************************************************************
+

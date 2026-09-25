@@ -1,0 +1,82 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EDIOBJECTSEARCH.ORDERS.REWRITE.EDI
+.. Author         : carue
+.. Verantwortlich : carue
+.. Kontrolle      : dsch
+.. Functionality  : Write results of edi objectsearch to edi message
+..*****************************************************************************
+.set trans -
+..
+..<META H|='P53:0' >
+..<META M|='dfue/EDIOBJSEARCH' > 
+..
+.. Required: edi message in H buffer
+.continue NOEDI  ? _F|defined(H|edinachr)
+.continue NOTYPE ?  F|empty(H|edinachr)
+.continue RETURN ? _F|empty(U|xfcode)
+..
+..Move back to header of edimessage
+.select header
+.select screen header
+..
+..fill header fields in edi message
+.formula H|idkundeab  = M|kunde^nummer
+.formula H|idkunderab = M|reempf^nummer
+.formula H|idkundesab = M|wempf^nummer
+.rewrite
+..
+!NEXTEDI
+.select line
+.continue RETURN  ? _G|mehr
+.continue NEXTEDI ? H|text1 <> "220" 
+..
+!NEXTOBJ
+.select screen line
+.continue RETURN ? _G|mehr
+..
+!S220
+.copy H|tartikel = M|art  ?  F|empty(H|tartikel)
+.select line
+.continue RETURN  ? _G|mehr
+.continue NEXTOBJ ? H|text1 = "220"
+.continue S221    ? H|text1 = "221"
+.continue S223    ? H|text1 = "223"
+.continue NEXTEDI
+..
+!S221
+.formula H|he       = M|einheit     ? F|empty(H|he) & _F|empty(M|einheit)
+.formula H|nabmge   = M|mge         ? F|empty(H|nabmge)
+.formula H|nabdat   = M|liefdatum   ? F|empty(H|nabdat)
+.select line
+.continue RETURN  ? _G|mehr
+.continue NEXTOBJ ? H|text1 = "220"
+.continue S223    ? H|text1 = "223"
+.continue NEXTEDI
+..
+!S223
+.formula H|he       = M|peinheit    ? F|empty(H|he) & _F|empty(M|peinheit)
+.formula H|he       = M|einheit     ? F|empty(H|he) &  F|empty(M|peinheit)
+.continue NEXTEDI
+..
+!RETURN
+.select header
+.formula H|fcode  = U|xfcode
+.formula H|status = U|xstatus
+.formula H|ftext  = U|xtfehler
+.formula H|ediobjsuch = M|suchkonfig^id
+.formula H|vabmodell  = M|abmodell^id
+.rewrite
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!NOEDI
+.error Fehler bei Start der Objektsuche: Kein EDI-Datensatz angegeben.
+.end 1
+..
+!NOTYPE
+.error Fehler bei Start der Objektsuche: EDI-Datensatz 'H|nummer' hat keinen Nachrichten-Eintrag.
+.end 1

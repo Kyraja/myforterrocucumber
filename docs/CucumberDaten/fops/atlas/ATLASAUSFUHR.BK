@@ -1,0 +1,238 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ATLASAUSFUHR.BK
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : FÅllt Kopffelder des Infosystems mit Daten aus dem
+..                  VK-/EK-Vorgang.
+.. Functionality  : Fills header fields of infosystem with data from
+..                  sales / purchasing transaction.
+..*****************************************************************************
+.set trans -
+..
+.type integer    xi7     ? _F|defined(T|xi7)
+..
+..
+..  VPK10   Vorgang
+.assign M|kvorgang = H|id
+.assign M|katmitls = H|atmitls
+..
+..  VPK17    Handelspartner
+.assign M|kkl = H|kunde^id    ?  H|dnr = 3
+.assign M|kkl = H|lief^id     ?  H|dnr = 4
+.assign M|kkl = H|kunde3^id   ?  H|dnr = 3  &  F|empty(M|kkl)
+.assign M|kkl = H|lief3^id    ?  H|dnr = 4  &  F|empty(M|kkl)
+.formula   M|kklname = M|kkl^sucherw
+..
+..  PS97:1  Bestimmungsland
+.assign M|kvstaat = H|vstaat^id
+..
+..  B   Status
+.. examine transaction status
+.input "ATLASPARAMS"
+.assign T|xvatvorgang = T|xvvorgang^id
+.input "ATLASSTATUS"
+.assign M|katlasgem = T|xbatgemeldet
+.assign M|kedi = T|xvatedi^id
+..
+..  ------------------------------------
+..
+..  GD      Datum der Nachricht
+.assign M|kdatum = T|datum
+..
+..  Z       Zeit der Nachricht
+.assign M|kzeit = T|zeit
+..
+..  ------------------------------------
+..
+..  GL14    Referenznummer              !!!!!  (at)refnummer
+.assign M|krefnummer = ""
+..
+..  ------------------------------------
+..
+..  Sachbearbeiter / Ansprechpartner beim Anmelder = Zollverantwortlicher
+.assign M|kzollverant = 'F|sysinfo(10)^zollverant^id'
+.formula M|kzollverantn = M|kzollverant^sucherw
+.formula M|kzollverante =  M|kzollverant^email
+..
+..  GL7     Zollnummer des NachrichtenÅbermittlers
+.assign M|ksender = 'F|sysinfo(10)^sender'
+..
+..  GL4     Dienststellennummer des NachrichtenempfÑngers beim Zoll (Firmenstamm)
+..          "EmpfÑnger der Nachricht"
+.assign M|kzollstelle  = 'F|sysinfo(10)^zollstelle'
+..
+..  alternativ: Dienststellennummer der Ausgangszollstelle (Åber grkenn im Vorgang)
+.continue EZOLL   ?  F|empty(H|grkenn)
+.formula M|kgrkenn = H|grkenn
+.load 1 company 'F|sysinfo(22)'
+.continue EZOLL   ? _T|mehr
+!NZOLL
+.load 1 line
+.continue EZOLL   ? _T|mehr
+.continue NZOLL   ?  H|grkenn <> 1|grkenn
+.formula M|kauszollst = 1|auszollst
+.load 1
+!EZOLL
+..
+.. Standardwert fÅr Ausfuhrzollstelle, wenn mîglich aus Vorgang
+.formula M|kuebzollst = M|kzollstelle
+.formula M|kuebzollst = M|kauszollst     ? _F|empty(M|kauszollst)
+.. Falls Bediener eine Wahl getroffen hat, diese verwenden
+.formula M|kuebzollst = M|kzollstelle    ?  M|kbzollausbda
+.formula M|kuebzollst = M|kauszollst     ?  M|kbzollausvor
+..
+..  ------------------------------------
+..
+..  VPK17   EmpfÑnger (der Ware) / Handelspartner
+.assign M|kempfaenger = M|kkl^id
+..
+..  GL7     TIN EmpfÑnger (der Ware)
+.assign M|kemptin = M|kkl^tin
+..
+..  B       EmpfÑnger hat deutsche Zollnummer (7-stellig numerisch)
+.assign T|xi7 = M|kemptin
+.assign M|kempzolld = true   ?  T|mehr & +M|kemptin < 8 & T|xi7 > 0
+..
+..  ------------------------------------
+..
+..  VPK17   Vertreter
+.assign M|kvertreter = ""
+..
+..  GL7     TIN Vertreter
+.assign M|kvertin = ""
+..
+..  B       Vertreter hat deutsche Zollnummer (7-stellig numerisch)
+.assign T|xi7 = M|kvertin
+.assign M|kverzolld = true   ?  T|mehr & +M|kvertin < 8 & T|xi7 > 0
+..
+..  ------------------------------------
+..
+..  P1      AusfÅhrer
+.assign M|kspediteur = H|spediteur^id
+..
+..  GL7     TIN AusfÅhrer
+.assign M|kspedtin = H|spediteur^tin
+..
+..  B       AusfÅhrer hat deutsche Zollnummer (7-stellig numerisch)
+.assign T|xi7 = M|kspedtin
+.assign M|kspedzolld = true   ?  T|mehr & +M|kspedtin < 8 & T|xi7 > 0
+..
+..  ------------------------------------
+..
+..  VPK17   Subunternehmer
+.assign M|ksubsped = ""
+..
+..  GL7     TIN Subunternehmer
+.assign M|ksubtin = ""
+..
+..  B       Subunternehmer hat deutsche Zollnummer (7-stellig numerisch)
+.assign T|xi7 = M|ksubtin
+.assign M|ksubzolld = true    ?  T|mehr & +M|ksubtin < 8 & T|xi7 > 0
+..
+..  ------------------------------------
+..
+..  PS64:2  Beteiligtenkonstellation
+.assign M|kbetkonst = H|betkonst^id
+..
+..  P12:3   Lieferbedingung
+.assign M|klbed = H|lbed^id
+..
+..  GL3     Lieferbedingung
+.assign M|kincoterm = H|lbed^incocode
+..
+..  GL35    Ort der Lieferbedingung
+.assign M|kincoort = H|incoort
+..
+..  P97:1  Land der Lieferbedingung
+.assign M|kincoland = H|incoland
+.formula M|kiso2 = H|incoland^iso2
+..
+..  MP6.3   Gesamtrohmasse
+.assign M|kbruttogew = H|bruttogew
+..
+..  ARTR52000 (R9.2) Rechnungsbetrag
+.assign M|krebetr = H|rebetr
+..
+..  P94:1   WÑhrung des GeschÑftsvorgangs
+.assign M|kland = H|land^id
+..
+..  "Vermerk" 5 * 70
+..  GL70   Vermerk
+.assign M|katvermerk  = H|atvermerk
+.assign M|katvermerk2 = H|atvermerk2
+.assign M|katvermerk3 = H|atvermerk3
+.assign M|katvermerk4 = H|atvermerk4
+.assign M|katvermerk5 = H|atvermerk5
+..
+..  ------------------------------------
+..
+..  P12:3   Verkehrszweig Inland
+.assign M|kvzweig = H|vzweig^id
+..
+..  P12:3   Verkehrszweig an der Grenze
+.assign M|kvzweiggrenz  = H|grvzweig^id
+..
+..  GL27    Kennzeichen des Befîrderungsmittel (GrenzÅberschreitung)
+.assign M|kbefmkz = H|befmkz
+..
+..  P12:3   Befîrderungsmittel (GrenzÅberschreitung)
+.assign M|kbefmart = H|befmart^id
+..
+..  PS97:1  Herkunftsland des Befîrderungsmittel (GrenzÅberschreitung)
+.assign M|kbefmstaat = H|befmstaat^id
+..
+..  GL70    Registriernummer
+.assign M|kregnummer = H|regnummer
+..
+.assign M|kabfahrtdat = H|abfahrtdat
+..
+..  ------------------------------------
+..
+..  Versandanschrift
+..
+.formula M|kempname1 = M|kvorgang^ans2<<";"
+.formula M|kempname2 = M|kvorgang^ans2>>";"
+.formula M|kempname3 = ""
+.formula M|kempstr1  = M|kvorgang^str2<<";"
+.formula M|kempstr2  = M|kvorgang^str2>>";"
+.formula M|kemport   = M|kvorgang^nort2
+.formula M|kempplz   = M|kvorgang^plz2
+.formula M|kempland  = M|kvorgang^staat2^iso2
+.formula M|kempstaat = M|kvorgang^staat2^id
+..
+.. only use ans, if  ^ans2 is empty (i.e. jump if ans2 is not empty)
+.continue ANS2OK  ? _F|empty(M|kvorgang^ans2)
+.formula M|kempname1 = M|kvorgang^ans<<";"
+.formula M|kempname2 = M|kvorgang^ans>>";"
+.formula M|kempname3 = ""
+.formula M|kempstr1  = M|kvorgang^str<<";"
+.formula M|kempstr2  = M|kvorgang^str>>";"
+.formula M|kemport   = M|kvorgang^nort
+.formula M|kempplz   = M|kvorgang^plz
+.formula M|kempland  = M|kvorgang^staat^iso2
+.formula M|kempstaat = M|kvorgang^staat^id
+!ANS2OK
+..
+..  ------------------------------------
+..
+..  Ladeort - Anschrift der Lagergruppe des ersten Artikels
+..
+.load 1 object nolock 'M|kvorgang^id'
+!NLADE
+.load 1 line
+.continue ELADE   ? _T|mehr
+.continue NLADE   ?  F|empty(1|lgruppe)
+.formula M|kladeort = 1|lgruppe^id
+.formula M|kladeortcode = ""
+.formula M|kladeortzus = ""
+.formula M|kladeortstr = 1|lgruppe^str
+.formula M|kladeortplz = 1|lgruppe^plz
+.formula M|kladeortort = 1|lgruppe^nort
+!ELADE
+.load 1
+..
+..*****************************************************************************
+!END
+.continue

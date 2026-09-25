@@ -1,0 +1,256 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : RETURNDELIVERYCENTER.TAB
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  :
+..
+.. Includes       :
+.. include ev/RETURNDELIVERYCENTER.TEST
+..*****************************************************************************
+.set trans -
+.type ARTR51000 xgebmge  ? _F|defined(U|xgebmge)
+.type text      xsel     ? _F|defined(U|xsel)
+..
+.formula U|xgebmge = 0
+.continue END     ? 1|mge <=0
+.. MaterialzuschlÑge rauslassen, die werden automatisch wieder eingefÅgt
+.continue END   ? F|equals(1|artikel^zptyp, "(MaterialSurcharge)")
+.continue END   ? 1|artikel^id <> M|artikel^id & _F|empty(M|artikel)
+..
+.input "ev/RETURNDELIVERYCENTER.TEST"
+.continue TOTALEND   ? U|xdouble
+..
+.select screen line 'M|tzeilen'
+.make screen line +O
+.copy M|tmark = G|FALSE
+..
+.continue EINKAUF                   ?  M|beinkauf
+.assign M|tvkvorg    = M|vkvorg     ? _F|empty(M|vkvorg)
+.assign M|tvkvorg    = 1|kopf       ?  F|empty(M|vkvorg)
+.assign M|tkl2vk     = 1|kopf^kl2
+.assign M|twarenempf = 1|kopf^warenempf
+.assign M|tkunde     = 1|kopf^kunde
+.formula M|zidvk     = 1|id
+.copy M|eateil       = M|zidvk^eateil
+.. Artikel mit entnahmeart "öber StÅckliste kînnen nicht austomatisiert rÅckgelifert werden. Daher schreibschutz.
+.protection tmark 'M|aktzeile'      ?  M|eateil
+.continue WEITER
+..
+!EINKAUF
+.assign M|tekvorg = M|ekvorg        ? _F|empty(M|ekvorg)
+.assign M|tekvorg = 1|kopf          ?  F|empty(M|ekvorg)
+.assign M|tkl2ek  = 1|kopf^kl2
+.assign M|tvstaat = 1|kopf^vstaat
+.assign M|tlief   = 1|kopf^lief
+.formula M|zidek  = 1|id
+.copy M|stl       = G|TRUE ?  _F|empty(M|zidek^eres)
+.. Artikel mit entnahmeart "öber StÅckliste kînnen nicht austomatisiert rÅckgelifert werden. Daher schreibschutz.
+.protection tmark 'M|aktzeile'      ?  M|stl
+.continue WEITER
+..
+!WEITER
+.assign M|tpbed    = 1|kopf^pbed
+.assign M|tzbed    = 1|kopf^zbed
+.assign M|tlbed    = 1|kopf^lbed
+.assign M|tartikel = 1|artikel
+.formula M|mge     = 1|mge
+.assign M|platz    = 1|platz
+..
+.. Zusatzpositionen vom Typ AU/BE-Position haben keine MZs
+.continue NOMZ ? 1|artikel^gruppe = 4
+.continue NOMZ ? 1|artikel^gruppe = 5
+.continue NOMZ ? F|protected(M|tmark, M|aktzeile)
+.. Schleife Åber Materialzuordnungen / aktiv = nein entspricht gebucht
+.formula U|xsel= "$,,"
+.formula U|xsel=  U|xsel + ";einplan=nein;aktiv=nein"
+.formula U|xsel=  U|xsel + ";artikel="+'1|artikel^id'
+.formula U|xsel=  U|xsel + ";lgruppe="+'1|lgruppe^id'
+.formula U|xsel=  U|xsel + ";abeweg="+'M|zidvk'       ? M|bverkauf
+.formula U|xsel=  U|xsel + ";zbeweg="+'M|zidek'       ? M|beinkauf
+.formula U|xsel=  U|xsel + ";@gruppe=0;@ablageart=(Both)"
+.select mallocation 'U|xsel'
+.copy M|mzda = G|TRUE ? G|mehr
+.select               ? G|mehr
+..
+.continue NOMZ ? F|empty(M|projekt) & F|empty(M|charge) & F|empty(M|verwendung)
+.. Build and execute query for materials allocation: aktiv = nein entspricht gebucht
+.formula U|xsel= "$,,"
+.formula U|xsel=  U|xsel + ";einplan=nein;aktiv=nein"
+.formula U|xsel=  U|xsel + ";artikel="+'1|artikel^id'
+.formula U|xsel=  U|xsel + ";lgruppe="+'1|lgruppe^id'
+.formula U|xsel=  U|xsel + ";charge="+'M|charge^id'   ? _F|empty(M|charge)
+.formula U|xsel=  U|xsel + ";projekt="+'M|projekt^id' ? _F|empty(M|projekt)
+.formula U|xsel=  U|xsel + ";verw="+'M|verwendung'    ? _F|empty(M|verwendung)
+.formula U|xsel=  U|xsel + ";abeweg="+'M|zidvk'       ? M|bverkauf
+.formula U|xsel=  U|xsel + ";zbeweg="+'M|zidek'       ? M|beinkauf
+.formula U|xsel=  U|xsel + ";@gruppe=0;@ablageart=(Both)"
+.select mallocation 'U|xsel'
+.continue NOMZ ? _G|mehr
+.continue MZDA
+..
+!LOOP
+.select mallocation
+.continue NOMZ ? _G|mehr
+!MZDA
+.copy M|mztreffer = G|TRUE ? H|charge^id = M|charge^id & _F|empty(M|charge)
+.copy M|mztreffer = G|TRUE ? H|projekt^id = M|projekt^id & _F|empty(M|projekt)
+.copy M|mztreffer = G|TRUE ? H|verw = M|verwendung & _F|empty(M|verwendung)
+.continue SELECT ?  M|mztreffer
+.continue LOOP   ? _M|mztreffer
+..
+!SELECT
+.select
+..
+!NOMZ
+.copy M|tcharge      = 1|charge
+.copy M|tprojekt     = 1|projekt   ? F|defined(1|projekt)
+.formula M|tverwendung = 1|verw
+.continue DELZEILE ? 1|charge^id <> M|charge^id & _F|empty(M|charge) & _M|mztreffer
+.continue DELZEILE ? 1|projekt^id <> M|projekt^id & _F|empty(M|projekt) & _M|mztreffer
+.continue DELZEILE ? 1|verw <> M|verwendung & _F|empty(M|verwendung) & _M|mztreffer
+..
+.formula M|select = "$,,"
+.formula M|select = M|select + ";kotyp=(PackingSlip)"
+.formula M|select = M|select + ";tlsart=(ReturnPackingSlip)"
+.formula M|select = M|select + ";orig="+'M|zidvk' ? M|bverkauf
+.formula M|select = M|select + ";orig="+'M|zidek' ? M|beinkauf
+.formula M|select = M|select + ";kopf^uebertr=nein"
+.formula M|select = M|select + ";@gruppe=2"
+.formula M|select = M|select + ";@ablageart=(Both)"
+.load 4 purchasing 'M|select'           ? M|beinkauf
+.load 4 sales 'M|select'                ? M|bverkauf
+.formula U|xgebmge = 0                 
+.continue CONTINUE                      ? _G|mehr
+.formula U|xgebmge = 4|mge   ?  '1|he' = '4|he'
+.formula U|xgebmge = 4|mge/4|artikel^fvhle ? '1|he' <> '4|he' & M|bverkauf
+.formula U|xgebmge = 4|mge/4|artikel^fehle ? '1|he' <> '4|he' & M|beinkauf
+..
+!LOADSEL
+.load 4 sales        ? M|bverkauf
+.load 4 purchasing   ? M|beinkauf
+.continue CONTINUE   ? _G|mehr
+.formula U|xgebmge = U|xgebmge + 4|mge ?  '1|he' = '4|he'
+.formula U|xgebmge = U|xgebmge + (4|mge / 4|artikel^fvhle) ? '1|he' <> '4|he' & M|bverkauf
+.formula U|xgebmge = U|xgebmge + (4|mge / 4|artikel^fehle) ? '1|he' <> '4|he' & M|beinkauf
+.continue LOADSEL
+..
+!CONTINUE
+.. ruecklifrg: ungebuchte Menge aber bereits in RÅcklieferscheinen enthalten
+.. xgebmge: gebuchte Mengen in RÅcklieferscheinen
+..'1|mge' + '1|ruecklifrg' + 'U|xgebmge' 
+.formula M|rueckmge = 1|mge + 1|ruecklifrg + U|xgebmge
+.continue DELZEILE ? M|bnullzeile & M|rueckmge <= 0 & F|empty(M|vkvorg) & M|bverkauf
+.continue DELZEILE ? M|bnullzeile & M|rueckmge <= 0 & F|empty(M|ekvorg) & M|beinkauf
+.protection newmge 'M|aktzeile'    ?  M|rueckmge <= 0
+.protection tmark 'M|aktzeile'     ?  M|rueckmge <= 0
+.formula M|tle   = 1|he            ? _F|empty(1|he)
+.formula M|netto = 1|nwert
+.copy M|pwaehr   = 1|kopf^erfwaehr ?  M|beinkauf
+.copy M|pwaehr   = 1|kopf^waehr    ?  M|bverkauf
+.formula M|proz  = 1|proz
+.formula M|vom   = 1|kovom
+.formula M|budat = 1|kopf^budat
+.continue END 
+..
+!DELZEILE
+.make screen line -O
+.continue END
+..
+!ZUSATZ
+.copy M|mzda = G|FALSE
+.formula M|rueckmge = ""
+.protection -line 'M|zn'
+.. Build and execute query for materials allocation: aktiv = nein entspricht gebucht
+.formula U|xsel= "$,,"
+.formula U|xsel=  U|xsel + ";einplan=nein;aktiv=nein"
+.formula U|xsel=  U|xsel + ";artikel="+'1|artikel^id'
+.formula U|xsel=  U|xsel + ";lgruppe="+'1|lgruppe^id'
+.formula U|xsel=  U|xsel + ";charge="+'M|charge^id'   ? _F|empty(M|charge)
+.formula U|xsel=  U|xsel + ";projekt="+'M|projekt^id' ? _F|empty(M|projekt)
+.formula U|xsel=  U|xsel + ";verw="+'M|verwendung'    ? _F|empty(M|verwendung) 
+.formula U|xsel=  U|xsel + ";abeweg="+'M|zidvk'       ? M|bverkauf
+.formula U|xsel=  U|xsel + ";zbeweg="+'M|zidek'       ? M|beinkauf
+.formula U|xsel=  U|xsel + ";@gruppe=0;@ablageart=(Both)"
+.load 2 mallocation 'U|xsel'
+.continue END     ? _G|mehr
+..
+!MORETAB
+.make screen line +O
+.copy M|bfarbe = G|TRUE
+.copy M|mzda           = G|TRUE
+.assign M|tartikel     = 1|artikel
+.formula M|zidvk       = 1|id             ? M|bverkauf
+.formula M|zidek       = 1|id             ? M|beinkauf
+.copy M|tcharge        = 2|charge
+.copy M|tprojekt       = 2|projekt        ? F|defined(2|projekt)
+.formula M|tverwendung = 2|verw
+.assign M|platz        = 2|platz
+.formula M|mge         = 2|zuomge
+.formula M|tle         = 2|einh
+.assign M|tvkvorg      = M|vkvorg         ? M|bverkauf & _F|empty(M|vkvorg)
+.assign M|tekvorg      = M|ekvorg         ? M|beinkauf & _F|empty(M|ekvorg)
+.assign M|tvkvorg      = 1|kopf           ? M|bverkauf &  F|empty(M|vkvorg)
+.assign M|tekvorg      = 1|kopf           ? M|beinkauf &  F|empty(M|ekvorg)
+.assign M|tkl2ek       = 1|kopf^kl2       ? M|beinkauf
+.assign M|tkl2vk       = 1|kopf^kl2       ? M|bverkauf
+.assign M|twarenempf   = 1|kopf^warenempf ? M|bverkauf
+.assign M|tpbed        = 1|kopf^pbed
+.assign M|tzbed        = 1|kopf^zbed
+.assign M|tlbed        = 1|kopf^lbed
+.assign M|tvstaat      = 1|kopf^vstaat    ? M|beinkauf
+.assign M|tartikel     = 1|artikel
+.assign M|tkunde       = 1|kopf^kunde     ? M|bverkauf
+.assign M|tlief        = 1|kopf^lief      ? M|beinkauf
+.assign M|mzidek       = 2|id ? M|beinkauf
+.assign M|mzidvk       = 2|id ? M|bverkauf
+.copy M|mztreffer = G|TRUE ? 2|charge^id = M|charge^id & _F|empty(M|charge)
+.copy M|mztreffer = G|TRUE ? 2|projekt^id = M|projekt^id & _F|empty(M|projekt)
+.copy M|mztreffer = G|TRUE ? 2|verw = M|verwendung & _F|empty(M|verwendung)
+..
+.. LJ-Eintrag suchen; 1 = Vorgangsposition; 2 = Materialzuodnung
+.formula U|xsel = "$,,"
+.formula U|xsel = U|xsel + ";artikel="+'1|artikel^id'
+.formula U|xsel = U|xsel + ";platz="+'2|platz^id'
+.formula U|xsel = U|xsel + ";me="+'2|einh'
+.formula U|xsel = U|xsel + ";gmge="+'2|zuomge'
+.formula U|xsel = U|xsel + ";buart=1"                   ?  M|beinkauf
+.formula U|xsel = U|xsel + ";buart=2"                   ?  M|bverkauf
+.formula U|xsel = U|xsel + ";vorgang=="+'M|zidek'       ?  M|beinkauf
+.formula U|xsel = U|xsel + ";vorgang=="+'M|zidvk'       ?  M|bverkauf
+.formula U|xsel = U|xsel + ";kl="+'M|lief'              ?  M|bverkauf
+.formula U|xsel = U|xsel + ";kl="+'M|kunde'             ?  M|bverkauf
+.formula U|xsel = U|xsel + ";budat="+'M|budat'
+.formula U|xsel = U|xsel + ";vom="+'M|vom'
+.formula U|xsel = U|xsel + ";verw=`"                    ?  F|empty(2|verw)
+.formula U|xsel = U|xsel + ";verw="+'2|verw'            ? _F|empty(2|verw)
+.formula U|xsel = U|xsel + ";projekt=`"                 ?  F|empty(2|projekt) & F|defined(2|projekt)
+.formula U|xsel = U|xsel + ";projekt=="+'2|projekt^id'  ? _F|empty(2|projekt) & F|defined(2|projekt)
+.formula U|xsel = U|xsel + ";restgmge="
+.formula U|xsel = U|xsel +";@ordnung=nummer.(Backwards);@gruppe=1;@ablageart=(Active)"
+.load 3 journal 'U|xsel'
+.continue NOLJ ? _G|mehr
+.assign M|journal = 3|id
+..
+.formula M|rueckmge = 3|restgmge
+.copy M|tljprojekt  = 3|projekt ? F|defined(3|projekt) & 3|projektla
+.formula M|tljverwendung = 3|verwla
+.protection -line 'M|zn' ? M|rueckmge = 0
+..
+!NOLJ
+.load 2 mallocation
+.continue FINISH  ? _G|mehr
+.continue MORETAB ?  G|mehr
+..
+!FINISH 
+.select screen line 1
+.continue
+..
+..*****************************************************************************
+!END
+.continue        ? M|tzeilen = 0
+.continue        ? _F|defined(M|mzda)
+.continue ZUSATZ ? M|mzda & M|rueckmge > 0 & _M|bfarbe
+!TOTALEND
+.continue

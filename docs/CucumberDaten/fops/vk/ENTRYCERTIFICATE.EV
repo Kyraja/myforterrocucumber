@@ -1,0 +1,92 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ENTRYCERTIFICATE.EV
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  :
+..
+..*****************************************************************************
+.set trans -
+..
+.input "vk/ENTRYCERTIFICATE.INI"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "kunde"
+.continue LS        ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "klskopf"
+.continue EMAIL     ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "emaildruck"
+.continue ADRESSE   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "anschriftdruck"
+.continue BARCODE   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "barcode"
+.continue BSTART    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "inklals"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "inklversendet"
+.continue BSTART    ? G|evtartengl = "BUTTON_AFTER" & (G|evtvar = "erhalt" ; G|evtvar = "versand")
+.continue BSTART    ? G|evtartengl = "FIELD_EXIT"   & (G|evtvar = "rueckausschl" ; G|evtvar = "ausgeschlossen" ; G|evtvar = "erhalten" ; G|evtvar = "versendet")
+.continue END
+..
+!BARCODE
+.continue TABLEEREN
+..
+!EMAIL
+.copy M|int = 0 ? _M|emaildruck
+.copy M|int = 1 ?  M|emaildruck
+.copy M|anschriftdruck = _M|emaildruck
+.continue END
+..
+!ADRESSE
+.copy M|int = 0 ?  M|anschriftdruck
+.copy M|int = 1 ? _M|anschriftdruck
+.copy M|emaildruck = _M|anschriftdruck
+.continue END
+..
+!LS
+.continue TABLEEREN ? F|empty(M|klskopf)
+.assign M|kunde = M|klskopf^kunde
+.formula M|kadresse = M|klskopf^adresse2
+.formula M|kadresse = M|klskopf^adresse   ? F|empty(M|kadresse)
+.assign M|vstaat = M|klskopf^vstaat
+.continue TABLEEREN 
+..
+!BSTART: gebuchte Lieferscheine, buart=0; noch nicht zurÅckerhalten, laart=EU-Staat
+.continue ERROR2 ? M|emaildruck & F|empty(M|emailadresse)
+.continue ERROR2 ? M|anschriftdruck & F|empty(M|adresse)
+.input "is/TABLEEREN"
+.formula M|select = "$,,"
+.formula M|select = M|select + ";nummer=" + 'M|klskopf' ? _F|empty(M|klskopf)
+.formula M|select = M|select + ";budat=" + 'M|von' + "!" + 'M|bis'
+.formula M|select = M|select + ";ktyp=4"
+.formula M|select = M|select + ";buart=0"
+.formula M|select = M|select + ";lsart<>(PackingSlipCanceled)"
+.formula M|select = M|select + ";uebertr=False"
+.formula M|select = M|select + ";glbrueck=False"       ?  F|empty(M|klskopf)
+.formula M|select = M|select + ";glbrueck="            ? _F|empty(M|klskopf)
+.formula M|select = M|select + ";glbausgeschl="        ?  M|inklals
+.formula M|select = M|select + ";glbausgeschl=False"   ? _M|inklals
+.formula M|select = M|select + ";glbversandt="         ?  M|inklversendet
+.formula M|select = M|select + ";glbversandt=False"    ? _M|inklversendet
+.formula M|select = M|select + ";kunde=" + M|kunde^id  ? _F|empty(M|kunde)
+.formula M|select = M|select + ";@ablageart=" + M|ablageart
+.formula M|select = M|select + ";@gruppe=1"
+.input "is/HOL.LISTE"
+.continue END
+..
+!TABLEEREN
+.input "is/TABLEEREN"
+.continue END
+..*****************************************************************************
+!END
+.continue ERROR  ? M|tzeilen = 0 & _F|empty(M|klskopf) & _M|inklals & M|klskopf^glbausgeschl & _M|bfirst 
+.continue ERROR1 ? M|tzeilen = 0 & _F|empty(M|klskopf) & _M|inklals & M|klskopf^uebertr & _M|bfirst
+.continue
+..
+!ERROR
+.copy M|bfirst = G|TRUE
+.error Lieferschein ist vom Druck der GelangensbestÑtigung ausgeschlossen!
+.end 1
+..
+!ERROR1
+.copy M|bfirst = G|TRUE
+.error Lieferschein ist noch nicht gebucht!
+.end 1
+..
+!ERROR2
+.error Bitte RÅckantwort-Adresse eintragen!
+.end 1

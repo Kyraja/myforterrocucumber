@@ -1,0 +1,206 @@
+..!interpreter german translate noabbrev
+..*****************************************************************************
+.. Name           : ASRUECK.ALLERUECK.BN
+.. Date           : 09.01.15
+.. Version        : 2014r3n02
+.. Author         : chbo
+.. Copyright      : (c) 2014 SABA International
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+..
+.art int  xicount                         ? F|defined( U|xicount )    = G|False
+.art int  xivcount                        ? F|defined( U|xivcount )   = G|False
+.art text xtedpdatei                      ? F|defined( U|xtedpdatei ) = G|False
+.art text xterrdat                        ? F|defined( U|xterrdat )   = G|False
+.art text xtedpcopy                       ? F|defined( U|xtedpcopy )  = G|False
+.art text xtedpkomm                       ? F|defined( U|xtedpkomm )  = G|False
+.art int  xidepth                         ? F|defined( U|xidepth )    = G|False
+.art int  xitotal                         ? F|defined( U|xitotal )    = G|False
+.art text xtcopyedp                       ? F|defined( U|xtcopyedp )  = G|False
+.art text xtselect                        ? F|defined( U|xtselect )   = G|False
+.art text xtbuchdat                       ? F|defined( U|xtbuchdat )  = G|False
+.art int  xiucount                        ? F|defined( U|xiucount )   = G|False
+.art text xtedpkomm2                      ? F|defined( U|xtedpkomm2 ) = G|False
+.art text xtcom                           ? F|defined( U|xtcom )      = G|False
+..
+..
+..-- Maske neu laden falls notwendig
+.weiter RELOAD ? M|reload = G|True
+..
+..-- Counters fÅr rÅckgemeldeten Belege und Wiederladen der Tabelle initialisieren
+.formel U|xitotal = 0
+.formel U|xidepth = 1
+..
+..
+!START
+..-- Kopf holen und Counters fÅr Tabellezeilen und rÅckgemeldete Belege initialisieren
+.hole maske kopf
+.formel U|xicount = 0
+.formel U|xivcount = 0
+..
+..-- Ende wenn Åberhaupt keine Zeilen in der Tabelle
+.weiter KEINEZEILEN                          ? M|tzeilen = 0
+.weiter KEINEVERFUEG                         ? M|offen   = G|False
+..
+..-- Flag setzten damit die Maske neu geladen werden muss
+.formel M|reload = G|True
+..
+..-- Ausgabe der Ebene
+.hinweis -sofort RÅckmeldung der 'U|xidepth'. Ebene beginnt...   ? M|rekursiv = G|True
+..
+..-- Logdatei definineren
+.formel U|xterrdat   = "tmp/XASRUECK." + 'G|versionneu' + ".EDP.LOG"
+.formel U|xtedpcopy  = "tmp/XASRUECK." + 'G|versionneu' + ".EDP.COPY"
+..
+..-- EDP Importdatei erstellen
+.datei -TEMPNAME U|xtedpdatei
+.eingabe DATEI.F
+.ausgabe auf 'U|xtedpdatei'
+#!DATABASE=9
+#!GROUP=1
+#!ACTION=DONE
+#!CHARSET=EKS
+#!FLDDELIMITER=;
+#!EDP_STOREROWMODE=DELNONE
+#!EDP_LOCKBEHAVIOR=NOWAIT
+#!EDP_TESTFLAG2=1
+#!EDP_DATE='M|dienstag:8'
+
+barmex;gut;sofort;bzeit;mzeit;
+..
+..
+!MZEILE
+..-- Zeilen in die EDP Datei ausgeben
+.formel U|xicount = U|xicount + 1
+.hole maske zeile 'U|xicount'
+..
+?'M|as^id';ja;ja;'M|vzeitschwank';'M|vzeitschwank'; ? M|verfuegbar = G|True & M|rueckgemeldet = G|False
+.formel U|xivcount = U|xivcount + 1                 ? M|verfuegbar = G|True & M|rueckgemeldet = G|False
+.weiter ENDLOOP                                     ? U|xicount = M|tzeilen
+.weiter MZEILE
+..
+..
+!ENDLOOP
+..-- Datei schlei·en und RÅckmeldungen Åber EDP ausfÅhren
+.ausgabe auf WERF.WEG
+.eingabe BILD.F
+.ausgabe BILDSCHIRM
+..
+..-- EDP Kommando zusammenbauen und laufen lassen
+.formel U|xtedpkomm = "edpimport.sh -I " + 'U|xtedpdatei' + " -p abas123 2> " + 'U|xterrdat'
+.. .edit 'U|xtedpdatei'
+.system 'U|xtedpkomm' HINTER
+..-- Fehlerbehandlung
+.weiter ERREDP ? G|mehr = G|False
+..-- EDP erfolgreich
+.hinweis -sofort RÅckmeldung von 'U|xivcount' Arbeitsscheinen der Maske erfolgreich.                   ? M|rekursiv = G|False
+.hinweis -sofort RÅckmeldung von 'U|xivcount' Arbeitsschein(en) der 'U|xidepth'. Ebene erfolgreich.    ? M|rekursiv = G|True
+..
+.. clean up when we don't have errors
+.formel  U|xtcom = "rm -f " + 'U|xtedpdatei' + " " + 'U|xterrdat'            ?  (F|filesize(U|xterrdat) = 0)
+.system 'U|xtcom' HINTER                                                     ?  (F|filesize(U|xterrdat) = 0)
+..
+..-- Nicht gebuchte RÅckmeldebelege ermittlen
+.hinweis -sofort Nicht gebuchte RÅckmeldungen ermittlen...
+..
+.formel U|xtselect = "$,,nummer=;such=;sucherw~`;@gruppe=2;@ablageart=(Active)"
+.hole Betriebsauftrag 'U|xtselect'
+.weiter REKURSIV ? G|mehr = G|False & M|rekursiv = G|True
+.weiter ENDE     ? G|mehr = G|False & M|rekursiv = G|False
+..
+..-- Falls es ungebuchte RÅckmeldungen gibt, EDP-Datei erfassen
+.formel U|xiucount = 0
+.datei -TEMPNAME U|xtbuchdat
+.eingabe DATEI.F
+.ausgabe auf 'U|xtbuchdat'
+#!DATABASE=9
+#!ACTION=TRANSFER
+#!CHARSET=EKS
+#!FLDDELIMITER=;
+#!EDP_STOREROWMODE=DELNONE
+#!EDP_LOCKBEHAVIOR=NOWAIT
+#!EDP_TESTFLAG2=1
+#!EDP_DATE='M|dienstag:8'
+
+nummer;
+..
+!LOOPUNGEBUCHT
+'H|nummer';
+..
+.formel U|xiucount = U|xiucount + 1
+.hole Betriebsauftrag
+.weiter LOOPUNGEBUCHT ? G|mehr = G|True
+..
+..-- EDP-Datei schlie·en
+.ausgabe auf WERF.WEG
+.eingabe BILD.F
+.ausgabe BILDSCHIRM
+..
+..-- Ungebuchte RÅckmeldungen Åber EDP buchen
+.hinweis -sofort 'U|xiucount' ungebuchte RÅckmeldung(en) gefunden.
+.formel U|xtedpkomm2 = "edpimport.sh -I " + 'U|xtbuchdat' + " -p abas123 2> " + 'U|xterrdat'
+.system 'U|xtedpkomm' HINTER
+.weiter ERRBUCH ? G|mehr = G|False
+..
+.. clean up when we don't have errors
+.formel  U|xtcom = "rm -f " + 'U|xtbuchdat' + " " + 'U|xterrdat'            ?  (F|filesize(U|xterrdat) = 0)
+.system 'U|xtcom' HINTER                                                    ?  (F|filesize(U|xterrdat) = 0)
+..
+.weiter REKURSIV ? M|rekursiv = G|True
+.weiter ENDE     ? M|rekursiv = G|False
+..
+..
+!REKURSIV
+..-- Die Tabelle neu laden und AS rÅckmelden solange es rÅckmeldbare AS gibt
+.hinweis Tabelle neu laden...
+.eingabe "TABLEEREN"
+.eingabe owfo/ASRUECK.BSTART.BA
+.formel U|xidepth = U|xidepth + 1            ? M|offen = G|True
+.formel U|xitotal = U|xitotal + U|xivcount   
+.weiter START                                ? M|offen = G|True
+.hinweis 'U|xitotal' Arbeitsscheine Åber 'U|xidepth' Ebenen erfolgreich rÅckgemeldet. ? M|rekursiv = G|True
+.weiter ENDE                                 ? M|offen = G|False
+..
+..
+!ERREDP
+.hinweis -sofort RÅckmeldung des Arbeitsscheins Åber EDP scheitert!
+.formel U|xtcopyedp = "cp " + 'U|xtedpdatei' + " " + 'U|xtedpcopy'
+.system 'U|xtcopyedp' HINTER
+.weiter ENDE
+..
+..
+!ERRBUCH
+.hinweis -sofort Buchen der ungebuchten RÅckmeldungen Åber EDP scheitert!
+.formel U|xtcopyedp = "cp " + 'U|xtbuchdat' + " " + 'U|xtedpcopy'
+.system 'U|xtcopyedp' HINTER
+.weiter ENDE
+..
+..
+!KEINEZEILEN
+.hinweis -sofort Keine Arbeitsscheine rÅckzumelden! Tabelle ist leer!
+.weiter ENDE
+..
+..
+!KEINEVERFUEG
+.hinweis -sofort Komponenten fÅr keine Arbeitsscheine vorhanden!
+.weiter ENDE
+..
+..
+!RELOAD
+.hinweis -sofort Tabelle zuerst aktualisieren mit Klick auf Starttaste!
+..
+..
+!ENDE
+.weiter

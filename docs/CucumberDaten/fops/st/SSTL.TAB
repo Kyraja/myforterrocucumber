@@ -1,0 +1,133 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name              : SSTL.TAB
+.. Autor             : bs
+.. Verantwortlich    : cl
+.. Kontrolle         : tiwe
+.. Funktion          : Erzeugt Tabellenzeilen der Strukturstueckliste.
+.. Ablauf            : Tabellen-EFOP
+..
+.. Functionality     : Creates table rows of the production list.
+.. Program flow      : Table-EFOP
+...Includes             :
+.. include st/GETICONPART
+..*****************************************************************************
+.set trans -
+..
+.type text   xt1      ? _F|defined(U|xt1)
+.type VPKS1  xtartid  ? _F|defined(xtartid)
+.type text   xticon   ? _F|defined(xticon)
+..
+.. filter parts list
+.continue END ? _M|bmitag    &  H|elart = 3
+.continue END ? _M|bmitfm    &  H|elart = 2
+.continue END ?  M|brelevant & _H|relevant
+..
+.. create table row
+.make screen line +O
+.formula M|tbaumstufe = M|stufe + 1
+..
+.copy M|elart= H|elart
+.formula M|mge = H|anzahl
+.assign M|amge = H|amge
+.copy M|combiprod = F|equals(H|kompeig , "(Coproduct)")
+.copy M|kompeig = H|kompeig
+.copy M|elem = H|elem
+.assign M|tbasisartikel = H|elem^basisartikel
+.formula M|tbaumtext = H|elem^nummer + " " + M|elem^such + " " + M|elname
+.copy M|tele = H|elem^le ? M|elart = 2
+..
+.. if part is relocated, use its warehouse group othwise use warehouse group as known from parts list header
+.copy M|laggr = H|lgruppean
+.copy M|laggr = U|xintlg        ? F|empty(H|lgruppean)
+.copy U|xtartid = M|elem
+.formula M|tbaumicon = U|xtartid^elementicon
+.continue INTLGR ? M|laggr^intlager
+..
+.. externe Lagergruppe
+.type ID39:2 xtlgid   ? _F|defined(xtlgid)
+.assign U|xtlgid  = M|laggr
+.input "st/GETICONPART"
+.formula M|tbaumicon = U|xticon
+..
+!INTLGR: interne Lagergruppe
+.continue NOARTIKEL                   ? M|elart = 2 ; M|elart = 3
+.load 0 add H|elem
+.. Lagergruppe bestimmen
+.copy 0|lgruppean = M|laggr     ? M|laggr^id <> U|xintlg^id ; F|equals(0|bsart, "(Relocation)")
+.continue WGROUP                ? _F|equals(0|bsart, "(Relocation)") ; 0|tzeilen<>1
+.load 0 line 1
+.continue WGROUP                      ? 0|elem^id <> 0|id
+.. skip destination warehouse group, continue with source warehouse group
+.copy 0|lgruppean = 0|umllg
+!WGROUP
+.load 0 header
+.copy 0|konddat   = M|konddat
+.copy 0|flistean  = M|fertliste ? _F|empty(M|fertliste) & M|stufe = 0 & _F|equals(0|bsart, "(Relocation)")
+.copy 0|mitaufl   = M|mitaufl
+.continue NOAUFLOES                   ? 0|tzeilen = 0
+.continue NOAUFLOES                   ? M|combiprod
+.formula M|tbaumstat = "+"
+.formula M|tbaumstat = "-"           ? M|bstartbut & M|tbaumstufe < M|anzstufen & (M|mge > 0.0 ; M|amge > 0.0)
+..
+!NOAUFLOES
+.formula M|dispo  = 0|dispo
+.formula M|dispoa = 0|dispoa
+.formula M|bsart  = 0|bsart          ? _M|combiprod
+.copy M|tele = 0|le
+..
+!NOARTIKEL: copy data from parts list row
+.formula M|vpos = H|vpos
+.formula M|laenge = H|lge
+.copy M|ellme = H|ellme ? M|laenge <> 0
+.formula M|breite = H|breite
+.copy M|elbme = H|elbme ? M|breite <> 0
+.copy M|elle = H|elle ? (M|laenge = 0) & (M|breite = 0)
+.copy M|ebu = H|bu
+.copy M|filter = H|filter
+.copy M|filtervgl = H|filtervgl
+.copy M|filtervgl2= H|filtervgl2
+.copy M|relevant  = H|relevant
+.copy M|mgr = H|mgr
+.copy M|lgr = H|lgr
+.formula M|postext = H|ptext
+.copy M|auslaufstatusicon = H|auslaufstatusicon
+.assign M|tnachfolgeartikel = H|tnachfolgeartikel
+.copy M|tlbsdatum = H|tlbsdatum
+.copy M|tlverwdatum = H|tlverwdatum
+.copy M|tvgltermin = H|tvgltermin
+.continue PART ? M|elart = 1 ; M|elart = 2 ; M|elart = 4
+..
+.. total quantity for operation => M|elart = 3
+.formula M|mzrsek = H|mzrsek ? F|defined(H|mzrsek)
+.formula M|mzesek = H|mzesek ? F|defined(H|mzesek)
+.formula M|gesamt = H|gesamtz
+.copy M|tele = M|defunit4op
+.continue TOOLTIP
+..
+!PART: total quantity for actual part
+.formula M|gesamt = H|gesamtm
+..
+!TOOLTIP: configure tooltip
+.set trans +
+.formula M|tbauminfo = ""
+.formula U|xt1 = M|laenge
+.formula M|tbauminfo = "L„nge/tr" + ": " + U|xt1 + " " + M|ellme ? M|laenge <> 0
+.formula U|xt1 = M|breite
+.formula M|tbauminfo = M|tbauminfo + " " + "Breite" + ": " + U|xt1 + " " + M|elbme ? M|breite <> 0
+.formula U|xt1 = M|mge
+.formula M|tbauminfo = M|tbauminfo + " " + "Mge/Anz." + ": " + U|xt1 ? M|mge <> 0
+.formula M|tbauminfo = M|tbauminfo + " " + M|elle ? M|laenge = 0 & M|breite = 0
+.formula U|xt1 = M|gesamt
+.formula M|tbauminfo = M|tbauminfo + " " + "Gesamt" + ": " + U|xt1 ? M|gesamt <> 0
+.formula U|xt1 = M|tele
+.formula M|tbauminfo = M|tbauminfo + " " + U|xt1 ? M|gesamt <> 0
+.formula U|xt1 = M|mgr
+.formula M|tbauminfo = M|tbauminfo + " " + "MGR" + ": " + U|xt1 ? U|xt1 <> ""
+.formula U|xt1 = M|lgr
+.formula M|tbauminfo = M|tbauminfo + " " + "LGR" + ": " + U|xt1 ? M|lgr <> 0
+.formula M|tbauminfo = M|tbauminfo + " " + M|bsart
+.formula M|tbauminfo = M|tbauminfo + " " + M|ebu
+..*****************************************************************************
+!END
+.continue

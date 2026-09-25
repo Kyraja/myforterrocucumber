@@ -1,0 +1,1241 @@
+..!interpreter english translate 
+..noabbrev
+..*****************************************************************************
+.. Name           : DFUE.EXP
+.. Author         : 
+.. Verantwortlich : mh
+.. Kontrolle      : 
+.. Functionality  : steuert den Export von EDI-DatensÑtzen 
+..*****************************************************************************
+.set trans +
+.. Variable definitions
+.type bool  xbreturn
+.type bool  xbEdiFehler
+.type text  xcom
+.type text  xdExport
+.type text  xdExport2
+.....edifact-Format
+.type text  xdEdiExport1
+.type text  xdEdiExport2
+.type text  xdfehler
+.type integer   xDFUEproto
+.type text  xdPARAM
+.type text  xdSendeDatei
+.type text  xdEdiSendeDatei
+.type integer   xExportCnt
+.type integer   xfcode
+.type integer   xFehlerCnt
+.type text  xkunde
+.type bool  xmehr
+.type text  xPostBetreff
+.type text  xPostEmpf
+.type text  xPostFtext
+.type text  xPostStichw1
+.type text  xPostStichw2
+.type text  xPostStichw3
+.type text  xPostStichw4
+..... procedure stack pointer .....
+.type integer   xprocsp
+.type integer   xsearchFcode
+.type text  xsearchIMEX
+.type integer   xsearchStatus
+.type text  xsys
+.type text  xtxt
+.type text  xtxt1
+.type text  xuebnr
+.type integer xiuebnr
+.type text  xUebNrNeu
+.type text  xUebNrAlt
+.type text  xUebNrAktuell
+.type integer   xVorArtVKAU
+.type integer   xVorArtVKLS
+.type integer   xVorArtVKRE
+.type integer   xVorArtVKSP
+.type text  xvorgang
+..
+.. initialize procedure stack pointer
+.formula xprocsp = 0
+.. alle variablen mÅssen definiert sein, sonst bricht das programm ab
+.set demand -
+..
+..
+..
+.. --------------------   BLOCK  --------------------
+.. initialisierung
+..die parameterdatei
+.formula xdPARAM = "dfue/DFUE.EXP.INI"
+.input 'xdPARAM'
+.up
+.down
+..
+..
+.. protokolldatei erzeugen, falls noch nicht existiert
+.formula xsys = "test -f " + xdProto
+.system 'xsys' background
+..
+..
+.continue EL012 ? _(_(mehr))
+.. IF012
+.. ueberschrift in protokolldatei setzen
+.input DATEI.F
+.output new 'xdProto'
+'txname                       ' START: 'datum'_'zeit ' PID: 'pid'
+  Datum_Zeit     EDI-Nr    Vorgang  Vo Kunde    Fehl       Bemerkung
+--------------------------------------------------------------------------------
+..
+..
+.continue FI012
+!EL012
+.. anfÅgen
+.input DATEI.F
+.output addedto 'xdProto'
+
+'txname                       ' START: 'datum'_'zeit ' PID: 'pid'
+  Datum_Zeit     EDI-Nr    Vorgang  Vo Kunde    Fehl       Bemerkung
+--------------------------------------------------------------------------------
+..
+..
+!FI012
+..
+.. Dateinamen vergeben, Variablen auf Initialwert setzen
+.. wichtige globale variablen fÅr vorgangsarten
+..**ok,14.01.2002 (vom abko zu 23 geÑndert)
+.formula xVorArtVKAU = 23
+.formula xVorArtVKSP = spko
+.formula xVorArtVKLS = liko
+.formula xVorArtVKRE = reko
+....**ok,13.02.2002 (neu: xVorArtPRICAT = 33 fÅr die Artikelpreisliste)
+.formula xVorArtPRICAT = 33
+..
+.. import/export flag der zu exportierenden datensÑtze
+.formula xsearchIMEX = "EX"
+.. status der zu exportierenden datensÑtze
+.formula xsearchStatus = 2
+.. fehlercode der zu exportierenden datensÑtze
+.formula xsearchFcode = 0
+..
+.. zÑhler fÅr anzahl vorgÑnge und fehler
+.formula xExportCnt = 0
+.formula xFehlerCnt = 0
+..
+.. datei fÅr fehlermeldungen -> kommt an den freitext der post
+.formula xdfehler = "X.ERR." + pid + ".TMP"
+..
+.. die tmp. exportdatei
+.formula xdExport  = "X.EX." + pid + ".TMP"
+.formula xdExport2 = "X.EX2." + pid + ".TMP"
+..
+.. die tmp. exportdatei fÅr edifact Format
+.formula xdEdiExport1 = "X.EDIEX1." + pid + ".TMP"
+.formula xdEdiExport2 = "X.EDIEX2." + pid + ".TMP"
+..
+.. -------------------- ENDBLOCK --------------------
+..
+.. Pruefung der Export-Konfiguration
+.. Werden Fehler gefunden, wird DFUE.EXP mit Fehler beendet
+.type bool xbquiet  ? _F|defined(T|xbquiet)
+.formula T|xbquiet = true
+.input "dfue/DFUE.EXP.CHECK"
+.continue EPRUEF  ? _T|xbfehler
+.error Bei der PrÅfung der Export-Konfiguration wurden Fehler gefunden.
+.error Starten Sie in der Export-Konfiguration das ExportprÅfpogramm!
+.end 1
+!EPRUEF
+..
+.. Meldungen fÅr Anwender
+..
+.continue EL013 ? _(xbRMeldAn)
+.. IF013
+.output terminal
+.left 1
+.right 210
+.view sg.klein
+..
+.. 2017-06: Abbildungsmodell muss leer sein
+.formula U|xcom = "$,,;@gruppe=0;@ablage=(1);@zeilen=(0);imex=EX;status=2;fcode=0;abmodell=`"
+..
+.select edifact 'U|xcom'
+..
+..
+.continue EL014 ? _(mehr)
+.. IF014
+.. Ausgabe
+Folgende EDI-VorgÑnge stehen zum Senden bereit!
+
+Datum: 'datum'
+
+EDI-ID   Erstell.-Datum Kurzname                           IMP/EXP B.status  F.code   öbertragungs-Nr
+-------- -------------- ---------------------------------- ------- --------- -------- ---------------
+
+..
+..
+!LOOP003: ==============================
+.continue ELOP003 ? _(mehr)
+.. Ausgabe
+'   num' 'erfass      ' 'name                            ' 'imex ' 'status ' 'fcode ' 'uebnr '
+..
+.select edifact
+..
+.continue LOOP003
+!ELOP003: ==============================
+..
+.menu Sollen diese gesendet werden
+JA, senden         >>
+NEIN, nicht senden >>
+..
+.continue FI014
+!EL014
+.. keine vorhanden
+.box Meldung
+In der EDI-Datenbank ist kein Vorgang zum Senden vorhanden!
+..
+.output terminal
+.input BILDB.F
+.formula xsys = "ls -lt " + xSendeVerz + " > XSEND.TMP"
+..**ok,06.12.2004 (fehlende hinter beim ".sys"-Befehl wurde ergÑnzt)
+.system 'xsys' background
+..
+.select from "XSEND.TMP" x1 x2
+..
+..
+.continue EL015 ? _((mehr) & (x2<>"0"))
+.. IF015
+Die folgenden Dateien stehen im Sendeverzeichnis zum Senden bereit:
+
+Datum        Uhrzeit   Dateiname                                 Dateigrî·e
+-----------  -------   ----------------------------------------  ----------
+..
+..
+!LOOP004: ==============================
+.continue ELOP004 ? _(mehr)
+.select from "XSEND.TMP" x1 x2 x3 x4 x5 x6 x7 x8 x9
+' x7'.'x6 '  'x8 '     'x9                                    '  '      x5'
+..
+.continue LOOP004
+!ELOP004: ==============================
+..
+.continue FI015
+!EL015
+Sendeverzeichnis ist leer!
+..
+!FI015
+..
+!FI014
+..
+..
+.. =====   CASE002   =====
+.continue BRK004 ? _(G|menue = 1)
+..
+..
+.continue ESAC002
+!BRK004
+.end
+..
+!ESAC002: =====   ENDCASE   =====
+..
+!EL013
+.. FI013
+..
+.input DATEI.F
+.output new 'xdfehler'
+ID-Nummern der fehlerhaften EDI-Datenbank-DatensÑtze
+----------------------------------------------------
+.output new WERF.WEG
+..
+.. 2017-06: Abbildungsmodell muss leer sein
+.formula U|xcom = "$,,;@gruppe=0;@ablage=(1);@zeilen=(0);imex=EX;status=2;fcode=0;abmodell=`"
+.select edifact lock 'U|xcom'
+..
+..
+!LOOP005: ==============================
+.continue ELOP005 ? _(mehr)
+..
+.continue EL016 ? _(H|such/"AT*")
+.. IF016
+.. mh, 02.09.2008: zur Info
+..
+.. ATLAS-Nachrichten werden in der EDI-DB zu Archivierungszwecken
+.. gespeichert, aber Åber eine ATLAS-Software versendet,
+.. und nicht Unter Einsatz einer Konvertierungssoftware.
+..
+.. Theoretisch sollten die ATLAS-Nachrichten in sehr kurzer
+.. Zeit (1 Sekunde) von Status 2 in Status 0 Åbergehen.
+.. Scheitert dies fÅr die ATLAS-Nachrichten aus irgendeinen
+.. Grund, kann hier ein Stau entstehen.
+..
+..
+.continue FI016
+!EL016
+.. ich zÑhle mal mit, wieviel vorgÑnge es gibt
+.formula xExportCnt = xExportCnt + 1
+.. das returnflag fÅr die unterprogramme erst mal auf fehler
+.formula xbreturn = false
+.. fehlercode auf undefiniert setzen
+.formula xfcode  = 99
+.formula h|fcode = xfcode
+.formula xEDINr = h|num
+.rewrite
+..
+.. exportdatei erzeugen
+.input DATEI.F
+.output new 'xdExport'
+..
+.. öbertrag-Nr, Zeit, Datum eintragen, Sendedateiname vergeben
+.. Transact no, Time, Date, Send-filename
+.. * gets the protokoll for a given edi-transaction
+.. * adds send date and time to the edi-transaction
+.. * constructs the filename for sending
+..
+.. initialize filenames
+.formula T|xdSendeDatei = ""
+.formula T|xdEdiSendeDatei = ""
+..
+.. set params for finding protokoll
+..
+..
+.. =====   CASE003   =====
+.continue BRK005 ? _(h|vorart = xVorArtVKAU)
+.. sales order confirmation, AuftragsbestÑtigung
+.formula T|xvorgang = "VKAUB"
+.formula T|xkunde   = 'h|idkundeab'
+..
+.continue ESAC003
+!BRK005
+.continue BRK006 ? _(h|vorart = xVorArtVKLS)
+.. delivery note (sales), VK-LS -> do nothing for now
+.continue ENDSEND
+..
+.continue ESAC003
+!BRK006
+.continue BRK007 ? _(h|vorart = xVorArtVKSP)
+.. shipping orders, SpeditionsauftrÑge
+.formula T|xvorgang = "VKLS"
+.formula T|xkunde   = 'h|idkundeab'
+..
+.continue ESAC003
+!BRK007
+.continue BRK008 ? _(h|vorart = xVorArtVKRE)
+.. invoices, Rechnungen
+.formula T|xvorgang = "VKRE"
+.formula T|xkunde   = 'h|idkunderab'
+..
+.continue ESAC003
+!BRK008
+.continue BRK009 ? _(h|vorart = xVorArtPRICAT)
+.. product price list, Artikelpreisliste (PRICAT)
+.formula T|xvorgang = "PRICAT"
+.formula T|xkunde   = 'h|idkundeab'
+..
+.continue ESAC003
+!BRK009
+.continue BRK010 ? _(h|vorart = 3)
+.. forecast delivery schedule (purchasing), Lieferabruf Einkauf
+.formula T|xvorgang = "EKLAB"
+.formula T|xkunde   = 'h|idabkunde'
+..
+.continue ESAC003
+!BRK010
+.. show error on screen
+.output terminal
+UNBEKANNTER VORGANG: 'h|vorart' in EDI-IdNr: 'h|num'
+.formula T|xbreturn = false
+.formula T|xfcode = 51
+.continue ENDSEND
+..
+!ESAC003: =====   ENDCASE   =====
+..
+.. get protokoll for edi transaction type
+.. note: T|xbreturn is set to 'false' by default, only if UebProtHolen succeeds it is set to 'true'
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+..
+..
+.continue EL017 ? _(T|xbreturn)
+.. IF017
+.. write current date and time into edi message
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC002
+!RET002
+.formula xprocsp = xprocsp - 1
+..
+.. building the path for send files is done in 3 steps
+.. 1) make filename (without path) with fields from edi message / transaction
+.. 2) strip non-compliant symbols (e.g. those that might mess up file operations)
+.. 3) add directory name to path
+..
+..<META H|='P53:0' > 
+..
+.. =====   CASE004   =====
+.continue BRK011 ? _(T|xvorgang = "VKAUB")
+.. substitute H|idkundesab if both "werk" and "ablstelle" are empty
+.formula T|xdSendeDatei    = "OSP" + 'idkunderab' + "_" + 'h|werk' + "_" + 'h|ablstelle'  ? _F|empty(H|werk) ; _F|empty(H|ablstelle)
+.formula T|xdEdiSendeDatei = "OSP" + 'idkunderab' + "_" + 'h|werk' + "_" + 'h|ablstelle'  ? _F|empty(H|werk) ; _F|empty(H|ablstelle)
+.formula T|xdSendeDatei    = "OSP" + 'idkunderab' + "_" + 'h|idkundesab'                  ?  F|empty(H|werk) &  F|empty(H|ablstelle)
+.formula T|xdEdiSendeDatei = "OSP" + 'idkunderab' + "_" + 'h|idkundesab'                  ?  F|empty(H|werk) &  F|empty(H|ablstelle)
+..
+.continue ESAC004
+!BRK011
+.continue BRK012 ? _(T|xvorgang = "VKLS")
+.. substitute H|idkundesab if both "werk" and "ablstelle" are empty
+.formula T|xdSendeDatei    = "SP" + 'idkunderab' + "_" + 'h|werk' + "_" + 'h|ablstelle'   ? _F|empty(H|werk) ; _F|empty(H|ablstelle)
+.formula T|xdSendeDatei    = "SP" + 'idkunderab' + "_" + 'h|idkundeab'                    ?  F|empty(H|werk) &  F|empty(H|ablstelle)
+..
+.continue ESAC004
+!BRK012
+.continue BRK013 ? _(T|xvorgang = "VKRE")
+.formula T|xdSendeDatei    = "RG" + 'h|idkunderab'
+.formula T|xdEdiSendeDatei = "RGE"+ 'h|idkunderab'
+..
+.continue ESAC004
+!BRK013
+.continue BRK014 ? _(T|xvorgang = "PRICAT")
+.formula T|xdSendeDatei    = "PRI" + 'idkundeab'
+..
+.continue ESAC004
+!BRK014
+.continue BRK015 ? _(T|xvorgang = "EKLAB")
+.formula T|xdSendeDatei    = "EKLAB" + 'h|idabkunde'
+..
+.continue ESAC004
+!BRK015
+..
+..
+!ESAC004: =====   ENDCASE   =====
+..
+..
+.continue EL018 ? _(F|empty(T|xdSendeDatei))
+.. IF018
+.continue FI018
+!EL018
+.. replace non-compliant symbols in filename with underscore: blank, slash, dot (note regexpression syntax)
+.formula T|xdSendeDatei = F|regreplaceall(T|xdSendeDatei, 'dblquote', "_")
+.formula T|xdSendeDatei = F|regreplaceall(T|xdSendeDatei, " ", "_")
+.formula T|xdSendeDatei = F|regreplaceall(T|xdSendeDatei, "[\.\$\&\'\(\)\*\+\=\/\;\:\<\>\?\`\^]", "_")
+.. build path with directory + filename + extension
+.formula T|xdSendeDatei = T|xSendeVerz + "/" + T|xdSendeDatei + "." + T|xtxt
+..
+!FI018
+..
+..
+.continue EL019 ? _(F|empty(T|xdEdiSendeDatei))
+.. IF019
+.continue FI019
+!EL019
+.. replace non-compliant symbols in filename with underscore: blank, slash, dot
+.formula T|xdEdiSendeDatei = F|regreplaceall(T|xdEdiSendeDatei, " ", "_")
+.formula T|xdEdiSendeDatei = F|regreplaceall(T|xdEdiSendeDatei, 'dblquote', "_")
+.formula T|xdEdiSendeDatei = F|regreplaceall(T|xdEdiSendeDatei, "[\.\$\&\'\(\)\*\+\=\/\;\:\<\>\?\`\^]", "_")
+.. build path with directory + filename + extension
+.formula T|xdEdiSendeDatei = T|xSendeVerz + "/" + T|xdEdiSendeDatei + "." + T|xtxt
+..
+!FI019
+..
+!EL017
+.. FI017
+..
+.. end send filename finding
+!SENDEND
+..
+..
+.continue EL020 ? _(xbreturn)
+.. IF020
+.. FEHLERFREI: --> ASCII-Datei erzeugen und Protokoll schreiben
+.formula xbreturn = false
+..
+.. ASCII-datei erzeugen und verschieben
+.select lock header
+.input 'xdDFUEEXPEDI2IHS'
+.output new WERF.WEG
+..
+.. Deaktivierter Block
+..
+.continue EL021 ? _((xDFUEproto=3) & (h|vorart=xVorArtVKRE))
+.. IF021
+..xbEdiFehler = RÅckgabe-Status der EDIFACT-INVOICE-DATEI-ERZEUGUNG
+..fo xbEdiFehler = false
+.. exportdatei erzeugen
+..ein DATEI.F
+..aus auf 'xdEdiExport1'
+..
+..hol sperr kopf
+..ein 'xdDfueExpEdi2INV'
+..aus auf WERF.WEG
+..
+!EL021
+.. FI021
+..
+.. Aus der Unix-datei eine Dos-datei machen
+.formula xsys = "crlf+ < " + xdExport + " > " + xdExport2
+.system 'xsys' background
+.formula  xsys = "mv -f " + xdExport2 + " " + xdExport
+.system 'xsys' background
+..
+..**ok,16.05.2002 (von s3-Zeichensatz in die ANSII-Datensatz konvertiert)
+.formula  xsys = "s3_conv 3 " + xdExport
+.system 'xsys' background
+..
+.. move file to export directory (sendeverzeichnis)
+.. mh, 30.05.2011: shell command replaces use of dfue.cp.sh
+.formula U|xsys = "mv -f " + xdExport + " " + xdSendeDatei
+.system 'U|xsys' background
+..
+..
+.continue EL022 ? _(mehr)
+.. IF022
+.formula xbreturn = true
+.formula xfcode = 0
+..
+.continue FI022
+!EL022
+.formula xbreturn = false
+.formula xfcode = 53
+..
+!FI022
+..
+.. status 0 -> ok
+.formula h|status = 0
+..**ok,14.08.2003 (jetzt hier ".bringe")
+.rewrite
+..
+.. Protokolleintrag
+.input DATEI.F
+.output addedto 'xdProto'
+..
+.. sauber verarbeitet und exportiert
+..**ok,10.01.2006 (jetzt zusÑtzlich EK-Lieferabruf)
+..
+..
+.. =====   CASE005   =====
+.continue BRK016 ? _(h|vorart = xVorArtVKAU)
+.formula xtxt1 = 'datum' + "_" + 'zeit'
+  'xtxt1       ' 'h|num  ' ORDRSP    'name'
+..
+.continue ESAC005
+!BRK016
+.continue BRK017 ? _(h|vorart = xVorArtVKLS)
+.. VK-LS -> erst mal nix zu tun
+..
+.continue ESAC005
+!BRK017
+.continue BRK018 ? _(h|vorart = xVorArtVKSP)
+.formula xtxt = ('h|ideksvor' + "        ") << 8
+.formula xtxt = xtxt + " " + (('h|vorart' + "  ") << 2)
+.formula xtxt = xtxt + " " + (('h|idkunderab' + "        ") << 8)
+.formula xtxt1 = 'datum' + "_" + 'zeit'
+  'xtxt1       ' 'h|num  ' 'xtxt'    'name'
+..
+.continue ESAC005
+!BRK018
+.continue BRK019 ? _(h|vorart = xVorArtVKRE)
+..
+.continue EL023 ? _(+h|ideksvor > 0)
+.. IF023
+.. eine rechn im edi-datensatz
+.formula xtxt = ('h|ideksvor' + "        ") << 8
+.formula xtxt = xtxt + " " + (('h|vorart' + "  ") << 2)
+.formula xtxt = xtxt + " " + (('h|idkunderab' + "        ") << 8)
+.formula xtxt1 = 'datum' + "_" + 'zeit'
+  'xtxt1       ' 'h|num  ' 'xtxt'    'name'
+..
+.continue FI023
+!EL023
+.. mehrere rechn in einem edi-datensatz
+..
+.continue EL024 ? _(xDfueProto = 1)
+.. IF024
+.select line
+..
+..
+!LOOP006: ==============================
+.continue ELOP006 ? _(mehr)
+..
+.continue EL025 ? _(h|text1 = "500")
+.. IF025
+.. kopfsatz fÅr rechnungen -> text3 = ReNr
+..
+.formula xtxt = (h|text3 + "        ") << 8
+.formula xtxt = xtxt + " " + (('h|vorart' + "  ") << 2)
+.formula xtxt = xtxt + " " + (('h|idkunderab' + "        ") << 8)
+.formula xtxt1 = 'datum' + "_" + 'zeit'
+  'xtxt1       ' 'h|num  ' 'xtxt'    'name'
+..
+!EL025
+.. FI025
+..
+.select line
+..
+.continue LOOP006
+!ELOP006: ==============================
+..
+!EL024
+.. FI024
+..
+..
+.continue EL026 ? _(xDFUEproto=2;xDFUEproto=3)
+.. IF026
+.select line
+..
+..
+!LOOP007: ==============================
+.continue ELOP007 ? _(mehr)
+..
+.continue EL027 ? _(h|text1 = "200")
+.. IF027
+.formula xtxt = (h|text3 + "        ") << 8
+.formula xtxt = xtxt + " " + (('h|vorart' + "  ") << 2)
+.formula xtxt = xtxt + " " + (('h|idkunderab' + "        ") << 8)
+.formula xtxt1 = 'datum' + "_" + 'zeit'
+  'xtxt1       ' 'h|num  ' 'xtxt'    'name'
+..
+!EL027
+.. FI027
+..
+.select line
+..
+.continue LOOP007
+!ELOP007: ==============================
+..
+!EL026
+.. FI026
+..
+!FI023
+..
+.output terminal
+..
+.. Rechnungsprotokoll Drucken
+..
+.continue EL028 ? _(xbDruckVKRE)
+.. IF028
+.formula xkunde = h|idkunderab
+.formula xuebnr = h|uebnr
+..
+..
+.. =====   CASE006   =====
+.continue BRK020 ? _(xDfueproto = 1)
+.input "EDI.INVOKE.EDICOLINVOICEPRINT"
+..
+.continue ESAC006
+!BRK020
+.continue BRK021 ? _(xDfueproto = 2)
+.input "EDI.INVOKE.EDICOLINVOICEPRINT"
+..
+.continue ESAC006
+!BRK021
+.continue BRK022 ? _(xDfueproto = 3)
+.input "EDI.INVOKE.EDICOLINVOICEPRINT"
+..
+.continue ESAC006
+!BRK022
+!ESAC006: =====   ENDCASE   =====
+..
+!EL028
+.. FI028
+..
+.continue ESAC005
+!BRK019
+.continue BRK023 ? _(h|vorart = xVorArtPRICAT)
+.formula xtxt1 = 'datum' + "_" + 'zeit'
+  'xtxt1       ' 'h|num  ' PRICAT    'name'
+..
+.continue ESAC005
+!BRK023
+.continue BRK024 ? _(h|vorart = 3)
+.formula xtxt1 = 'datum' + "_" + 'zeit'
+  'xtxt1       ' 'h|num  ' EKLAB    'name'
+..
+.continue ESAC005
+!BRK024
+.. was soll das denn
+.output terminal
+UNBEKANNTER VORGANG: 'h|vorart' in EDI-IdNr: 'h|num'
+..
+.end
+..
+!ESAC005: =====   ENDCASE   =====
+..
+.continue FI020
+!EL020
+.. FEHLER: --> Protokoll schreiben
+.formula h|status = 2
+..**ok,14.08.2003 (jetzt hier ".bringe")
+.rewrite
+..
+.. edi-id-nr in die fehlerdatei
+.output addedto 'xdfehler'
+'h|num     '   'h|name'
+.output new WERF.WEG
+..
+.. Protokolleintrag
+.input DATEI.F
+.output addedto 'xdProto'
+..
+.. fehlerhaft
+.formula xFehlerCnt = xFehlerCnt + 1
+..
+..
+.. =====   CASE007   =====
+.continue BRK025 ? _(h|vorart = xVorArtVKAU)
+.. VK-AU -> erst mal nix zu tun
+..
+.continue ESAC007
+!BRK025
+.continue BRK026 ? _(h|vorart = xVorArtVKLS)
+.. VK-LS -> erst mal nix zu tun
+..
+.continue ESAC007
+!BRK026
+.continue BRK027 ? _(h|vorart = xVorArtVKSP)
+.. eintrag fÅr SPED
+.formula xtxt = ('h|ideksvor' + "        ") << 8
+.formula xtxt = xtxt + " " + (('h|vorart' + "  ") << 2)
+.formula xtxt = xtxt + " " + (('h|idkunderab' + "        ") << 8)
+.formula xtxt = xtxt + " " + (('h|fcode' + "  ") << 2)
+.formula xtxt1 = 'datum' + "_" + 'zeit'
+# 'xtxt1       ' 'h|num  ' 'xtxt' 'name'
+..
+.. Bei Fehlerfall öbertragungsnummer zurÅcksetzen
+..**ok,26.05.2003 (öb-Nr protokollunabhÑngig bei Fehler zurÅckgesetzt)
+..
+.. ZurÅcksetzen der öbertragungsnr. im Kundenkontakt
+..
+..
+.continue EL029 ? _(xUebNrNeu > 0)
+.. IF029
+.. ----------------------------------------
+.reserve
+.. Es gibt wohl eine gÅltige öbertragungsnr.
+..**ok,12.12.2003 (statt idkundesab --> idkundeab)
+..
+.select customer lock 'h|idkundesab'
+..
+..
+.continue EL030 ? _(mehr)
+.. IF030
+.. ----------------------------------------
+.select lock add edinfosnr
+..
+.continue EL031 ? _(mehr)
+.. IF031
+.select line lock
+.formula xmehr = mehr
+..
+..
+!LOOP008: ==============================
+.continue ELOP008 ? _(xmehr)
+..
+.continue EL032 ? _(h|vorgang = xvorgang)
+.. IF032
+..
+.continue EL033 ? _(xUebNrNeu = h|uebnr)
+.. IF033
+.. nummern stimmen Åberein -> zurÅcksetzen
+.formula h|uebnr = xUebNrNeu - 1
+.rewrite
+.formula xmehr = false
+..
+!EL033
+.. FI033
+..
+.continue FI032
+!EL032
+.select line lock
+.formula xmehr = mehr
+..
+!FI032
+..
+.continue LOOP008
+!ELOP008: ==============================
+..
+!EL031
+.. FI031
+..
+.add
+.. ----------------------------------------
+..
+!EL030
+.. FI030
+..
+.select
+.. ----------------------------------------
+..
+!EL029
+.. FI029
+..
+.. lîschen Åbertragungsnummer und datum im edi-datensatz
+.formula h|uebnr = 0
+.formula h|uebnra = 0
+.formula h|uebdat = ""
+.rewrite
+..
+.continue ESAC007
+!BRK027
+.continue BRK028 ? _(h|vorart = xVorArtVKRE)
+..
+.continue EL034 ? _(+h|ideksvor > 0)
+.. IF034
+.. eine rechn im edi-datensatz
+.formula xtxt = ('h|ideksvor' + "        ") << 8
+.formula xtxt = xtxt + " " + (('h|vorart' + "  ") << 2)
+.formula xtxt = xtxt + " " + (('h|idkunderab' + "        ") << 8)
+.formula xtxt = xtxt + " " + (('h|fcode' + "  ") << 2)
+.formula xtxt1 = 'datum' + "_" + 'zeit'
+# 'xtxt1       ' 'h|num  ' 'xtxt' 'name'
+..
+.continue FI034
+!EL034
+.. mehrere rechn in einem edi-datensatz
+..
+.continue EL035 ? _(xDfueProto=1)
+.. IF035
+.select line
+..
+..
+!LOOP009: ==============================
+.continue ELOP009 ? _(mehr)
+..
+.continue EL036 ? _(h|text1 = "500")
+.. IF036
+.. kopfsatz fÅr rechnungen -> text3 = ReNr
+..
+.formula xtxt = ('h|text3' + "        ") << 8
+.formula xtxt = xtxt + " " + (('h|vorart' + "  ") << 2)
+.formula xtxt = xtxt + " " + (('h|idkunderab' + "        ") << 8)
+.formula xtxt = xtxt + " " + (('h|fcode' + "  ") << 2)
+.formula xtxt1 = 'datum' + "_" + 'zeit'
+# 'xtxt1       ' 'h|num  ' 'xtxt' 'name'
+..
+!EL036
+.. FI036
+..
+.select line
+..
+.continue LOOP009
+!ELOP009: ==============================
+..
+!EL035
+.. FI035
+..
+..
+.continue EL037 ? _(xDFUEproto=2;xDFUEproto=3)
+.. IF037
+.select line
+..
+..
+!LOOP010: ==============================
+.continue ELOP010 ? _(mehr)
+..
+.continue EL038 ? _(h|text1 = "200")
+.. IF038
+.formula xtxt = ('h|text3' + "        ") << 8
+.formula xtxt = xtxt + " " + (('h|vorart' + "  ") << 2)
+.formula xtxt = xtxt + " " + (('h|idkunderab' + "        ") << 8)
+.formula xtxt = xtxt + " " + (('h|fcode' + "  ") << 2)
+.formula xtxt1 = 'datum' + "_" + 'zeit'
+# 'xtxt1       ' 'h|num  ' 'xtxt' 'name'
+..
+!EL038
+.. FI038
+..
+.select line
+..
+.continue LOOP010
+!ELOP010: ==============================
+..
+!EL037
+.. FI037
+..
+!FI034
+..
+.. Bei Fehlerfall öbertragungsnummer zurÅcksetzen
+..**ok,26.05.2003 (öb-Nr protokollunabhÑngig bei Fehler zurÅckgesetzt)
+..
+.. ZurÅcksetzen der öbertragungsnr. im Kunden
+..
+..
+.continue EL039 ? _(xUebNrNeu > 0)
+.. IF039
+.. ----------------------------------------
+.reserve
+.. Es gibt wohl eine gÅltige öbertragungsnr.
+.select customer lock 'h|idkunderab'
+..
+..
+.continue EL040 ? _(mehr)
+.. IF040
+.. ----------------------------------------
+.select lock add edinfosnr
+..
+.continue EL041 ? _(mehr)
+.. IF041
+.select line lock
+.formula xmehr = mehr
+..
+..
+!LOOP011: ==============================
+.continue ELOP011 ? _(xmehr)
+..
+.continue EL042 ? _(h|vorgang = xvorgang)
+.. IF042
+..
+.continue EL043 ? _(xUebNrNeu = h|uebnr)
+.. IF043
+.. nummern stimmen Åberein -> zurÅcksetzen
+.formula h|uebnr = xUebNrNeu - 1
+.rewrite
+.formula xmehr = false
+..
+!EL043
+.. FI043
+..
+.continue FI042
+!EL042
+.select line lock
+.formula xmehr = mehr
+..
+!FI042
+..
+.continue LOOP011
+!ELOP011: ==============================
+..
+!EL041
+.. FI041
+..
+.add
+.. ----------------------------------------
+..
+!EL040
+.. FI040
+..
+.select
+.. ----------------------------------------
+..
+!EL039
+.. FI039
+..
+.. lîschen Åbertragungsnummer und datum im edi-datensatz
+.formula h|uebnr = "0"
+.formula h|uebnra = "0"
+.formula h|uebdat = ""
+.rewrite
+..
+.continue ESAC007
+!BRK028
+.. was soll das denn
+.output terminal
+UNBEKANNTER VORGANG: 'h|vorart' in EDI-IdNr: 'h|num'
+..
+.end
+..
+!ESAC007: =====   ENDCASE   =====
+..
+!FI020
+..
+.formula h|fcode = xfcode
+.rewrite
+..
+!FI016
+..
+.select edifact lock
+..
+.continue LOOP005
+!ELOP005: ==============================
+..
+.. noch post an verteiler dfÅ-export
+.formula xPostBetreff = 'xFehlerCnt' + " Fehler beim DFö-Export von " + 'xExportCnt' + " VorgÑngen"
+.formula xPostStichw1 = "DFö-Export " + 'xFehlerCnt' + " Fehler"
+.formula xPostFtext   = ""
+.formula xPostFtext   = xdfehler ? xFehlerCnt > 0
+.formula xPostEmpf    = xIdDfueExVerteil
+..
+..**ok,30.11.2005
+.input 'xdPostSenden' ? xPostEmpf<>""
+..
+.. die tmp. exportdatei lîschen
+.formula xsys = "rm -f " + xdExport + " " + xdExport2 + " " + xdfehler
+.system 'xsys' background
+..
+.. Meldungen fÅr Anwender
+..
+.continue EL044 ? _(xbRMeldAn)
+.. IF044
+.up
+.page
+..**ok,18.06.2001 (.oben und .seite NEU)
+.output terminal
+.input BILDB.F
+.formula xsys = "ls -lt " + xSendeVerz + " > XSEND.TMP"
+..**ok,06.12.2004 (fehlende hinter beim ".sys"-Befehl wurde ergÑnzt)
+.system 'xsys' background
+..
+..**im,23.03.2001 (Neue Meldungen fÅr Anwender)
+.select from "XSEND.TMP" x1 x2
+..
+..
+.continue EL045 ? _((mehr) & (x2<>"0"))
+.. IF045
+..**ok,07.06.2002 (die Ausgabe von x9 vergî·ert)
+Die folgenden Dateien stehen im Sendeverzeichnis zum Senden bereit:
+
+Datum        Uhrzeit   Dateiname                                 Dateigrî·e
+-----------  -------   ----------------------------------------  ----------
+..
+..
+!LOOP012: ==============================
+.continue ELOP012 ? _(mehr)
+.select from "XSEND.TMP" x1 x2 x3 x4 x5 x6 x7 x8 x9
+' x7'.'x6 '  'x8 '     'x9                                    '  '      x5'
+..
+.continue LOOP012
+!ELOP012: ==============================
+..
+.continue FI045
+!EL045
+Sendeverzeichnis ist leer!
+..
+!FI045
+..
+!EL044
+.. FI044
+..
+.continue END
+..
+..
+..*****************************************************************************
+..
+!PROC001: ----- UebProtHolen -----
+.. öbertragungsprotokoll holen
+.. invoices only get one transaction number, if an invoice is sent a second time,
+.. it must ust the same transaction number (uebnr).
+.. h buffer is edi message, if invoice has not beent sent, current uebnr in edi msg is 0
+.. here: remember current uebnr
+.formula T|xUebNrAktuell = H|uebnr
+.formula U|xUebNrAktuell = "0" ? F|empty(H|uebnr)
+.. remember uebnr/a to 'update' edi msg with its current uebnr/a after sending
+.formula T|xUebNrNeu = H|uebnr
+.formula T|xUebNrAlt = H|uebnra
+.formula U|xUebNrAlt = "0" ? F|empty(U|xUebNrAlt)
+..
+.. ----------------------------------------
+.reserve
+.. erst mal kein protokoll
+.formula xDFUEproto = -1
+..
+..
+.continue EL001 ? _(+xkunde > 0)
+.. IF001
+..
+.continue EL002 ? _(xvorgang<>"EKLAB")
+.. IF002
+.select customer lock 'xkunde'
+..
+.continue FI002
+!EL002
+.select supplier lock 'xkunde'
+..
+!FI002
+..
+..
+.continue EL003 ? _(mehr)
+.. IF003
+.. ----------------------------------------
+.select lock add edinfosnr
+..
+.continue EL004 ? _(mehr)
+.. IF004
+.select line lock
+.formula xmehr = mehr
+..
+..
+!LOOP001: ==============================
+.continue ELOP001 ? _(xmehr)
+..
+.continue EL005 ? _(h|vorgang = xvorgang)
+.. IF005
+..
+.. =====   CASE001   =====
+.continue BRK001 ? _(-h|protokoll = "VDA")
+.formula xDFUEproto = 1
+..
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(-h|protokoll = "ODETTE")
+.formula xDFUEproto = 2
+..
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(-h|protokoll = "EDIFACT")
+.formula xDFUEproto = 3
+..
+.continue ESAC001
+!BRK003
+!ESAC001: =====   ENDCASE   =====
+..
+..
+.continue EL006 ? _(h|vorgang="PRICAT")
+.. IF006
+..
+!EL006
+.. FI006
+..
+.. do not increment transaction number (uebnr)
+.. if sending an invoice a second time!
+..
+..
+.continue EL007 ? _(H|vorgang = "VKRE" & T|xUebnrAktuell <> "0")
+.. IF007
+.continue FI007
+!EL007
+.. alte und neue Åbertragungsnr
+.formula xUebNrAlt  = h|uebnr
+.formula U|xUebNrAlt = "0" ? F|empty(U|xUebNrAlt)
+.formula xUebNrNeu  = h|uebnr
+.. only increment if numeric
+.formula U|xiuebnr = 0
+.assign U|xiuebnr = H|uebnr
+.assign U|xiuebnr = 0 ? F|empty(H|uebnr)
+.formula U|xiuebnr = U|xiuebnr + 1  ?  G|mehr
+.formula U|xUebnrNeu = 'U|xiuebnr' ? U|xiuebnr<>0
+.formula h|uebnr    = xUebNrNeu
+..
+!FI007
+..
+.rewrite
+.formula xmehr = false
+.formula xbreturn = true
+..
+.continue FI005
+!EL005
+.select line lock
+.formula xmehr = mehr
+..
+!FI005
+..
+.continue LOOP001
+!ELOP001: ==============================
+..
+.continue FI004
+!EL004
+.formula xbreturn = false
+.formula xfcode = 54
+..
+!FI004
+..
+.add
+.. ----------------------------------------
+..
+.continue FI003
+!EL003
+.formula xbreturn = false
+.formula xfcode = 52
+..
+!FI003
+..
+.continue FI001
+!EL001
+.formula xbreturn = false
+.formula xfcode = 52
+..
+!FI001
+..
+.select
+.. ----------------------------------------
+..
+.continue 'xprocst.xprocsp'
+..
+..
+!PROC002: ----- ZeitDatumEDI -----
+.. Aktuelle Zeit und Datum in den EDI-Datensatz schreiben
+.. datum / zeit der dateierstellung
+.formula xdatum     = datum
+.formula xzeit      = zeit
+.formula h|dinhouse = xdatum
+.formula h|zinhouse = xzeit
+.formula h|ddatei   = xdatum
+.formula h|zdatei   = xzeit
+..
+.formula h|uebnr  = xUebNrNeu
+.formula h|uebnra = xUebNrAlt
+..**ok,14.08.2003 (jetzt hier auch uebdat eintragen)
+.formula h|uebdat = datum
+.rewrite
+..
+.. Satzart
+.select lock line
+.formula xmehr = mehr
+..**ok,10.01.2006 (jetzt EintrÑge auch fÅr EK-Lieferabruf)
+..
+..
+!LOOP002: ==============================
+.continue ELOP002 ? _(xmehr)
+..
+.continue EL008 ? _((h|text1 = "UNBI") & ((xvorgang = "VKAUB") ; (xvorgang = "PRICAT") ; (xvorgang = "VKLS") ; (xvorgang = "EKLAB")))
+.. IF008
+.. Datum und Uhrzeit in Satz UNBI eintragen
+.formula h|text9  = xdatum:8
+.formula h|text10 = (("00" + ('xzeit' << ":")) >> 2) + (("00" + ('xzeit' >> ":")) >> 2)
+.formula h|text12 = xUebNrAlt
+.formula h|text13 = xUebNrNeu
+.formula h|text15 = xdatum:8
+.rewrite
+.continue UEBNR
+..
+!EL008
+.. FI008
+..
+..
+.continue EL009 ? _((h|text1 = "000") & ((xvorgang = "VKRE") ; (xvorgang = "VKLS")))
+.. IF009
+.. Datum und Uhrzeit in Satz 000 eintragen
+.formula h|text12 = xdatum:8
+.formula h|text13 = (("00" + ('xzeit' << ":")) >> 2) + (("00" + ('xzeit' >> ":")) >> 2)
+..
+..
+.continue EL010 ? _(xDFUEproto=2;xDFUEproto=3)
+.. IF010
+.formula h|text14 = xUebNrNeu
+..
+!EL010
+.. FI010
+..
+.rewrite
+..
+!EL009
+.. FI009
+..
+..
+.continue EL011 ? _((h|text1 = "400") & ((xvorgang = "VKRE") ; (xvorgang = "VKLS")) & (xDFUEproto = 1))
+.. IF011
+.. im ersten satz 400 Åbertragungsnr setzen -> vda4906-811
+.formula h|text5 = xUebNrAlt
+.formula h|text6 = xUebNrNeu
+.formula h|text7 = datum:8
+.rewrite
+.continue UEBNR
+..
+!EL011
+.. FI011
+..
+.select lock line
+.formula xmehr = mehr
+..
+.continue LOOP002
+!ELOP002: ==============================
+..
+.. neue uebertragungsnummer mit fÅhrenden nullen
+!UEBNR
+.formula xtxt = xUebNrNeu
+.formula xtxt = ("000" + xtxt) >> 3
+..
+.continue 'xprocst.xprocsp'
+..
+..*****************************************************************************
+!END
+.continue

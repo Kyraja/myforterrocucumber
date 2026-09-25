@@ -1,0 +1,135 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : EVVORGANG.ZUGFERDSUMME
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type ARTR52002  xposgesamt      ? _F|defined(U|xposgesamt)
+.type text       xmerkid         ? _F|defined(U|xmerkid)
+.type R13.2      xrsteuersum     ? _F|defined(U|xrsteuersum)
+.type R13.2      xrpossum        ? _F|defined(U|xrpossum)
+.type R13.2      xzuschlagsum    ? _F|defined(U|xzuschlagsum)
+.type R13.2      xabschlagsum    ? _F|defined(U|xabschlagsum)
+.type R13.2      xrgrundsum      ? _F|defined(U|xrgrundsum)
+.type R13.2      xabbasissum     ? _F|defined(U|xabbasissum)
+..
+.. alle Tabellenzeilen von unten durchlaufen und Summen bilden
+.formula U|xzuschlagsum = ""
+.formula U|xabschlagsum = ""
+.formula U|xrpossum = 0
+.formula U|xposgesamt = 0
+.select screen header
+.formula U|xtzeilen = M|tzeilen + 1
+..
+!SELECT
+.formula U|xtzeilen = U|xtzeilen - 1
+.continue HEAD ? U|xtzeilen = 0
+.select screen line 'U|xtzeilen'
+.continue SELECT ? F|equals(M|vktypa, "(VATInputTaxItem)")
+.continue SELECT ? F|equals(M|vktypa, "(VATInputTaxItemInclusive)")
+..
+.. Zu- und Abschl„ge auf Dokumentebene
+.formula U|xzuschlagsum = U|xzuschlagsum + M|abwert ? F|empty(M|merkartikelpos) & M|zptyp<>7 & _F|empty(M|zutyp)
+.formula U|xabschlagsum = U|xabschlagsum + M|abwert ? F|empty(M|merkartikelpos) & M|zptyp<>7 & _F|empty(M|abtyp)
+..
+.continue SELECT ? F|empty(M|merkartikelpos)
+.formula U|xposgesamt = M|gpreis                ? F|empty(U|xmerkid)
+.formula U|xposgesamt = U|xposgesamt + M|gpreis ? U|xmerkid = M|merkartikelpos & _F|empty(U|xmerkid)
+.formula U|xmerkid    = M|merkartikelpos
+.. alle Tabellenzeilen von unten durchlaufen und Summen bilden
+.continue SELECT ? _F|equals(M|vktypa, "(SOPOItemPOS)")
+.formula M|posgesamtsum = U|xposgesamt
+.formula U|xrpossum     = U|xrpossum + U|xposgesamt
+.formula U|xmerkid = ""
+.continue SELECT
+..
+!HEAD
+.. Nettoendsumme aller Artikelpositionen nur mit Zu-/Abschl„gen Artikelebene und
+.. ohne Zu-/Abschl„ge auf Dokumentebene
+.formula M|nettosum = U|xrpossum ? _M|bbrutto
+.formula M|nettosum = M|vorgang^sumnetto ? M|bbrutto
+..
+.. Summe aller Zuschl„ge
+.formula M|zuschlagsum = U|xzuschlagsum
+..
+.. Summe aller Abschl„ge
+.formula M|abschlagsum = U|xabschlagsum
+..
+.. Rechnungsbetrag ohne Steuer = gesamt Nettosumme
+.formula M|ohnesteuersum = M|vorgang^sumnetto
+..
+.. Bruttoendsumme
+.formula M|gesamtsum = U|xgesamtsum
+..
+.. Wert der Steuer  in Buchungsw„hrung(Inlandsw„hrung)
+..
+.formula U|xrsteuersum = M|gesamtsum - M|ohnesteuersum
+.formula M|steuersum = U|xrsteuersum
+.formula M|steuersumbwaehr = U|xrsteuersum / H|ewkurs
+..
+.formula M|rundungsbetrag = U|xrundungsbetrag
+..
+.. Gesamtsumme - Summe aller Anzahlungen
+.formula M|restzahlsum = M|gesamtsum - M|vorauszahlsum 
+..
+..Umrechnung der Summen bei Gutschriften / Storno
+..
+.continue NOGUTSCHRIFT ? _(('H|vorganga(L=":")' = "(CreditNoteCommercial)") ; ('H|vorganga(L=":")' = "(InvoiceReversal)"))
+..
+.. Rechnungsbetrag ohne Steuer = gesamt Nettosumme
+.formula M|ohnesteuersum = M|ohnesteuersum * -1
+..
+.. Bruttoendsumme
+.formula M|gesamtsum = M|gesamtsum * -1
+..
+.. Wert der Steuer  in Buchungsw„hrung(Inlandsw„hrung)
+..
+.formula M|steuersum = M|steuersum * -1
+.formula M|steuersumbwaehr = M|steuersumbwaehr * -1
+..
+.formula M|rundungsbetrag = M|rundungsbetrag * -1
+..
+.. Summe aller Anzahlungspositionen
+.formula M|vorauszahlsum = M|vorauszahlsum * -1
+..
+.. Gesamtsumme - Summe aller Anzahlungen
+.formula M|restzahlsum =M|restzahlsum * -1
+..
+!NOGUTSCHRIFT
+..
+..*****************************************************************************
+.. 0 Steuerzeilen bei innergemeinschaftlichen Lieferungen zusammenfassen
+..
+!NULLSTEUER
+.add H|vrgstrgl
+.continue ENDNULLSTEUER ? _mehr
+.continue ENDNULLSTEUER ? _('D|stlaart(L=":")'="(EUCountry)" & D|ustartsf = G|true)
+.add
+.formula U|xrgrundsum = 0
+.formula U|xabbasissum = 0
+.select screen head
+.select screen line "$,,vktyp=10;zptyp=10"
+.continue LASTSTEUERLINE ? _G|mehr
+!NEXTSTEUERLINE
+.formula U|xrgrundsum = M|epreis + U|xrgrundsum
+.formula U|xabbasissum = U|xabbasissum + M|abbasis
+.select screen line
+.continue NEXTSTEUERLINE ? G|mehr
+!LASTSTEUERLINE
+.select screen head
+.select screen line "$,,vktyp=10;zptyp=10"
+.continue ENDNULLSTEUER ? _G|mehr
+.formula M|epreis = U|xrgrundsum
+.formula M|abbasis = U|xabbasissum
+!NEXTLOESCH
+.select screen line 
+.continue ENDNULLSTEUER ? _G|mehr
+.make screen line -0
+.continue NEXTLOESCH 
+!ENDNULLSTEUER
+..
+!END
+.continue

@@ -1,0 +1,65 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : M3LIST.HOL
+.. Autor          : ok
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Functionality  : Three months orders list
+..*****************************************************************************
+.set trans -
+..
+.type text  xtsel
+.. Merker fÅr Gruppenwechsel: aktueller Kunde, aktueller Artikel, letzte Gruppe
+.type P0    xvkunde
+.type P2    xvartikel
+.type bool  xbende
+.. Summe Åber Gruppe (Artikel/Kunde): Mengen pro Periode und RÅckstand
+.type real  xrmger
+.type real  xrmge1
+.type real  xrmge2
+.type real  xrmge3
+.. Offene Liefermenge einer Position: H|limge * H|lehe
+.type real  xrlmge
+..
+.copy U|xbende = G|false
+..
+.. Selektion: Auftrag, Zeilen, Lebendig, Lieferobligo_nach_Termin (artex, term)
+.formula U|xtsel = F|formatstr("$,,kotyp==(SalesOrder);aktiv=(Yes);term=!{1};@gruppe=2;@ablageart=(Active);@ordnung=artex^nummer,kunde,tterm", 'M|dbis:8')
+.formula U|xtsel = U|xtsel + ";artex=" + 'M|art^id'     ? _F|empty(M|art)
+.formula U|xtsel = U|xtsel + ";kunde=" + 'M|kunde^id'   ? _F|empty(M|kunde)
+.formula U|xtsel = U|xtsel + ";zrahmen<>`"              ?  M|rahmen
+.formula U|xtsel = U|xtsel + ";zkuartnr==" + M|kuart    ? _F|empty(M|kuart)
+.select sales 'U|xtsel'
+.continue END  ? _G|mehr
+..
+!NEWGRP: neuen Artikel/Kunde als neue aktuelle Gruppe setzen
+.assign U|xvartikel = H|art^id
+.assign U|xvkunde   = H|kunde^id
+.formula U|xrmger = 0
+.formula U|xrmge1 = 0
+.formula U|xrmge2 = 0
+.formula U|xrmge3 = 0
+..
+!SUM
+.formula U|xrlmge = (H|limge*H|lehe):2
+.formula U|xrmger = U|xrmger + U|xrlmge     ?  H|tterm < M|dat
+.formula U|xrmge1 = U|xrmge1 + U|xrlmge     ?  H|tterm < M|dat2  &  H|tterm  >= M|dat
+.formula U|xrmge2 = U|xrmge2 + U|xrlmge     ?  H|tterm < M|dat3  &  H|tterm  >= M|dat2
+.formula U|xrmge3 = U|xrmge3 + U|xrlmge     ?  H|tterm < M|dat4  &  H|tterm  >= M|dat3
+..
+!LOOP
+.select sales
+.copy U|xbende = G|true ? _G|mehr
+..
+!GROUP: Gruppenwechsel prÅfen
+.continue AUSGABE  ? U|xbende
+.continue AUSGABE  ? U|xvartikel^id <> H|art^id ; U|xvkunde^id <> H|kunde^id
+.continue SUM
+..
+!AUSGABE
+.input 'M|tab'
+.continue NEWGRP  ? _U|xbende
+..
+..*****************************************************************************
+!END
+.continue

@@ -1,0 +1,1068 @@
+..!interpreter english
+..@@BEGINHEAD
+..========================================================================
+..==  Name              : EDI.EDI2VKEDL36
+..==  Pfad              : dfue
+..==  Funktion          : EDL-Meldungen Abgangsmeldung/Entnahmeninfo
+..==  Erstellungsdatum  : 08.11.2002
+..==  Autor             : Ozan Kesim
+..==  Verantwortlicher  : mh
+..==  notwendige Pfade  : dfue, dfue1, dfue2, tmp
+..==  Menuepunkte       :
+..==  Maskenprioritaet
+..==  bei EFOP          :
+..==  Besonderheiten    : Unterprogram von EDI.EDI2VKEDL
+..==  Aenderungshistorie:
+..========================================================================
+..#KOR#EDI-MODUL#DATUM#éNDERUNGS-INDEX#MitarbeiterkÅrzel#
+..#KOR#EDL#08.11.2002#0#ok#
+..#KOR#EDL#31.01.2003#1#ok# (Fehlercodes geÑndert und ergÑnzt)
+..#KOR#EDL#03.02.2003#2#ok# (u.a. mehrere .merk/.hol hinzugefÅgt)
+..#KOR#EDL#07.02.2003#3#ok# (u.a. Fehlertexte standardisiert)
+..#KOR#EDL#10.02.2003#4#ok# Prozedur "EDISchreibeProtokoll" wurde entfernt
+..#KOR#EDL#11.06.2003#5#ok#
+..#KOR#EDL#13.06.2003#6#ok#
+..#KOR#EDL#24.06.2003#7#ok#
+..#KOR#EDL#30.06.2003#8#ok#
+..#KOR#EDL#07.07.2003#9#ok#
+..#KOR#EDL#14.07.2003#10#ok#
+..#KOR#EDL#22.07.2003#11#ok# Version 1
+..#KOR#EDL#28.07.2003#12#ok#
+..#KOR#EDL#29.07.2003#13#ok#
+..#KOR#EDL#30.07.2003#14#ok#
+..#KOR#EDL#01.08.2003#15#ok#
+..#KOR#EDL#11.08.2003#16#ok#
+..#KOR#EDL#17.12.2003#17#ok#
+..#KOR#EDL#13.02.2004#18#ok#
+..#KOR#EDL#16.03.2004#19#ok#
+..#KOR#EDL#23.03.2004#20#ok#
+..#KOR#EDL#02.08.2004#21#ok#
+..#KOR#EDL#16.08.2004#22#ok#
+..#KOR#EDL#17.08.2004#23#ok#
+..#KOR#EDL#04.08.2008#24#ok# Spooler abgeschafft
+..#KOR#EDL#26.08.2008#25#ok#
+..#KOR#LAB#28.10.2009#26#mh# Ausgabeformatierung reduziert (globale Einstellung, nicht pro Ausgabe)
+..#KOR#EDL#20.05.2010#27#mh# Umstellung neue Packmittel, edpimport statt Lader
+..#KOR#EDL#11.08.2010#28#mh# Verbesserungen, edp-script mit EDI.EDI2VKEDL36.EDPZEILE
+..#KOR#EDL#16.08.2010#29#mh# Korrektur EinheitenprÅfung: EDL-Meldung ?= Ursprungs-LS
+..========================================================================
+..@@ENDHEAD
+..
+.. Variablendefinition
+..@@BEGINVARDEFS
+..====================================================
+.set trans -
+.. Variablendefinition
+..
+..**ok,16.08.2004 (xedllsdat als datum definiert)
+.type date xedllsdat
+..**ok,23.03.2004 (neue Variable xzusatzc)
+.type integer   xzusatzc xczaehler
+..**ok,23.03.2004 (fehlende Definition von xcpin ergÑnzt)
+.type integer   xcpin
+..**ok,28.07.2003 (neue Variable Laderkopf)
+.type bool  xladerpos
+.type bool  xAPackFehl
+..**ok,22.07.2003 (xmgeueb, xfmenge, xreal definiert)
+.type real4  xreal
+.type bool   xmgeueb
+..**ok,23.03.2004 (xfmenge real4 --> MP7.2)
+.type MP7.2  xfmenge
+.type text   xtext xtex1
+.type real4  xerg xzeilmge
+.type integer    xipaentmge
+..**ok,22.07.2003 (xtxt3 ist NEU)
+.type text xtxt1 xtxt2 xtxt3
+.type text xlsnum xumplatz xedlnr
+.type bool xmehr
+.type integer  xcpzaehler xrunde
+..**ok,11.06.2003 (neu xinput, xoutput, xinputvar, xanzpos)
+.type text  xinput xoutput xinputvar xzeilenr
+.type integer   xanzpos xzeilez
+.type bool  xeintrag
+..**ok,07.07.2003 (neue Variable Laderkopf)
+.type bool  xladerkopf
+..**ok,14.07.2003 (neue Variable xistpac1)
+.type bool  xistpac1
+..**ok,22.07.2003 (neue Variable xPackEntAuto, xpaentmge)
+.type bool  xPackEntAuto
+.type real4  xpaentmge
+.type text  xursplsnr xsum xusum xart
+..**ok,13.02.2004 (neue Variable xidursplsnr)
+.type text  xidursplsnr
+.type integer   xi
+.type text  xz
+..
+.. Charge aus RFL1 Feld 18 im Ursprungslieferschein
+.type P59 xcharge
+.type text xchargeorig
+..
+.. ZÑhlervariablen fÅr Satzarten
+.. KOPF
+.type integer xzUNBI xzUNHI
+..      SCHLEIFE 1 START
+.type integer xzBGMI xzRFH1 xzRFH2 xzDAH1 xzSUP1 xzSUP2 xzBUY1 xzBUY2 xzDPA1 xzDPA2 xzIV1 xzTRA1 xzTRA2
+..              SCHLEIFE 2 START
+.type integer xzLIN1 xzRFL1 xzRFL2 xzART1 xzART2 xzQTY1 xzALC1 xzPAC1 xzPAC2 xzPAC3 xzDAL1
+..              SCHLEIFE 2 ENDE
+.type integer xzSUM1
+..      SCHLEIFE 1 ENDE
+.. KOPF
+.type integer xzUNZI
+..**ok,17.12.2003 (Variable xanzrfl ist NEU)
+.type integer xanzrfl
+..
+.. Schluessel-Textfelder
+.type text xLieferscheinEDL
+.set trans +
+.formula T|xLieferscheinEDL = "Lieferscheinnummer_EDL"
+.set trans -
+..
+.. Verweis auf EDI-Nachricht mit der EDL-Meldung
+.. Programm startet mit dieser Meldung im H-Puffer
+.type P53 xvedi
+..
+.. Bemerkung fÅr Entnahmelieferschein
+.type text xbem
+..
+.. Selektionen
+.type text xtsel         ? _F|defined(xtsel)
+..
+.. mh, 20.05.2010: Fehlerdateien fÅr Lader-Vorgaenge
+.type text       xtladerEDI    ? _F|defined(xtladerEDI)
+.type text       xtladerErr    ? _F|defined(xtladerErr)
+.type text       xtladerHinw   ? _F|defined(xtladerHinw)
+..====================================================
+..@@ENDVARDEFS
+..
+.. ----------------------------------------
+.continue EPROCDEF
+.. procedure definitions
+..
+!PROC001: ----- FEHLER -----
+.formula xbfehler = true
+..
+.output addedto 'xdfehler'
+?'xtxt1' ? +xtxt1 > 0
+?'xtxt2' ? +xtxt2 > 0
+?'xtxt3' ? +xtxt3 > 0
+.output
+..
+.continue 'xprocst.xprocsp'
+..
+..
+!PROC002: ----- SENDE.POST -----
+.set trans +
+.formula xPostBetreff = "Fehler beim Verarbeiten der EDL-Meldungen in EDI-Datenbank"
+.formula xPostStichw1 = "EDI-Fehler"
+.set trans -
+.formula xPostFtext   = xdfehler
+.formula xPostEmpf    = xPostEmpfErr
+..
+.input 'xdPostSenden' ? xPostEmpf<>""
+..
+.continue 'xprocst.xprocsp'
+..
+!EPROCDEF: ----- end procedure definitions -----
+.. ----------------------------------------
+..
+.input ARB
+.input DATEI.F
+.input "dfue/DFUE.IMP.INI"
+..
+.. EDL-Meldung aus EDI-Nachricht verarbeiten
+.. Wichtige Schalter initialisieren
+.formula U|xladerkopf = false
+.formula U|xladerpos = false
+.formula U|xmgeueb = false
+.formula U|xbfehler = false
+..
+.. Verweis auf EDI-Nachricht merken
+.. Aus Ausrufparameter: xedinumneu == H|nummer
+.formula U|xvedi = H|id
+..
+.. Holen EDI-Datensatz (ist eigentlich schon da)
+.select edifact nolock 'U|xvedi^id'
+..
+..
+.continue EL001 ? _(_G|mehr)
+.. IF001
+.. ABBRUCH - Achtung: ohne EDI-Nachricht kann der Fehler nicht in EDI geschrieben werden!
+.formula U|xedistatus = 4
+.formula U|xedifcode = 40
+.formula U|xbfehler = false
+..
+.continue END
+..
+.continue FI001
+!EL001
+.. LADER komplett erstellen
+.. Felder aus EDI-Nachricht
+.. Felder aus EDI-Nachricht merken
+.. Identnummer der ABAS-Vorgangs
+.formula U|xideksvor = ideksvor
+..>> Abschlu·/Bestellnummer
+.formula U|xabbenr = abbenr
+.. Zeichen des Kunden
+.formula U|xkdzeich = kdzeich
+.. Ident-Nr. Kunde
+.formula U|xidkundeab = idkundeab
+.. GLN-Nr. Kunde
+.formula U|xglkundeab = glkundeab
+.. Ident-Nr. WarenempfÑnger
+.formula U|xidkundeabs = idkundesab
+.. GLN-Nr. WarenempfÑnger
+.formula U|xglkundeabs = glkundesab
+.. Ident-Nr. RechnungsempfÑnger
+.formula U|xidkundeabr = idkunderab
+.. GLN-Nr. RechnungsempfÑnger
+.formula U|xglkundeabr = glkunderab
+.. Werk
+.formula U|xwerk = werk
+.. Abladestelle
+.formula U|xablstelle = ablstelle
+.. Funktion der Nachricht
+.formula U|xfunktion = funktion
+.. Fehlercode des EDI-Datensatzes
+.formula U|xedifcode = fcode
+..
+.. Belegen Name Lader-Datei und Erzeugen leere Lader-Datei
+.formula xnlader = xmmvvl + "." + xedinumneu + ".EDP
+.output new 'xnlader'
+.output new WERF.WEG
+..
+.. Holen erste Tabellenzeile
+.select line
+..
+..
+!LOOP001: ==============================
+.continue ELOP001 ? _((G|mehr) & (_U|xbfehler))
+..
+.. =====   CASE001   =====
+.continue BRK001 ? _(text1 = "BGMI")
+.. BGMI-Satzart
+.. EDL-Lieferschein-Datum
+.assign T|xedllsdat = text4
+..
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(text1 = "RFH1")
+.. RFH1-Satzart
+.. EDL-Lieferschein-Nr
+.formula U|xedllsnr = text7
+..
+.. EDL-Lieferschein-Datum
+.assign U|xedllsdat = text8 ? text8<>""
+..
+.. Erzeugen Lader-Abschnitt fÅr Status 9 und Fehlercode 0 in ABAS-EDI-Datensatz
+.. EFOPs fÅr EDI-Nachricht nicht berÅcksichtigen
+..
+.output addedto 'U|xnlader'
+..
+
+# EDI-Nachricht: Status = Lader gestartet
+
+#!action=update
+#!database=53
+#!dontchange=~
+#!EDP_FOPMODE=0
+
+nummer;status;fcode
+'U|xvedi^id';9;0
+
+..
+.output new WERF.WEG
+..
+.continue ESAC001
+!BRK002
+.continue BRK003 ? _(text1 = "RFL1")
+..
+.continue EL002 ? _(U|xladerkopf)
+.. IF002
+.. Alte/Vorrausgegangene Puffer/VorgÑnge freigeben!
+.load 1
+.load 2
+..
+.. Erstellen der EDP-Zeilen Åber individualisierbares FOP
+.type text xedpmarke ? _F|defined(U|xedpmarke)
+.formula U|xedpmarke = "RFL1MEHR"
+.input "EDI.EDI2VKEDL36.EDPZEILE"
+..
+!EL002
+.. FI002
+..
+.. RFL1-Satzart
+.. Ursprungslieferschein in Puffer 1
+.formula U|xursplsnr = H|text7
+..
+.formula U|xinput = U|xursplsnr
+..
+..
+!LOOP002: ==============================
+.continue ELOP002 ? _(U|xinput << 1 = "0")
+.formula U|xinput = U|xinput << -1
+..
+.continue LOOP002
+!ELOP002: ==============================
+..
+.formula U|xursplsnr = U|xinput
+..
+..
+.continue EL003 ? _(_F|empty(T|xursplsnr))
+.. IF003
+.formula T|xtsel = "$,,;@gruppe=1;ktyp=4;@ablageart=(2);@gruppe=1;umplatz<>`;umlgruppe<>`;nummer=" + T|xursplsnr
+.load 1 sales 'T|xtsel'
+..
+.continue FI003
+!EL003
+.load 1
+..
+!FI003
+..
+.. Charge aus RFL1 Feld 18
+.formula U|xchargeorig = H|text18
+.formula U|xcharge = ""
+.assign U|xcharge = "$,,;@gruppe=0;nummer==" + H|text18  ? _F|empty(H|text18) &  F|isvalue(H|text18, "N59")
+.assign U|xcharge = "$,,;@gruppe=0;exnum=" + H|text18 + "!" + H|text18 ? _F|empty(H|text18) & F|empty(U|xcharge)
+..
+..
+.continue EL004 ? _(F|defined(1|id))
+.. IF004
+.. Ursprungslieferschein prÅfen
+.formula U|xursplsnr = 1|nummer
+.formula U|xidursplsnr = 1|id
+.formula U|xumplatz = 1|umplatz
+.formula U|xedlnr = 1|edl
+..
+.formula xi = 0
+.formula xanzpos = 0
+.formula xzeilez = 0
+..
+.. PrÅfung: Passen Kundenangaben aus EDI-Nachricht zum Ur-Lieferschein
+.. 1) Besteller
+.. 2) WarenempfÑnger
+.. 3) RechnungsempfÑnger
+..
+..
+.continue EL005 ? _(xidkundeab <> "")
+.. IF005
+..
+.continue EL006 ? _(_((xidkundeab = 1|kunde^nummer) ; (xidkundeab = 1|kunde2^nummer)))
+.. IF006
+.. Fehler 51 (Besteller aus Satzart BUY1 und LS stimmen nicht Åberein)
+.formula xedifcode = 51
+.formula xistsatz1 = false
+..
+.set trans +
+.formula xtxt1 = 'F|formatstr("- Besteller: {1} aus der Satzart BUY1 und aus dem gefundenen Lieferschein: {2} stimmen nicht Åberein", xidkundeab, xursplsnr)'
+.set trans -
+.formula xtxt2 = ""
+.formula xtxt3 = ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+..
+!EL006
+.. FI006
+..
+!EL005
+.. FI005
+..
+..
+.continue EL007 ? _(xidkundeabs <> "")
+.. IF007
+..
+.continue EL008 ? _(_((xidkundeabs = 1|kunde^nummer) ; (xidkundeabs = 1|kunde3^nummer)))
+.. IF008
+.. Fehler 52 (WarenempfÑnger aus Satzart DPA1 und LS stimmen nicht Åberein)
+.formula xedifcode = 52
+.formula xistsatz1 = false
+..
+.set trans +
+.formula xtxt1 = 'F|formatstr("- WarenempfÑnger: {1} aus der Satzart DPA1 und aus dem gefundenen Lieferschein: {2} stimmen nicht Åberein", xidkundeabs, xursplsnr)'
+.set trans -
+.formula xtxt2 = ""
+.formula xtxt3 = ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+..
+!EL008
+.. FI008
+..
+!EL007
+.. FI007
+..
+..
+.continue EL009 ? _(xidkundeabr <> "")
+.. IF009
+..
+.continue EL010 ? _(_(xidkundeabr = 1|kunde2^nummer))
+.. IF010
+.. Fehler 53 (RechnungsempfÑnger aus Satzart IV12 und LS stimmen nicht Åberein)
+..**ok,11.06.2003 (hier keine Fehlercode mehr eingetragen)
+..
+.formula xedistatus = 4
+.formula xedifcode = 53
+..>> "RechnungsempfÑnger aus der Satzart IV12 und aus dem LS stimmt nicht Åberein"
+.formula xistsatz1 = false
+..
+.set trans +
+.formula xtxt1 = 'F|formatstr("- RechnungsempfÑnger: {1} aus der Satzart IV1 und aus dem gefundenen Lieferschein: {2} stimmen nicht Åberein", xidkundeabr, xursplsnr)'
+.set trans -
+.formula xtxt2 = ""
+.formula xtxt3 = ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+..
+!EL010
+.. FI010
+..
+!EL009
+.. FI009
+..
+.. PrÅfung: gibt es bereits einen Entnahme-LS mit dieser EDLLSNR?
+..
+..
+.continue EL011 ? _(xedllsnr <> "")
+.. IF011
+.formula T|xtsel = "$,,;@gruppe=1;@ablage=(3);@zeilen=(0);ktyp=4;edllsnr=" + T|xedllsnr + ";edllsdat=" + 'T|xedllsdat' + ";ursplsnr=" + T|xursplsnr
+.load 0 sales 'T|xtsel'
+..
+..
+.continue EL012 ? _(mehr)
+.. IF012
+.continue FI012
+!EL012
+.formula T|xtsel = "$,,;@gruppe=1;@ablage=(3);@zeilen=(0);ktyp=4;edllsnr=" + T|xedllsnr + ";ursplsnr=" + T|xursplsnr
+.load 0 sales 'T|xtsel'
+..
+!FI012
+..
+..
+.continue EL013 ? _(mehr)
+.. IF013
+.. Fehler 54 (Bereits Entnahme-LS zu dieser EDLLSNR vorhanden)
+..>> "In ABAS mit dieser EDL-LS-Nr wurde bereits ein Entnahme-LS angelegt"
+.formula xedifcode = 54
+..
+.set trans +
+.formula xtxt1 = 'F|formatstr("- Satzart: {1}, Zeile: {2}:", xaktsatz, xaktzeile)'
+.formula xtxt2 = 'F|formatstr("Mit der EDL-LS-Nr: {1} wurde bereits ein Entnahme-Lieferschein: {2} angelegt!", xedllsnr, 0|nummer)'
+.formula xtxt3 = 'F|formatstr("Ursprungs-LS-Nr: {1}, EDI-Id: {2}", 0|ursplsnr, 0|ident)'
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC001
+!RET004
+.formula xprocsp = xprocsp - 1
+..
+.formula xladerkopf = false
+..
+!EL013
+.. FI013
+..
+.load 0
+..
+!EL011
+.. FI011
+..
+.continue FI004
+!EL004
+.. Fehler 50 (Kein Usprungslieferschein)
+.formula xedifcode = 50
+..
+.set trans +
+.formula xtxt1 = 'F|formatstr("- Satzart: {1}, Zeile: {2}:", xaktsatz, xaktzeile)'
+.formula xtxt2 = 'F|formatstr("Mit der angegebenen Ursprungs-Lieferschein-Nr {1} wurde kein Lieferschein mit Umlagerung gefunden", xursplsnr)'
+.set trans -
+.formula xtxt3 = ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC001
+!RET005
+.formula xprocsp = xprocsp - 1
+..
+!FI004
+..
+.. mîgliche Fehler (xbfehler wird gesetzt):
+.. - Fehler 50 (kein Ursprungslieferschein)
+.. - Fehler 51 (Besteller aus Satzart BUY1 und LS stimmen nicht Åberein)
+.. - Fehler 52 (WarenempfÑnger aus Satzart DPA1 und LS stimmen nicht Åberein)
+.. - Fehler 53 (RechnungsempfÑnger aus Satzart IV12 und LS stimmen nicht Åberein)
+.. - Fehler 54 (Bereits Entnahme-LS zu dieser EDLLSNR vorhanden)
+..
+..
+.continue EL014 ? _(_U|xbfehler)
+.. IF014
+.. Erstelle Entnahme-Lieferschein als Kopie des Usprungslieferscheins
+..      Puffer H: EDI-Zeile
+..      Puffer 1: Ursprungslieferschein (Kopf)
+..
+.. Erstellen der EDP-Zeilen Åber individualisierbares FOP
+.type text xedpmarke ? _F|defined(U|xedpmarke)
+.formula U|xedpmarke = "RFL1"
+.input "EDI.EDI2VKEDL36.EDPZEILE"
+..
+.formula U|xladerkopf = true
+..
+!EL014
+.. FI014
+..
+.continue ESAC001
+!BRK003
+.continue BRK004 ? _(text1 = "ART1")
+.. ART1-Satzart
+.. Artikel-Angaben
+.formula T|xkugtinnr = text3
+.formula T|xkuartnr  = text4
+.formula T|xideksart = text5
+..
+.type text xapnummer  ? _F|defined(xapnummer)
+.type BT128 xapkuartnr ? _F|defined(xapkuartnr)
+.type text xapgtin    ? _F|defined(xapgtin)
+.type P0   xapkunde   ? _F|defined(xapkunde)
+.formula T|xedifcode  = 0
+.formula T|xapnummer  = H|text5
+.formula T|xapkuartnr = H|text4
+.formula T|xapgtin    = H|text3
+.assign T|xapkunde = 'T|xidkundeab'
+.input "ARTIKELPRUEFUNG"
+.formula T|xedifcode = T|xapfcode
+..
+..
+.continue EL015 ? _(T|xapfcode > 0)
+.. IF015
+.. Fehler XX (FOP ARTIKELPRUEFUNG gescheitert)
+.formula T|xtxt1 = T|xaptext1
+.formula T|xtxt2 = T|xaptext2
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC001
+!RET006
+.formula xprocsp = xprocsp - 1
+..
+.continue FI015
+!EL015
+.formula T|xkugtinnr = 5|gtin
+.formula T|xideksart = 5|nummer
+.formula T|xbfehler = false
+.formula T|xart = 5|nummer
+..
+!FI015
+..
+..
+.continue EL016 ? _(_U|xbfehler)
+.. IF016
+.. Positionen mit Artikel-Kunde (evkopf;evartex;evkotyp;vkkunde;evkovom) prÅfen
+..
+.formula U|xtsel = "$,,;@gruppe=2;kotyp=(4)"
+.formula U|xtsel = U|xtsel + ";kopf="      + 1|id
+.formula U|xtsel = U|xtsel + ";artex="     + 5|id
+.formula U|xtsel = U|xtsel + ";charge="    + U|xcharge^id ? _F|empty(U|xcharge)
+.formula U|xtsel = U|xtsel + ";mge<>0;@ablageart=(3)"
+..
+.load 2 sales 'U|xtsel'
+..
+..
+.continue EL017 ? _((_G|mehr) ; (F|empty(U|xcharge) & _F|empty(U|xchargeorig)))
+.. IF017
+.. Fehler 54 (Artikel nicht in Ursprungslieferschein)
+.formula xedifcode = 54
+..
+.set trans +
+.formula xtxt1 = 'F|formatstr("- Satzart: {1}, Zeile: {2}:", xaktsatz, xaktzeile)'
+.formula xtxt2 = 'F|formatstr("Der Artikel: {1} ist im Ursprungs-Lieferschein-Nr {2} nicht vorhanden!", xideksart, xursplsnr)'
+.formula xtxt1 = 'F|formatstr("Der Artikel {1} mit Charge {2} ist im Ursprungslieferschein {3} nicht vorhanden!", U|xideksart, U|xchargeorig, U|xursplsnr)' ? _F|empty(U|xchargeorig)
+.formula xtxt2 = ""  ? _F|empty(U|xchargeorig)
+.set trans -
+.formula xtxt3 = ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC001
+!RET007
+.formula xprocsp = xprocsp - 1
+..
+!EL017
+.. FI017
+..
+!EL016
+.. FI016
+..
+.. mîgliche Fehler (xbfehler wird gesetzt):
+.. - Fehler XX (FOP ARTIKELPRUEFUNG gescheitert)
+.. - Fehler 54 (Artikel nicht im Ursprungslieferschein)
+..
+.continue ESAC001
+!BRK004
+.continue BRK005 ? _(text1 = "QTY1")
+.. QT1-Satzart
+.. (Re-)Initialisieren Variablen
+.. Positionsnummer
+.formula U|xpnum = ""
+.. Menge
+.formula U|xmge = 0
+.. Mengeneinheit
+.formula U|xeinhmge = ""
+.. Termin
+.formula U|xtterm = ""
+.. Positionstext
+.formula U|xptext = ""
+..
+.. Positionstext aus EDI-Datensatz
+.formula U|xptext = text10 + ";" + text11 + ";" + text12
+..
+.. Abrufmenge und Mengeneinheit (Variante 1)
+.formula U|xmge = text3 ? _F|empty(text3)
+.formula U|xeinhmge = text4 ? _F|empty(text4)
+..
+.. Abrufmenge und Mengeneinheit (Variante 2)
+.formula U|xeinhmge = text8  ?  _(xmge>0) & _F|empty(text7)
+.formula U|xmge = text7      ?  _(xmge>0) & _F|empty(text7)
+..
+.. Einheiten-PrÅfung: Einheit in EDL-Meldung ?= Einheit in Urspurngslieferschein
+.. mh, 16.08.2010: Korrektur der EinheitenprÅfung
+..  Theoretisch sollte die Einheit in der Entnahmemeldung eine ISO-Einheit
+..  sein, in der Praxis ist diese Einheit aber oft eine VDA-Einheit.
+..  Die Einheit im Ursprungslieferschein ist immer eine ABAS-Einheit.
+..
+.. Selektion der Einheit
+.type text xtselTAZ      ? _F|defined(xtselTAZ)
+..
+.. Einheiten-Varianten fÅr Ursprungslieferschein
+.type text xISOursprung  ? _F|defined(xISOursprung)
+.type text xTAZursprung  ? _F|defined(xTAZursprung)
+.type text xVDAursprung  ? _F|defined(xVDAursprung)
+..
+.. Die Einheit des Ursprungslieferscheins steht in 2|he, im internen ABAS-Format.
+.formula U|xISOurpsrung = ""
+.formula U|xTAZursprung = ""
+.formula U|xVDAurpsrung = ""
+.formula U|xtselTAZ =  "$,,;@gruppe=1;gruppe=1;evda=;eiso=;einheitbspr=" + 2|he
+.load 9 unit 'U|xtselTAZ'
+..
+..
+.continue EL018 ? _(G|mehr)
+.. IF018
+.formula U|xISOurpsrung = -9|eiso
+.formula U|xTAZursprung = -9|einheitbspr
+.formula U|xVDAurpsrung = -9|evda
+..
+.continue FI018
+!EL018
+..
+.continue EL019 ? _(2|mge <> 0)
+.. IF019
+.. Fehler XX (Mengeneinheit Ursprungs-LS-Pos unbekannt)
+.set trans +
+.formula xtxt1 = 'F|formatstr("- Satzart: {1}, Zeile: {2}:", xaktsatz, xaktzeile)'
+.formula xtxt2 = 'F|formatstr("FÅr die Artikelposition {1} angegebene Mengeneinheit -{2} ist unbekannt!", xideksart, 2|he)'
+.formula xtxt2 = xtxt2 + ";Lieferschein: " + xlsnum + ", Zeile: " + 'zeile'
+.set trans -
+.formula xtxt3 = ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC001
+!RET008
+.formula xprocsp = xprocsp - 1
+..
+!EL019
+.. FI019
+..
+!FI018
+..
+.. Einheiten-Varianten fÅr Entnahmemeldung
+.type text xISOentnahme  ? _F|defined(xISOentnahme)
+.type text xTAZentnahme  ? _F|defined(xTAZentnahme)
+.type text xVDAentnahme  ? _F|defined(xVDAentnahme)
+..
+.. Die Einheit der Entnahmemeldung steht in U|xeinhmge, es ist unklar, ob die Einheit
+.. im ISO- oder VDA-Format Åbertragen worden ist!
+.formula U|xISOentnahme = ""
+.formula U|xTAZentnahme = ""
+.formula U|xVDAentnahme = ""
+.formula U|xtselTAZ =  "$,,;@gruppe=1;gruppe=1;eiso=;einheitbspr=;evda=" + -U|xeinhmge
+.load 9 unit 'U|xtselTAZ'
+.formula U|xtselTAZ =  "$,,;@gruppe=1;gruppe=1;einheitbspr=;evda=;eiso=" + -U|xeinhmge        ? _G|mehr
+.load 9 unit 'U|xtselTAZ'                                                                     ? _G|mehr
+..
+..
+.continue EL020 ? _(G|mehr)
+.. IF020
+.formula U|xISOentnahme = -9|eiso
+.formula U|xTAZentnahme = -9|einheitbspr
+.formula U|xVDAentnahme = -9|evda
+..
+.continue FI020
+!EL020
+.. Fehler XX (Mengeneinheit Entnahme unbekannt)
+.set trans +
+.formula xtxt1 = 'F|formatstr("- Satzart: {1}, Zeile: {2}:", xaktsatz, xaktzeile)'
+.formula xtxt2 = 'F|formatstr("Die fÅr die Artikelposition {1} angegebene Mengeneinheit -{2} ist unbekannt!", xideksart, U|xeinhmge)'
+.set trans -
+.formula xtxt3 = ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET009" 
+.continue PROC001
+!RET009
+.formula xprocsp = xprocsp - 1
+..
+!FI020
+..
+..
+.continue EL021 ? _(_U|xbfehler)
+.. IF021
+..
+.continue EL022 ? _(U|xTAZursprung <> U|xTAZentnahme)
+.. IF022
+.. Fehler XX (Mengeneinheit Entnahme und Ursprung stimmen nicht Åberein)
+.set trans +
+.formula xtxt1 = 'F|formatstr("- Satzart: {1}, Zeile: {2}:", xaktsatz, xaktzeile)'
+.formula xtxt2 = 'F|formatstr("FÅr die Artikelposition {1} stimmen die Mengeneinheiten nicht Åberein!", xideksart)'
+.formula xtxt2 = xtxt2 + ";Im EDI-Datensatz: " + U|xTAZentnahme + " im Lieferschein " + xlsnum + ": " + U|xTAZursprung + ", Zeile: " + 'zeile'
+.formula xtxt3 = 'F|formatstr("Die Einheit im EDI-Datensatz wurde von {1} zu {2} konvertiert.", U|xeinhmge, U|xTAZentnahme)'
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET010" 
+.continue PROC001
+!RET010
+.formula xprocsp = xprocsp - 1
+..
+!EL022
+.. FI022
+..
+.continue FI021
+!EL021
+.. Mengeneinheiten Urpsrung und Entnahme stimmen Åberein
+..
+!FI021
+..
+.. mîgliche Fehler (xbfehler wird gesetzt):
+.. - Fehler XX (Mengeneinheit Entnahme unbekannt)
+.. - Fehler XX (Mengeneinheit Ursprungs-LS-Pos unbekannt)
+.. - Fehler XX (Mengeneinheit Entnahme und Ursprung stimmen nicht Åberein)
+..
+..
+.continue EL023 ? _((_U|xbfehler) & (U|xladerkopf) & (U|xmge > 0))
+.. IF023
+.. ErgÑnzen der Entnahme-Lieferschein-Erstellung:
+.. Muss zum EDP-Skript (s.o. RFL1) passen:
+..      Puffer H: EDI-Zeile
+..      Puffer 1: Ursprungslieferschein (Kopf)                  (RFL1)
+..      Puffer 2: Ursprungslieferschein-Artikel-Position        (ART1)
+..      Puffer 5: Artikel aus ARTIKELPRUEFUNG                   (ART1)
+..
+.. Erstellen der EDP-Zeilen Åber individualisierbares FOP
+.type text xedpmarke ? _F|defined(U|xedpmarke)
+.formula U|xedpmarke = "QTY1"
+.input "EDI.EDI2VKEDL36.EDPZEILE"
+..
+.formula U|xladerpos = true
+..
+!EL023
+.. FI023
+..
+.continue ESAC001
+!BRK005
+.continue BRK006 ? _(text1 = "PAC1")
+.. PAC1-Satzart
+.. Packmittel-Angaben
+.formula T|xpakuartnr  = text4
+.formula T|xpaideksart = text5
+.formula T|xanzpackst  = text14
+..
+.. use fop ARTIKELPRUEFUNG to find product / customer product no / gtin
+.type text xapnummer  ? _F|defined(xapnummer)
+.type BT128 xapkuartnr ? _F|defined(xapkuartnr)
+.type text xapgtin    ? _F|defined(xapgtin)
+.type P0   xapkunde   ? _F|defined(xapkunde)
+.formula T|xedifcode  = 0
+.formula T|xapnummer  = T|xpaideksart
+.formula T|xapkuartnr = T|xpakuartnr
+.formula T|xapgtin    = ""
+.assign T|xapkunde = 'T|xidkundeab'
+.input "ARTIKELPRUEFUNG"
+.formula T|xedifcode = T|xapfcode
+..
+..
+.continue EL024 ? _(T|xedifcode > 0)
+.. IF024
+.. Fehler XX (FOP ARTIKELPRUEFUNG gescheitert)
+.formula T|xbfehler = true
+.formula T|xtxt1 = T|xaptext1
+.formula T|xtxt2 = T|xaptext2
+.formula T|xtxt3 = ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET011" 
+.continue PROC001
+!RET011
+.formula xprocsp = xprocsp - 1
+..
+.continue FI024
+!EL024
+.formula T|xpaideksart = 5|nummer
+.formula T|xpakugtinnr = 5|gtin
+..
+!FI024
+..
+..
+.continue EL025 ? _(_U|xbfehler)
+.. IF025
+.. Positionen mit Artikel-Kunde (evkopf;evartex;evkotyp;vkkunde;evkovom) prÅfen
+..
+.formula U|xtsel = "$,,;@gruppe=2;kotyp=(4)"
+.formula U|xtsel = U|xtsel + ";kopf="      + 1|id
+.formula U|xtsel = U|xtsel + ";artex="     + 5|id
+.formula U|xtsel = U|xtsel + ";@ablageart=(3)"
+.formula U|xtsel = U|xtsel + ";@gruppe=2"
+..
+.load 2 sales 'U|xtsel'
+..
+..
+.continue EL026 ? _(_G|mehr)
+.. IF026
+.. Fehler 54 (Packmittel nicht in Ursprungslieferschein)
+.formula xedifcode = 54
+..
+.set trans +
+.formula xtxt1 = 'F|formatstr("- Satzart: {1}, Zeile: {2}:", xaktsatz, xaktzeile)'
+.formula xtxt2 = 'F|formatstr("Das Packmittel: {1} ist im Ursprungs-Lieferschein-Nr {2} nicht vorhanden!", xpaideksart, xursplsnr)'
+.set trans -
+.formula xtxt3 = ""
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET012" 
+.continue PROC001
+!RET012
+.formula xprocsp = xprocsp - 1
+..
+!EL026
+.. FI026
+..
+!EL025
+.. FI025
+..
+..
+.continue EL027 ? _(false)
+.. IF027
+.. Packmittel-Fehler ignorieren?
+..**ok,30.07.2003 (nur bei Fehler, also bei xbfehler=true)
+..
+..
+.continue EL028 ? _((xladerkopf) & (xladerpos) & (xbfehler))
+.. IF028
+.. NEU: auch bei Packmittelfehler LS anlegen
+..**ok,28.07.2003 (jetzt xAPackFehl aus der Datei "EDL.PACK")
+..**ok,28.07.2003 (EDL.PACK im Kunden-EDI-Info bei EDL als Internes Programm einzutragen)
+..
+.. PrÅfen ob die Datei existiert
+.formula U|xintedi  = F|foppath(U|xintedi)
+.input 'U|xintedi' ? _F|empty(U|xintedi)
+..
+..
+.continue EL029 ? _(xAPackFehl)
+.. IF029
+..**ok,30.07.2003 (Fehlertext geÑndert)
+..
+.. Fehlertext
+.set trans +
+.formula xtxt1 = 'F|formatstr("- Satzart: {1}, Zeile: {2}:", xaktsatz, xaktzeile)'
+.formula xtxt2 = 'F|formatstr("Trotz des vorhandenen Packmittelfehlers bei {1} kann der Lieferschein ohne die fehlerhafte Packmittelposition angelegt werden.", xpaideksart)'
+.set trans -
+..
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET013" 
+.continue PROC001
+!RET013
+.formula xprocsp = xprocsp - 1
+..
+.formula xbfehler = false
+..
+!EL029
+.. FI029
+..
+!EL028
+.. FI028
+..
+..**ok,14.07.2003 (neue Variable xistpac1)
+.formula xistpac1 = true
+..
+!EL027
+.. FI027
+..
+.. mîgliche Fehler (xbfehler wird gesetzt):
+.. - Fehler XX (FOP ARTIKELPRUEFUNG gescheitert)
+.. - Fehler 54 (Packmittel nicht in Ursprungslieferschein)
+..
+..
+.continue EL030 ? _((_U|xbfehler) & (U|xladerpos))
+.. IF030
+.. ErgÑnzen der Entnahme-Lieferschein-Erstellung:
+.. Muss zum EDP-Skript (s.o. RFL1) passen:
+..      Puffer H: EDI-Zeile
+..      Puffer 1: Ursprungslieferschein (Kopf)                  (RFL1)
+..      Puffer 2: Ursprungslieferschein-Packmittel-Position     (PAC1)
+..      Puffer 5: Packmittel aus ARTIKELPRUEFUNG                (PAC1)
+..
+.. Erstellen der EDP-Zeilen Åber individualisierbares FOP
+.type text xedpmarke ? _F|defined(U|xedpmarke)
+.formula U|xedpmarke = "PAC1"
+.input "EDI.EDI2VKEDL36.EDPZEILE"
+..
+!EL030
+.. FI030
+..
+.continue ESAC001
+!BRK006
+!ESAC001: =====   ENDCASE   =====
+..
+.select line
+..
+.continue LOOP001
+!ELOP001: ==============================
+..
+.. Alte/Vorrausgegangene Puffer/VorgÑnge freigeben!
+.load 1
+.load 2
+..
+..
+.continue EL031 ? _((_U|xbfehler) & (U|xladerkopf))
+.. IF031
+.. Abschluss der Entnahme-Lieferschein-Erstellung
+.. Erstellen der EDP-Zeilen Åber individualisierbares FOP
+.type text xedpmarke ? _F|defined(U|xedpmarke)
+.formula U|xedpmarke = "ENDE"
+.input "EDI.EDI2VKEDL36.EDPZEILE"
+..
+.. Erzeugen Lader-Abschnitt fÅr Status 10 und Fehlercode 0 in ABAS-EDI-Datensatz
+.. EFOPs fÅr EDI-Nachricht nicht berÅcksichtigen
+..
+.output addedto 'U|xnlader'
+..
+
+# EDI-Nachricht: Status = Lader fertig
+
+#!action=update
+#!database=53
+#!dontchange=~
+#!EDP_FOPMODE=0
+
+nummer;status;fcode
+'U|xvedi^id';10;0
+
+..
+.output new WERF.WEG
+..
+.. Was tun mit "LADER.ENDE" ?
+.. Erzeugen Lader-Abschnitt fÅr Lîschen des Lader-Files
+.. sys rm -f 'xnlader' 1> ${DEVNULL:-/dev/null} 2>&1
+.. <Text> LADER.ENDE
+.. <zeigen>
+..
+!EL031
+.. FI031
+..
+..
+.continue EL032 ? _((U|xladerkopf) & (U|xladerpos) & (_U|xmgeueb) & (_U|xbfehler))
+.. IF032
+.. EDI-Nachricht: Status setzen - Lader wird gestartet
+.. Status 6 -> Lader fÅr Vorgang aus EDI-Datenbank ohne Korrekturen erzeugt
+.. Fcode  0 -> Lader fÅr Vorgang aus EDI-Datenbank gestartet
+.. Datum Laderstart merken
+..
+.select lock edifact 'U|xvedi^id'
+.formula H|status = 6
+.formula H|fcode = 0
+.formula H|sdatlader = datum
+.formula H|szeitlader = zeit
+.rewrite
+.select -
+..
+.. LADER ausfuehren, bei Erfolg LADER lîschen
+.formula U|xnbatchspooldir = "batchlg.spooler"
+.formula U|xtladerEDI  = (("0000000000" + xedinumneu) >> 10)
+.formula U|xtladerErr  = xnbatchspooldir + "/X.stderr" + U|xtladerEDI + "eds.TMP"
+.formula U|xtladerHinw = xnbatchspooldir + "/X.stderr" + U|xtladerEDI + "eds.HINW"
+..
+.. Alte Ausgabedateien wegrÑumen
+.formula T|xsybefehl = "rm -f " + U|xtladerErr
+.system 'T|xsybefehl' background
+.formula T|xsybefehl = "rm -f " + U|xtladerHinw
+.system 'T|xsybefehl' background
+..
+.. Neuen Lader Starten, OHNE &
+.formula T|xsybefehl = "edpimport.sh -P -I " +  T|xnlader + " 2> " + U|xtladerErr + " -H " + U|xtladerHinw
+.system 'T|xsybefehl' password background
+..
+..
+.continue EL033 ? _(mehr)
+.. IF033
+.. Nach fehlerfreiem Laderlauf den Lader lîschen
+.formula U|xsybefehl = "rm -f " + xnlader
+.system 'U|xsybefehl' background
+.formula U|xsybefehl = "rm -f " + U|xtladerHinw
+.system 'U|xsybefehl' background
+..
+!EL033
+.. FI033
+..
+.continue FI032
+!EL032
+.. EDI-Nachricht: Status setzen - Lader wird NICHT gestartet
+.select lock edifact 'U|xvedi^id'
+.formula H|status = 4
+.formula H|fcode = 54 ? +fcode=0
+.rewrite
+.select -
+..
+.. LADER ungenutzt loeschen
+.formula U|xsybefehl = "rm -f " + xnlader
+.system 'U|xsybefehl' background
+..
+!FI032
+..
+.. EDI-Nachricht: Fehler und/oder Warnungen in ftext schreiben
+.select lock edifact 'U|xvedi^id'
+.formula H|ftext = U|xdfehler
+.rewrite
+.select -
+..
+.. Zum Abschluss den EDI-Datensatz wieder in den H-Puffer lesen
+.select nolock edifact 'U|xvedi^id'
+..
+!FI001
+..
+!END
+.continue
+..

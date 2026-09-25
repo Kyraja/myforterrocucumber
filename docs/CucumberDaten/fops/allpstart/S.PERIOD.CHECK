@@ -1,0 +1,178 @@
+..!interpreter english declaration noabbrev
+.. at 2016-01-29, 17:03
+.set trans -
+..========================================================================
+..==  Name              : S.PERIOD.CHECK
+..==  Pfad              : allpstart
+..==  Funktion          : EFOP an Verrechnungssatz und Zuschlagsatzwert
+..==                      Schreibschutz fÅr Perioden in denen entweder Fibu-Abschluss oder WiP-Gesamtabschluss gesetzt
+..==
+..==  Erstellungsdatum  : 12.03.2014
+..==  Autor             : Thomas Saalborn, alltrotec GmbH
+..==  Copyright         : (c) 1990 - 2014 alltrotec GmbH
+..==
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..==
+..==
+..========================================================================
+.input "allpstart/PRJM.KONFIG.INI"  ? _F|defined(U|xydbgrwipkonfighist)
+..====================================================
+.type GD      xbudat        ? _F|defined(U|xbudat)
+.type GD      xd1           ? _F|defined(U|xd1)
+.type GD      xdfydate      ? _F|defined(U|xdfydate)
+.type integer ximonth       ? _F|defined(U|ximonth)
+.type bool    xbline        ? _F|defined(U|xbline)
+.type bool    xbopen1       ? _F|defined(U|xbopen1)
+.type bool    xbopen2       ? _F|defined(U|xbopen2)
+.type bool    xbopen3       ? _F|defined(U|xbopen3)
+.type bool    xbopen4       ? _F|defined(U|xbopen4)
+.type bool    xbopen5       ? _F|defined(U|xbopen5)
+.type bool    xbopen6       ? _F|defined(U|xbopen6)
+.type bool    xbopen7       ? _F|defined(U|xbopen7)
+.type bool    xbopen8       ? _F|defined(U|xbopen8)
+.type bool    xbopen9       ? _F|defined(U|xbopen9)
+.type bool    xbopen10      ? _F|defined(U|xbopen10)
+.type bool    xbopen11      ? _F|defined(U|xbopen11)
+.type bool    xbopen12      ? _F|defined(U|xbopen12)
+.type integer xprocsp       ? _F|defined(U|xprocsp)
+.set demand -
+..====================================================
+.continue EPROCDEF
+!PROC001: ----- CheckMonths -----
+.copy U|xbline = G|FALSE
+.continue EL001 ? _(_(F|empty(M|ygjahr)))
+.copy U|xbline = G|TRUE
+.formula U|xdfydate = F|fystartdate(M|ygjahr)
+.formula U|xdfydate = (U|xdfydate:8)<<6 + "01"
+!REPT001: ==============================
+.formula U|xbudat  = (U|xdfydate:8)<<6 + "01"
+.formula U|ximonth = F|month(U|xbudat)
+.input "allpstart/PRUEF.BUDAT"
+.copy U|xbopen.ximonth = U|xbbuchbar
+.continue EL002 ? _(U|xbopen.ximonth)
+.formula U|xd1 =  U|xbudat + 31
+.formula U|xd1 = (U|xd1:8)<<6 + "01"
+.formula U|xd1 =  U|xd1 - 1
+.load 9 group 'U|xydbgrwipkonfighist' 'F|expr("$,,;ybewertdat==" + U|xd1:8 + ";@filingmode=(Active)")'
+.continue EL003 ? _(G|mehr)
+.copy U|xbopen.ximonth = G|FALSE    ? 9|yperwipabs
+.load 9
+!EL003
+!EL002
+.copy U|xbline = G|FALSE    ? _U|xbopen.ximonth
+.formula U|xdfydate =  U|xdfydate + 31
+.formula U|xdfydate = (U|xdfydate:8)<<6 + "01"
+.continue REPT001 ? _(U|xdfydate > F|fyenddate(M|ygjahr))
+!EL001
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.continue BRK001 ? _(G|evtart = "maskein")
+.continue EL004 ? _(_(G|evtkommd = G|kaktname12))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.select screen header
+.select screen line
+!LOOP001: ==============================
+.continue ELOP001 ? _(G|mehr)
+.continue EL005 ? _(_(U|xbline))
+.protection yleiart      'M|aktzeile'   ? F|defined(M|yleiart)
+.protection ytzuschlsatz 'M|aktzeile'   ? F|defined(M|ytzuschlsatz)
+.protection yvland       'M|aktzeile'   ? F|defined(M|yvland)
+!EL005
+.formula U|ximonth = 1
+!REPT002: ==============================
+.'F|expr("protection ytzs" + F|tostring(U|ximonth) + " " + F|tostring(M|aktzeile))' ? _U|xbopen.ximonth & F|defined(M|ytzs.ximonth)
+.'F|expr("protection yvsf" + F|tostring(U|ximonth) + " " + F|tostring(M|aktzeile))' ? _U|xbopen.ximonth & F|defined(M|yvsf.ximonth)
+.'F|expr("protection yvsv" + F|tostring(U|ximonth) + " " + F|tostring(M|aktzeile))' ? _U|xbopen.ximonth & F|defined(M|yvsv.ximonth)
+.formula U|ximonth = U|ximonth + 1
+.continue REPT002 ? _(U|ximonth > 12)
+.select screen line
+.continue LOOP001
+!ELOP001: ==============================
+!EL004
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "feldaus")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC001
+!RET002
+.formula xprocsp = xprocsp - 1
+.continue BRK003 ? _(G|evtvar = "ygjahr")
+.continue EL006 ? _(_(G|evtkommd = G|kaktname12))
+.select screen header
+.select screen line
+!LOOP002: ==============================
+.continue ELOP002 ? _(G|mehr)
+.continue EL007 ? _(_(U|xbline))
+.protection yleiart      'M|aktzeile'   ? F|defined(M|yleiart)
+.protection ytzuschlsatz 'M|aktzeile'   ? F|defined(M|ytzuschlsatz)
+.protection yvland       'M|aktzeile'   ? F|defined(M|yvland)
+!EL007
+.formula U|ximonth = 1
+!REPT003: ==============================
+.'F|expr("protection ytzs" + F|tostring(U|ximonth) + " " + F|tostring(M|aktzeile))' ? _U|xbopen.ximonth & F|defined(M|ytzs.ximonth)
+.'F|expr("protection yvsf" + F|tostring(U|ximonth) + " " + F|tostring(M|aktzeile))' ? _U|xbopen.ximonth & F|defined(M|yvsf.ximonth)
+.'F|expr("protection yvsv" + F|tostring(U|ximonth) + " " + F|tostring(M|aktzeile))' ? _U|xbopen.ximonth & F|defined(M|yvsv.ximonth)
+.formula U|ximonth = U|ximonth + 1
+.continue REPT003 ? _(U|ximonth > 12)
+.select screen line
+.continue LOOP002
+!ELOP002: ==============================
+!EL006
+.continue ESAC002
+!BRK003
+.continue BRK004 ? _(G|evtvar = "yleiart")
+.formula U|ximonth = 1
+!REPT004: ==============================
+.'F|expr("protection ytzs" + F|tostring(U|ximonth) + " " + F|tostring(M|aktzeile))' ? _U|xbopen.ximonth & F|defined(M|ytzs.ximonth)
+.'F|expr("protection yvsf" + F|tostring(U|ximonth) + " " + F|tostring(M|aktzeile))' ? _U|xbopen.ximonth & F|defined(M|yvsf.ximonth)
+.'F|expr("protection yvsv" + F|tostring(U|ximonth) + " " + F|tostring(M|aktzeile))' ? _U|xbopen.ximonth & F|defined(M|yvsv.ximonth)
+.formula U|ximonth = U|ximonth + 1
+.continue REPT004 ? _(U|ximonth > 12)
+.continue ESAC002
+!BRK004
+.continue BRK005 ? _(G|evtvar = "ytzuschlsatz")
+.formula U|ximonth = 1
+!REPT005: ==============================
+.'F|expr("protection ytzs" + F|tostring(U|ximonth) + " " + F|tostring(M|aktzeile))' ? _U|xbopen.ximonth & F|defined(M|ytzs.ximonth)
+.'F|expr("protection yvsf" + F|tostring(U|ximonth) + " " + F|tostring(M|aktzeile))' ? _U|xbopen.ximonth & F|defined(M|yvsf.ximonth)
+.'F|expr("protection yvsv" + F|tostring(U|ximonth) + " " + F|tostring(M|aktzeile))' ? _U|xbopen.ximonth & F|defined(M|yvsv.ximonth)
+.formula U|ximonth = U|ximonth + 1
+.continue REPT005 ? _(U|ximonth > 12)
+.continue ESAC002
+!BRK005
+!ESAC002: =====   ENDCASE   =====
+.continue ESAC001
+!BRK002
+.continue BRK006 ? _(G|evtart = "zeileloevor")
+.continue EL008 ? _(_(G|evtkommd = G|kaktname12))
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC001
+!RET003
+.formula xprocsp = xprocsp - 1
+.error  ? _U|xbline
+.end 1  ? _U|xbline
+!EL008
+.continue ESAC001
+!BRK006
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC001
+!RET004
+.formula xprocsp = xprocsp - 1
+!ESAC001: =====   ENDCASE   =====
+.continue

@@ -1,0 +1,96 @@
+..!interpreter english noabbrev
+..*****************************************************************************
+.. Name           : allpstart/PS.CHECK.OVERBOOKING
+.. Datum/Date     : 30.01.2015
+.. Autor/Author   : Thomas Saalborn, alltrotec GmbH
+.. Copyright      : (c) 1990 - 2016 alltrotec GmbH
+.. Beschreibung/
+.. Description    : Unterprogrammm zur PrÅfung des öberbuchungsschutzes 
+..
+.. Function       : Unterprogrammm zur PrÅfung des öberbuchungsschutzes an 
+..                  - Leistungsmeldung
+..                  - IS PRJMAUFGABERM
+..                  - IS PRJMPLANDEF
+..                  - IS PRJMABSTUNDEN    
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.type text xtsel    ? _F|defined(U|xtsel)
+.type text xtid     ? _F|defined(U|xtid)
+.type real xrist    ? _F|defined(U|xrist)
+..
+..Leistungsmeldung
+.continue LM              ? M|dnr = 147 & M|gruppe = 1
+..RÅckmeldung
+.continue PRJMAUFGABERM   ? G|evtobjekt = "PRJMAUFGABERM"
+..AnfangsbestÑnde
+.continue PRJMABSTUNDEN   ? G|evtobjekt = "PRJMABSTUNDEN"
+..Stundenvrteilung
+.continue PRJMPVSTDPLAN   ? G|evtobjekt = "PRJMPVSTDPLAN"
+.continue
+..
+..
+!LM:Leistungsmeldung
+..!meta M|=P147:1
+.continue       ? _M|yaufgabe^ybnichtuebbuch
+..prÅfen ob Plan Stunden Åberschritten werden
+.formula U|xrist = 0
+.formula U|xtid = M|id
+.continue CHECK
+..
+..
+!PRJMAUFGABERM:IS RÅckmeldung, Erfassung der AnfangsbestÑnde
+..!meta M|=allpstart/PRJMAUFGABERM
+.continue       ? _M|yaufgabe^ybnichtuebbuch
+.formula U|xtid = M|yleistmeld^id
+.continue CHECK
+..
+..
+!PRJMABSTUNDEN RÅckmeldung, Erfassung der AnfangsbestÑnde
+..!meta M|=allpstart/PRJMABSTUNDEN
+.continue       ? _M|yaufgabe^ybnichtuebbuch
+.formula U|xtid = M|ylm^id
+.continue CHECK
+..
+..
+!PRJMPVSTDPLAN: Stundenverteilung
+..!meta M|=allpstd/PRJMPVSTDPLAN
+.continue         ? _M|ypvorgang^ybnichtuebbuch
+.continue ERROR   ? (M|ytpviststd + M|ytpvaktist + M|ystdplanrest) > M|ypvorgang^ypvsollstd
+.continue
+..
+..
+!CHECK: PrÅfung
+.formula U|xtsel = "$,,yaufgabe==" + M|yaufgabe^id + ";id<>" + U|xtid + ";@filingmode=(Active)"
+.load 8 group "147:1" 'U|xtsel'
+.continue ECHECK      ? _G|mehr
+!LMLOAD:
+.formula U|xrist = U|xrist + 8|yarbzeit
+.load 8 continue
+.continue LMLOAD      ? G|mehr
+..
+!ECHECK:
+.continue ERROR       ? M|yaufgabe^yplanstd - (U|xrist + M|yarbzeit) < 0
+.continue
+..
+..
+!ERROR: Fehlermeldung
+.set trans +
+..
+.box Hinweis
+Die insgesamt gemeldeten Stunden dÅrfen die Planstunden nicht Åberschreiten.
+Die Dauer wird auf die noch offene Stundenzahl zurÅckgesetzt.
+..
+.set trans -
+..
+.formula M|ystdplanrest = M|ytpvplanstd - M|ytpviststd - M|ytpvaktist   ? G|evtobjekt = "PRJMPVSTDPLAN"
+.error (0)                                                              ? G|evtobjekt = "PRJMPVSTDPLAN"
+.end 1                                                                  ? G|evtobjekt = "PRJMPVSTDPLAN"
+..
+.formula M|yarbzeit  = M|yaufgabe^yplanstd - U|xrist
+.formula M|yarbzeit  = 0                ? M|yarbzeit < 0
+.formula M|yfaktzeit = M|yarbzeit       ? M|yfaktzeit > M|yarbzeit
+..
+.continue

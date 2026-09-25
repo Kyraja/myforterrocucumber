@@ -1,0 +1,83 @@
+..!interpreter german translate noabbrev
+..*****************************************************************************
+.. Name           : ow1/IS.ADJNEGQTY.CORRECT.AUTO
+.. Date           : 17.01.14
+.. Version        : 2012r4n05
+.. Author         : chbo/abas AG
+.. Copyright      : (c) 2014 abas AG
+.. Functionality  :
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   : Create EDP script and execute with edpimport.sh for a row
+..                  in the table which creates an inventory correction, setting
+..                  current amount to minimum stock quantity of item.
+...Includes       : None
+..*****************************************************************************
+..
+.art text xtfile                  ? F|defined( U|xtfile )      = False
+.art text xtcommand               ? F|defined( U|xtcommand )   = False
+.art text xtdelete                ? F|defined( U|xtdelete )    = False
+..
+.weiter NODATA ? F|empty(M|qart) = G|True
+.weiter NODATE ? F|empty(M|korrdat) = G|True
+..
+.formel U|xtfile = "ow1/BKORR.EDP"
+.formel U|xtcommand = "edpimport.sh -a do -b '(SInventory)' -p " + 'G|einmalpw' + " -I ow1/BKORR.EDP"
+.formel U|xtdelete = "rm ow1/BKORR.EDP"
+..
+.. Create EDP file
+.eingabe DATEI.F
+.ausgabe auf 'U|xtfile'
+..
+.. Set header information
+#!EDP_TESTFLAG2=1
+#!EDP_DATE='M|korrdat'
+
+param;artikel;beldat;beleg\
+zeile;platz;mge
+..
+.. Set import lines
+;'M|qart^id';'M|korrdat';ADJNEGQTY\
++1;'M|qlpl^id';'M|mindest'
+..
+.. Close file
+.ausgabe auf WERF.WEG
+.eingabe BILD.F
+.ausgabe BILDSCHIRM
+..
+.. Execute edpimport.sh with the created file
+.system 'U|xtcommand' HINTER
+.weiter ERRORCMD ? G|mehr = G|False
+.system 'U|xtdelete' HINTER
+.weiter ERRORFILE ? G|mehr = G|False
+.. Success message
+.hinweis -sofort Stock quantity for product 'M|qart^num2' set to 'F|tostring(M|mindest,"R9.2")' at location 'M|qlpl^such38'.
+.weiter
+..
+!ERRORCMD
+.. Message if EDP command does not complete successfully
+.hinweis -sofort Error executing EDP command for product 'M|qart^num2'.
+.system 'U|xtdelete' HINTER
+.weiter ERRORFILE ? G|mehr = G|False
+.weiter
+..
+!ERRORFILE
+.. Message if temporary EDP file is not delete successfully
+.hinweis -sofort Error deleting temporary EDP file 'U|xtfile'.
+.weiter
+..
+!NODATA
+.. Message if there is no data loaded in the list
+.hinweis -sofort Line contains no data!
+.weiter
+..
+!NODATE
+.. Message if no correction date has been defined
+.hinweis -sofort The correction date is empty!
+.weiter

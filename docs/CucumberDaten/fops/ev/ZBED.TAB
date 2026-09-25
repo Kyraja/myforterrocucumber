@@ -1,0 +1,99 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ZBED.TAB
+.. Autor          : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Ablauf         : H|-Puffer: Vorgang
+..                  1|-Puffer: Zahlungsbedingung
+..                              a) aus Vorgang
+..                       oder   b) aus Zahlungsverteiler
+..                  M|-Puffer: Maskenpuffer IS ZBED
+..*****************************************************************************
+.set trans -
+..
+.type text   xttext xtsk xtzum xtmit xtrein
+.type r7.2   xrebetr
+.type bool   xzbedvert
+.type PS94:1 xwaehr
+.type P12:8  xzbed
+..
+.input "is/TABLEEREN"
+..
+.continue ERROR1                 ?  F|empty(M|vorgang)
+.select object 'M|vorgang^id'
+.continue END                    ? _G|mehr
+.. Sollen bei negativen RechnungsbetrÑgen bzw. buart = 1 keine
+.. Zahlungsbedingungen gedruckt werden, so mÅssen diese Zeilen wieder
+.. aufgenommen werden.
+.. .continue END                    ?  H|buart = 1
+.. .continue END                    ?  H|rebetr < 0
+..
+.copy U|xzbedvert = G|TRUE     ? +'H|zbedvert' > 0
+.formula U|xrebetr   = H|rebetr
+.formula U|xwaehr    = H|land
+.formula U|xzbed     = H|zbed^id  ? _U|xzbedvert
+.formula U|xzbed     = M|zbed^id  ?  U|xzbedvert
+.text U|xtzum  'P|spr' zum
+.text U|xtmit  'P|spr' mit
+.text U|xtrein 'P|spr' rein netto
+..
+.load 1 company 'U|xzbed^id'
+.continue END ? _G|mehr
+.. Zahlungsbedingung wird mit dem Valutadatum, dem Betrag und der WÑhrung
+.. des Vorgangs belegt, um Datum und Zahlbetrag zu erhalten
+.copy 1|vdat    = H|vdat
+.copy 1|waehr   = H|land
+.copy 1|betrag  = H|rebetr          ? _U|xzbedvert
+.copy 1|betrag  = M|teilbetr        ?  U|xzbedvert
+.copy 1|skbbetr = H|skbbetr         ? _U|xzbedvert
+.copy M|waehr   = H|land
+.copy M|vdat    = H|vdat
+.formula M|textzbed  = 1|sucherw
+.formula M|textzbed  = '1|name.P|ksi' ? '1|name.P|ksi' <> ""
+.assign M|zbed    = U|xzbed
+.formula M|tzum    = U|xtzum
+.formula M|ktext   = U|xtrein
+.formula M|ohnetab = 0
+.formula M|ohnebetr = 0
+.formula M|ohnebetr = 1 ? M|teilskbbetr = 0
+.formula M|tgleich = "="
+..
+.input "ev/ZBEDKOPF"
+.continue END               ? F|empty(M|vdat)
+..
+!ZEILE
+.load 1 line
+.continue ZB                ? G|mehr
+.continue END
+..
+!ZB
+.formula M|ohnetab = 1
+.text U|xtsk   'P|spr' Skonto          ? 1|skonto > 0
+.formula U|xttext = "% "+ 'U|xtsk'      ? 1|skonto > 0
+.formula U|xttext = U|xtrein          ? 1|skonto = 0
+..
+.make screen line +O
+.formula M|tmit    = ""
+.formula M|tmit    = U|xtmit          ? 1|skonto > 0
+.formula M|frist   = 1|frist
+.formula M|skonto  = 1|skonto
+.formula M|zum     = 1|termbis
+.formula M|rebetr  = 1|zabetr
+.formula M|rebetr  = - 1|zabetr ? F|equals(M|vorgang^vorganga, "(CreditNoteCommercial)")
+.formula M|text    = U|xttext
+.formula M|trebetr = H|rebetr
+.formula M|tskbbetr = H|skbbetr
+.formula M|tskbbetr = - H|skbbetr ? F|equals(M|vorgang^vorganga, "(CreditNoteCommercial)")
+..
+.input "ev/ZBEDZEILE"
+.continue ZEILE
+..*****************************************************************************
+!END
+.input "ev/ZBEDENDE"
+.continue
+..*****************************************************************************
+..
+!ERROR1
+.error -field M|vorgang -message Bitte Verkaufsvorgang wÑhlen.
+.end 1

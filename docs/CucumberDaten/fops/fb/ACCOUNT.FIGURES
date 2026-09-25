@@ -1,0 +1,107 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : ACCOUNT.FIGURES
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Anfangssaldo, Soll-Summe, Haben-Summe und Endsaldo fr
+..                  einen gesch„ftsjahresbergreifenden Zeitraum berechnen.
+..
+..                  Eingabe: xaccount -> Konto (Verweis)
+..                           xsyear   -> Anfangsjahr (GJ)
+..                           xsmonth  -> Anfangsmonat (int)
+..                           xeyear   -> Endjahr (GJ)
+..                           xemonth  -> Endmonat (int)
+..
+..                  Ausgabe: xdebit    -> Summe Soll (R)
+..                           xcredit   -> Summe Haben (R)
+..                           xobalance -> Anfangssaldo (R)
+..                           xcbalance -> Endsaldo (R)
+..
+.. Functionality  : Compute opening balance, debit, credit and closing balance for
+..                  a period which expands over multiple financial periods.
+..
+..                  Input:   xaccount -> account (reference)
+..                           xsyear   -> start year (GJ)
+..                           xsmonth  -> start month  (int)
+..                           xeyear   -> end year (GJ)
+..                           xemonth  -> end month (int)
+..
+..                  Output:  xdebit    -> sum debit (R)
+..                           xcredit   -> sum credit (R)
+..                           xobalance -> opening balance (R)
+..                           xcbalance -> closing balance (R)
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.type real xdebit    ? _F|defined(U|xdebit)
+.type real xcredit   ? _F|defined(U|xcredit)
+.type real xobalance ? _F|defined(U|xobalance)
+.type real xcbalance ? _F|defined(U|xcbalance)
+..
+.type GJ  xxyear   ? _F|defined(U|xxyear)
+.type integer xxemonth ? _F|defined(U|xxemonth)
+.type integer xxsmonth ? _F|defined(U|xxsmonth)
+..
+.continue ERR01 ? _F|defined(U|xaccount)
+.continue ERR01 ?  F|empty(U|xaccount)
+.continue ERR01 ? _F|defined(U|xsyear)
+.continue ERR01 ?  F|empty(U|xsmonth)
+.continue ERR01 ? _F|defined(U|xeyear)
+.continue ERR01 ?  F|empty(U|xeyear)
+.continue ERR01 ? _F|defined(U|xemonth)
+.continue ERR01 ?  F|empty(U|xemonth)
+..
+.continue ERR02 ? F|defined(8|id)
+..
+.load 8 add U|xaccount
+..
+.select year 'U|xsyear' 'U|xsmonth'
+.formula U|xobalance = 8|asaldo
+..
+.select year 'U|xeyear' 'U|xemonth'
+.formula U|xcbalance = 8|esaldo
+..
+.formula U|xdebit  = 0
+.formula U|xcredit = 0
+..
+.formula U|xxyear = ""
+.continue NEXT
+..
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+.select year 'U|xxyear' 'U|xxsmonth' 'U|xxemonth'
+.formula U|xdebit  = U|xdebit  + 8|ssum
+.formula U|xcredit = U|xcredit + 8|hsum
+.continue END ? F|fycmp(U|xxyear, U|xeyear) = 0
+.continue NEXT
+..
+..*****************************************************************************
+!NEXT
+..*****************************************************************************
+.copy U|xxyear = F|condexpr(F|empty(U|xxyear), U|xsyear, F|nextfy(U|xxyear))
+.formula U|xxemonth = F|condexpr(F|fycmp(U|xxyear, U|xeyear) = 0, U|xemonth, F|getfm(F|fyenddate(U|xxyear), G|TRUE))
+.formula U|xxsmonth = F|condexpr(F|fycmp(U|xxyear, U|xsyear) = 0, U|xsmonth, F|getfm(F|fystartdate(U|xxyear), G|FALSE))
+.formula U|xxemonth = 15 ? F|fycmp(U|xxyear, G|abgjahr) = 0 & F|fycmp(U|xsyear, U|xeyear) <> 0
+.continue LOOP
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.load 8
+.continue
+..
+..*****************************************************************************
+!ERR01
+..*****************************************************************************
+.error 'G|stackframe.G|framecount': Argumente unvollst„ndig.
+.end 1
+..
+..*****************************************************************************
+!ERR02
+..*****************************************************************************
+.error 'G|stackframe.G|framecount': FO-Puffer 8 wird bereits verwendet.
+.end 1

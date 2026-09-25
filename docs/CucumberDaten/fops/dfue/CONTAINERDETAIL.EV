@@ -1,0 +1,107 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : CONTAINERDETAIL.EV
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      :
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text xselect ? _F|defined(U|xselect)
+.type text xsel    ? _F|defined(U|xsel)
+..
+.formula P|maskkontextfop   = ""
+.formula P|maskkontextfop   = "AP" ? M|aufruf & _F|empty(M|artikel) & _F|empty(M|behaelterkonto)
+.formula M|ktostandort   = "intern"           ? M|aufruf & F|value(M|ktofuehr, "AS318") = "(Internal)" & M|bintern
+.formula M|ktostandort   = "Gesch„ftspartner" ? M|aufruf & F|value(M|ktofuehr, "AS318") = "(BusinessPartner)" & _M|bintern
+..
+.continue BSTART      ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar = "bstart"
+.continue BKONTO      ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "behaelterkonto"
+.continue BUARTIKEL   ? G|evtartengl = "BUTTON_AFTER"  & G|evtvar = "buartikel"
+.continue KREISLAUF   ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kreislauf" 
+.continue DATE        ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "von"
+.continue DATE        ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bis"
+.continue ARTIKEL     ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "artikel"
+.continue SEL         ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bbeldat"
+.continue SEL         ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "bbudat"
+.input "is/TABLEEREN" ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "ktofuehr"
+.input "is/TABLEEREN" ? G|evtartengl = "FIELD_EXIT"    & G|evtvar = "kwerk"
+.continue END
+..
+!SEL
+.copy M|bbeldat = G|FALSE   ? M|bbeldat & G|evtvar = "bbudat"
+.copy M|bbudat  = G|FALSE   ? M|bbudat  & G|evtvar = "bbeldat"
+.copy M|bbeldat = G|TRUE    ? _M|bbeldat & _M|bbudat
+.continue BSTART
+..
+!BUARTIKEL
+.formula U|xsel = "%,,nummer=;such=;packmit=ja;vpkenn=(ReturnablePackaging);@gruppe=1;@ablageart=lebendig"
+.load 1 parts 'U|xsel'
+.formula M|artikel = ""  ? _G|mehr
+.continue END            ? _G|mehr
+.formula M|artikel = 1|id
+..
+!ARTIKEL: nur wenn packmit = TRUE und vpkenn = Mehrwegverpackung
+.continue BSTART    ?  F|empty(M|artikel)
+.continue ERROR1    ? _M|artikel^packmit
+.continue ERROR2    ?  F|value(M|artikel^vpkenn, "AS189") <> "(ReturnablePackaging)"
+.continue BSTART
+..
+!KREISLAUF
+.continue KOPFLEEREN    ? F|empty(M|kreislauf)
+.formula M|behaelterkonto = ""
+.formula M|artikel        = ""
+.formula M|kpartner       = ""
+.formula M|kwerk          = ""
+.formula M|kwerkbez       = ""
+.formula M|ktofuehr       = ""
+.protection behaelterkonto
+.continue BSTART
+..
+!BKONTO
+.continue KOPFLEEREN ? F|empty(M|behaelterkonto)
+.formula M|kreislauf = ""
+.formula M|select = "$,,"
+.formula M|select = M|select + ";@gruppe = 1"                 ?  F|empty(M|kreislauf)
+.formula M|select = M|select + ";@gruppe = 2;@zeilen=ja"      ? _F|empty(M|kreislauf)
+.formula M|select = M|select + ";id=" + 'M|behaelterkonto^id' ? _F|empty(M|behaelterkonto)
+.select containeraccount 'M|select'
+.continue END                         ? _G|mehr
+.formula M|ktofuehr = M|behaelterkonto^ktofuehr
+.assign M|artikel   = M|behaelterkonto^artikel
+.assign M|kpartner  = M|behaelterkonto^partner
+.formula M|kwerk    = M|behaelterkonto^werk
+.formula M|kwerkbez = M|behaelterkonto^werkname
+.continue BSTART
+..
+!KOPFLEEREN
+.protection -reset behaelterkonto
+.formula M|ktofuehr = ""
+.protection -reset artikel
+.protection -reset kreislauf
+.formula M|behaelterkonto    = ""
+.formula M|kpartner          = ""
+.formula M|kwerk             = ""
+.formula M|kwerkbez          = ""
+.continue BSTART
+..
+!DATE
+.continue BSTART
+..
+!BSTART
+.input "is/TABLEEREN"
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR1
+.error -field M|artikel -message Artikel ist kein Packmittel!
+.formula M|artikel = ""
+.end 1
+..
+!ERROR2
+.error -field M|artikel -message Packmittel ist keine Mehrwegverpackung!
+.formula M|artikel = ""
+.end 1

@@ -1,0 +1,99 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : RELRAL.EV
+.. Autor          : cl/fwester
+.. Verantwortlich : cl 
+.. Kontrolle      : tiwe
+.. Funktion       : Behandelt zentral die Feldaustrittsereignisse sowie der
+..                  Button-vor-Ereignisse auf den Feldern "bselect" und
+..                  "tbaumaufzu".
+.. Ablauf         : Zentrale Ereignisbehandlung
+..
+.. Functionality  : Handles all field exit events as well as the button before
+..                  events from the items "bselect" and "tbaumaufzu".
+.. Program flow   : Central event handling
+..*****************************************************************************
+.set trans -
+.. ---------------------- Kopf/header - ---------------------------------------
+.continue SEL       ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bselect"
+.continue DECIMAL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "auswaehr"
+.continue INITSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "von" ; G|evtvar = "bis"
+.continue INITSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "nurkunde"
+.continue INITSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "nurvertreter"
+.continue INITSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "nurbetreuer"
+.continue INITSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "vonbeleg" ; G|evtvar="bisbeleg"
+.continue INITSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "mitpos"
+.continue MITOPS    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "mitops"
+.continue BUTTGRP   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "aktive" ; G|evtvar = "ablage"
+.continue PROJEKT   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "kprojekt"
+.continue INITSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "kstlaart"
+.continue INITSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "kebeleg"
+.continue INITSEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "vorganga"
+.. ---------------------- Tabelle/table ---------------------------------------
+.continue KLAPP     ? G|evtartengl = "BUTTON_BEFORE" & G|evtvar="tbaumaufzu"
+.. ----------------------------------------------------------------------------
+.continue END
+.. ----------------------------------------------------------------------------
+..
+!PROJEKT
+.continue TABLEER ? F|empty(M|kprojekt)
+.copy M|mitpos = G|TRUE 
+.continue TABLEER
+..
+!DECIMAL: Decimal places of output currency
+.input "is/EVT.FIELD.OUTCURR"
+.continue INITSEL
+..
+!SEL: define selection with a selection bar
+.assign G|evtfeldneu = "%"
+.input "is/AUSWAHL"
+.copy M|selektion = (M|select <> "!")
+.continue END ? _M|selektion
+.. and clear header parameter
+.assign M|von = ""
+.assign M|bis = ""
+.assign M|vonbeleg = ""
+.assign M|bisbeleg = ""
+.assign M|nurkunde = ""
+.formula M|kebeleg = ""
+.copy M|ablage = G|FALSE
+.copy M|aktive = G|FALSE
+.continue NEW  ? F|defined(M|eingehend)
+.assign M|nurvertreter = ""
+.assign M|nurbetreuer  = ""
+.continue NEW
+..
+!MITOPS: Check access to open items
+.input "KDATNAME.KONST"
+.input "KAKTNAME.KONST"
+.continue ERROR01 ? _F|cmdpermitted(U|kodateinkauf, U|koaktzeigen, , 3)
+.continue INITSEL
+..
+!INITSEL: turn switch for selection bar off
+.copy M|selektion = G|FALSE
+.continue NEW
+..
+!KLAPP: show or hide positions of the invoice in this row
+.assign M|stufe = 2
+.continue END
+..
+!BUTTGRP: simulate a kind of button group for switches isaktive and isablage
+.copy M|ablage = G|TRUE ? (G|evtvar = "aktive" & _M|ablage)
+.copy M|aktive = G|TRUE ? (G|evtvar = "ablage" & _M|aktive)
+.continue INITSEL
+..
+!NEW: prepare new query
+.assign M|stufe = 1
+.input "ev/RELRAL.INIT.SUMMEN"
+.continue TABLEER
+..
+!TABLEER: clear table
+.make screen line -- ? M|tzeilen > 0
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR01
+.copy M|mitops = G|FALSE
+.error -message Zugriff auf offene Posten nicht erlaubt.
+.end 1

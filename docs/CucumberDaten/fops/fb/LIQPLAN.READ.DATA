@@ -1,0 +1,90 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : LIQPLAN.READ.DATA
+.. Autor          : male
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Funktion       : Gruppiert die Daten und baut die Maskentabelle auf
+.. Functionality  : Grouping of data and generation of screen table rows
+.. include fb/LIQPLAN.CALCULATE
+.. include fb/LIQPLAN.SET.COLORS
+.. include fb/LIQPLAN.ROW.FIND
+.. include fb/LIQPLAN.SCHEMA.INIT
+..*****************************************************************************
+..
+.set trans -
+..
+.input "fb/LIQPLAN.SCHEMA.INIT"
+..
+.continue ADDPER1 ? F|filesize(U|xtout) = 0
+..
+.type text xtoutgrp xtoutgrperr
+.type integer xiexitcode
+.formula U|xtoutgrp = U|xtout + ".GRP"
+.formula U|xtoutgrperr = U|xtout + ".ERR"
+.system 'F|expr("group_by.sh -n 18 -k 1 -k 2      -k 4 -k 5 -s 6 " + U|xtout + " > " + U|xtoutgrp + " 2> " + U|xtoutgrperr)' background ?  M|icgetrennt
+.system 'F|expr("group_by.sh -n 18 -k 1           -k 4 -k 5 -s 6 " + U|xtout + " > " + U|xtoutgrp + " 2> " + U|xtoutgrperr)' background ? _M|icgetrennt
+.formula U|xiexitcode = G|status
+.continue LOOP ? U|xiexitcode = 0 & F|filesize(U|xtoutgrperr) = 0
+.input -text 'U|xtoutgrperr'
+.end 'U|xiexitcode'
+..
+..*****************************************************************************
+!LOOP
+..*****************************************************************************
+.select from 'U|xtoutgrp' U|xttype # U|xbintercompany # U|xcategory # U|xepurchsales # U|xiperiod # U|xrvalue #
+.continue ADDPER1 ? _G|mehr
+.continue LOOP    ?  U|xiperiod < 0
+.. special case
+.formula   U|xepurchsales = "" ? U|xttype = "(AmountOfVATPayableFromOutstandingItems)"
+.input "fb/LIQPLAN.ROW.FIND"
+..*****************************************************************************
+!RFOUND: Row found
+..*****************************************************************************
+.. the purchasing values have to be multiplied by -1
+.copy U|xrvalue = -U|xrvalue ? U|xepurchsales = "(Purchasing)"
+.formula   M|twert.U|xiperiod = M|twert.U|xiperiod + U|xrvalue
+.continue LOOP
+..
+.. special case: add period 0 to period 1 ( "period 1 + overdue" )
+..*****************************************************************************
+!ADDPER1: Add values from period 0 to period 1
+..*****************************************************************************
+.select screen header
+..*****************************************************************************
+!LOOP2
+..*****************************************************************************
+.select screen line
+.continue CALC ? _G|mehr
+.continue LOOP2 ? _M|tdetail
+.formula M|twert1 = M|twert1 + M|twert0
+.continue LOOP2
+..
+..*****************************************************************************
+!CALC: Set calculated values
+..*****************************************************************************
+.input "fb/LIQPLAN.CALCULATE"
+.continue OPENALL ? U|xbevalcategories & M|startoeffnekat
+.continue COLORS
+..
+..*****************************************************************************
+!OPENALL
+..*****************************************************************************
+.formula U|xitreelevel = 1
+.select screen header
+!OLOOP
+.select screen line
+.continue COLORS ? _G|mehr
+.input "fb/LIQPLAN.OPEN.NODE" ? M|tbaumstat = "+"
+.continue OLOOP
+..
+..*****************************************************************************
+!COLORS
+..*****************************************************************************
+.input "fb/LIQPLAN.SET.COLORS"
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

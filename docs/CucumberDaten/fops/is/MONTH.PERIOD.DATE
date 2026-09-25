@@ -1,0 +1,93 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : MONTH.PERIOD.DATE
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      : 
+.. Funktion       : Liefert das kontraere Datum einer Monatsdauer zum Basisdatum.
+.. Functionality  : Returns contrarian date of a month period using the base date.
+..	
+.. The contrarian day can differ from the base day. This is due to the fact,
+.. that some month like February does not match days like 30. or 31. In this
+.. cases the day move forward to the next valid day.
+..
+.. IN:
+.. xbasedate  - Use this date to define the month period
+..              or today if no base date is specified.
+.. xdiffmonth - Use this value as month period or -3 (last three months) as
+..              default.
+.. OUT:
+.. xpdate     - Contrarian date of the needed month period.
+..*****************************************************************************
+.set trans -
+..
+.. Declarations:
+..
+.. Input
+.type GD   xbasedate  ? _F|defined(U|xbasedate)
+.type integer  xdiffmonth ? _F|defined(U|xdiffmonth)
+..
+.. Output
+.type GD   xpdate ? _F|defined(U|xpdate)
+..
+.. Others
+.type text xptmp   ? _F|defined(U|xptmp)
+.type integer  xpday   ? _F|defined(U|xpday)
+.type integer  xpmonth ? _F|defined(U|xpmonth)
+.type integer  xpyear  ? _F|defined(U|xpyear)
+..
+.type integer  xdday    ? _F|defined(U|xdday)
+.type integer  xddmonth ? _F|defined(U|xddmonth)
+.type integer  xddyear  ? _F|defined(U|xddyear)
+..
+.. Initialize
+.assign U|xpdate = ""
+.assign U|xptmp = ""
+..
+.continue DEVIDE ? _F|empty(U|xbasedate)
+.assign U|xbasedate = 'G|datum:8'
+..
+!DEVIDE: Devide base date
+.copy U|xpday = F|day(U|xbasedate)
+.copy U|xpmonth = F|month(U|xbasedate)
+.copy U|xpyear = F|year(U|xbasedate)
+..
+.. Define differences for year, month and day
+.copy U|xddmonth = U|xdiffmonth
+.copy U|xddmonth = -3 ? F|empty(U|xddmonth)
+.formula U|xddyear = F|trunc(U|xddmonth / 12)
+.copy U|xddmonth = U|xddmonth // 12
+.copy U|xdday = 0
+..
+.. Do we have an turn of year due to the addition of months?
+.continue ADDYEAR ? (U|xpmonth + U|xddmonth) > 12
+.continue REDYEAR ? (U|xpmonth + U|xddmonth) <= 0
+.copy U|xpyear = U|xpyear + U|xddyear
+.copy U|xpmonth = U|xpmonth + U|xddmonth
+..
+!ADDDAYS
+.formula U|xpday = F|day(U|xbasedate) + U|xdday
+..
+!BUILD
+.formula U|xptmp = 'U|xpyear'
+.formula U|xptmp = U|xptmp + F|condexpr(F|length(U|xpmonth) = 1, F|expr("0" + 'U|xpmonth'), 'U|xpmonth')
+.formula U|xptmp = U|xptmp + F|condexpr(F|length(U|xpday) = 1, F|expr("0" + 'U|xpday'), 'U|xpday')
+.assign U|xpdate = U|xptmp
+.continue END ? G|mehr
+..
+.. Reduce difference of days
+.formula U|xdday = U|xdday - 1
+.continue ADDDAYS
+..
+!ADDYEAR
+.formula U|xpyear = U|xpyear + U|xddyear + 1
+.formula U|xpmonth = (U|xpmonth + U|xddmonth) - 12
+.continue ADDDAYS
+..
+!REDYEAR
+.formula U|xpyear = U|xpyear + U|xddyear - 1
+.formula U|xpmonth = 12 + (U|xpmonth + U|xddmonth)
+.continue ADDDAYS
+..*****************************************************************************
+!END
+.continue

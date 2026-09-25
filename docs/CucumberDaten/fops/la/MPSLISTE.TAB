@@ -1,0 +1,341 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : MPSLISTE.TAB
+.. Autor          : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Funktion       :
+..
+.. Program flow   :
+...Includes       :
+.. include la/MPSLISTE.PLAN
+..*****************************************************************************
+.set trans -
+.type VPKS22  xtart       ? _F|defined(U|xtart)
+.type ID121   xid         ? _F|defined(U|xid)
+.type R6.2    xmgeproz    ? _F|defined(U|xmgeproz)
+.type ID39    xlgruppe    ? _F|defined(U|xlgruppe)
+.type M9.3    xtgesamtabs ? _F|defined(U|xtgesamtabs)
+.type integer xi          ? _F|defined(U|xi)
+.type integer xgelbp      ? _F|defined(U|xgelbp)
+.type integer xgelbn      ? _F|defined(U|xgelbn)
+.type integer xrotp       ? _F|defined(U|xrotp)
+.type integer xrotn       ? _F|defined(U|xrotn)
+.type integer xgruenp     ? _F|defined(U|xgruenp)
+.type integer xgruenn     ? _F|defined(U|xgruenn)
+.type integer xnull       ? _F|defined(U|xnull)
+.type R6.2    xsist       ? _F|defined(U|xsist)
+.type R6.2    xsplan      ? _F|defined(U|xsplan)
+.type integer xigerade    ? _F|defined(U|xigerade)
+.type ARTR51200 xmabw     ? _F|defined(U|xmabw)
+.type ARTR51200 xmplan    ? _F|defined(U|xmplan)
+.type ARTR51200 xmist     ? _F|defined(U|xmist)
+.type R7.4    xplanpreis  ? _F|defined(U|xplanpreis)
+.type GD      xvondat     ? _F|defined(U|xvondat)
+.type GD      xbisdat     ? _F|defined(U|xbisdat)
+.type real    xfaktor     ? _F|defined(U|xfaktor)
+.type integer xigestage   ? _F|defined(U|xigestage)
+.type integer xiteiltage  ? _F|defined(U|xiteiltage)
+.type integer ximaxpos    ? _F|defined(U|ximaxpos)
+..
+.formula U|xmplan   = 0
+..
+.. Keine Artikel ausgewaehlt
+.continue SEL2ROLL ? F|empty(M|kartvon) & F|empty(M|kartbis)
+..
+.select parts 'U|xselect'
+.continue END  ? _G|mehr
+.continue SELROLL
+..
+!HOLE
+.select parts
+.continue END  ? _G|mehr
+.continue SELROLL
+..
+!SELROLL
+.formula M|select = "$,,artikel=" + 'H|id'
+.formula M|select = M|select + ";lgruppe=" + 'M|klgruppe^id' ? _F|empty(M|klgruppe)
+.formula M|select = M|select + ";lgruppe<>`"                 ?  F|empty(M|klgruppe)
+.formula M|select = M|select + ";aktiv=1"
+.formula M|select = M|select + ";@ablageart=(Active)"
+.formula M|select = M|select + ";@ordnung=rollplanung,artikel,lgruppe"
+.formula M|select = M|select + ";@gruppe=4"
+.continue LADEABSATZ
+..
+!SEL2ROLL
+.. Keine Artikel ausgewaehlt -> alle aktiven Bedarfsplanungseinheiten selektieren
+.formula M|select = "$,,aktiv=1"
+.formula M|select = M|select + ";lgruppe=" + 'M|klgruppe^id' ? _F|empty(M|klgruppe)
+.formula M|select = M|select + ";lgruppe<>`"                 ?  F|empty(M|klgruppe)
+.formula M|select = M|select + ";@ablageart=(Active)"
+.formula M|select = M|select + ";@ordnung=rollplanung,artikel^nummer,lgruppe"
+.formula M|select = M|select + ";@gruppe=4"
+..
+!LADEABSATZ
+.load 0 salesplanning 'M|select'
+.continue PRUEFBPLAN
+..
+!LADEPLAN
+.load 0 salesplanning
+..
+!PRUEFBPLAN
+.continue END     ? _G|mehr & F|empty(M|kartvon) & F|empty(M|kartbis)
+.continue HOLE    ? _G|mehr
+..
+!GETTYP: Typspezifische Felder initialisieren
+.formula M|select = "$,,eplan=" + '0|id'
+..
+.. Rollierender Plan 'R'
+.formula M|select = M|select + ";typ=(82)"
+.formula M|select = M|select + ";archiv=nein"
+.formula M|select = M|select + ";@ablageart=(Active)"
+.formula M|select = M|select + ";@ordnung=abschn"
+.formula M|select = M|select + ";@gruppe=2"
+..
+!KOPF
+.load 2 valuesequence 'M|select'
+.set trans +
+?Keine Daten vorhanden       ? _G|mehr
+.set trans -
+.continue ZENDE                ? _G|mehr
+..
+.assign  U|xid        = 2|id
+.formula U|xtart      = 2|artber^id
+.assign  U|xlgruppe   = 2|lgruppe
+.formula U|xplanpreis = 2|plpreis
+..
+!NEUZEILE: new line
+.make screen line +O
+.formula U|xigerade    = M|aktzeile // 2
+.colour -background 'M|farbe1' 'M|aktzeile' ? U|xigerade = 0
+.colour -background 'M|farbe2' 'M|aktzeile' ? U|xigerade <> 0
+.formula U|xsist       = 0
+.formula U|xsplan      = 0
+.formula U|xi          = 0
+.formula U|xgelbp      = 0
+.formula U|xgelbn      = 0
+.formula U|xrotp       = 0
+.formula U|xrotn       = 0
+.formula U|xgruenp     = 0
+.formula U|xgruenn     = 0
+.formula U|xmgeproz    = 0
+.formula U|xtgesamtabs = 0
+.formula U|xnull       = 0
+.assign  M|tart        = U|xtart
+.assign  M|tlgruppe    = U|xlgruppe
+.formula M|wertereihe  = U|xid
+.assign  M|waehr       = 2|waehr
+.assign  M|lebe        = 2|be
+.assign  M|le          = 2|le
+.formula M|tadatum     = 2|anfdat
+.formula M|tedatum     = 2|enddat
+.formula M|text        = ""
+..
+!ZEILEN: Wertereihezeilen
+.load 2 line
+.continue WERTEREIHE ? _G|mehr
+.. Wertereihe liegt vor oder nach dem Betrachtungszeitraums
+.continue VORHER     ? _F|empty(M|kvon) & M|kvon > 2|bisdat
+.continue VSPLIT     ? _F|empty(M|kvon) & M|kvon > 2|vondat & M|kvon < 2|bisdat
+.continue NACHHER    ? _F|empty(M|kbis) & M|kbis < 2|vondat
+.continue NSPLIT     ? _F|empty(M|kvon) & M|kbis > 2|vondat & M|kbis < 2|bisdat
+.formula U|xi = U|xi + 1
+.formula U|ximaxpos = U|xi
+..
+.set trans +
+.formula M|text = "Und Weitere ..."  ? U|xi > 60
+.set trans -
+.continue ZEILEN                      ? U|xi > 60
+..
+!STANDARD
+.formula U|xmplan          = 2|mge
+.formula U|xsplan          = U|xsplan + 2|mge
+.formula M|tljmge.U|xi     = 2|istmge
+.formula M|treservmge.U|xi = 0.0
+.formula M|tofplanmge.U|xi = 2|mgeabweich
+.formula M|mist.U|xi       = M|tljmge.U|xi
+.formula U|xvondat         = 2|vondat
+.formula U|xbisdat         = 2|bisdat
+.formula M|tzeitraum.U|xi  = 'U|xvondat' + "-" + 'U|xbisdat'
+.formula M|tplan.U|xi      = 2|wert
+.formula M|mplan.U|xi      = U|xmplan
+.formula M|tedatum         = 2|bisdat
+.continue ZEILEN
+..
+!VORHER: Vor dem Anzeigezeitraum
+.formula U|xmplan          = 2|mge
+.formula M|tljmgevor       = M|tljmgevor + 2|istmge
+.formula M|treservmgevor   = 0.0
+.formula M|tofplanmgevor   = M|tofplanmgevor + 2|mgeabweich
+.formula M|mistvor         = M|tljmgevor
+.formula U|xvondat         = 2|vondat ? F|empty(U|xvondat)
+.formula U|xbisdat         = 2|bisdat
+.formula M|tzeitraumvor    = 'U|xvondat' + "-" + 'U|xbisdat'
+.formula M|tplanvor        = M|tplanvor + 2|wert
+.formula M|mplanvor        = M|mplanvor + U|xmplan
+.formula M|tedatum         = 2|bisdat
+..
+.continue ZEILEN
+..
+!NACHHER: Nach dem Anzeigezeitraum
+.formula U|xmplan          = 2|mge
+.formula M|tljmgenach      = M|tljmgenach + 2|istmge
+.formula M|treservmgenach  = 0.0
+.formula M|tofplanmgenach  = M|tofplanmgenach +2|mgeabweich
+.formula M|mistnach        = M|tljmgenach
+.formula U|xvondat         = 2|vondat ? F|empty(U|xvondat)
+.formula U|xbisdat         = 2|bisdat
+.formula M|tzeitraumnach   = 'U|xvondat' + "-" + 'U|xbisdat'
+.formula M|tplannach       = M|tplannach + 2|wert
+.formula M|mplannach       = M|mplannach + U|xmplan
+.formula M|tedatum         = 2|bisdat
+..
+.continue ZEILEN
+..
+!VSPLIT: Vor dem Anzeigezeitraum
+.formula U|xigestage       = F|numworkdays("", M|klgruppe, 2|vondat, 2|bisdat)
+.formula U|xiteiltage      = F|numworkdays("", M|klgruppe, 2|vondat, M|kvon -1)
+.formula U|xfaktor         = 0.0
+.formula U|xfaktor         = U|xiteiltage/U|xigestage ? U|xigestage > 0
+.formula U|xi = 1
+.formula U|ximaxpos = U|xi
+.continue VORHER   ? U|xfaktor = 1.0
+.continue STANDARD ? U|xfaktor = 0.0
+..
+.formula U|xmplan          = 2|mge * U|xfaktor
+.formula M|tljmgevor       = M|tljmgevor + 2|istmge * U|xfaktor
+.formula M|treservmgevor   = 0.0
+.formula M|tofplanmgevor   = M|tofplanmgevor + 2|mgeabweich * U|xfaktor
+.formula M|mistvor         = M|tljmgevor * U|xfaktor
+.formula U|xvondat         = 2|vondat ? F|empty(U|xvondat)
+.formula U|xbisdat         = M|kvon - 1
+.formula M|tzeitraumvor    = 'U|xvondat' + "-" + 'U|xbisdat'
+.formula M|tplanvor        = M|tplanvor + 2|wert * U|xfaktor
+.formula M|mplanvor        = M|mplanvor + U|xmplan
+..
+.formula U|xfaktor         = 1 - U|xfaktor
+.formula U|xmplan          = 2|mge * U|xfaktor
+.formula U|xsplan          = U|xsplan + 2|mge * U|xfaktor
+.formula M|tljmge.U|xi     = 2|istmge * U|xfaktor
+.formula M|treservmge.U|xi = 0.0
+.formula M|tofplanmge.U|xi = 2|mgeabweich * U|xfaktor
+.formula M|mist.U|xi       = M|tljmge.U|xi * U|xfaktor
+.formula U|xvondat         = M|kvon
+.formula U|xbisdat         = 2|bisdat
+.formula M|tzeitraum.U|xi  = 'U|xvondat' + "-" + 'U|xbisdat'
+.formula M|tplan.U|xi      = 2|wert * U|xfaktor
+.formula M|mplan.U|xi      = U|xmplan
+.formula M|tedatum         = 2|bisdat
+.continue ZEILEN
+..
+!NSPLIT: Teilweise nach dem Anzeigezeitraum
+.formula U|xigestage       = F|numworkdays("", M|klgruppe, 2|vondat, 2|bisdat)
+.formula U|xiteiltage      = F|numworkdays("", M|klgruppe, 2|vondat, M|kbis)
+.formula U|xfaktor         = 0.0
+.formula U|xfaktor         = U|xiteiltage/U|xigestage ? U|xigestage > 0
+.formula U|xi = U|xi + 1
+.formula U|ximaxpos = U|xi
+.continue NACHHER  ? U|xfaktor = 0.0
+.continue STANDARD ? U|xfaktor = 1.0
+..
+.formula U|xmplan          = 2|mge * U|xfaktor
+.formula U|xsplan          = U|xsplan + 2|mge * U|xfaktor
+.formula M|tljmge.U|xi     = 2|istmge * U|xfaktor
+.formula M|treservmge.U|xi = 0.0
+.formula M|tofplanmge.U|xi = 2|mgeabweich * U|xfaktor
+.formula M|mist.U|xi       = M|tljmge.U|xi * U|xfaktor
+.formula U|xvondat         = 2|vondat
+.formula U|xbisdat         = M|kbis
+.formula M|tzeitraum.U|xi  = 'U|xvondat' + "-" + 'U|xbisdat'
+.formula M|tplan.U|xi      = 2|wert * U|xfaktor
+.formula M|mplan.U|xi      = U|xmplan
+..
+.formula U|xfaktor         = 1 - U|xfaktor
+.formula U|xmplan          = 2|mge * U|xfaktor
+.formula M|tljmgenach      = M|tljmgenach + 2|istmge * U|xfaktor
+.formula M|treservmgenach  = 0.0
+.formula M|tofplanmgenach  = M|tofplanmgenach + 2|mgeabweich * U|xfaktor
+.formula M|mistnach        = M|tljmgenach * U|xfaktor
+.formula U|xvondat         = M|kbis + 1
+.formula U|xbisdat         = 2|bisdat
+.formula M|tzeitraumnach   = 'U|xvondat' + "-" + 'U|xbisdat'
+.formula M|tplannach       = M|tplannach + 2|wert * U|xfaktor
+.formula M|mplannach       = M|mplannach + U|xmplan
+.formula M|tedatum         = 2|bisdat
+.continue ZEILEN
+..
+!WERTEREIHE
+.load 2 valuesequence
+.continue ZENDE       ? _G|mehr
+..
+.formula U|xplanpreis = 2|plpreis
+.continue ZEILEN
+..
+!ZENDE
+.continue LADEPLAN                                      ? M|tzeilen = 0
+..
+.reserve
+.input "la/MPSLISTE.PLAN"
+.select
+..
+.. Anzahl der grÅnen, gelben und roten ZeitrÑume
+.formula M|tgzeitraumpos  = U|xgelbp
+.formula M|tgzeitraumneg  = U|xgelbn
+.formula M|trzeitraumneg  = U|xrotn
+.formula M|trzeitraumpos  = U|xrotp
+.formula M|tgrzeitraumpos = U|xgruenp
+.formula M|tgrzeitraumneg = U|xgruenn
+.formula M|tzeitraumnull  = U|xnull
+.formula M|tgesamtproz    = 0
+.formula M|tgesamtproz    = (U|xsist*100/U|xsplan)-100 ? U|xsplan <> 0
+.formula M|tgesamtabs     = U|xtgesamtabs
+.formula M|gesplanmge     = U|xsplan
+.formula M|gesistmge      = U|xsist
+.formula M|tngesamtflagz  = ""            ? M|tgesamtproz = 0
+.formula M|tpgesamtflagz  = ""            ? M|tgesamtproz = 0
+.continue GESNEG                           ? M|tgesamtproz < 0
+.continue GESPOS                           ? M|tgesamtproz > 0
+..
+!GESNEG
+.formula M|tngesamtflagz  = G|icoerror    ? M|tgesamtproz < (M|kgesneggelb * (-1))
+.formula M|tngesamtflagz  = G|icowarn     ? M|tgesamtproz < (M|kgesneggruen * (-1)) & M|tgesamtproz >= (M|kgesneggelb * (-1))
+.formula M|tngesamtflagz  = G|icook       ? M|tgesamtproz >= (M|kgesneggruen * (-1))
+.continue SUMMEN
+..
+!GESPOS
+.formula M|tpgesamtflagz  = G|icoerror    ? M|tgesamtproz > M|kgesposgelb
+.formula M|tpgesamtflagz  = G|icowarn     ? M|tgesamtproz > M|kgesposgruen & M|tgesamtproz <= M|kgesposgelb
+.formula M|tpgesamtflagz  = G|icook       ? M|tgesamtproz <= M|kgesposgruen
+.continue SUMMEN
+..
+!SUMMEN
+.formula U|xi       = 1
+.formula U|ximaxpos = U|ximaxpos + 1
+..
+.formula M|tljmgesum     = M|tljmgevor     + M|tljmgenach
+.formula M|treservmgesum = M|treservmgevor + M|treservmgenach
+.formula M|tofplanmgesum = M|tofplanmgevor + M|tofplanmgenach
+.formula M|mistsum       = M|mistvor       + M|mistnach
+.formula M|tplansum      = M|tplanvor      + M|tplannach
+.formula M|mplansum      = M|mplanvor      + M|mplannach
+.formula M|tgesbedarfsum = M|tgesbedarfvor + M|tgesbedarfnach
+.formula M|tistsum       = M|tistvor       + M|tistnach
+.formula M|mabwsum       = M|mabwvor       + M|mabwnach
+!NZ
+.formula M|tljmgesum     = M|tljmgesum     + M|tljmge.U|xi
+.formula M|treservmgesum = M|treservmgesum + M|treservmge.U|xi
+.formula M|tofplanmgesum = M|tofplanmgesum + M|tofplanmge.U|xi
+.formula M|mistsum       = M|mistsum       + M|mist.U|xi
+.formula M|tplansum      = M|tplansum      + M|tplan.U|xi
+.formula M|mplansum      = M|mplansum      + M|mplan.U|xi
+.formula M|tgesbedarfsum = M|tgesbedarfsum + M|tgesbedarf.U|xi
+.formula M|tistsum       = M|tistsum       + M|tist.U|xi
+.formula M|mabwsum       = M|mabwsum       + M|mabw.U|xi
+.formula M|mabwprozsum   = (M|mistsum*100/M|mplansum)-100 ? M|mplansum <> 0
+.formula U|xi = U|xi + 1
+.continue NZ ? U|xi < U|ximaxpos
+.continue LADEPLAN
+..*****************************************************************************
+!END
+.error Keine passende Planungseinheit gefunden ? M|tzeilen=0
+.end 1                                         ? M|tzeilen=0

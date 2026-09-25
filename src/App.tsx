@@ -12,48 +12,60 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import logoUrl from './assets/logo.png';
 import JSZip from 'jszip';
-import type { FeatureInput, TableDef, ParsedFeaturePackage } from './types/gherkin';
+import type { FeatureInput, TableDef, ParsedFeaturePackage, Scenario } from './types/gherkin';
 import type { TocInfo } from './components/DocxImport/DocxImport';
-import type { Agent, AgentMessage, AgentContext } from './types/agent';
+import type { Agent, AgentContext } from './types/agent';
+import type { LearningEntry } from './types/learning';
 import { useGherkinGenerator } from './hooks/useGherkinGenerator';
 import { generateGherkin } from './lib/generator';
 import { useAiGeneration } from './hooks/useAiGeneration';
 import { useAiRating } from './hooks/useAiRating';
 import type { AiPromptRating } from './lib/aiPrompt';
 import { useUndoRedo } from './hooks/useUndoRedo';
-import { getModel, saveFeatures, getCustomSystemPrompt, getExperimentalFeatures, saveFopBindings, loadFopBindings, saveIsBindings, loadIsBindings, getForceKiTableId } from './lib/settings';
-import { DEFAULT_SYSTEM_PROMPT, DEFAULT_SYSTEM_PROMPT_EN, formatSingleTableContext } from './lib/aiPrompt';
+import { getModel, saveFeatures, getExperimentalFeatures, isDevMode, isAiEnabled, saveFopBindings, loadFopBindings, saveIsBindings, loadIsBindings, getForceKiTableId, getLearningCrosscheckMode, importAppSettingsJson, getTaskModel, getStoredAgentId } from './lib/settings';
+import { formatSingleTableContext } from './lib/aiPrompt';
 import { useAgentActivity, loadConversationsFromDir, saveConversationsToDir } from './hooks/useAgentActivity';
 import { useFopAnalysis } from './hooks/useFopAnalysis';
 import AgentStatusBar from './components/AgentStatusBar';
-import AgentActivityModal from './components/AgentActivityModal';
-import ProcessDiagram from './components/ProcessDiagram/ProcessDiagram';
-import { useProcessFlow, CUCUMBER_STEPS, FOP_STEPS } from './hooks/useProcessFlow';
-import { UploadPanel, FopTree, AnalysisPanel } from './components/ReverseEngineering';
+import { WorkflowSidePanel } from './components/WorkflowTimeline/WorkflowSidePanel';
+import { WorkflowDiagram } from './components/WorkflowTimeline/WorkflowDiagram';
+import { useProcessFlow } from './hooks/useProcessFlow';
+import { FopTree, AnalysisPanel } from './components/ReverseEngineering';
 import { DataStatusBar } from './components/DataStatusBar/DataStatusBar';
 import { StammdatenView } from './components/StammdatenView/StammdatenView';
-import { isLoggedIn, hasAuthCallback, handleAuthCallback, initiateLogin, getStoredClientId, getStoredApplicationId, getStoredClientSecret, getStoredTenantId, createMftAgent, updateMftAgent, deleteMftAgent, discoverMftAgents, chatWithAgent } from './lib/myforterroApi';
-import { loadTableDefs, saveTableDefs, migrateTableDefsFromLocalStorage } from './lib/csvTableParser';
+import { isLoggedIn, hasAuthCallback, handleAuthCallback, initiateLogin, getStoredClientId, getStoredApplicationId, getStoredClientSecret, getStoredTenantId, chatWithAgentSync } from './lib/myforterroApi';
+import { loadTableDefs, saveTableDefs, migrateTableDefsFromLocalStorage, loadTableDefsFromWorkspace, saveTableDefsToWorkspace, loadFopBindingsFromWorkspace, saveFopBindingsToWorkspace, loadIsBindingsFromWorkspace, saveIsBindingsToWorkspace, saveKBToWorkspace, loadKBFromWorkspace } from './lib/csvTableParser';
 import { featureHasStepErrors, scenarioHasErrors } from './lib/featureValidation';
-import { loadAgents, saveAgent, deleteAgent as deleteAgentFromDb } from './lib/agentStore';
+import { loadAgents, saveAgent } from './lib/agentStore';
 import { parseGherkin } from './lib/gherkinParser';
+import { buildFeatureEditMessage, extractEditedFeatureGherkin } from './lib/featureEditPrompt';
+import { checkDailyLimitExceededFromHistory, syncServerConsumption, syncTenantLimit } from './lib/tokenHistory';
+import { getPhaseLabel } from './lib/workflowLabels';
 import { useTranslation } from './i18n';
 import { FeatureForm } from './components/FeatureForm/FeatureForm';
 import { GherkinPreview } from './components/GherkinPreview/GherkinPreview';
 import { ActionBar } from './components/ActionBar/ActionBar';
 import { SettingsPanel } from './components/SettingsPanel/SettingsPanel';
-import { HelpGuide } from './components/HelpGuide/HelpGuide';
-import { TokenHistory } from './components/TokenHistory/TokenHistory';
 import { DocxImport } from './components/DocxImport/DocxImport';
+import { DataImportTab } from './components/DataImport/DataImportTab';
 import { FlowDiagram } from './components/FlowDiagram/FlowDiagram';
 import { StepToolbox } from './components/StepToolbox/StepToolbox';
 import { FileExplorer } from './components/FileExplorer/FileExplorer';
-import { AgentPanel } from './components/AgentPanel/AgentPanel';
 import { ConfirmDialog } from './components/ConfirmDialog/ConfirmDialog';
+import { WorkspaceSwitchModal, type WorkspaceSwitchPayload } from './components/WorkspaceSwitchModal/WorkspaceSwitchModal';
 import { useFileExplorer } from './hooks/useFileExplorer';
 import { collectExistingGuids, makeFeatureGuid } from './lib/featureGuid';
-import { sanitizeName } from './lib/fileSystemAccess';
+import {
+  sanitizeName,
+  loadSharedSettingsDirectoryHandle,
+  saveSharedSettingsDirectoryHandle,
+  pickDirectory,
+  verifyPermission,
+} from './lib/fileSystemAccess';
+import { buildLearningPromptHints, loadSharedLearnings, loadSharedSettingsJson, saveSharedSettingsJson, loadWorkspaceLearnings } from './lib/learningStore';
 import styles from './App.module.css';
+
+const ENTRY_GATE_DONE_SESSION_KEY = 'cucumbergnerator_entry_gate_done';
 
 const INITIAL_FEATURE: FeatureInput = {
   name: '',
@@ -65,34 +77,126 @@ const INITIAL_FEATURE: FeatureInput = {
 };
 
 export default function App() {
-  const { t, lang, setLang } = useTranslation();
-  const experimentalFeatures = getExperimentalFeatures();
-  const [view, setView] = useState<'editor' | 'docx' | 'stammdaten' | 'reverse'>('editor');
+  const { t, lang } = useTranslation();
+  const currentLang = lang as 'de' | 'en';
+  const devMode = isDevMode();
+  // AI mode gate (?ai=true). When OFF the app is a pure Baukasten:
+  // no login, no settings, no agent UI — every loggedIn-gated AI feature
+  // falls away because we force loggedIn=false below.
+  const aiEnabled = isAiEnabled();
+  // Experimental features (Reverse Engineering tab, FOP agents) require BOTH
+  // the dev=true URL gate AND the explicit user toggle in settings.
+  // Also requires AI mode — Reverse Engineering depends on FOP agents.
+  const experimentalFeatures = aiEnabled && devMode && getExperimentalFeatures();
+  const [view, setView] = useState<'editor' | 'docx' | 'dataimport' | 'stammdaten' | 'reverse'>('editor');
+  const [stammdatenInitialTab, setStammdatenInitialTab] = useState<'variablen' | 'learning'>('variablen');
   const [appLoading, setAppLoading] = useState(true);
+  const [sharedSettingsReady, setSharedSettingsReady] = useState(false);
+  const [sharedSettingsChecking, setSharedSettingsChecking] = useState(true);
+  const [sharedSettingsError, setSharedSettingsError] = useState<string | null>(null);
+  const [entryGateDone, setEntryGateDone] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      return sessionStorage.getItem(ENTRY_GATE_DONE_SESSION_KEY) === 'true';
+    } catch {
+      return true;
+    }
+  });
 
   // Core state — declared first so downstream hooks can reference
   const initialFeatures = [INITIAL_FEATURE];
   const { value: features, set: setFeatures, undo, redo, canUndo, canRedo } = useUndoRedo(initialFeatures);
   const [activeFeatureIdx, setActiveFeatureIdx] = useState(0);
+  const [templateDraft, setTemplateDraft] = useState<FeatureInput | null>(null);
+  const [templateDraftInitial, setTemplateDraftInitial] = useState<FeatureInput | null>(null);
+  const [templateEditingName, setTemplateEditingName] = useState<string | null>(null);
+  const [templateEditingId, setTemplateEditingId] = useState<string | null>(null);
+  const [templateSaveTick, setTemplateSaveTick] = useState(0);
   const [tableDefs, setTableDefs] = useState<TableDef[]>([]);
   const [fopBindings, setFopBindings] = useState<import('./types/fop').FopBinding[]>(
     () => loadFopBindings() as import('./types/fop').FopBinding[],
   );
 
-  // Persist FOP bindings whenever they change
+  // Persist FOP bindings to localStorage (workspace saving is handled after fileExplorer init)
   useEffect(() => { saveFopBindings(fopBindings); }, [fopBindings]);
 
-  const [isBindings, setIsBindings] = useState<import('./lib/fopTxtParser').IsBinding[]>(
-    () => loadIsBindings() as import('./lib/fopTxtParser').IsBinding[],
+  const [isBindings, setIsBindings] = useState<import('./lib/isBindingsParser').IsBinding[]>(
+    () => loadIsBindings() as import('./lib/isBindingsParser').IsBinding[],
   );
-  // Persist IS bindings whenever they change
+  // Persist IS bindings to localStorage (workspace saving is handled after fileExplorer init)
   useEffect(() => { saveIsBindings(isBindings); }, [isBindings]);
 
   // Knowledge Base documents
   const [kbDocuments, setKbDocuments] = useState<import('./types/knowledgeBase').KBDocument[]>([]);
+  const [pendingWorkspaceImport, setPendingWorkspaceImport] = useState<WorkspaceSwitchPayload | null>(null);
+  const [workspaceLearnings, setWorkspaceLearnings] = useState<LearningEntry[]>([]);
+  const [sharedLearnings, setSharedLearnings] = useState<LearningEntry[]>([]);
+  const [workspaceLearningHints, setWorkspaceLearningHints] = useState('');
+  const [workspaceConceptLearningHints, setWorkspaceConceptLearningHints] = useState('');
+  const [sharedSettingsRevision, setSharedSettingsRevision] = useState(0);
 
-  const [loggedIn, setLoggedIn] = useState(() => isLoggedIn());
+  // Global app gate: a shared settings folder is mandatory for all modes.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const handle = await loadSharedSettingsDirectoryHandle();
+        if (!handle) {
+          if (!cancelled) setSharedSettingsReady(false);
+          return;
+        }
+        const hasPermission = await verifyPermission(handle);
+        if (!cancelled) setSharedSettingsReady(hasPermission);
+      } catch {
+        if (!cancelled) setSharedSettingsReady(false);
+      } finally {
+        if (!cancelled) setSharedSettingsChecking(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const handleChooseSharedSettingsFolderAtStartup = useCallback(async () => {
+    setSharedSettingsError(null);
+    try {
+      const handle = await pickDirectory();
+      const hasPermission = await verifyPermission(handle);
+      if (!hasPermission) return;
+      await saveSharedSettingsDirectoryHandle(handle);
+
+      const existingJson = await loadSharedSettingsJson();
+      if (existingJson && existingJson.trim()) {
+        const imported = importAppSettingsJson(existingJson);
+        setModel(imported.model ?? '');
+      } else {
+        try {
+          const presetRes = await fetch('/presets/recommended-settings.json', { cache: 'no-store' });
+          if (presetRes.ok) {
+            const presetJson = await presetRes.text();
+            const imported = importAppSettingsJson(presetJson);
+            setModel(imported.model ?? '');
+          }
+        } catch {
+          // Ignore preset loading failures and proceed with current in-memory defaults.
+        }
+        await saveSharedSettingsJson();
+      }
+
+      setSharedSettingsReady(true);
+      setSharedSettingsRevision((v) => v + 1);
+    } catch (err) {
+      if ((err as Error).name !== 'AbortError') {
+        setSharedSettingsError((err as Error).message || t('settings.sharedChooseFolderError'));
+      }
+    }
+  }, [t]);
+
+  // Force loggedIn=false when AI mode is off — this single line cascades
+  // through every `loggedIn`-gated AI feature (generate button, rating,
+  // DOCX AI, agent chat, etc.) so they all disappear without per-site edits.
+  const [loggedIn, setLoggedIn] = useState(() => aiEnabled && isLoggedIn());
   const [model, setModel] = useState(() => getModel() || '');
+  const displayModel = model;
 
   // Agent activity tracking (Cucumber + FOP agents)
   const agentActivity = useAgentActivity(lang as 'de' | 'en');
@@ -100,7 +204,6 @@ export default function App() {
   // Process flow visualisation
   const processFlow = useProcessFlow();       // FOP analysis OR Cucumber (non-reverse tabs)
   const cucumberFlow = useProcessFlow();      // Cucumber generation from FOP analysis (reverse tab only)
-  const [openProcessAgent, setOpenProcessAgent] = useState<string | null>(null);
 
   // FOP agent IDs (set after auto-creation in startup effect below)
   const [fopAnalystAgentId, setFopAnalystAgentId] = useState<string | null>(null);
@@ -118,6 +221,7 @@ export default function App() {
     analystAgentId: fopAnalystAgentId ?? undefined,
     guidelinesAgentId: fopGuidelinesAgentId ?? undefined,
     experimentalFeatures,
+    getEmitter: (type) => agentActivity.getEmitter(type),
     onActivityStart: (type, total) => {
       agentActivity.startRun(type, total);
     },
@@ -216,19 +320,60 @@ export default function App() {
     return () => clearInterval(id);
   }, [loggedIn, tenantReady]);
 
+  // Once tenant is ready, pull the authoritative server-side consumption total
+  // and the tenant's configured daily token limit (both no-op without permissions).
+  useEffect(() => {
+    if (!tenantReady) return;
+    void syncTenantLimit();
+    void syncServerConsumption();
+  }, [tenantReady]);
+
+  // Re-sync when the active tenant changes mid-session (user picks a different
+  // tenant in SettingsPanel without logging out).
+  useEffect(() => {
+    const handler = () => {
+      void syncTenantLimit();
+      void syncServerConsumption();
+    };
+    window.addEventListener('tenant-changed', handler);
+    return () => window.removeEventListener('tenant-changed', handler);
+  }, []);
+
   // Agents
   const [agents, setAgents] = useState<Agent[]>([]);
   const [, setSelectedFolderPath] = useState<string | null>(null);
   // EFK agents removed — Standard-Agent is used for all AI calls
-  const [agentSending, setAgentSending] = useState(false);
-  const [agentStreamingText, setAgentStreamingText] = useState<string | null>(null);
-  const [agentError, setAgentError] = useState<string | null>(null);
 
   // Auto-logout when session expires (e.g. refresh token invalid)
   useEffect(() => {
-    const handler = () => setLoggedIn(false);
+    const handler = () => {
+      setLoggedIn(false);
+      setTenantReady(false);
+    };
     window.addEventListener('session-expired', handler);
     return () => window.removeEventListener('session-expired', handler);
+  }, []);
+
+  // Whenever the login flag drops (manual logout from SettingsPanel, session
+  // expiry, etc.), reset tenantReady so the post-login sync effect re-fires
+  // the next time a tenant becomes available.
+  useEffect(() => {
+    if (!loggedIn) setTenantReady(false);
+  }, [loggedIn]);
+
+  // Pre-emptive daily-limit check on app startup: if today's locally-recorded
+  // token usage already exceeds DAILY_LIMIT, set the session flag now so the
+  // first AI call short-circuits with the daily-limit error instead of wasting
+  // a doomed round-trip to MyForterro. The event listener in DocxImport will
+  // show the one-time info banner.
+  useEffect(() => {
+    const hit = checkDailyLimitExceededFromHistory();
+    if (hit) {
+      console.log('[App] Startup check: local token history shows daily limit exceeded → session flag set, requests will short-circuit with the daily-limit error');
+    }
+    // Also reconcile with the server's authoritative count (requires admin
+    // rights on the tenant — silently no-ops if the user lacks them).
+    void syncServerConsumption();
   }, []);
 
   // Handle OAuth callback (code + state in URL after redirect from MyForterro)
@@ -236,6 +381,8 @@ export default function App() {
   const authCallbackHandled = useRef(false);
   useEffect(() => {
     if (authCallbackHandled.current) return;
+    // AI mode off → ignore any stray OAuth callback in the URL.
+    if (!aiEnabled) return;
     if (!hasAuthCallback()) return;
     authCallbackHandled.current = true;
     (async () => {
@@ -249,10 +396,22 @@ export default function App() {
       }
     })();
   }, []);
-  const [previewMode, setPreviewMode] = useState<'toolbox' | 'text' | 'diagram' | 'agent'>('toolbox');
+  const [previewMode, setPreviewMode] = useState<'toolbox' | 'text' | 'diagram'>('toolbox');
 
   // File Explorer
   const fileExplorer = useFileExplorer();
+  // Ref so save effects can read the current handle without it being a dep that triggers them on workspace switch
+  const activeRootHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
+  activeRootHandleRef.current = fileExplorer.rootHandle;
+
+  // Persist FOP/IS bindings only when data changes (ref ensures correct workspace, no switch-triggered saves)
+  useEffect(() => {
+    if (activeRootHandleRef.current) saveFopBindingsToWorkspace(activeRootHandleRef.current, fopBindings).catch(() => {});
+  }, [fopBindings]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (activeRootHandleRef.current) saveIsBindingsToWorkspace(activeRootHandleRef.current, isBindings).catch(() => {});
+  }, [isBindings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync conversation history with .agent-history.json in the open directory
   useEffect(() => {
@@ -269,6 +428,120 @@ export default function App() {
     saveConversationsToDir(handle, agentActivity.savedConversations).catch(() => {});
   }, [agentActivity.savedConversations]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // When the workspace folder changes, load all per-workspace data.
+  const prevRootHandleRef = useRef<FileSystemDirectoryHandle | null>(null);
+  useEffect(() => {
+    const handle = fileExplorer.rootHandle;
+    const isSwitch = prevRootHandleRef.current !== null;
+    prevRootHandleRef.current = handle;
+    if (!handle) return;
+    let cancelled = false;
+    (async () => {
+      const [workspaceTables, workspaceFop, workspaceIs, workspaceKB] = await Promise.all([
+        loadTableDefsFromWorkspace(handle),
+        loadFopBindingsFromWorkspace(handle),
+        loadIsBindingsFromWorkspace(handle),
+        loadKBFromWorkspace(handle),
+      ]);
+      if (cancelled) return;
+
+      const isNewWorkspace = workspaceTables === null && workspaceFop === null && workspaceIs === null && workspaceKB === null;
+
+      if (isSwitch && isNewWorkspace) {
+        // Switching to a brand-new workspace: offer to carry data over or start fresh
+        const hasCurrent = tableDefs.length > 0 || fopBindings.length > 0 || isBindings.length > 0 || kbDocuments.length > 0 || workspaceLearnings.length > 0;
+        if (hasCurrent) {
+          setPendingWorkspaceImport({
+            fromName: prevRootHandleRef.current?.name ?? '—',
+            toName: handle.name,
+            tables: tableDefs,
+            fopBindings,
+            isBindings,
+            kbDocuments,
+            learnings: workspaceLearnings.length,
+            hasSettings: true,
+          });
+          return; // wait for modal decision before updating state
+        }
+        // No existing data — just clear and continue
+        setTableDefs([]);
+        setFopBindings([]);
+        setIsBindings([]);
+        return;
+      }
+
+      // Load saved workspace data; clear any type that has no saved cache
+      setTableDefs(workspaceTables ?? []);
+      setFopBindings((workspaceFop ?? []) as import('./types/fop').FopBinding[]);
+      setIsBindings((workspaceIs ?? []) as import('./lib/isBindingsParser').IsBinding[]);
+      if (workspaceKB !== null) {
+        const { clearAllKBDocuments, saveKBDocument, saveKBChunks } = await import('./lib/kbStore');
+        await clearAllKBDocuments();
+        for (const doc of workspaceKB.docs) await saveKBDocument(doc as import('./types/knowledgeBase').KBDocument);
+        if (workspaceKB.chunks.length > 0) await saveKBChunks(workspaceKB.chunks as import('./types/knowledgeBase').KBChunk[]);
+        if (!cancelled) setKbDocuments(workspaceKB.docs as import('./types/knowledgeBase').KBDocument[]);
+      } else if (isSwitch) {
+        const { clearAllKBDocuments } = await import('./lib/kbStore');
+        await clearAllKBDocuments();
+        if (!cancelled) setKbDocuments([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [fileExplorer.rootHandle]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist tableDefs — only when data changes, NOT on workspace switch (ref prevents race condition)
+  useEffect(() => {
+    if (!activeRootHandleRef.current) return;
+    saveTableDefsToWorkspace(activeRootHandleRef.current, tableDefs).catch(() => {});
+  }, [tableDefs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Persist KB documents+chunks — only when data changes
+  useEffect(() => {
+    if (!activeRootHandleRef.current) return;
+    const handle = activeRootHandleRef.current;
+    if (kbDocuments.length === 0) {
+      saveKBToWorkspace(handle, [], []).catch(() => {});
+      return;
+    }
+    import('./lib/kbStore').then(({ loadAllKBChunks }) => loadAllKBChunks()).then((chunks) => {
+      saveKBToWorkspace(handle, kbDocuments, chunks).catch(() => {});
+    }).catch(() => {});
+  }, [kbDocuments]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load workspace learnings and shared learnings from the shared settings folder
+  // and keep compact hints ready for new agent conversations (token-efficient memory injection).
+  useEffect(() => {
+    let cancelled = false;
+    const handle = fileExplorer.rootHandle;
+
+    (async () => {
+      try {
+        const [workspaceEntries, sharedEntries] = await Promise.all([
+          handle ? loadWorkspaceLearnings(handle) : Promise.resolve([]),
+          loadSharedLearnings(),
+        ]);
+        if (cancelled) return;
+        setWorkspaceLearnings(workspaceEntries);
+        setSharedLearnings(sharedEntries);
+      } catch {
+        if (cancelled) return;
+        setWorkspaceLearnings([]);
+        setSharedLearnings([]);
+        setWorkspaceLearningHints('');
+        setWorkspaceConceptLearningHints('');
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [fileExplorer.rootHandle, sharedSettingsRevision]);
+
+  // Recompute compact hints when learnings change in-memory.
+  useEffect(() => {
+    const mergedLearnings = [...sharedLearnings, ...workspaceLearnings];
+    setWorkspaceLearningHints(buildLearningPromptHints(mergedLearnings, 2400, getLearningCrosscheckMode(), 'tests'));
+    setWorkspaceConceptLearningHints(buildLearningPromptHints(mergedLearnings, 2400, getLearningCrosscheckMode(), 'programs'));
+  }, [sharedLearnings, workspaceLearnings]);
+
   const [explorerWidth, setExplorerWidth] = useState(() => {
     const saved = localStorage.getItem('cucumbergnerator_explorer_width');
     return saved ? Number(saved) : 320;
@@ -276,12 +549,45 @@ export default function App() {
   const explorerWidthRef = useRef(explorerWidth);
   explorerWidthRef.current = explorerWidth;
 
+  const [sidePanelCollapsed, setSidePanelCollapsedRaw] = useState<boolean>(() => {
+    return localStorage.getItem('cucumbergnerator_side_panel_collapsed') === '1';
+  });
+  const setSidePanelCollapsed = useCallback((next: boolean) => {
+    setSidePanelCollapsedRaw(next);
+    localStorage.setItem('cucumbergnerator_side_panel_collapsed', next ? '1' : '0');
+  }, []);
+  const [workflowDiagramExpanded, setWorkflowDiagramExpanded] = useState<boolean>(() => {
+    return localStorage.getItem('cucumbergnerator_workflow_diagram_expanded') === '1';
+  });
+  useEffect(() => {
+    localStorage.setItem('cucumbergnerator_workflow_diagram_expanded', workflowDiagramExpanded ? '1' : '0');
+  }, [workflowDiagramExpanded]);
+  const [sidePanelWidth, setSidePanelWidth] = useState<number>(() => {
+    const saved = localStorage.getItem('cucumbergnerator_side_panel_width');
+    return saved ? Number(saved) : 420;
+  });
+  const sidePanelWidthRef = useRef(sidePanelWidth);
+  sidePanelWidthRef.current = sidePanelWidth;
+  const appRef = useRef<HTMLDivElement>(null);
+
   const existingFeatureGuids = useMemo(() => collectExistingGuids(fileExplorer.tree), [fileExplorer.tree]);
 
   // Load tableDefs from IndexedDB on mount (async)
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      // If a shared settings folder is configured, always pull settings.json first
+      // so manual file edits are applied on every app start.
+      try {
+        const sharedJson = await loadSharedSettingsJson();
+        if (sharedJson && sharedJson.trim()) {
+          const imported = importAppSettingsJson(sharedJson);
+          if (!cancelled) setModel(imported.model ?? '');
+        }
+      } catch (err) {
+        console.warn('[App] Failed to load shared settings.json at startup:', err);
+      }
+
       // Try migration from localStorage first (one-time)
       const migrated = await migrateTableDefsFromLocalStorage();
       if (cancelled) return;
@@ -370,6 +676,31 @@ export default function App() {
     document.addEventListener('mouseup', onMouseUp);
   }, []);
 
+  // Side panel divider resize — drag leftward to widen the panel.
+  const handleSidePanelDividerMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!appRef.current) return;
+      const rect = appRef.current.getBoundingClientRect();
+      // Distance from cursor to the right edge of the app container = new panel width.
+      const px = rect.right - ev.clientX;
+      const clamped = Math.min(Math.max(px, 260), 900);
+      setSidePanelWidth(clamped);
+      sidePanelWidthRef.current = clamped;
+    };
+    const onMouseUp = () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      localStorage.setItem('cucumbergnerator_side_panel_width', String(sidePanelWidthRef.current));
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, []);
+
   // Compute paths with validation errors for file explorer red markers
   const errorPaths = useMemo(() => {
     const paths = new Set<string>();
@@ -388,65 +719,34 @@ export default function App() {
   }, [fileExplorer.tree]);
 
   // Single agent mode — always use the first (and only) agent regardless of folder
-  const activeAgent = agents.length > 0 ? agents[0] : null;
+  // Agent chat UI removed; agents are only used for: editorAgentApiId (generation) and FOP analysis
+  const effectivePreviewMode = previewMode;
 
-
-  // If previewMode is 'agent' but there's no active agent, fall back to toolbox
-  const effectivePreviewMode = previewMode === 'agent' && !activeAgent ? 'toolbox' : previewMode;
-
-  // Auto-create a default agent when logged in but no agents exist.
-  // Waits until agents are loaded from IndexedDB (agentsLoaded flag).
+  // Agent IDs are configured by the user in Settings (like AI credentials) — the
+  // tool never creates agents on the API. This supports both global agents shared
+  // across tenants and customer-specific agents someone else created and handed over.
   const [agentsLoaded, setAgentsLoaded] = useState(false);
-  const autoAgentCreated = useRef(false);
-  // Mark agents as loaded after initial IndexedDB load
   useEffect(() => {
     loadAgents().then(() => setAgentsLoaded(true)).catch(() => setAgentsLoaded(true));
   }, []);
 
+  // Sync the local Cucumber-Agent record to whatever ID is configured in Settings.
+  // No creation/discovery, and no remote instructions push — the agent's instructions
+  // are managed externally on the agent itself. A missing/invalid ID simply means AI
+  // calls run in "Direct" mode (no agentId, see generatePackage.ts).
   useEffect(() => {
-    if (!loggedIn || !model || !agentsLoaded || !tenantReady || autoAgentCreated.current) return;
-    autoAgentCreated.current = true;
+    if (!loggedIn || !agentsLoaded || !tenantReady) return;
+    const configuredId = getStoredAgentId('cucumber').trim() || null;
 
-    const currentPrompt = getCustomSystemPrompt() ?? DEFAULT_SYSTEM_PROMPT;
-
-    if (agents.length > 0) {
-      // Agent exists locally — sync only the Standard-Agent (first agent) so prompt changes take effect.
-      // Other agents on MyForterro are not touched to avoid overwriting user-specific prompts.
-      const standardAgent = agents[0];
-      if (standardAgent?.apiAgentId) {
-        const apiId = standardAgent.apiAgentId;
-        (async () => {
-          try {
-            await updateMftAgent(apiId, standardAgent.name, model, currentPrompt);
-            console.log(`[App] Agent "${standardAgent.name}" Prompt synchronisiert`);
-          } catch (err) {
-            console.warn(`[App] Agent "${standardAgent.name}" Prompt-Sync fehlgeschlagen:`, err);
-          }
-        })();
-      }
-      return;
-    }
-
-    // No agents yet — find existing or create Standard-Agent
     (async () => {
-      try {
-        let apiAgentId: string | null = null;
-        const existing = await discoverMftAgents();
-        const found = existing.find(a => a.name === 'Cucumber Agent');
-        if (found) {
-          apiAgentId = found.agentId;
-          updateMftAgent(found.agentId, 'Cucumber Agent', model, currentPrompt).catch(() => {});
-        } else {
-          try {
-            const dto = await createMftAgent('Cucumber Agent', model, currentPrompt);
-            apiAgentId = dto.agentId;
-          } catch { /* fallback */ }
-        }
+      const existing = agents.length > 0 ? agents[0] : null;
+      if (!existing) {
+        if (!configuredId) return; // nothing configured yet — stay in Direct mode
         const newAgent: Agent = {
           id: crypto.randomUUID(),
           name: 'Cucumber Agent',
           folderPath: '',
-          apiAgentId,
+          apiAgentId: configuredId,
           conversationId: null,
           messages: [],
           context: [],
@@ -455,70 +755,36 @@ export default function App() {
         };
         await saveAgent(newAgent);
         setAgents((prev) => [...prev, newAgent]);
-        console.log('[App] Standard-Agent automatisch erstellt');
-      } catch (err) {
-        console.warn('[App] Auto-Agent-Erstellung fehlgeschlagen:', err);
+      } else if (existing.apiAgentId !== configuredId) {
+        // The configured ID changed (or was cleared) — reset the conversation.
+        const updated: Agent = { ...existing, apiAgentId: configuredId, conversationId: null, updatedAt: Date.now() };
+        await saveAgent(updated);
+        setAgents((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
       }
     })();
-  }, [loggedIn, model, agentsLoaded, agents.length, tenantReady]);
+  }, [loggedIn, agentsLoaded, tenantReady, agents]);
 
-  // Auto-create FOP agents (experimentalFeatures only) — find existing first, create only if needed
-  const fopAgentsCreated = useRef(false);
+  // Track FOP-agent IDs configured in Settings (experimentalFeatures only) — no
+  // creation/discovery and no remote instructions push (managed externally).
   useEffect(() => {
-    if (!loggedIn || !model || !tenantReady || !experimentalFeatures || fopAgentsCreated.current) return;
-    fopAgentsCreated.current = true;
-    (async () => {
-      try {
-        // First: check if agents already exist
-        const existing = await discoverMftAgents();
-        const existingAnalyst = existing.find(a => a.name === 'FOP Inhaltsanalyst');
-        const existingGuidelines = existing.find(a => a.name === 'FOP Richtlinienprüfer');
-
-        const { buildFopAnalystPrompt, buildFopGuidelinesPrompt } = await import('./lib/fopAgentPrompt');
-        const currentLang = lang as 'de' | 'en';
-
-        if (existingAnalyst) {
-          console.log('[App] FOP Analyst gefunden:', existingAnalyst.agentId);
-          setFopAnalystAgentId(existingAnalyst.agentId);
-          // Update prompt silently
-          updateMftAgent(existingAnalyst.agentId, 'FOP Inhaltsanalyst', model, buildFopAnalystPrompt(currentLang)).catch(() => {});
-        } else {
-          const dto = await createMftAgent('FOP Inhaltsanalyst', model, buildFopAnalystPrompt(currentLang));
-          console.log('[App] FOP Analyst erstellt:', dto.agentId);
-          setFopAnalystAgentId(dto.agentId);
-        }
-
-        if (existingGuidelines) {
-          console.log('[App] FOP Guidelines gefunden:', existingGuidelines.agentId);
-          setFopGuidelinesAgentId(existingGuidelines.agentId);
-          updateMftAgent(existingGuidelines.agentId, 'FOP Richtlinienprüfer', model, buildFopGuidelinesPrompt(currentLang)).catch(() => {});
-        } else {
-          const dto = await createMftAgent('FOP Richtlinienprüfer', model, buildFopGuidelinesPrompt(currentLang));
-          console.log('[App] FOP Guidelines erstellt:', dto.agentId);
-          setFopGuidelinesAgentId(dto.agentId);
-        }
-
-        console.log('[App] FOP-Agents bereit');
-      } catch (err) {
-        console.warn('[App] FOP-Agent-Setup fehlgeschlagen:', err);
-      }
-    })();
-  }, [loggedIn, model, tenantReady, experimentalFeatures]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Build agent instructions — only the system prompt, NO context files.
-  // Context is sent as a preamble in the first chat message to avoid OOM on the instructions endpoint.
-  const buildAgentInstructions = useCallback((): string => {
-    return getCustomSystemPrompt() ?? DEFAULT_SYSTEM_PROMPT;
-  }, []);
+    if (!loggedIn || !tenantReady || !experimentalFeatures) return;
+    setFopAnalystAgentId(getStoredAgentId('fop-analyst').trim() || null);
+    setFopGuidelinesAgentId(getStoredAgentId('fop-guidelines').trim() || null);
+  }, [loggedIn, tenantReady, experimentalFeatures]);
 
   // ~15 000 Tokens pro Datei — hält den Request unter dem gpt-4 TPM-Limit
   const MAX_CONTEXT_CHARS_PER_FILE = 60_000;
 
   // Build the message to send: prepend context docs when starting a new conversation.
   // Type-aware: vartab and efk summaries are included as structured preamble; oversized docs are truncated.
-  const buildChatMessage = useCallback((text: string, context: AgentContext[], isNewConversation: boolean): string => {
-    if (!isNewConversation || context.length === 0) return text;
+  // (Currently not used, kept for future multi-agent messaging support)
+  useCallback((text: string, context: AgentContext[], isNewConversation: boolean): string => {
+    if (!isNewConversation) return text;
     const parts: string[] = [];
+
+    if (workspaceLearningHints.trim()) {
+      parts.push(`## Workspace Learning-Hints\n${workspaceLearningHints}`);
+    }
 
     for (const c of context) {
       const type = c.type ?? 'doc';
@@ -536,231 +802,41 @@ export default function App() {
       }
     }
 
+    if (parts.length === 0) return text;
+
     return `${parts.join('\n\n')}\n\n---\n\n${text}`;
-  }, []);
+  }, [workspaceLearningHints]);
 
 
   // Helper: handle errors from agent API calls
-  const handleAgentError = useCallback((err: unknown) => {
+  // (Currently not used, kept for future error-handling support)
+  useCallback((err: unknown) => {
     const raw = (err as Error).message ?? '';
-    setAgentError(raw || 'Unbekannter Fehler');
+    // Error handling for agent API calls would be placed here
   }, []);
 
   // Create folder — no agent creation needed (Standard-Agent is used)
-  const handleCreateFolder = useCallback(async (parentPath: string): Promise<string | null> => {
-    return fileExplorer.createFolder(parentPath);
+  const handleCreateFolder = useCallback(async (parentPath: string, folderName?: string): Promise<string | null> => {
+    return fileExplorer.createFolder(parentPath, folderName);
   }, [fileExplorer]);
 
-  // Agent: send message via real API (SSE streaming)
-  const handleAgentSendMessage = useCallback(async (agentId: string, text: string) => {
-    let agent = agents.find((a) => a.id === agentId);
-    if (!agent) return;
-
-    // Auto-create API agent if missing (e.g. migrating old local-only agents)
-    if (!agent.apiAgentId) {
-      if (!model) {
-        setAgentError('Kein Modell ausgewählt. Bitte zuerst ein Modell in den Einstellungen wählen.');
-        return;
-      }
-      try {
-        const dto = await createMftAgent(agent.name, model, buildAgentInstructions());
-        const migrated: Agent = { ...agent, apiAgentId: dto.agentId, updatedAt: Date.now() };
-        await saveAgent(migrated);
-        setAgents((prev) => prev.map((a) => (a.id === agentId ? migrated : a)));
-        agent = migrated;
-      } catch (err) {
-        handleAgentError(err);
-        return;
-      }
-    }
-
-    const userMsg: AgentMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: text,
-      timestamp: Date.now(),
-    };
-    const withUser: Agent = { ...agent, messages: [...agent.messages, userMsg], updatedAt: Date.now() };
-    setAgents((prev) => prev.map((a) => (a.id === agentId ? withUser : a)));
-    await saveAgent(withUser);
-
-    setAgentError(null);
-    setAgentSending(true);
-    setAgentStreamingText('');
-    try {
-      const isNewConversation = agent.conversationId === null;
-      const apiMessage = buildChatMessage(text, agent.context, isNewConversation);
-      const result = await chatWithAgent(
-        agent.apiAgentId!,
-        apiMessage,
-        agent.conversationId,
-        (delta) => setAgentStreamingText((prev) => (prev ?? '') + delta),
-      );
-      const assistantMsg: AgentMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: result.fullMessage,
-        timestamp: Date.now(),
-      };
-      const final: Agent = {
-        ...withUser,
-        messages: [...withUser.messages, assistantMsg],
-        conversationId: result.conversationId,
-        updatedAt: Date.now(),
-      };
-      setAgents((prev) => prev.map((a) => (a.id === agentId ? final : a)));
-      await saveAgent(final);
-    } catch (err) {
-      handleAgentError(err);
-    } finally {
-      setAgentSending(false);
-      setAgentStreamingText(null);
-    }
-  }, [agents, model, buildAgentInstructions, buildChatMessage, handleAgentError]);
-
-  // Agent: retry — re-sends the last user message using the same conversationId
-  const handleAgentRetry = useCallback(async (agentId: string) => {
-    const agent = agents.find((a) => a.id === agentId);
-    if (!agent || !agent.apiAgentId) return;
-    const lastMsg = agent.messages[agent.messages.length - 1];
-    if (!lastMsg || lastMsg.role !== 'user') return;
-
-    setAgentError(null);
-    setAgentSending(true);
-    setAgentStreamingText('');
-    try {
-      const isNewConversation = agent.conversationId === null;
-      const apiMessage = buildChatMessage(lastMsg.content, agent.context, isNewConversation);
-      const result = await chatWithAgent(
-        agent.apiAgentId,
-        apiMessage,
-        agent.conversationId,
-        (delta) => setAgentStreamingText((prev) => (prev ?? '') + delta),
-      );
-      const assistantMsg: AgentMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: result.fullMessage,
-        timestamp: Date.now(),
-      };
-      const final: Agent = {
-        ...agent,
-        messages: [...agent.messages, assistantMsg],
-        conversationId: result.conversationId,
-        updatedAt: Date.now(),
-      };
-      setAgents((prev) => prev.map((a) => (a.id === agentId ? final : a)));
-      await saveAgent(final);
-    } catch (err) {
-      handleAgentError(err);
-    } finally {
-      setAgentSending(false);
-      setAgentStreamingText(null);
-    }
-  }, [agents, buildChatMessage, handleAgentError]);
+  // Agent chat handlers removed — no longer needed
 
 
 
 
 
   // Agent: reset (delete + recreate, with confirmation modal)
-  const [deleteAgentConfirm, setDeleteAgentConfirm] = useState<{ agentId: string; resolve: (v: boolean) => void } | null>(null);
 
-  const handleDeleteAgent = useCallback((agentId: string) => {
-    new Promise<boolean>((resolve) => {
-      setDeleteAgentConfirm({ agentId, resolve });
-    }).then(async (confirmed) => {
-      if (confirmed) {
-        const agent = agents.find((a) => a.id === agentId);
-        // 1. Delete old agent on API
-        if (agent?.apiAgentId) {
-          try { await deleteMftAgent(agent.apiAgentId); } catch { /* ignore */ }
-        }
-        // 2. Delete locally
-        await deleteAgentFromDb(agentId);
-
-        // 3. Immediately create a fresh agent
-        const currentPrompt = getCustomSystemPrompt() ?? DEFAULT_SYSTEM_PROMPT;
-        let newApiAgentId: string | null = null;
-        if (model) {
-          try {
-            const dto = await createMftAgent('Cucumber Agent', model, currentPrompt);
-            newApiAgentId = dto.agentId;
-          } catch { /* ignore — will retry on next login */ }
-        }
-        const freshAgent: Agent = {
-          id: crypto.randomUUID(),
-          name: 'Cucumber Agent',
-          folderPath: '',
-          apiAgentId: newApiAgentId,
-          conversationId: null,
-          messages: [],
-          context: [],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
-        await saveAgent(freshAgent);
-        setAgents([freshAgent]);
-        console.log('[App] Agent zurückgesetzt — neuer Standard-Agent erstellt');
-      }
-    });
-  }, [agents, model, buildAgentInstructions]);
-
-  // System prompt change: sync only the active agent's instructions (not other user agents)
-  const handleSystemPromptChange = useCallback(async () => {
-    if (!model || !activeAgent?.apiAgentId) return;
-    try {
-      await updateMftAgent(activeAgent.apiAgentId, activeAgent.name, model, buildAgentInstructions());
-      console.log(`[App] Agent "${activeAgent.name}" Prompt synchronisiert`);
-    } catch { /* Non-fatal */ }
-  }, [activeAgent, model, buildAgentInstructions]);
-
-  // Sync ALL agent prompts on language change (Cucumber Agent + FOP agents)
-  useEffect(() => {
-    if (!model || !loggedIn) return;
-    const currentLang = lang as 'de' | 'en';
-    // Cucumber Agent
-    if (activeAgent?.apiAgentId) {
-      const prompt = getCustomSystemPrompt() ?? (currentLang === 'de' ? DEFAULT_SYSTEM_PROMPT : DEFAULT_SYSTEM_PROMPT_EN);
-      updateMftAgent(activeAgent.apiAgentId, activeAgent.name, model, prompt).catch(() => {});
-    }
-    // FOP Agents (only if experimental features enabled)
-    if (experimentalFeatures) {
-      (async () => {
-        try {
-          const { buildFopAnalystPrompt, buildFopGuidelinesPrompt } = await import('./lib/fopAgentPrompt');
-          if (fopAnalystAgentId) {
-            await updateMftAgent(fopAnalystAgentId, 'FOP Inhaltsanalyst', model, buildFopAnalystPrompt(currentLang)).catch(() => {});
-          }
-          if (fopGuidelinesAgentId) {
-            await updateMftAgent(fopGuidelinesAgentId, 'FOP Richtlinienprüfer', model, buildFopGuidelinesPrompt(currentLang)).catch(() => {});
-          }
-        } catch { /* Non-fatal */ }
-      })();
-    }
-  }, [lang]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Model change: sync only the active agent to the new model
-  const handleModelChange = useCallback(async (newModel: string) => {
+  // Model change — agent instructions/model are no longer pushed to the remote
+  // agent; it's managed externally, and per-call model overrides already apply
+  // (see getTaskModel / generatePackage.ts).
+  const handleModelChange = useCallback((newModel: string) => {
     setModel(newModel);
-    if (!newModel || !activeAgent?.apiAgentId) return;
-    try {
-      await updateMftAgent(activeAgent.apiAgentId, activeAgent.name, newModel, buildAgentInstructions());
-    } catch { /* Non-fatal */ }
-  }, [activeAgent, buildAgentInstructions]);
+  }, []);
 
-  // Agent: start a new conversation (clears messages + conversationId)
-  const handleAgentNewConversation = useCallback(async (agentId: string) => {
-    const agent = agents.find((a) => a.id === agentId);
-    if (!agent) return;
-    const reset: Agent = { ...agent, messages: [], conversationId: null, updatedAt: Date.now() };
-    setAgents((prev) => prev.map((a) => (a.id === agentId ? reset : a)));
-    await saveAgent(reset);
-    setAgentError(null);
-  }, [agents]);
-
-  // Agent: retry login after session expiry
-  const handleAgentRetryLogin = useCallback(async () => {
+  // Session retry (general)
+  const retryAfterSessionExpiry = useCallback(async () => {
     const clientId = getStoredClientId();
     const applicationId = getStoredApplicationId();
     const clientSecret = getStoredClientSecret();
@@ -770,13 +846,13 @@ export default function App() {
   }, []);
 
   // File explorer: handle file creation → auto-open in editor
-  const handleExplorerCreateFile = useCallback(async (parentPath: string) => {
-    const newPath = await fileExplorer.createFile(parentPath);
+  const handleExplorerCreateFile = useCallback(async (parentPath: string, fileName?: string) => {
+    const newPath = await fileExplorer.createFile(parentPath, fileName);
     if (newPath) {
       // createFile already sets activeFilePath and reads the file handle;
       // we just need to load the (empty) feature into the editor state
       const featureName = newPath.split('/').pop()?.replace(/\.feature$/, '') || '';
-      const featureInput = { ...INITIAL_FEATURE, name: featureName, tags: [`@${makeFeatureGuid('', featureName)}`] };
+      const featureInput = { ...INITIAL_FEATURE, name: featureName, tags: [`@guid-${makeFeatureGuid('', featureName)}`] };
       setFeatures([featureInput]);
       setActiveFeatureIdx(0);
     }
@@ -789,6 +865,29 @@ export default function App() {
     if (wasActive) {
       setFeatures([{ ...INITIAL_FEATURE }]);
       setActiveFeatureIdx(0);
+    }
+  }, [fileExplorer, setFeatures]);
+
+  // File explorer: handle bulk file delete (multi-select)
+  const handleDeleteFiles = useCallback(async (paths: string[]) => {
+    if (paths.length === 0) return;
+    const wasActive = !!(fileExplorer.activeFilePath && paths.includes(fileExplorer.activeFilePath));
+    await fileExplorer.deleteFiles(paths);
+    if (wasActive) {
+      setFeatures([{ ...INITIAL_FEATURE }]);
+      setActiveFeatureIdx(0);
+    }
+  }, [fileExplorer, setFeatures]);
+
+  // File explorer: duplicate file and load duplicate in editor
+  const handleDuplicateFile = useCallback(async (path: string) => {
+    const newPath = await fileExplorer.duplicateFile(path);
+    if (!newPath) return;
+    const featureInput = await fileExplorer.selectFile(newPath);
+    if (featureInput) {
+      setFeatures([featureInput]);
+      setActiveFeatureIdx(0);
+      fileExplorer.expandNode(newPath);
     }
   }, [fileExplorer, setFeatures]);
 
@@ -847,6 +946,66 @@ export default function App() {
   }, [fileExplorer, setFeatures, features, activeFeatureIdx]);
 
   const feature = features[activeFeatureIdx] ?? INITIAL_FEATURE;
+  const isTemplateEditing = templateDraft !== null;
+  const editorFeature = templateDraft ?? feature;
+
+  const stripIds = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map((entry) => stripIds(entry));
+    if (value && typeof value === 'object') {
+      const result: Record<string, unknown> = {};
+      for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+        if (key === 'id') continue;
+        result[key] = stripIds(entry);
+      }
+      return result;
+    }
+    return value;
+  };
+
+  const isTemplateDirty = isTemplateEditing
+    && templateDraftInitial !== null
+    && JSON.stringify(stripIds(templateDraft)) !== JSON.stringify(stripIds(templateDraftInitial));
+
+  const templateDiscardConfirmActionRef = useRef<(() => void) | null>(null);
+  const [showTemplateDiscardConfirm, setShowTemplateDiscardConfirm] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const deriveTemplateName = (draft: FeatureInput): string => (
+    draft.name?.trim()
+    || draft.scenarios[0]?.name?.trim()
+    || ''
+  );
+
+  const startTemplateEditor = (draft: FeatureInput, templateName: string, templateId: string | null) => {
+    const run = () => {
+      const clonedDraft = JSON.parse(JSON.stringify(draft)) as FeatureInput;
+      setTemplateDraft(clonedDraft);
+      setTemplateDraftInitial(JSON.parse(JSON.stringify(clonedDraft)) as FeatureInput);
+      setTemplateEditingName(templateName || deriveTemplateName(clonedDraft));
+      setTemplateEditingId(templateId);
+    };
+    if (isTemplateDirty) {
+      templateDiscardConfirmActionRef.current = run;
+      setShowTemplateDiscardConfirm(true);
+      return;
+    }
+    run();
+  };
+
+  const closeTemplateEditor = () => {
+    const run = () => {
+      setTemplateDraft(null);
+      setTemplateDraftInitial(null);
+      setTemplateEditingName(null);
+      setTemplateEditingId(null);
+    };
+    if (isTemplateDirty) {
+      templateDiscardConfirmActionRef.current = run;
+      setShowTemplateDiscardConfirm(true);
+      return;
+    }
+    run();
+  };
 
   const updateFeature = (updated: FeatureInput) => {
     setFeatures((prev) => prev.map((f, i) => (i === activeFeatureIdx ? updated : f)));
@@ -857,14 +1016,117 @@ export default function App() {
     }
   };
 
+  const updateEditorFeature = (updated: FeatureInput) => {
+    if (isTemplateEditing) {
+      setTemplateDraft(updated);
+      setTemplateEditingName(deriveTemplateName(updated));
+      return;
+    }
+    updateFeature(updated);
+  };
+
+  const handleTemplateSaved = useCallback((savedTemplateId: string, savedTemplateName: string) => {
+    if (!templateDraft) return;
+    const clonedDraft = JSON.parse(JSON.stringify(templateDraft)) as FeatureInput;
+    setTemplateDraftInitial(clonedDraft);
+    setTemplateEditingId(savedTemplateId);
+    setTemplateEditingName(savedTemplateName || deriveTemplateName(clonedDraft));
+    setTemplateSaveTick((value) => value + 1);
+  }, [templateDraft]);
+
   const handleTablesChange = (tables: TableDef[]) => {
     setTableDefs(tables);
-    saveTableDefs(tables);
+    saveTableDefs(tables); // global IDB fallback; workspace save handled by effect
   };
-  const { gherkin, lineMapping } = useGherkinGenerator(feature);
+  const { gherkin, lineMapping } = useGherkinGenerator(editorFeature);
   const { loading, generationStep, error, generate } = useAiGeneration();
   const [aiRating, setAiRating] = useState<AiPromptRating | null>(null);
+  const [aiEditLoading, setAiEditLoading] = useState(false);
+  const [aiEditError, setAiEditError] = useState<string | null>(null);
+  const [aiEditReview, setAiEditReview] = useState<{
+    updated: FeatureInput;
+    title: string;
+    message: string;
+    allowApply: boolean;
+  } | null>(null);
   const { loading: ratingLoading, error: ratingError, rating: standaloneAiRating, requestRating } = useAiRating();
+
+  const normalizeScenarioName = useCallback((name: string) => name.trim().toLowerCase().replace(/\s+/g, ' '), []);
+
+  const hasExplicitDestructiveIntent = useCallback((request: string) => {
+    // Require explicit destructive verbs; generic "anpassen" should not allow removals.
+    return /\b(loesch|lösch|entfern|streich|remove|delete|drop|merge|zusammenfassen|combine|rename|umbenenn|ersetz\w* komplett|rewrite|neu aufbauen)\b/i.test(request);
+  }, []);
+
+  const buildAiEditSafetySummary = useCallback((before: FeatureInput, after: FeatureInput) => {
+    const beforeByName = new Map(before.scenarios.map((s) => [normalizeScenarioName(s.name), s] as const).filter(([k]) => !!k));
+    const afterByName = new Map(after.scenarios.map((s) => [normalizeScenarioName(s.name), s] as const).filter(([k]) => !!k));
+
+    const removedKeys = Array.from(beforeByName.keys()).filter((k) => !afterByName.has(k));
+    const addedKeys = Array.from(afterByName.keys()).filter((k) => !beforeByName.has(k));
+
+    const changed = Array.from(beforeByName.keys())
+      .filter((k) => afterByName.has(k))
+      .map((k) => {
+        const b = beforeByName.get(k)!;
+        const a = afterByName.get(k)!;
+        const bSig = JSON.stringify(b.steps.map((st) => ({ kw: st.keyword, tx: st.text, ac: st.action })));
+        const aSig = JSON.stringify(a.steps.map((st) => ({ kw: st.keyword, tx: st.text, ac: st.action })));
+        return {
+          key: k,
+          name: b.name || a.name || k,
+          changed: bSig !== aSig,
+          beforeSteps: b.steps.length,
+          afterSteps: a.steps.length,
+        };
+      })
+      .filter((entry) => entry.changed);
+
+    return {
+      removedKeys,
+      addedKeys,
+      changed,
+      hasDestructiveDelta: removedKeys.length > 0,
+      beforeCount: before.scenarios.length,
+      afterCount: after.scenarios.length,
+    };
+  }, [normalizeScenarioName]);
+
+  const parseScenarioPatchResponse = useCallback((rawResponse: string): { scenarios: Scenario[]; hasEndMarker: boolean } => {
+    const START_MARKER = '# BEGIN-SCENARIO-PATCH';
+    const END_MARKER = '# END-SCENARIO-PATCH';
+    const text = (rawResponse || '').replace(/\r\n/g, '\n').trim();
+    const hasEndMarker = text.includes(END_MARKER);
+    let body = text;
+    const startRegex = new RegExp(`(^|\\n)\\s*${START_MARKER.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\s*(\\n|$)`);
+    const endRegex = new RegExp(`(^|\\n)\\s*${END_MARKER.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\s*$`);
+    const startMatch = body.match(startRegex);
+    if (startMatch && typeof startMatch.index === 'number') {
+      body = body.slice(startMatch.index + startMatch[0].length).trim();
+    }
+    body = body.replace(endRegex, '').trim();
+    if (!body) return { scenarios: [], hasEndMarker };
+
+    const lines = body.split('\n');
+    const headerIdx: number[] = [];
+    for (let i = 0; i < lines.length; i += 1) {
+      if (/^\s*Scenario:\s+/.test(lines[i])) headerIdx.push(i);
+    }
+    if (headerIdx.length === 0) return { scenarios: [], hasEndMarker };
+
+    const scenarios: Scenario[] = [];
+    for (let i = 0; i < headerIdx.length; i += 1) {
+      let start = headerIdx[i];
+      while (start > 0 && /^\s*@/.test(lines[start - 1])) start -= 1;
+      const end = i + 1 < headerIdx.length ? headerIdx[i + 1] : lines.length;
+      const block = lines.slice(start, end).join('\n').trim();
+      if (!block) continue;
+      const parsedPatch = parseGherkin(`Feature: PATCH\n\n${block}\n`);
+      if (parsedPatch.scenarios.length > 0) scenarios.push(parsedPatch.scenarios[0]);
+    }
+
+    return { scenarios, hasEndMarker };
+  }, []);
 
   // Report single-feature generation to AgentStatusBar
   useEffect(() => {
@@ -882,14 +1144,16 @@ export default function App() {
     }
   }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Agent for editor: prefer activeAgent (folder), then any agent with apiAgentId
-  const editorAgentApiId = activeAgent?.apiAgentId ?? agents.find((a) => a.apiAgentId)?.apiAgentId ?? null;
+  // Agent for editor: use first agent with apiAgentId
+  const editorAgentApiId = agents.find((a) => a.apiAgentId)?.apiAgentId ?? null;
 
   const handleRequestRating = useCallback(() => {
     if (!feature.description.trim()) return;
     if (!editorAgentApiId) return;
-    requestRating(feature.description, model, editorAgentApiId);
-  }, [feature.description, model, editorAgentApiId, requestRating]);
+    agentActivity.startRun('rating', 1);
+    requestRating(feature.description, model, editorAgentApiId, agentActivity.getEmitter('rating'), lang as 'de' | 'en')
+      .finally(() => agentActivity.finishRun('rating', 'done'));
+  }, [feature.description, model, editorAgentApiId, requestRating, agentActivity, lang]);
 
   const handleStepClick = useCallback((stepId: string) => {
     const el = document.getElementById(`step-${stepId}`);
@@ -955,21 +1219,16 @@ export default function App() {
     let streamedSoFar = '';
     const result = await generate(
       feature.description, model, editorAgentApiId, feature.testUser, tableDefs, feature.name,
+      workspaceConceptLearningHints,
       (chunk) => {
         streamedSoFar += chunk;
-        agentActivity.updateProgress(
-          'cucumber', 0, feature.name || '…',
-          `Feature: ${feature.name || '(unnamed)'}\n\n${feature.description}`,
-          streamedSoFar,
-        );
       },
       undefined, // onTablesIdentified handled separately
       preDetectedTables, // pass pre-detected tables → skips re-detection in generatePackage
-      (round, maxRounds, sent, received) => {
-        // Deep test: show each round in Agent Monitor
-        const label = `${lang === 'de' ? 'Runde' : 'Round'} ${round}/${maxRounds}`;
-        agentActivity.addExchange('cucumber', label, sent, received);
-      },
+      undefined,
+      agentActivity.getEmitter('cucumber'),
+      lang as 'de' | 'en',
+      fileExplorer.rootHandle,
     );
 
     if (result) {
@@ -1045,25 +1304,265 @@ export default function App() {
         gherkinOutput,
       );
       agentActivity.completeItem('cucumber', result.feature.name || feature.name || '…', true);
-      setFeatures((prev) =>
-        prev.map((f, i) => {
-          if (i !== activeFeatureIdx) return f;
-          return {
-            ...f,
-            name: result.feature.name || f.name,
-            tags: result.feature.tags.length > 0 ? result.feature.tags : f.tags,
-            scenarios: result.feature.scenarios,
-          };
-        }),
-      );
+      const base = features[activeFeatureIdx] ?? feature;
+      const updated: FeatureInput = {
+        ...base,
+        name: result.feature.name || base.name,
+        tags: result.feature.tags.length > 0 ? result.feature.tags : base.tags,
+        scenarios: result.feature.scenarios,
+      };
+      updateFeature(updated);
+      // Make sure the user sees the inserted result even if they switched tabs during generation.
+      setView('editor');
     }
   };
+
+  const handleApplyAiEdit = useCallback(async (request: string) => {
+    const trimmed = request.trim();
+    if (!trimmed) return;
+    if (!editorAgentApiId) {
+      setAiEditError(t('app.noAgentAvailable'));
+      return;
+    }
+
+    setAiEditError(null);
+    setAiEditLoading(true);
+    const itemKey = editorFeature.name.trim() || t('app.currentFile');
+    const emitter = agentActivity.getEmitter('cucumber');
+    const allowDestructive = hasExplicitDestructiveIntent(trimmed);
+    const phaseLang: 'de' | 'en' = lang === 'de' ? 'de' : 'en';
+    const promptLang = ((['de', 'en', 'es', 'fr'] as const).includes(lang as 'de' | 'en' | 'es' | 'fr')
+      ? lang
+      : 'en') as 'de' | 'en' | 'es' | 'fr';
+    try {
+      const currentGherkin = generateGherkin(editorFeature);
+      const safetyAppendix = [
+        '',
+        t('app.aiEditPromptHardRulesTitle'),
+        `- ${t('app.aiEditPromptRuleNoDelete')}`,
+        `- ${t('app.aiEditPromptRuleKeepNames')}`,
+        `- ${t('app.aiEditPromptRuleConservative')}`,
+        `- ${t('app.aiEditPromptRuleSelfCheck')}`,
+        ...(!allowDestructive ? [
+          '',
+          t('app.aiEditPromptOutputTitle'),
+          `- ${t('app.aiEditPromptOutputRuleChangedOnly')}`,
+          `- ${t('app.aiEditPromptOutputRuleKeepNamesExact')}`,
+          `- ${t('app.aiEditPromptOutputRuleNoFeature')}`,
+          `- ${t('app.aiEditPromptOutputRuleEndMarker')}`,
+        ] : []),
+        '',
+        t('app.aiEditPromptExistingNamesTitle'),
+        ...editorFeature.scenarios.map((s) => `- ${s.name || t('app.aiEditPromptUnnamedScenario')}`),
+      ].join('\n');
+      const patchPrompt = [
+        t('app.aiEditPatchPromptIntro'),
+        '',
+        t('app.aiEditPatchPromptChangeTitle'),
+        trimmed,
+        '',
+        (phaseLang === 'de'
+          ? 'Ausgabeformat (streng):\n# BEGIN-SCENARIO-PATCH\n[nur geaenderte Scenario-Bloecke mit optionalen @tags]\n# END-SCENARIO-PATCH\nKeine Erklaerung, kein JSON, kein Feature:-Header.'
+          : 'Output format (strict):\n# BEGIN-SCENARIO-PATCH\n[only changed Scenario blocks with optional @tags]\n# END-SCENARIO-PATCH\nNo explanation, no JSON, no Feature: header.'),
+        '',
+        t('app.aiEditPatchPromptCurrentFileTitle'),
+        currentGherkin,
+        safetyAppendix,
+      ].join('\n');
+      const prompt = allowDestructive
+        ? `${buildFeatureEditMessage(currentGherkin, trimmed, promptLang)}\n${safetyAppendix}`
+        : patchPrompt;
+      const systemPrompt = t('app.aiEditSystemPromptDisplay');
+
+      agentActivity.startRun('cucumber', 1);
+      agentActivity.updateProgress('cucumber', 0, itemKey, prompt, undefined);
+
+      emitter.emitLocal({
+        phase: 'cuc-build-prompt',
+        label: getPhaseLabel('cuc-build-prompt', phaseLang),
+        summary: t('app.aiEditPreparedSummary', { count: trimmed.length }),
+        inputText: prompt,
+        itemKey,
+      });
+
+      const response = await emitter.emitAiCall(
+        {
+          phase: 'agent-chat-response',
+          label: getPhaseLabel('agent-chat-response', phaseLang),
+          agent: 'agent-chat',
+          systemPrompt,
+          userPrompt: prompt,
+          model,
+          itemKey,
+        },
+        async () => {
+          const result = await chatWithAgentSync(
+            editorAgentApiId,
+            prompt,
+            'gherkin-generation',
+            model,
+            'feature-edit',
+          );
+          return result.response;
+        },
+      );
+
+      let updated: FeatureInput;
+      let editedGherkin: string;
+      let appliedScenarioCount: number;
+
+      if (!allowDestructive) {
+        const patch = parseScenarioPatchResponse(response);
+        const markerMissing = !patch.hasEndMarker;
+
+        // Compatibility fallback: if the model returned a full .feature instead of a patch,
+        // accept it only when it is non-destructive.
+        if (markerMissing && patch.scenarios.length === 0) {
+          const fullCandidate = extractEditedFeatureGherkin(response);
+          const parsedFull = parseGherkin(fullCandidate);
+          if (parsedFull.scenarios.length > 0) {
+            const fullUpdated: FeatureInput = {
+              ...editorFeature,
+              name: parsedFull.name || editorFeature.name,
+              tags: parsedFull.tags.length > 0 ? parsedFull.tags : editorFeature.tags,
+              scenarios: parsedFull.scenarios,
+            };
+            const fullDelta = buildAiEditSafetySummary(editorFeature, fullUpdated);
+            if (!fullDelta.hasDestructiveDelta) {
+              updated = fullUpdated;
+              editedGherkin = generateGherkin(updated);
+              appliedScenarioCount = fullDelta.changed.length;
+              emitter.emitLocal({
+                phase: 'cuc-parse',
+                label: getPhaseLabel('cuc-parse', phaseLang),
+                summary: t('app.aiEditPatchFallbackSummary'),
+                outputText: editedGherkin,
+                itemKey,
+              });
+            } else {
+              throw new Error(t('app.aiEditErrorTruncated'));
+            }
+          } else {
+            throw new Error(t('app.aiEditErrorNoValidBlocks'));
+          }
+        } else {
+          if (markerMissing) {
+            throw new Error(t('app.aiEditErrorTruncated'));
+          }
+          if (patch.scenarios.length === 0) {
+            throw new Error(t('app.aiEditErrorNoValidBlocks'));
+          }
+
+          const patchByName = new Map<string, Scenario>();
+          for (const scenario of patch.scenarios) {
+            const key = normalizeScenarioName(scenario.name || '');
+            if (key) patchByName.set(key, scenario);
+          }
+          if (patchByName.size === 0) {
+            throw new Error(t('app.aiEditErrorNoRecognizableNames'));
+          }
+
+          const existingKeys = new Set(editorFeature.scenarios.map((s) => normalizeScenarioName(s.name || '')).filter(Boolean));
+          const unknownPatchedNames = Array.from(patchByName.keys()).filter((k) => !existingKeys.has(k));
+          if (unknownPatchedNames.length > 0) {
+            throw new Error(t('app.aiEditErrorUnknownRenamed', { names: unknownPatchedNames.slice(0, 5).join(', ') }));
+          }
+
+          let replaced = 0;
+          const mergedScenarios = editorFeature.scenarios.map((scenario) => {
+            const key = normalizeScenarioName(scenario.name || '');
+            const replacement = patchByName.get(key);
+            if (!replacement) return scenario;
+            replaced += 1;
+            return replacement;
+          });
+
+          updated = {
+            ...editorFeature,
+            scenarios: mergedScenarios,
+          };
+          editedGherkin = generateGherkin(updated);
+          appliedScenarioCount = replaced;
+        }
+      } else {
+        editedGherkin = extractEditedFeatureGherkin(response);
+        const parsed = parseGherkin(editedGherkin);
+        if (parsed.scenarios.length === 0) {
+          throw new Error(t('app.aiEditErrorNoScenarios'));
+        }
+
+        updated = {
+          ...editorFeature,
+          name: parsed.name || editorFeature.name,
+          tags: parsed.tags.length > 0 ? parsed.tags : editorFeature.tags,
+          scenarios: parsed.scenarios,
+        };
+        appliedScenarioCount = parsed.scenarios.length;
+      }
+
+      const delta = buildAiEditSafetySummary(editorFeature, updated);
+      if (!allowDestructive && delta.hasDestructiveDelta) {
+        const removedPreview = delta.removedKeys.slice(0, 6).join(', ');
+        const changedPreview = delta.changed.slice(0, 6)
+          .map((entry) => `${entry.name} (${entry.beforeSteps}→${entry.afterSteps} Steps)`)
+          .join(', ');
+        const message = [
+          t('app.aiEditSafetyContainsDestructive'),
+          t('app.aiEditSafetyBeforeAfter', { before: delta.beforeCount, after: delta.afterCount }),
+          t('app.aiEditSafetyRemovedRenamed', { count: delta.removedKeys.length, details: removedPreview ? ` (${removedPreview})` : '' }),
+          t('app.aiEditSafetyContentChanged', { count: delta.changed.length, details: changedPreview ? ` (${changedPreview})` : '' }),
+          '',
+          t('app.aiEditSafetyBlocked'),
+          t('app.aiEditSafetyRefineHint'),
+        ].join('\n');
+
+        setAiEditReview({
+          updated,
+          title: t('app.aiEditSafetyTitle'),
+          message,
+          allowApply: false,
+        });
+
+        emitter.emitLocal({
+          phase: 'cuc-parse',
+          label: getPhaseLabel('cuc-parse', phaseLang),
+          summary: t('app.aiEditSafetyStopSummary', { count: delta.removedKeys.length }),
+          outputText: editedGherkin,
+          itemKey,
+        });
+        agentActivity.completeItem('cucumber', itemKey, false);
+        agentActivity.finishRun('cucumber', 'error');
+        setAiEditError(t('app.aiEditSafetyStopError'));
+        return;
+      }
+
+      emitter.emitLocal({
+        phase: 'cuc-parse',
+        label: getPhaseLabel('cuc-parse', phaseLang),
+        summary: t('app.aiEditAppliedSummary', { count: appliedScenarioCount }),
+        outputText: editedGherkin,
+        itemKey,
+      });
+
+      updateEditorFeature(updated);
+      setView('editor');
+      agentActivity.updateProgress('cucumber', 1, itemKey, prompt, editedGherkin);
+      agentActivity.completeItem('cucumber', itemKey, true);
+      agentActivity.finishRun('cucumber', 'done');
+    } catch (err) {
+      agentActivity.completeItem('cucumber', itemKey, false);
+      agentActivity.finishRun('cucumber', 'error');
+      setAiEditError(err instanceof Error ? err.message : t('app.aiEditUnknownError'));
+    } finally {
+      setAiEditLoading(false);
+    }
+  }, [editorAgentApiId, lang, editorFeature, model, updateEditorFeature, agentActivity, hasExplicitDestructiveIntent, buildAiEditSafetySummary, parseScenarioPatchResponse, normalizeScenarioName]);
 
   // DocxImport "Bearbeiten" → load feature into editor, create file in directory mode
   const handleLoadToEditor = useCallback(async (f: FeatureInput) => {
     if (fileExplorer.isDirectoryMode) {
       // Create a new .feature file in the root and open it
-      const fileName = (f.name || 'Neues Feature').replace(/[^a-zA-Z0-9äöüÄÖÜß_\- ]/g, '_');
+      const fileName = (f.name || t('app.newFeatureFallback')).replace(/[^a-zA-Z0-9äöüÄÖÜß_\- ]/g, '_');
       const newPath = await fileExplorer.createFileWithName('', fileName);
       if (newPath) {
         setFeatures([f]);
@@ -1080,24 +1579,10 @@ export default function App() {
     setView('editor');
   }, [fileExplorer, setFeatures]);
 
-  // Resolve target folder name: auto-detect existing folder or prompt
+  // Resolve target folder name. Always merges into an existing folder of the same
+  // name (GUID-based dedup in writeFeaturePkg overwrites matching files).
   const resolveImportFolder = async (fileName: string): Promise<string | null> => {
-    const defaultName = sanitizeName(fileName);
-    // Check if a folder with the sanitized name already exists in the tree root
-    const existingFolder = fileExplorer.tree.find(
-      (n) => n.type === 'folder' && n.displayName === defaultName,
-    );
-    if (existingFolder) {
-      const mergeInto = window.confirm(
-        `Ordner "${defaultName}" existiert bereits.\n\nIn bestehenden Ordner importieren?`,
-      );
-      if (mergeInto) return defaultName;
-      // User declined merge — prompt for a different name
-      const altName = window.prompt('Neuen Ordnernamen eingeben:', `${defaultName} (neu)`);
-      return altName || null;
-    }
-    // First import: use the document name directly
-    return defaultName;
+    return sanitizeName(fileName);
   };
 
   // ── EFK Agent management ─────────────────────────────────────
@@ -1124,7 +1609,7 @@ export default function App() {
     }
     setView('editor');
     setPreviewMode('toolbox');
-  }, [fileExplorer, model, buildAgentInstructions, setFeatures]);
+  }, [fileExplorer, model, setFeatures]);
 
   // Upload .feature files or ZIP
   const featureFileRef = useRef<HTMLInputElement>(null);
@@ -1187,8 +1672,121 @@ export default function App() {
     URL.revokeObjectURL(url);
   };
 
+  const handleEntryModeSelect = (nextAiEnabled: boolean) => {
+    try {
+      sessionStorage.setItem(ENTRY_GATE_DONE_SESSION_KEY, 'true');
+    } catch {
+      // Ignore blocked sessionStorage.
+    }
+
+    if (nextAiEnabled === aiEnabled) {
+      setEntryGateDone(true);
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.set('ai', nextAiEnabled ? 'true' : 'false');
+    window.location.assign(url.toString());
+  };
+
+  // ── Entry gateway (mode selection before any page is shown) ──
+  if (!entryGateDone) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg)', padding: '2rem' }}>
+        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <img src={logoUrl} alt="abas Forterro" style={{ height: 48, marginBottom: 12 }} />
+          <h1 style={{ fontSize: '1.4rem', fontWeight: 600, margin: 0 }}>{t('app.title')}</h1>
+          <p style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)', margin: '8px 0 0' }}>{t('app.entryModeTitle')}</p>
+          <p style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', margin: '4px 0 0' }}>{t('app.entryModeSubtitle')}</p>
+        </div>
+
+        <div style={{ width: '100%', maxWidth: 620, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+          <button
+            type="button"
+            onClick={() => handleEntryModeSelect(true)}
+            style={{ textAlign: 'left', border: '1px solid var(--color-border)', borderRadius: 10, background: 'var(--color-surface)', padding: '14px 16px', cursor: 'pointer' }}
+          >
+            <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{t('app.entryModeAiTitle')}</div>
+            <div style={{ marginTop: 6, fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{t('app.entryModeAiDesc')}</div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleEntryModeSelect(false)}
+            style={{ textAlign: 'left', border: '1px solid var(--color-border)', borderRadius: 10, background: 'var(--color-surface)', padding: '14px 16px', cursor: 'pointer' }}
+          >
+            <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>{t('app.entryModeLocalTitle')}</div>
+            <div style={{ marginTop: 6, fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{t('app.entryModeLocalDesc')}</div>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Mandatory shared-settings gate (all modes) ───────────────
+  if (sharedSettingsChecking) {
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        height: '100vh', gap: 16, color: 'var(--color-text-muted)',
+        fontFamily: 'var(--font-sans)', fontSize: '0.9rem',
+      }}>
+        <div style={{
+          width: 28, height: 28, border: '3px solid var(--color-border)',
+          borderTopColor: 'var(--color-primary)', borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+        <div style={{ textAlign: 'center' }}>
+          <div>{t('app.sharedSettingsChecking')}</div>
+        </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  if (!sharedSettingsReady) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg)', padding: '2rem' }}>
+        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <img src={logoUrl} alt="abas Forterro" style={{ height: 48, marginBottom: 12 }} />
+          <h1 style={{ fontSize: '1.4rem', fontWeight: 600, margin: 0 }}>{t('app.title')}</h1>
+          <p style={{ fontSize: '0.9rem', color: 'var(--color-danger)', margin: '8px 0 0', fontWeight: 600 }}>
+            {t('app.sharedSettingsRequiredTitle')}
+          </p>
+          <p style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', margin: '8px 0 0', maxWidth: 560 }}>
+            {t('app.sharedSettingsRequiredDesc')}
+          </p>
+        </div>
+
+        {sharedSettingsError && (
+          <div style={{ background: 'var(--color-danger)', color: 'white', padding: '8px 16px', fontSize: '0.85rem', borderRadius: 'var(--radius)', marginBottom: '1rem', maxWidth: 560, textAlign: 'center' }}>
+            {sharedSettingsError}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => { void handleChooseSharedSettingsFolderAtStartup(); }}
+          style={{
+            padding: '10px 18px',
+            border: 'none',
+            borderRadius: 999,
+            background: 'var(--color-accent)',
+            color: 'var(--color-text)',
+            fontWeight: 700,
+            cursor: 'pointer',
+          }}
+        >
+          📁 {t('app.sharedSettingsChooseFolder')}
+        </button>
+      </div>
+    );
+  }
+
   // ── Login screen when not authenticated ──────────────────────
-  if (!loggedIn) {
+  // Only shown in AI mode — without `?ai=true` the app boots straight
+  // into the Baukasten view with no auth prompt.
+  if (!loggedIn && aiEnabled) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg)', padding: '2rem' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
@@ -1202,13 +1800,14 @@ export default function App() {
           </div>
         )}
         <div style={{ width: '100%', maxWidth: 480 }}>
-          <SettingsPanel loggedIn={false} onLoginChange={setLoggedIn} model={model} onModelChange={handleModelChange} onSystemPromptChange={handleSystemPromptChange} alwaysOpen />
-        </div>
-        <div style={{ marginTop: '1rem' }}>
-          <div className={styles.langSwitch}>
-            <button className={lang === 'de' ? styles.langBtnActive : styles.langBtn} onClick={() => setLang('de')} type="button">DE</button>
-            <button className={lang === 'en' ? styles.langBtnActive : styles.langBtn} onClick={() => setLang('en')} type="button">EN</button>
-          </div>
+          <SettingsPanel
+            loggedIn={false}
+            onLoginChange={setLoggedIn}
+            model={model}
+            onModelChange={handleModelChange}
+            onSharedSettingsChange={() => setSharedSettingsRevision((value) => value + 1)}
+            alwaysOpen
+          />
         </div>
       </div>
     );
@@ -1228,10 +1827,10 @@ export default function App() {
           animation: 'spin 0.8s linear infinite',
         }} />
         <div style={{ textAlign: 'center' }}>
-          <div>{lang === 'de' ? 'Daten werden geladen…' : 'Loading data…'}</div>
+          <div>{t('app.loadingData')}</div>
           <div style={{ fontSize: '0.75rem', marginTop: 6, opacity: 0.7 }}>
-            {appLoading && (lang === 'de' ? 'Variablentabellen & Infosysteme' : 'Variable tables & infosystems')}
-            {!appLoading && fopAnalysis.isRestoring && (lang === 'de' ? 'FOP-Ordner wird wiederhergestellt…' : 'Restoring FOP folder…')}
+            {appLoading && t('app.loadingVariablesInfosystems')}
+            {!appLoading && fopAnalysis.isRestoring && t('app.loadingRestoreFop')}
           </div>
         </div>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -1258,7 +1857,7 @@ export default function App() {
             >
               {t('app.editor')}
             </button>
-            {fileExplorer.isDirectoryMode && (
+            {aiEnabled && fileExplorer.isDirectoryMode && (
               <button
                 className={view === 'docx' ? styles.navItemActive : styles.navItem}
                 onClick={() => setView('docx')}
@@ -1267,44 +1866,55 @@ export default function App() {
                 {t('app.docxImport')}
               </button>
             )}
+            {aiEnabled && fileExplorer.isDirectoryMode && (
+              <button
+                className={view === 'dataimport' ? styles.navItemActive : styles.navItem}
+                onClick={() => setView('dataimport')}
+                type="button"
+              >
+                {lang === 'de' ? 'Datenimport' : 'Data Import'}
+              </button>
+            )}
             <button
               className={view === 'stammdaten' ? styles.navItemActive : styles.navItem}
-              onClick={() => setView('stammdaten')}
+              onClick={() => { setStammdatenInitialTab('variablen'); setView('stammdaten'); }}
               type="button"
             >
-              {lang === 'de' ? 'Stammdaten' : 'Master Data'}
+              {t('app.masterData')}
             </button>
             {experimentalFeatures && (
               <button
                 className={view === 'reverse' ? styles.navItemActive : styles.navItem}
                 onClick={() => setView('reverse')}
                 type="button"
-                title="⚗ Experimentell"
+                title={`⚗ ${t('app.experimental')}`}
               >
-                {lang === 'de' ? 'Reverse Engineering' : 'Reverse Engineering'} ⚗
+                {t('app.reverseEngineering')} ⚗
               </button>
             )}
           </nav>
           <div className={styles.headerActions}>
-            <div className={styles.langSwitch}>
-              <button
-                className={lang === 'de' ? styles.langBtnActive : styles.langBtn}
-                onClick={() => setLang('de')}
-                type="button"
-              >
-                DE
-              </button>
-              <button
-                className={lang === 'en' ? styles.langBtnActive : styles.langBtn}
-                onClick={() => setLang('en')}
-                type="button"
-              >
-                EN
-              </button>
-            </div>
-            <TokenHistory />
-            <HelpGuide />
-            <SettingsPanel loggedIn={loggedIn} onLoginChange={setLoggedIn} model={model} onModelChange={handleModelChange} onSystemPromptChange={handleSystemPromptChange} />
+            <button
+              type="button"
+              className={`${styles.modeToggleBtn} ${aiEnabled ? styles.modeToggleBtnOn : styles.modeToggleBtnOff}`}
+              onClick={() => handleEntryModeSelect(!aiEnabled)}
+              title={t('app.modeToggleTitle')}
+              aria-label={aiEnabled ? t('app.modeAiOn') : t('app.modeAiOff')}
+            >
+              <span className={styles.modeToggleText}>AI</span>
+              <span className={styles.modeToggleTrack} aria-hidden="true">
+                <span className={styles.modeToggleKnob} />
+              </span>
+            </button>
+            {aiEnabled && (
+              <SettingsPanel
+                loggedIn={loggedIn}
+                onLoginChange={setLoggedIn}
+                model={model}
+                onModelChange={handleModelChange}
+                onSharedSettingsChange={() => setSharedSettingsRevision((value) => value + 1)}
+              />
+            )}
           </div>
         </div>
       </header>
@@ -1322,66 +1932,54 @@ export default function App() {
         </div>
       )}
 
-      {/* Agent Status Bar — visible on all tabs */}
-      <AgentStatusBar
-        runs={agentActivity.runs}
-        savedConversations={agentActivity.savedConversations}
-        onDeleteSaved={agentActivity.deleteSaved}
-        experimentalFeatures={experimentalFeatures}
-        lang={lang as 'de' | 'en'}
-      />
+      {/* Agent Status Bar — visible on all tabs. Clicking a chip expands the side panel. */}
+      {aiEnabled && (
+        <AgentStatusBar
+          runs={agentActivity.runs}
+          experimentalFeatures={experimentalFeatures}
+          lang={lang as 'de' | 'en'}
+          onChipClick={() => setSidePanelCollapsed(false)}
+        />
+      )}
 
-      {/* AgentActivityModal is rendered inside AgentStatusBar on chip click */}
-
-      {/* Process diagram — only Cucumber generation flow on Editor/Konzept/Stammdaten tabs */}
-      {view !== 'reverse' && [
-        { flow: processFlow, label: lang === 'de' ? 'Generierungs-Ablauf' : 'Generation Flow', defaultType: 'cucumber' as const },
-      ].map(({ flow, label, defaultType }) => {
-        const activeFlow = flow;
-        return (
-        <div key={defaultType} style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
+      {/* Workflow diagram — 1:1 mirror of the timeline, collapsible. */}
+      {aiEnabled && view !== 'reverse' && (
+        <div style={{ borderBottom: '1px solid var(--color-border)', background: 'var(--color-bg)' }}>
           <button
             type="button"
-            onClick={activeFlow.toggleExpanded}
+            onClick={() => setWorkflowDiagramExpanded(v => !v)}
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
               width: '100%', padding: '5px 16px',
               background: 'none', border: 'none', cursor: 'pointer',
               fontSize: '0.78rem', color: 'var(--color-text-muted)',
-              borderBottom: activeFlow.expanded ? '1px solid var(--color-border)' : 'none',
+              borderBottom: workflowDiagramExpanded ? '1px solid var(--color-border)' : 'none',
               textAlign: 'left',
             }}
           >
-            <span>{activeFlow.expanded ? '▾' : '▸'}</span>
+            <span>{workflowDiagramExpanded ? '▾' : '▸'}</span>
             <span style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', flexShrink: 0 }}>
-              {label}
+              {t('app.workflowDiagram')}
             </span>
-            {activeFlow.statusText && (
-              <span style={{ fontSize: '0.78rem', color: 'var(--color-primary)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                — {activeFlow.statusText}
-              </span>
-            )}
+            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+              — {(() => {
+                let total = 0;
+                for (const run of agentActivity.runs.values()) total += run.steps.length;
+                return t('app.stepsCount', { count: total });
+              })()}
+            </span>
           </button>
-          {activeFlow.expanded && (
-            <ProcessDiagram
-              flow={activeFlow.diagramFlow ?? { type: defaultType, steps: (defaultType === 'fop' ? FOP_STEPS : CUCUMBER_STEPS).map(s => ({ ...s })) }}
-              onAgentClick={(agentType: string) => setOpenProcessAgent(agentType)}
+          {workflowDiagramExpanded && (
+            <WorkflowDiagram
+              runs={agentActivity.runs as Map<string, import('./types/fop').AgentRun>}
               lang={lang as 'de' | 'en'}
+              onStepClick={() => setSidePanelCollapsed(false)}
             />
           )}
         </div>
-        );
-      })}
-      {openProcessAgent && (
-        <AgentActivityModal
-          run={agentActivity.runs.get(openProcessAgent as Parameters<typeof agentActivity.runs.get>[0]) ?? null}
-          agentLabel={openProcessAgent}
-          savedConversations={agentActivity.savedConversations.filter(c => c.agentType === openProcessAgent)}
-          onDeleteSaved={agentActivity.deleteSaved}
-          onClose={() => setOpenProcessAgent(null)}
-          lang={lang as 'de' | 'en'}
-        />
       )}
+      {/* AgentActivityModal removed — timeline is now rendered in the always-visible
+          WorkflowSidePanel on the right side of the main layout. */}
 
       {/* Data status bar — shows what reference data is loaded (all tabs) */}
       <DataStatusBar
@@ -1393,7 +1991,8 @@ export default function App() {
         lang={lang as 'de' | 'en'}
       />
 
-      <div className={styles.app}>
+      <div className={styles.app} ref={appRef}>
+      <div className={styles.mainsWrapper}>
       {/* Editor view */}
       <main ref={mainRef} className={styles.main} style={{ display: view === 'editor' ? undefined : 'none' }}>
         {/* File Explorer sidebar */}
@@ -1419,6 +2018,8 @@ export default function App() {
                 onDeleteFolder={handleDeleteFolder}
                 onCreateFile={handleExplorerCreateFile}
                 onDeleteFile={handleDeleteFile}
+                onDuplicateFile={handleDuplicateFile}
+                onDeleteFiles={handleDeleteFiles}
                 onMoveFile={fileExplorer.moveEntry}
                 onRenameEntry={fileExplorer.renameEntry}
                 onSetDragOverPath={fileExplorer.setDragOverPath}
@@ -1426,6 +2027,8 @@ export default function App() {
                 onFolderSelect={setSelectedFolderPath}
                 errorPaths={errorPaths}
                 activeScenarioPath={focusScenario && fileExplorer.activeFilePath ? `${fileExplorer.activeFilePath}#${focusScenario.id}` : null}
+                recentWorkspaces={fileExplorer.recentWorkspaces}
+                onSwitchWorkspace={fileExplorer.switchWorkspace}
               />
             </aside>
             <div className={styles.explorerDivider} onMouseDown={handleExplorerDividerMouseDown} />
@@ -1444,8 +2047,21 @@ export default function App() {
                 📁
               </button>
             )}
+            {isTemplateEditing && (
+              <div className={styles.templateModeBadge}>
+                <span className={styles.templateModeLabel}>{t('action.templateEditorLabel')}</span>
+                <span className={styles.templateModeName}>{templateEditingName || t('action.templateNew')}</span>
+                <button
+                  className={styles.templateModeClose}
+                  onClick={closeTemplateEditor}
+                  type="button"
+                >
+                  {t('action.templateCloseEditor')}
+                </button>
+              </div>
+            )}
             {/* Undo/Redo and reset only when a file is open */}
-            {fileExplorer.activeFilePath && (
+            {fileExplorer.activeFilePath && !isTemplateEditing && (
               <>
                 <div className={styles.undoRedo}>
                   <button
@@ -1469,10 +2085,7 @@ export default function App() {
                   <button
                     className={styles.resetBtn}
                     onClick={() => {
-                      if (window.confirm(t('app.resetConfirm'))) {
-                        setFeatures([{ ...INITIAL_FEATURE }]);
-                        setActiveFeatureIdx(0);
-                      }
+                      setShowResetConfirm(true);
                     }}
                     type="button"
                     title={t('app.resetAll')}
@@ -1493,33 +2106,36 @@ export default function App() {
           </div>
 
           {/* No folder or no file selected: show placeholder */}
-          {!fileExplorer.activeFilePath ? (
+          {!fileExplorer.activeFilePath && !isTemplateEditing ? (
             <div className={styles.editorPlaceholder}>
               <div className={styles.editorPlaceholderIcon}>{fileExplorer.isDirectoryMode ? '📄' : '📂'}</div>
               <div className={styles.editorPlaceholderText}>
                 {!fileExplorer.isDirectoryMode
-                  ? (lang === 'de' ? 'Öffne einen Ordner im Explorer, um Feature-Dateien zu bearbeiten.' : 'Open a folder in the explorer to edit feature files.')
+                  ? t('app.editorPlaceholderOpenFolder')
                   : fileExplorer.isVisible
-                    ? (lang === 'de' ? 'Wähle eine Feature-Datei aus dem Explorer, um sie zu bearbeiten.' : 'Select a feature file from the explorer to edit.')
-                    : (lang === 'de' ? 'Explorer einblenden (📁 oder Ctrl+B), um eine Feature-Datei auszuwählen.' : 'Show explorer (📁 or Ctrl+B) to select a feature file.')}
+                    ? t('app.editorPlaceholderSelectFile')
+                    : t('app.editorPlaceholderShowExplorer')}
               </div>
             </div>
           ) : (
             <>
               <FeatureForm
-                feature={feature}
-                onChange={updateFeature}
-                showGenerate={loggedIn && !!editorAgentApiId}
+                feature={editorFeature}
+                onChange={updateEditorFeature}
+                showGenerate={!isTemplateEditing && loggedIn && !!editorAgentApiId}
                 onGenerate={handleGenerate}
                 generating={loading}
                 generationStep={generationStep}
-                generateError={!editorAgentApiId && loggedIn ? (lang === 'de' ? 'Kein Agent verfügbar. Bitte zuerst einen Agent erstellen (Konzept-Import oder Ordner-Agent).' : 'No agent available. Please create an agent first (concept import or folder agent).') : error}
+                generateError={!editorAgentApiId && loggedIn ? t('app.noAgentAvailableExplain') : error}
                 tables={tableDefs}
                 aiRating={aiRating}
                 standaloneAiRating={standaloneAiRating}
                 onRequestRating={editorAgentApiId ? handleRequestRating : undefined}
                 ratingLoading={ratingLoading}
                 ratingError={ratingError}
+                onApplyAiEdit={!isTemplateEditing && loggedIn && !!editorAgentApiId ? handleApplyAiEdit : undefined}
+                aiEditLoading={aiEditLoading}
+                aiEditError={aiEditError}
                 focusScenarioId={focusScenario ? `${focusScenario.id}::${focusScenario.ts}` : null}
               />
             </>
@@ -1536,7 +2152,7 @@ export default function App() {
                 onClick={() => setPreviewMode('toolbox')}
                 type="button"
               >
-                {lang === 'de' ? 'Baukasten' : 'Toolbox'}
+                {t('app.toolbox')}
               </button>
               <button
                 className={previewMode === 'text' ? styles.previewToggleActive : styles.previewToggleBtn}
@@ -1552,47 +2168,32 @@ export default function App() {
               >
                 {t('app.diagram')}
               </button>
-              {activeAgent && (
-                <button
-                  className={previewMode === 'agent' ? styles.previewToggleActive : styles.previewToggleBtn}
-                  onClick={() => setPreviewMode('agent')}
-                  type="button"
-                >
-                  🤖 Agent
-                </button>
-              )}
+
             </div>
-            {(effectivePreviewMode === 'text' || effectivePreviewMode === 'diagram') && (
+            {features.length > 1 && (
               <ActionBar
-                gherkin={gherkin}
-                featureName={feature.name}
                 showZip={features.length > 1}
                 onDownloadZip={handleDownloadAllZip}
               />
             )}
           </div>
           {effectivePreviewMode === 'toolbox' && (
-            <StepToolbox />
+            <StepToolbox
+              feature={editorFeature}
+              onStartTemplateEdit={startTemplateEditor}
+              onTemplateSaved={handleTemplateSaved}
+              onCloseTemplateEditor={closeTemplateEditor}
+              templateEditingName={templateEditingName}
+              templateEditingId={templateEditingId}
+              isTemplateDirty={isTemplateDirty}
+              templateSaveTick={templateSaveTick}
+            />
           )}
           {effectivePreviewMode === 'text' && (
             <GherkinPreview gherkin={gherkin} lineMapping={lineMapping} onStepClick={handleStepClick} />
           )}
           {effectivePreviewMode === 'diagram' && (
             <FlowDiagram scenarios={feature.scenarios} onStepClick={handleStepClick} />
-          )}
-          {effectivePreviewMode === 'agent' && activeAgent && (
-            <AgentPanel
-              agent={activeAgent}
-              model={model}
-              isSending={agentSending}
-              streamingText={agentStreamingText}
-              onSendMessage={(text) => handleAgentSendMessage(activeAgent.id, text)}
-              onDeleteAgent={() => handleDeleteAgent(activeAgent.id)}
-              error={agentError}
-              onRetryLogin={handleAgentRetryLogin}
-              onRetry={() => handleAgentRetry(activeAgent.id)}
-              onNewConversation={() => handleAgentNewConversation(activeAgent.id)}
-            />
           )}
         </section>
       </main>
@@ -1610,53 +2211,48 @@ export default function App() {
           padding: 0,
           boxSizing: 'border-box',
         }}>
-          {/* Flow diagrams — inline in reverse tab */}
-          {[
-            { flow: processFlow, label: lang === 'de' ? 'Analyse-Ablauf' : 'Analysis Flow', defaultType: 'fop' as const },
-            { flow: cucumberFlow, label: lang === 'de' ? 'Generierungs-Ablauf' : 'Generation Flow', defaultType: 'cucumber' as const },
-          ].map(({ flow, label, defaultType }) => (
-            <div key={defaultType} style={{ borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
-              <button
-                type="button"
-                onClick={flow.toggleExpanded}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  width: '100%', padding: '5px 16px',
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontSize: '0.78rem', color: 'var(--color-text-muted)',
-                  borderBottom: flow.expanded ? '1px solid var(--color-border)' : 'none',
-                  textAlign: 'left',
-                }}
-              >
-                <span>{flow.expanded ? '▾' : '▸'}</span>
-                <span style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  {label}
-                </span>
-                {flow.statusText && (
-                  <span style={{ fontSize: '0.78rem', color: 'var(--color-primary)', fontWeight: 500 }}>
-                    — {flow.statusText}
-                  </span>
-                )}
-              </button>
-              {flow.expanded && (
-                <ProcessDiagram
-                  flow={flow.diagramFlow ?? (defaultType === 'fop'
-                    ? { type: 'fop' as const, steps: FOP_STEPS.map(s => ({ ...s })) }
-                    : { type: 'cucumber' as const, steps: CUCUMBER_STEPS.map(s => ({ ...s })) })}
-                  onAgentClick={(agentType: string) => setOpenProcessAgent(agentType)}
-                  lang={lang as 'de' | 'en'}
-                />
-              )}
-            </div>
-          ))}
+          {/* Workflow diagram — single unified view driven by the timeline. */}
+          <div style={{ borderBottom: '1px solid var(--color-border)', flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => setWorkflowDiagramExpanded(v => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', padding: '5px 16px',
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: '0.78rem', color: 'var(--color-text-muted)',
+                borderBottom: workflowDiagramExpanded ? '1px solid var(--color-border)' : 'none',
+                textAlign: 'left',
+              }}
+            >
+              <span>{workflowDiagramExpanded ? '▾' : '▸'}</span>
+              <span style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                {t('app.workflowDiagram')}
+              </span>
+              <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                — {(() => {
+                  let total = 0;
+                  for (const run of agentActivity.runs.values()) total += run.steps.length;
+                  return t('app.stepsCount', { count: total });
+                })()}
+              </span>
+            </button>
+            {workflowDiagramExpanded && (
+              <WorkflowDiagram
+                runs={agentActivity.runs as Map<string, import('./types/fop').AgentRun>}
+                lang={lang as 'de' | 'en'}
+                onStepClick={() => setSidePanelCollapsed(false)}
+              />
+            )}
+          </div>
           {/* FOP folder header bar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderBottom: '1px solid var(--color-border)', flexShrink: 0, fontSize: '0.8rem' }}>
             {fopAnalysis.rootDir ? (
               <>
                 <span>📁 {fopAnalysis.rootDir.name}</span>
                 <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem' }}>{fopAnalysis.fopFiles.length} FOPs</span>
-                <button type="button" onClick={() => fopAnalysis.loadDirectory(fopAnalysis.rootDir!)} style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, padding: '1px 6px', cursor: 'pointer', fontSize: '0.72rem' }} title={lang === 'de' ? 'Neu laden' : 'Reload'}>⟳</button>
-                <button type="button" onClick={fopAnalysis.closeDirectory} style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, padding: '1px 6px', cursor: 'pointer', fontSize: '0.72rem' }} title={lang === 'de' ? 'Ordner entfernen' : 'Remove folder'}>✕</button>
+                <button type="button" onClick={() => fopAnalysis.loadDirectory(fopAnalysis.rootDir!)} style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, padding: '1px 6px', cursor: 'pointer', fontSize: '0.72rem' }} title={t('app.reload')}>⟳</button>
+                <button type="button" onClick={fopAnalysis.closeDirectory} style={{ background: 'none', border: '1px solid var(--color-border)', borderRadius: 4, padding: '1px 6px', cursor: 'pointer', fontSize: '0.72rem' }} title={t('app.removeFolder')}>✕</button>
                 <span style={{ flex: 1 }} />
               </>
             ) : (
@@ -1672,7 +2268,7 @@ export default function App() {
                   }}
                   style={{ padding: '4px 12px', border: '1.5px solid var(--color-primary)', borderRadius: 6, background: 'none', color: 'var(--color-primary)', cursor: 'pointer', fontWeight: 500 }}
                 >
-                  {lang === 'de' ? '📁 FOP-Ordner öffnen' : '📁 Open FOP folder'}
+                  📁 {t('app.openFopFolder')}
                 </button>
                 {fileExplorer.rootHandle && (
                   <button
@@ -1680,11 +2276,19 @@ export default function App() {
                     onClick={() => fopAnalysis.loadDirectory(fileExplorer.rootHandle!)}
                     style={{ padding: '4px 12px', border: '1px solid var(--color-border)', borderRadius: 6, background: 'none', cursor: 'pointer', fontSize: '0.75rem' }}
                   >
-                    {lang === 'de' ? '← Aus Explorer' : '← From Explorer'}
+                    ← {t('app.fromExplorer')}
                   </button>
                 )}
               </>
             )}
+            <button
+              type="button"
+              onClick={() => { setStammdatenInitialTab('learning'); setView('stammdaten'); }}
+              style={{ marginLeft: 'auto', padding: '4px 10px', border: '1px solid var(--color-border)', borderRadius: 6, background: 'none', cursor: 'pointer', fontSize: '0.75rem' }}
+              title={t('app.openLearningDashboard')}
+            >
+              🧠 {t('app.learnings')}
+            </button>
           </div>
           {/* Loading bar */}
           {fopAnalysis.isLoading && (
@@ -1798,11 +2402,8 @@ export default function App() {
                 const tests = await generateCucumberFromFopAnalysis(
                   fopFile, analysis, fopAnalysis.bindings, tableDefs, model, lang as 'de' | 'en',
                   { testDepth,
-                    onTableIdStarted: (req) => {
-                      agentActivity.addExchange('cucumber', lang === 'de' ? 'Tabellen-Identifikation' : 'Table Identification', req);
-                    },
+                    emitter: agentActivity.getEmitter('fop-cucumber'),
                     onTablesIdentified: (info) => {
-                      if (info.tableIdRawResponse) agentActivity.updateLastExchange('cucumber', info.tableIdRawResponse);
                       // Step: Tables identified → complete branch + table step
                       const tableStep = info.path === 'local' ? 'local-tables' : 'ki-tables';
                       cucumberFlow.activateStep(tableStep);
@@ -1813,17 +2414,10 @@ export default function App() {
                       }]);
                       cucumberFlow.completeStep(tableStep);
                     },
-                    onPromptBuilt: (prompt) => {
+                    onPromptBuilt: (_prompt) => {
                       cucumberFlow.activateStep('build-prompt');
                       cucumberFlow.completeStep('build-prompt');
                       cucumberFlow.activateStep('gen-gherkin');
-                      agentActivity.addExchange('cucumber', lang === 'de' ? 'Gherkin-Generierung' : 'Gherkin Generation', prompt);
-                      agentActivity.updateProgress('cucumber', 0, fopName, prompt, undefined);
-                    },
-                    onRound: (round, maxRounds, sent, received) => {
-                      console.log(`[DeepTest-UI] Round ${round}/${maxRounds} | sent: ${sent.slice(0, 100)}... | received: ${received.slice(0, 100)}...`);
-                      const label = `${lang === 'de' ? 'Runde' : 'Round'} ${round}/${maxRounds}`;
-                      agentActivity.addExchange('cucumber', label, sent, received);
                     },
                     maxRounds: (await import('./lib/settings')).getDeepTestMaxRounds(),
                   },
@@ -1886,7 +2480,7 @@ export default function App() {
               // Load tests into the Editor tab — replace existing with same GUID
               const { makeFopGuid } = await import('./lib/featureGuid');
               const fopGuid = makeFopGuid(analysis.fopPath);
-              const guidTag = `@${fopGuid}`;
+              const guidTag = `@guid-${fopGuid}`;
 
               const newFeatures = analysis.cucumberTests!.map(f => ({
                 ...f,
@@ -1935,22 +2529,21 @@ export default function App() {
               const analysis = fopAnalysis.getSelectedAnalysis();
               if (!analysis || !fopAnalysis.rootDir) return;
               const { writeKonzeptDoc } = await import('./lib/fopCache');
-              const currentLang = lang as 'de' | 'en';
               const lines = [
                 `# ${analysis.fopPath}`,
                 '',
-                `## ${currentLang === 'de' ? 'Fachliche Beschreibung' : 'Business Description'}`,
+                `## ${t('app.exportBusinessHeading')}`,
                 analysis.humanDescription.summary,
                 '',
                 ...(analysis.humanDescription.useCases.length > 0 ? [
-                  `### ${currentLang === 'de' ? 'Anwendungsfälle' : 'Use Cases'}`,
+                  `### ${t('app.exportUseCasesHeading')}`,
                   ...analysis.humanDescription.useCases.map(u => `- ${u}`),
                   '',
                 ] : []),
-                `## ${currentLang === 'de' ? 'Technische Beschreibung' : 'Technical Description'}`,
+                `## ${t('app.exportTechnicalHeading')}`,
                 analysis.technicalDescription.summary,
                 '',
-                `## ${currentLang === 'de' ? 'Richtlinien' : 'Guidelines'}: ${analysis.guidelines.score}`,
+                `## ${t('app.exportGuidelinesHeading')}: ${analysis.guidelines.score}`,
                 ...analysis.guidelines.findings.map(f => `- [${f.severity.toUpperCase()}] Z.${f.line}: ${f.message}`),
               ];
               const safeName = (analysis.fopPath.split('/').pop() ?? 'analyse').replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -1975,6 +2568,13 @@ export default function App() {
             onIsBindingsChange={setIsBindings}
             kbDocuments={kbDocuments}
             onKBDocumentsChange={setKbDocuments}
+            rootHandle={fileExplorer.rootHandle}
+            onLearningsChanged={(entries) => {
+              setWorkspaceLearnings(entries);
+            }}
+            learningAgentApiId={editorAgentApiId}
+            learningModel={model}
+            initialTab={stammdatenInitialTab}
             lang={lang as 'de' | 'en'}
           />
         </main>
@@ -1985,12 +2585,15 @@ export default function App() {
         <DocxImport
           onLoadToEditor={handleLoadToEditor}
           model={model}
+          learningHints={workspaceConceptLearningHints}
           tables={tableDefs}
           onTablesChange={handleTablesChange}
-          showAi={loggedIn}
+          showAi={aiEnabled}
           agentApiId={editorAgentApiId}
-          onCreateWithAgent={loggedIn ? handleDocxCreateWithAgent : undefined}
+          rootHandle={fileExplorer.rootHandle}
+          onCreateWithAgent={aiEnabled ? handleDocxCreateWithAgent : undefined}
           existingFeatureGuids={existingFeatureGuids}
+          getBulkEmitter={() => agentActivity.getEmitter('cucumber')}
           onBulkActivityChange={(info) => {
             console.log('[ProcessFlow-Bulk]', {
               phase: info.current === 0 ? 'FLOW_START' : info.identifiedTables !== undefined ? 'AP_COMPLETED' : !info.outputSoFar ? 'AP_STARTING' : 'AP_STREAMING',
@@ -2014,7 +2617,7 @@ export default function App() {
                 console.log('[ProcessFlow-Bulk] → tableIdStarted:', info.currentItem);
                 agentActivity.addExchange(
                   'cucumber',
-                  lang === 'de' ? 'Tabellen-Identifikation' : 'Table Identification',
+                  t('app.tableIdentification'),
                   info.tableIdRequest || '(Anfrage)',
                 );
               } else if ((info as { tablesIdentified?: boolean }).tablesIdentified) {
@@ -2198,19 +2801,134 @@ export default function App() {
           }}
         />
       </main>
-      </div>
 
-      {/* Agent reset confirm dialog */}
-      {deleteAgentConfirm && (
-        <ConfirmDialog
-          title="Agenten zurücksetzen?"
-          message="Der Chatverlauf und Kontext werden gelöscht. Ein neuer Agent mit dem aktuellen System-Prompt wird sofort erstellt."
-          confirmLabel="Ja, zurücksetzen"
-          cancelLabel="Abbrechen"
-          onConfirm={() => { deleteAgentConfirm.resolve(true); setDeleteAgentConfirm(null); }}
-          onCancel={() => { deleteAgentConfirm.resolve(false); setDeleteAgentConfirm(null); }}
+      {/* Data Import view (Excel/CSV) */}
+      <main style={{ display: view === 'dataimport' ? undefined : 'none' }}>
+        <DataImportTab
+          rootHandle={fileExplorer.rootHandle}
+          tableDefs={tableDefs}
+          onFeatureGenerated={(feature) => {
+            setFeatures((previous) => [...previous, feature]);
+            setActiveFeatureIdx(features.length);
+            setView('editor');
+          }}
+        />
+      </main>
+      </div>
+      {aiEnabled && !sidePanelCollapsed && (
+        <div className={styles.sidePanelDivider} onMouseDown={handleSidePanelDividerMouseDown} />
+      )}
+      {aiEnabled && (
+        <WorkflowSidePanel
+          runs={agentActivity.runs as Map<string, import('./types/fop').AgentRun>}
+          lang={lang as 'de' | 'en'}
+          collapsed={sidePanelCollapsed}
+          onToggleCollapsed={() => setSidePanelCollapsed(!sidePanelCollapsed)}
+          width={sidePanelWidth}
+          onClear={agentActivity.clearAllRuns}
         />
       )}
+
+      {showTemplateDiscardConfirm && (
+        <ConfirmDialog
+          title={t('app.unsavedChanges')}
+          message={t('action.templateDiscardConfirm')}
+          confirmLabel={t('app.discard')}
+          cancelLabel={t('bulk.cancel')}
+          onConfirm={() => {
+            const action = templateDiscardConfirmActionRef.current;
+            templateDiscardConfirmActionRef.current = null;
+            setShowTemplateDiscardConfirm(false);
+            action?.();
+          }}
+          onCancel={() => {
+            templateDiscardConfirmActionRef.current = null;
+            setShowTemplateDiscardConfirm(false);
+          }}
+        />
+      )}
+
+      {showResetConfirm && (
+        <ConfirmDialog
+          title={t('app.resetEverything')}
+          message={t('app.resetConfirm')}
+          confirmLabel={t('app.reset')}
+          cancelLabel={t('bulk.cancel')}
+          onConfirm={() => {
+            setFeatures([{ ...INITIAL_FEATURE }]);
+            setActiveFeatureIdx(0);
+            setShowResetConfirm(false);
+          }}
+          onCancel={() => setShowResetConfirm(false)}
+        />
+      )}
+
+      {aiEditReview && (
+        <ConfirmDialog
+          title={aiEditReview.title}
+          message={aiEditReview.message}
+          confirmLabel={aiEditReview.allowApply
+            ? t('app.aiEditApplyAnyway')
+            : t('app.close')}
+          cancelLabel={t('app.cancel')}
+          onConfirm={() => {
+            if (aiEditReview.allowApply) {
+              updateEditorFeature(aiEditReview.updated);
+              setView('editor');
+            }
+            setAiEditReview(null);
+            setAiEditError(null);
+          }}
+          onCancel={() => setAiEditReview(null)}
+        />
+      )}
+
+      {pendingWorkspaceImport && (
+        <WorkspaceSwitchModal
+          payload={pendingWorkspaceImport}
+          onConfirm={(sel) => {
+            const handle = fileExplorer.rootHandle;
+            if (!sel.tables) setTableDefs([]);
+            if (!sel.fopBindings) setFopBindings([]);
+            if (!sel.isBindings) setIsBindings([]);
+            if (!sel.kbDocuments) {
+              import('./lib/kbStore').then(({ clearAllKBDocuments }) => clearAllKBDocuments()).catch(() => {});
+              setKbDocuments([]);
+            }
+            // Save selected data into new workspace
+            if (handle) {
+              if (sel.tables) saveTableDefsToWorkspace(handle, pendingWorkspaceImport.tables).catch(() => {});
+              if (sel.fopBindings) saveFopBindingsToWorkspace(handle, pendingWorkspaceImport.fopBindings).catch(() => {});
+              if (sel.isBindings) saveIsBindingsToWorkspace(handle, pendingWorkspaceImport.isBindings).catch(() => {});
+              if (sel.kbDocuments) {
+                import('./lib/kbStore').then(({ loadAllKBChunks }) => loadAllKBChunks()).then((chunks) => {
+                  saveKBToWorkspace(handle, pendingWorkspaceImport.kbDocuments, chunks).catch(() => {});
+                }).catch(() => {});
+              }
+              if (sel.learnings) {
+                import('./lib/learningStore').then(({ saveWorkspaceLearnings }) =>
+                  saveWorkspaceLearnings(handle, workspaceLearnings)
+                ).catch(() => {});
+              }
+              if (sel.settings) {
+                import('./lib/learningStore').then(({ saveSharedSettingsJson }) =>
+                  saveSharedSettingsJson()
+                ).catch(() => {});
+              }
+            }
+            setPendingWorkspaceImport(null);
+          }}
+          onClear={() => {
+            setTableDefs([]);
+            setFopBindings([]);
+            setIsBindings([]);
+            import('./lib/kbStore').then(({ clearAllKBDocuments }) => clearAllKBDocuments()).catch(() => {});
+            setKbDocuments([]);
+            setPendingWorkspaceImport(null);
+          }}
+        />
+      )}
+      </div>
     </>
   );
 }

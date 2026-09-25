@@ -1,0 +1,126 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDILADKO.TAB
+.. Autor          : tg
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Zeilen-FOP, FÅllt Tabelle und Kopf aus EDI-Nachricht
+.. Functionality  : row fop, fills header and table with data from edi message
+..*****************************************************************************
+.set trans -
+..
+.type integer    ximge       ? _F|defined(T|ximge)
+.type integer    ximgen      ? _F|defined(T|ximgen)
+.type integer    ximgea      ? _F|defined(T|ximgea)
+.type text   xtvorg      ? _F|defined(T|xtvorg)
+..
+..  H buffer contains an edi message,
+..  first rows of that message contain header information
+..  then there might be multiple blocks of rows with row information
+..  each block of rows starts with LIN1
+..
+!KOPF
+.. show error, if message ends without LIN1 entries
+.select line
+.continue ERROR1  ? _T|mehr
+.. branch to rows
+.continue LIN1    ?  H|text1 = "LIN1"
+.. evaluate diffrent header rows
+.continue UNBI    ?  H|text1 = "UNBI"
+.continue PAC1    ?  H|text1 = "PAC1"
+.continue SUP1    ?  H|text1 = "SUP1"
+.continue BUY1    ?  H|text1 = "BUY1"
+.continue DAH1    ?  H|text1 = "DAH1"
+.continue KOPF
+!UNBI
+.formula M|uebdat = H|text15 ? H|text15<>""
+.formula M|uebdat = H|text9  ? H|text15="" & H|text9<>""
+.formula M|uebnrn = H|text13
+.formula M|uebnra = H|text12
+.continue KOPF
+!SUP1
+.formula M|liefnum  = H|text4
+.formula M|ortschll = H|text11
+.continue KOPF
+!BUY1
+.formula M|knum     = H|text4
+.formula M|ortschlk = H|text11
+.continue KOPF
+!PAC1
+.formula T|ximgea = H|text17
+.formula M|sollw  = H|text21
+.formula T|ximgea = T|ximgea * (-1)      ?  'H|text18' = "-"
+.formula M|besalt = T|ximgea
+.formula T|ximgen = H|text19
+.formula M|ladgrp = H|text16
+.formula T|ximgen = T|ximgen * (-1)      ?  'H|text20' = "-"
+.formula M|besneu = T|ximgen
+.formula M|artnrk = H|text4
+.formula M|artnrl = H|text5
+.formula M|sollwt = H|text22
+.continue KOPF
+!DAH1
+.formula M|budatalt = H|text8
+.formula M|budatneu = H|text7
+.continue KOPF
+..
+!ZEILEN
+.select line
+.continue END     ? _T|mehr
+.continue LIN1    ?  H|text1 = "LIN1"
+.continue RFL1    ?  H|text1 = "RFL1"
+.continue RFL2    ?  H|text1 = "RFL2"
+.continue DAL1    ?  H|text1 = "DAL1"
+.continue QTY1    ?  H|text1 = "QTY1"
+.continue TRA2    ?  H|text1 = "TRA2"
+.continue ZEILEN
+!LIN1
+.make screen line +O
+.formula T|xtvorg      = ""
+.formula M|bezbelgpos1 = H|text11
+.formula M|bezbelgpos2 = H|text12
+.formula M|belgpos1    = H|text9
+.formula M|belgpos2    = H|text10
+.continue ZEILEN
+!RFL1
+.formula M|belegnr = H|text5 ? H|text5<>""
+.formula M|belegnr = H|text7 ? H|text5="" & H|text7<>""
+.formula M|belegdat = H|text6
+.formula M|bezbelegdat = H|text4
+.formula M|anldat      = H|text8
+.formula M|bezbelegnr = H|text3
+.continue ZEILEN
+!RFL2: 'T|xtvorg' is used at QTY1
+.formula T|xtvorg  = 'H|text17'
+.formula M|vorgang = H|text17
+.formula M|werkk   = H|text12
+.continue ZEILEN
+!DAL1
+.. ggf bereits mit RFL1 gefuellt
+.formula M|belegdat    = H|text7   ?  F|empty(M|belegdat)
+.formula M|bezbelegdat = H|text8   ?  F|empty(M|bezbelegdat)
+.formula M|bezugbudat  = H|text9
+.formula M|anldat      = H|text5   ?  F|empty(M|anldat)
+.formula M|budat       = H|text10  ? _F|empty(H|text10)
+.formula M|budat       = H|text6   ?  F|empty(H|text10) & _F|empty(H|text6)
+.continue ZEILEN
+!QTY1
+.formula T|ximge  = H|text3
+.formula T|ximge  = T|ximge  * (-1)      ? 'H|text15' = "-"
+.formula M|zugang = ximge                ?  T|xtvorg="10";T|xtvorg="12";T|xtvorg="14";T|xtvorg="16";T|xtvorg="30";T|xtvorg="50";T|xtvorg="52";T|xtvorg="54";T|xtvorg="56";T|xtvorg="70";T|xtvorg="72";T|xtvorg="90"
+.formula M|abgang = ximge                ?  T|xtvorg="21";T|xtvorg="23";T|xtvorg="25";T|xtvorg="27";T|xtvorg="31";T|xtvorg="51";T|xtvorg="53";T|xtvorg="55";T|xtvorg="57";T|xtvorg="71";T|xtvorg="73";T|xtvorg="91"
+.formula M|bezmge = H|text13
+.formula T|ximge  = T|ximge  * (-1)      ? 'H|text16' = "-"
+.formula M|bezmge = ximge
+.continue ZEILEN
+!TRA2
+.formula M|trannr = H|text15
+.continue ZEILEN
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERROR1
+.error Der Datensatz ist unvollstÑndig.
+.end 1

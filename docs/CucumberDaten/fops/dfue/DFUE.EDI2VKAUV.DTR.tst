@@ -1,0 +1,9 @@
+Datei mit Informationen zum Ersetzen Debitor-Identnummer in
+eingegegangenen VDA-Lieferabrufen fr EDI-Datens„tze
+mit bestimmten Werten fr:
+
+- Identnummer des Kunden bei ABAS
+- Werk der Kunden
+- Abladestelle beim Kunden
+neu      # alt      # werk # abladestelle # Kommentar
+00000000 # 00000000 # 000  # 00000        # max. Parameterl„nge

@@ -1,0 +1,149 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : AUFRUFPARAMETER.BSTART.BV
+.. Autor          : fwester
+.. Verantwortlich : fwester
+.. Kontrolle      : lei
+.. Funktion       : Validiert die Maske und formuliert die Datenbankanfrage.
+.. Functionality  : Validates mask and defines database request.
+..*****************************************************************************
+.set trans -
+..
+.continue ERROR03 ?  F|empty(M|anzstufen)
+.continue ISVALID ?  M|testmode
+.continue SUBMASK ? _F|defined(A|gruppe)
+.select metadata "A|"
+.continue SUBMASK ? _G|mehr
+.continue INFOSYS ? H|dnr = 65 & H|gruppe = 1
+.continue VARTAB  ? H|dnr = 12 & H|gruppe = 26
+.error -number 1111
+.continue BREAK
+..
+!INFOSYS
+.assign M|kontexttyp = "(SingleInfosystem)"
+.continue HASTAB
+..
+!VARTAB
+.assign M|kontexttyp = "(SingleTableOfVariables)"
+.continue HASTAB ? H|vvtab
+.copy M|aufrtab = G|false
+.continue COMMON
+..
+!HASTAB
+.copy M|aufrtab = G|true ? G|avtzeile > 0 ; A|aktzeile > 0
+..
+!COMMON
+.assign M|aufrktxt = H|id
+.assign M|buttonfeld = G|avtvar
+.select -
+..
+!ISVALID: Validate input
+.continue SINGLE  ? _F|empty(M|aufruf)
+.continue ERRCTXT ?  F|empty(M|kontexttyp)
+.continue ERRMASK ?  F|empty(M|aufrktxt)
+.continue ERRBUTT ?  F|empty(M|buttonfeld)
+.continue INIT
+..
+!SINGLE: Validate contexts
+.continue CLRTAB  ? F|empty(M|aufruf)
+.continue ERROR04 ? M|aufrtab <> M|aufruf^aufrtab
+.continue ALLVTAB ? F|equals(M|kontexttyp, "(AllTablesOfVariables)")
+.continue ALLINFO ? F|equals(M|kontexttyp, "(AllInfosystems)")
+.continue ONEVTAB ? F|equals(M|kontexttyp, "(SingleTableOfVariables)")
+.continue ONEINFO ? F|equals(M|kontexttyp, "(SingleInfosystem)")
+.continue ERROR04
+..
+!ALLVTAB: All tables needs all tables
+.continue ALLNALL ? F|equals(M|aufruf^kontexttyp, "(AllTablesOfVariables)")
+.continue ERROR04
+..
+!ALLINFO: All infosystems need all infosystems
+.continue ALLNALL ? F|equals(M|aufruf^kontexttyp, "(AllInfosystems)")
+.continue ERROR04
+..
+!ONEVTAB: One table allows one or all tables
+.continue ONENALL ? F|equals(M|aufruf^kontexttyp, "(AllTablesOfVariables)")
+.continue ONENONE ? F|equals(M|aufruf^kontexttyp, "(SingleTableOfVariables)")
+.continue ERROR04
+..
+!ONEINFO: One infosystem allows one or all infosystems
+.continue ONENALL ? F|equals(M|aufruf^kontexttyp, "(AllInfosystems)")
+.continue ONENONE ? F|equals(M|aufruf^kontexttyp, "(SingleInfosystem)")
+.continue ERROR04
+..
+!ALLNALL: All in all needs empty callers at all
+.continue CLRTAB ? F|empty(M|aufrktxt) & F|empty(M|aufruf^aufrktxt)
+.continue ERROR04
+..
+!ONENALL: One and all needs empty caller in the where-used element
+.continue CLRTAB ? _F|empty(M|aufrktxt) & F|empty(M|aufruf^aufrktxt)
+.continue ERROR04
+..
+!ONENONE: One in one needs no empty callers at all
+.continue ERROR04 ? F|empty(M|aufrktxt) ; F|empty(M|aufruf^aufrktxt)
+.continue ERROR04 ? M|aufrktxt^id <> M|aufruf^aufrktxt^id
+.continue CLRTAB
+..
+!INIT: Initialize
+.assign M|select = F|formatstr("$,,;id={1};@ablageart=(Active)", M|menuapliste^id)
+..
+!CLRTAB: Clear table
+.input "is/TABLEEREN"
+..
+.continue END ? _F|empty(M|aufruf)
+.continue END ? _F|empty(M|menuapliste)
+.continue ERROR01 ? _F|cmdpermitted(87, 12, ,30)
+.assign M|select = F|formatstr("$,,@ablageart=(Active);aufrktxt=={1};kontexttyp=={2};buttonfeld=={3};aufrtab=={4}", M|aufrktxt^id, M|kontexttyp, M|buttonfeld, M|aufrtab)
+.continue SUBLIST ? M|buttonfeld <> "buaktion"
+.continue ICNTXT  ? F|equals(M|kontexttyp, "(SingleInfosystem)")
+.. Context is single table of variables
+.assign M|apliste = F|condexpr(M|aufrtab, "60011", "60001")
+.assign M|stdapliste = F|condexpr(M|aufrtab, "60010", "60000")
+.continue SUBLIST
+..
+!ICNTXT: Context is single infosystem
+.assign M|apliste = F|condexpr(M|aufrtab, "60013", "60007")
+.assign M|stdapliste = F|condexpr(M|aufrtab, "60012", "60006")
+..
+!SUBLIST: In a menu list there is only one delivered custom partial list
+.select group "ID87:14" 'F|formatstr("{1};typ==(CustomPartialList)", M|select)'
+.assign M|teilapliste = H|id ? G|mehr
+..
+.. In a menu list there is only one delivered standard partial list
+.select group "ID87:14" 'F|formatstr("{1};typ==(StandardPartialList)", M|select)'
+.assign M|stdteilapliste = H|id ? G|mehr
+..*****************************************************************************
+!END
+.select -
+.continue
+..*****************************************************************************
+..
+!SUBMASK: Only usable with the buffer of the parent dialog!
+.error -message Dieses Infosystem kann nur aus anderen Dialogen benutzt werden!
+.continue BREAK
+..
+!ERROR01: Missing permission!
+.error -message Dieser Dialog ben”tigt die Erlaubnis: 'G|kdatname87' 'G|kaktname12'!
+.continue BREAK
+..
+!ERROR03: Missing real level!
+.error -line 0 -field M|anzstufen -message Die Anzahl der Stufen muss mehr als Null sein!
+.continue BREAK
+..
+!ERROR04: Context mismatch between buffer A and single callparameter
+.error -message Der Aufrufparameter passt nicht zum Kontext des Aufrufers!
+.continue BREAK
+..
+!ERRBUTT: Missing button menu is linked to!
+.error -message Es fehlt die Angabe eines Bezugsfeldes!
+.continue BREAK
+..
+!ERRMASK: Only usable as a sub mask!
+.error -message Es fehlt die Angabe eines Kontextes!
+.continue BREAK
+..
+!ERRCTXT: Missing type of context!
+.error -message Es fehlt die Angabe eines Kontexttyps!
+..
+!BREAK
+.end 1

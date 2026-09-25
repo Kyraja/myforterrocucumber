@@ -1,0 +1,320 @@
+..!interpreter english declaration noabbrev
+.. at 2015-12-10, 18:05
+.set TRANS -
+..========================================================================
+..==  Name              : FOP.MASK.TRANSDATEN
+..==  Pfad              : allpstart
+..==  Funktion          : Maskenereignisse in Transaktionsdaten
+..==  Erstellungsdatum  : 25.11.09
+..==  Autor             : alltrotec GmbH/CP
+..==  Copyright         : (c) 1990 - 2015 alltrotec GmbH
+..==  Besonderheiten    :
+..==
+..==  Dieses FOP wird Åber EasyCase bearbeitet und mit easy2lg generiert!
+..==  énderungen au·erhalb von EasyCase werden nach der nÑchsten énderung
+..==  im EasyCase wieder Åberschrieben und dÅrfen daher NICHT mit "edi"
+..==  realisiert werden!
+..==
+..========================================================================
+.input DATEI.F
+..====================================================
+.type integer   xprocsp         ? _F|defined(xprocsp)
+.type integer   xi01
+.type text      xt01 xsys xsel xedp xout xerr
+.type bool      xb01
+..====================================================
+.formula U|xprocsp = 0
+.set demand -
+.continue EPROCDEF
+!PROC001: ----- kstellekopf -----
+.formula M|yskkstname = ""
+.continue EL001 ? _(_(F|empty(M|ykkstelle)))
+.formula U|xsel = "$,,@gruppe=2;nummer==" + M|ykkstelle
+.load 0 accountdata 'U|xsel'
+.continue EL002 ? _(G|mehr)
+.formula M|yskkstname = 0|name
+.continue FI002
+!EL002
+.formula U|xsel = "$,,@gruppe=4;nummer==" + M|ykkstelle
+.load 0 accountdata 'U|xsel'
+.continue EL003 ? _(G|mehr)
+.formula M|yskkstname = 0|name
+!EL003
+!FI002
+!EL001
+.continue 'xprocst.xprocsp'
+!PROC002: ----- kstelletab -----
+.formula M|yskstname = ""
+.continue EL004 ? _(_(F|empty(M|ykstelle)))
+.continue EL005 ? _(M|ykstelle / "(09)*")
+.formula U|xsel = "$,,@gruppe=2.4;nummer==" + M|ykstelle
+.continue FI005
+!EL005
+.formula U|xsel = "$,,@gruppe=2.4;such==" + M|ykstelle
+!FI005
+.load 0 accountdata 'U|xsel'
+.continue EL006 ? _(G|mehr)
+.formula U|xt01 = 0|name
+.load 0 accountdata
+.formula M|yskstname = U|xt01   ? _G|mehr
+!EL006
+!EL004
+.continue 'xprocst.xprocsp'
+!PROC003: ----- kontotab -----
+.formula M|ysktoname = ""
+.continue EL007 ? _(_(F|empty(M|ykonto)))
+.continue EL008 ? _(M|ykonto / "(09)*")
+.formula U|xsel = "$,,@gruppe=1;nummer==" + M|ykonto
+.load 0 account 'U|xsel'
+.formula M|ysktoname = 0|name   ? G|mehr
+!EL008
+.continue EL009 ? _(M|ykonto / "K*")
+.formula U|xsel = "$,,@gruppe=1;nummer==" + M|ykonto>>"K "
+.load 0 customer 'U|xsel'
+.formula M|ysktoname = 0|name   ? G|mehr
+!EL009
+.continue EL010 ? _(M|ykonto / "L*")
+.formula U|xsel = "$,,@gruppe=1;nummer==" + M|ykonto>>"L "
+.load 0 supplier 'U|xsel'
+.formula M|ysktoname = 0|name   ? G|mehr
+!EL010
+.continue EL011 ? _(M|ykonto / "M*")
+.formula U|xsel = "$,,@gruppe=1;nummer==" + M|ykonto>>"M "
+.load 0 employee 'U|xsel'
+.formula M|ysktoname = 0|name   ? G|mehr
+!EL011
+!EL007
+.continue 'xprocst.xprocsp'
+!PROC004: ----- larttab -----
+.formula M|yslartname = ""
+.continue EL012 ? _(_(F|empty(M|yleiart)))
+.input "allpstart/LART.KONFIG.INI"
+.continue EL013 ? _(M|yleiart / "(09)*")
+.formula U|xsel = "$,,nummer=="
+.continue FI013
+!EL013
+.formula U|xsel = "$,,such=="
+!FI013
+.formula U|xsel = U|xsel + M|yleiart + ";@filingmode=(Active)"
+.load 0 group 'U|xydbgrlart' 'U|xsel'
+.formula M|yslartname = 0|name  ? G|mehr
+!EL012
+.continue 'xprocst.xprocsp'
+!EPROCDEF: ----- end procedure definitions -----
+.input "allpstart/TRANS.KONFIG.INI"
+.continue BRK001 ? _(G|evtart = "maskein")
+.continue EL014 ? _((G|evtkommd = G|kaktname13) & (M|ybabl))
+.set TRANS +
+.box Hinweis
+Dieser Transaktionsdatensatz ist bereits abgeschlossen!
+énderungen sind nicht mehr mîglich!
+.set TRANS -
+.error(0)
+.end 2
+!EL014
+.continue EL015 ? _(_(G|evtkommd = G|kaktname10))
+.select screen header
+.assign  M|yssbuchung    = M|ysbuchung
+.assign  M|ysfbuchung    = M|yfbuchung
+.assign  M|yssbuchstorno = M|ysbuchstorno
+.assign  M|ysfbuchstorno = M|yfbuchstorno
+.load 0 company "$,,@gruppe=18"
+.formula M|yiwbu = 0|inland
+.load 0
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET001" 
+.continue PROC001
+!RET001
+.formula xprocsp = xprocsp - 1
+.select screen line
+!LOOP001: ==============================
+.continue ELOP001 ? _(mehr)
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET002" 
+.continue PROC002
+!RET002
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET003" 
+.continue PROC003
+!RET003
+.formula xprocsp = xprocsp - 1
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET004" 
+.continue PROC004
+!RET004
+.formula xprocsp = xprocsp - 1
+.select screen line
+.continue LOOP001
+!ELOP001: ==============================
+!EL015
+.continue ESAC001
+!BRK001
+.continue BRK002 ? _(G|evtart = "buttonnach")
+.continue EL016 ? _(G|evtkommd = G|kaktname12)
+.continue BRK003 ? _(G|evtvar = "ycheck")
+.continue EL017 ? _((_(M|ybabl)) & (_(M|ystorno)))
+.input "allpstart/UP.CHECK.TRANSACTION"
+.rewrite screen
+.continue FI017
+!EL017
+.set TRANS +
+.box Hinweis
+Datensatz ist bereits abgelegt bzw. storniert!
+.set TRANS -
+!FI017
+.continue ESAC002
+!BRK003
+.continue BRK004 ? _(G|evtvar = "ybuzeigausl")
+.continue EL018 ? _(_(F|empty(M|yausloes)))
+.continue EL019 ? _(M|yausloes / "\(*,*,*\)")
+.input "allpstart/BUCHUNGSAUSLOESER.ZEIGEN"
+.continue FI019
+!EL019
+.set TRANS +
+.box Hinweis
+Der Inhalt des Feldes "Auslîser" ist nicht
+geeignet, um das Datenobjekt anzuzeigen!
+.set TRANS -
+!FI019
+!EL018
+.continue ESAC002
+!BRK004
+.continue BRK005 ? _(G|evtvar = "ybutdstorno")
+.load 0 add M|id
+.input "allpstart/TRANSACTION.STORNO"
+.load 0 add M|id
+.continue EL020 ? _((F|empty(0|yfbuchung)) & (F|empty(0|yfbuchstorno)) & (F|empty(0|ysbuchung)) & (F|empty(0|ysbuchstorno)))
+.select lock add M|id
+.copy    H|ybabl    = G|true
+.copy    H|ystorno  = G|true
+.formula H|ybezeich = G|bzeichen
+.rewrite
+.select --
+!EL020
+.load 0 add M|id
+.select screen header
+.assign M|yssbuchung    = 0|ysbuchung
+.assign M|ysfbuchung    = 0|yfbuchung
+.assign M|yssbuchstorno = 0|ysbuchstorno
+.assign M|ysfbuchstorno = 0|yfbuchstorno
+.rewrite screen
+.formula U|xt01 = "$,,@rows=(Yes);ytrdaten==" + M|id
+.load 0 group 'U|xydbgrtrans' 'U|xt01'
+!LOOP002: ==============================
+.continue ELOP002 ? _(mehr)
+.formula U|xt01 = 0|id
+.formula U|xb01 = G|true
+.load 0 line
+!LOOP003: ==============================
+.continue ELOP003 ? _(G|mehr)
+.formula U|xb01 = G|false   ? _0|ytrdaten^ystorno
+.load 0 line
+.continue LOOP003
+!ELOP003: ==============================
+.continue EL021 ? _(U|xb01)
+.select lock object 'U|xt01'
+.copy    H|ybabl    = G|true
+.copy    H|ystorno  = G|true
+.formula H|yabldat  = "."
+.formula H|yablzeit = "."
+.formula H|ybezeich = G|bzeichen
+.rewrite
+.select --
+!EL021
+.load 0 continue
+.continue LOOP002
+!ELOP002: ==============================
+.continue ESAC002
+!BRK005
+!ESAC002: =====   ENDCASE   =====
+.continue FI016
+!EL016
+.set TRANS +
+.box Hinweis
+Diese Funktion steht nur im Zeigen zur VerfÅgung!
+.set TRANS -
+!FI016
+.continue ESAC001
+!BRK002
+.continue BRK006 ? _(G|evtart = "feldaus")
+.continue BRK007 ? _(G|evtvar = "yewbu")
+.formula M|yeikurs = 0
+.continue EL022 ? _(_(F|empty(M|yewbu)))
+.formula U|xsel = "$,,@gruppe=1;symbol==" + M|yewbu
+.load 0 currency 'U|xsel'
+.continue EL023 ? _(_(G|mehr))
+.formula U|xsel = "$,,@gruppe=1;iso3a==" + M|yewbu
+.load 0 currency 'U|xsel'
+.continue EL024 ? _(_(G|mehr))
+.formula U|xsel = "$,,@gruppe=1;iso3n==" + M|yewbu
+.load 0 currency 'U|xsel'
+!EL024
+!EL023
+.continue EL025 ? _(_(G|mehr))
+.set TRANS +
+.box Hinweis
+Kurs zur WÑhrung nicht gefunden
+bzw. falscher WÑhrungseintrag!
+.set TRANS -
+.formula M|yewbu = ""
+.cursor yewbu
+.continue FI025
+!EL025
+.formula U|xsel = "$,,@gruppe=16;@rows=(Yes);land==" + 0|such
+.load 1 company 'U|xsel'
+.continue EL026 ? _(G|mehr)
+.load 1 line '1|selzeile'
+.formula M|yewbu   = 0|such
+.formula M|yeikurs = 1|kkurs
+!EL026
+.load 1
+!FI025
+!EL022
+.continue ESAC003
+!BRK007
+.continue BRK008 ? _(G|evtvar = "ykkstelle")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET005" 
+.continue PROC001
+!RET005
+.formula xprocsp = xprocsp - 1
+.continue ESAC003
+!BRK008
+.continue BRK009 ? _(G|evtvar = "ykstelle")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET006" 
+.continue PROC002
+!RET006
+.formula xprocsp = xprocsp - 1
+.continue ESAC003
+!BRK009
+.continue BRK010 ? _(G|evtvar = "ykonto")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET007" 
+.continue PROC003
+!RET007
+.formula xprocsp = xprocsp - 1
+.continue ESAC003
+!BRK010
+.continue BRK011 ? _(G|evtvar = "yleiart")
+.formula xprocsp = xprocsp + 1
+.type text xprocst.xprocsp ? _defined(xprocst.xprocsp)
+.formula xprocst.xprocsp = "RET008" 
+.continue PROC004
+!RET008
+.formula xprocsp = xprocsp - 1
+.continue ESAC003
+!BRK011
+!ESAC003: =====   ENDCASE   =====
+.continue ESAC001
+!BRK006
+!ESAC001: =====   ENDCASE   =====
+.continue

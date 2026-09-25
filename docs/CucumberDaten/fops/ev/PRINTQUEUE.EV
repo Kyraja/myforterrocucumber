@@ -1,0 +1,185 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PRINTQUEUE.EV
+.. Autor          : fwester
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Funktion       : Zentrales Behandeln von Ereignissen zur Steuerung der Eingaben.
+.. Ablauf         : Zentrales EFOP
+..
+.. Functionality  : Handles events of the printer queue with smaller functionality
+..                  in this central program.
+.. Program flow   : Central efop
+..*****************************************************************************
+.set trans -
+..------------------------------- Header:  -------------------------------------
+.continue NEBILL  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "printqueue"
+.continue NEBILL  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "filingmode"
+.continue DIVISON ? G|evtartengl = "FIELD_FILL" & G|evtvar = "division"
+.continue DIVISON ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "division"
+.continue DOCTYPE ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "purchtype"
+.continue DOCTYPE ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "salestype"
+.continue EBILL   ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "vkerechnung"
+.continue NORMAL  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "docfrom"
+.continue NORMAL  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "docto"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "operator"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "docdateto"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "docdatefrom"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "bookdatefrom"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "bookdateto"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "reviewfrom"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "reviewto"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "vkdocpartner"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "vkpayment"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "vkshipping"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "ekdocpartner"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "ekpayment"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "inhouse"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "unlockeddocuments"
+.continue CLRTAB  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "ausschr"
+.continue SINGLE  ? G|evtartengl = "FIELD_EXIT" & G|evtvar = "ktransaction"
+..==============================================================================
+.continue END
+..
+!SINGLE: Print single document
+.assign M|docfrom = ""
+.assign M|docto = ""
+.assign M|operator = ""
+.assign M|inhouse = ""
+.assign M|docfrom = ""
+.assign M|docto = ""
+.continue DEFAULT ? F|empty(M|ktransaction)
+.assign M|printqueue = M|ktransaction^druck
+.assign M|filingmode = "(Active)" ? _M|ktransaction^ablagef
+.assign M|filingmode = "(Filed)" ? M|ktransaction^ablagef
+.assign M|datnr = M|ktransaction^dnr
+.copy M|sales = (M|datnr <> 4)
+.continue FILE3 ? M|sales
+.assign M|division = G|kdatname4
+.formula M|purchtype = "(" + 'M|ktransaction^typ' + ")"
+.continue PURCHAS
+..
+!DEFAULT: Defaults
+.assign M|filingmode = "(Active)"
+.assign M|division = G|kdatname3
+.copy M|newdivision = G|TRUE
+.copy M|sales = G|TRUE
+.formula M|salestype = "(" + 'G|REKO' + ")"
+.continue DIVEXIT
+..
+!FILE3
+.assign M|division = G|kdatname3 ? M|sales
+.formula M|salestype = "(" + 'M|ktransaction^typ' + ")"
+.continue SALES
+..
+!DIVISON: handle evants for field "division"
+.continue DIVEXIT ? G|evtartengl = "FIELD_EXIT"
+..
+.. handle field fill event
+.continue OLDDIV ? G|evtfeldneu = ""
+.copy M|newdivision = ('G|evtfeldneu' <> 'M|division')
+.continue END
+..
+!OLDDIV: reset to old value while new value is empty
+.assign G|evtfeldneu = M|division
+.copy M|newdivision = G|FALSE
+.continue END
+..
+!DIVEXIT: handle field exit event
+.assign M|dn = 'M|division'
+.continue END ? _M|newdivision
+.copy M|sales = (M|datnr = 3)
+.continue SALES ? M|sales
+.continue PURCHAS
+..******************************************************************************
+!PURCHAS: protect sales-only and unprotect purchasing-only
+.protection salestype 0
+.protection vkdocpartner 0
+.assign M|vkdocpartner = ""
+.protection vkpayment 0
+.assign M|vkpayment = ""
+.protection vkshipping 0
+.assign M|vkshipping = ""
+.protection vkerechnung 0
+.assign M|vkerechnung = false
+.protection -reset ekdocpartner 0
+.protection -reset ekpayment 0
+.protection -reset purchtype 0
+.continue DOCTYPE
+..******************************************************************************
+!SALES: protect purchasing-only and unprotect sales-only
+.protection purchtype 0
+.protection ekdocpartner 0
+.assign M|ekdocpartner = ""
+.protection ekpayment 0
+.assign M|ekpayment = ""
+.protection ausschr 0
+.assign M|ausschr = ""
+.protection -reset vkdocpartner 0
+.protection -reset vkpayment 0
+.protection -reset vkshipping 0
+.protection -reset vkerechnung 0
+.protection -reset salestype 0
+.continue DOCTYPE
+..******************************************************************************
+!NEBILL
+.assign M|vkerechnung = false ? _F|equals(M|filingmode, "(Filed)")
+.assign M|vkerechnung = false ? _M|printqueue
+.continue CLRTAB
+..******************************************************************************
+!EBILL
+.continue CLRTAB ? _M|vkerechnung
+.assign M|salestype = "(Invoice)"
+.continue CLRTAB ? _M|vkerechnung
+.assign M|filingmode = "(Filed)"
+.copy M|printqueue = G|TRUE
+.continue CLRTAB
+..******************************************************************************
+!DOCTYPE: set type of document
+.assign M|doctype = F|condexpr(M|sales, M|salestypenum, M|purchtypenum)
+..
+.protection -reset reviewfrom 0
+.protection -reset reviewto 0
+.assign M|vkerechnung = false ? M|doctype <> G|REKO
+.continue TENDER ? _M|sales & M|doctype = G|ANKO
+.protection ausschr 0
+.assign M|ausschr = ""
+.continue DATES
+..
+!TENDER: Unprotect tender
+.protection -reset ausschr 0
+.continue DATES
+..
+!DATES
+.continue REKO ? M|doctype = G|REKO
+.copy M|bookdatedoc = G|FALSE
+.protection bookdatefrom 0
+.assign M|bookdatefrom = ""
+.protection bookdateto 0
+.assign M|bookdateto = ""
+.continue LIKO ? M|doctype = G|LIKO
+.continue CLRTAB
+..
+!REKO: unprotect booking date input fields
+.copy M|bookdatedoc = G|TRUE
+.protection -reset bookdatefrom 0
+.protection -reset bookdateto 0
+.continue CLRTAB
+..
+!LIKO: protect review input fields
+.protection reviewfrom 0
+.protection reviewto 0
+.continue CLRTAB
+..*****************************************************************************
+!NORMAL: if values starts with a letter, this will normalize them
+.assign M|ktransaction = ""
+.continue CLRTAB ? M|.G|evtvar / "(0-9)*"
+.formula M|.G|evtvar = -M|.G|evtvar
+.continue CLRTAB
+..*****************************************************************************
+!CLRTAB: clear table
+.make screen line -- ? M|tzeilen > 0
+.continue END
+..*****************************************************************************
+!END
+.continue

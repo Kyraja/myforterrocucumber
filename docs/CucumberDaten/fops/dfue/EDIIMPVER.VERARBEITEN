@@ -1,0 +1,228 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDIIMPVER.VERARBEITEN
+.. Autor          : mh/ok
+.. Verantwortlich : mh
+.. Kontrolle      : carue
+.. Funktion       : Verarbeite EDI-Nachrichten nach Kunde und/oder Nachrichtenart
+.. Functionality  : Process EDI-Messages by customer and/or by message type
+...Includes       :
+..  include dfue/EDIIMPPROCESS.PROTOKOLL
+..  include dfue/EDIIMPPROCESS.MODULSPERRE
+..  include dfue/EDIIMPPROCESS.ERZEUGEPOSTB
+..  include dfue/EDIIMPPROCESS.DRUCKEPROTOKOLL
+..  include dfue/EDIIMPPROCESS.ERGAENZEPROTOKOLL
+..*****************************************************************************
+.set trans -
+..
+.. Variables used for EDI-Processing with FO-programs
+.type integer  xprocsp          ? _F|defined(U|xprocsp)
+.type bool xistfehler       ? _F|defined(U|xistfehler)
+.type bool xistfproterw     ? _F|defined(U|xistfproterw)
+.type text xdfueprog        ? _F|defined(U|xdfueprog)
+.type text xnfprotokoll     ? _F|defined(U|xnfprotokoll)
+.type text xmmvvl           ? _F|defined(U|xmmvvl)
+.type text xvorart          ? _F|defined(U|xvorart)
+..
+.. Primary argument for processing -> Forecasts, Pick-up sheets, Orders
+.type text xidkundeabe      ? _F|defined(U|xidkundeabe)
+..
+.. @FIXME: Protokolle liegen im Grundverzeichnis
+.type text xneprotokollerw  ? _F|defined(U|xneprotokollerw)
+.type text xnfprotokollerw  ? _F|defined(U|xnfprotokollerw)
+.type text xnkdeliste       ? _F|defined(U|xnkdeliste)
+.type text xtmpdir          ? _F|defined(U|xtmpdir)
+.type bool xprocreturn      ? _F|defined(U|xprocreturn)
+.type integer  xaktion          ? _F|defined(U|xaktion)
+.type integer  xmenu            ? _F|defined(U|xmenu)
+.type text xKeinProtokoll   ? _F|defined(U|xKeinProtokoll)
+..
+.. Sammellieferungen
+.type bool xsammel          ? _F|defined(U|xsammel)
+.copy U|xsammel = F|sysinfo(18)^sammel
+..
+.. Debugging switch for FO-processing/loaders: pick-up sheets, orders
+.type bool xdebug           ? _F|defined(U|xdebug)
+..
+.. Local used Texts
+.type text xNachrichtenTyp              ? _F|defined(U|xNachrichtenTyp)
+.type text xNachrichtenTypAuftrag       ? _F|defined(U|xNachrichtenTypAuftrag)
+.type text xNachrichtenTypAbruf         ? _F|defined(U|xNachrichtenTypAbruf)
+.type text xNachrichtenTypPUS           ? _F|defined(U|xNachrichtenTypPUS)
+.type text xNachrichtenTypEDLMeldung    ? _F|defined(U|xNachrichtenTypEDLMeldung)
+.type text xNachrichtenTypAlle          ? _F|defined(U|xNachrichtenTypAlle)
+.type text xNachrichtenTypLAKO          ? _F|defined(U|xNachrichtenTypLAKO)
+.type text xBeendenText                 ? _F|defined(U|xBeendenText)
+.type text xVerarbeiteNachricht         ? _F|defined(U|xVerarbeiteNachricht)
+.type text xVerarbeiteAlleNachrichten   ? _F|defined(U|xVerarbeiteAlleNachrichten)
+.set trans +
+.formula U|xBeendenText = "Beende Programm, bitte warten ..."
+.formula U|xVerarbeiteNachricht = "Verarbeite eingegangene Nachricht Typ {1} fÅr Kunden <{2}>, bitte warten ..."
+.formula U|xVerarbeiteAlleNachrichten = "Verarbeite Nachrichten fÅr Kunden <{1}>, bitte warten ..."
+.formula U|xNachrichtenTypAuftrag = "Auftrag"
+.formula U|xNachrichtenTypAbruf = "Abruf"
+.formula U|xNachrichtenTypPUS = "Versandabruf (PUS)"
+.formula U|xNachrichtenTypEDLMeldung = "EDL-Meldung"
+.formula U|xNachrichtenTypLAKO = "LadungstrÑgerkontoauszug"
+.formula U|xKeinProtokoll = "Protokollverzeichnis dfue/ediprocessing fehlt. Keine Protokollierung der Abrufverarbeitung."
+.set trans -
+.formula U|xNachrichtenTypAlle = "-"
+..
+..
+.. Lock EDI-Processing
+.formula U|xmenu = 14
+.formula U|xaktion = 1
+.continue ESPERR1 ? _(M|kbabrufe ; M|kballe ; M|kbpus)
+.formula U|xmmvvl = "VKAUV"
+.input "EDIIMPPROCESS.MODULSPERRE"
+.continue LOCKED  ? _U|xprocreturn
+!ESPERR1
+.continue ESPERR2 ? _(M|kborders ; M|kballe)
+.formula U|xmmvvl = "VKAUE"
+.input "EDIIMPPROCESS.MODULSPERRE"
+.continue LOCKED  ? _U|xprocreturn
+!ESPERR2
+.continue ESPERR3 ? _(M|kbedl ; M|kballe)
+.formula U|xmmvvl = "VKEDL"
+.input "EDIIMPPROCESS.MODULSPERRE"
+.continue LOCKED  ? _U|xprocreturn
+!ESPERR3
+..
+..
+.. Initialize protocolls
+.input "dfue/DFUE.IMP.INI"
+.formula U|xSELVKRLAId = "$"
+.formula U|xdfueprog = tname
+.formula U|xnfprotokoll = "DFUE.IMP.PROTO"
+.input "dfue/EDIIMPPROCESS.PROTOKOLL"
+.formula U|xprocsp = 0
+..
+..
+.. Event evaluation
+.. There are 3 processing options
+.. 1) Header-Button - Checkbox "all customers"
+.. 2) Header-Button - Several Customers in table
+.. 3) Row-Button - Single Customer
+..
+.type bool xbprocessSingleCustomer    ? _F|defined(U|xbprocessSingleCustomer)
+.type bool xbprocessSeveralCustomers  ? _F|defined(U|xbprocessSeveralCustomers)
+.type bool xbprocessAllCustomers      ? _F|defined(U|xbprocessAllCustomers)
+.copy U|xbprocessSingleCustomer = G|false
+.copy U|xbprocessSeveralCustomers = G|false
+.copy U|xbprocessAllCustomers = G|false
+..
+.. ----------- ---------- ---------- -------------------------------------------
+.continue TABLE    ?  G|evtartengl  = "BUTTON_AFTER"    &  G|evtvar = "kbuverarb"  & _M|kballekunden
+.continue ALLCUST  ?  G|evtartengl  = "BUTTON_AFTER"    &  G|evtvar = "kbuverarb"  &  M|kballekunden
+.continue SINGLE   ?  G|evtartengl  = "BUTTON_AFTER"    &  G|evtvar = "tbuverarb"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue DONE
+..
+..
+!SINGLE
+.formula U|xidkundeabe = M|thauptkunde^nummer
+.copy U|xbprocessSingleCustomer = G|true
+.continue VERARB
+..
+..
+!TABLE
+.select screen header
+.continue DONE  ? _G|mehr
+!NEXT
+.select screen line
+.continue DONE  ? _G|mehr
+.continue NEXT  ? _M|tbaktiv
+.formula U|xidkundeabe = M|thauptkunde^nummer
+.copy U|xbprocessSeveralCustomers = G|true
+.continue VERARB
+..
+..
+!ALLCUST
+.formula U|xidkundeabe = ""
+.copy U|xbprocessAllCustomers = G|true
+.continue VERARB
+..
+..
+!VERARB
+.formula U|xNachrichtenTyp = U|xNachrichtenTypAuftrag       ?  M|kborders
+.formula U|xNachrichtenTyp = U|xNachrichtenTypAbruf         ?  M|kbabrufe
+.formula U|xNachrichtenTyp = U|xNachrichtenTypPUS           ?  M|kbpus
+.formula U|xNachrichtenTyp = U|xNachrichtenTypEDLMeldung    ?  M|kbedl
+.formula U|xNachrichtenTyp = U|xNachrichtenTypLAKO          ?  M|kblako
+.formula U|xNachrichtenTyp = U|xNachrichtenTypAlle          ?  M|kballe
+..
+.output terminal
+.input "DATEI.F"
+?'F|formatstr(U|xKeinProtokoll)'                                          ?  _F|fileexists("dfue/ediprocessing") & _(M|kbabrufe ; M|kballe)
+?'F|formatstr(U|xVerarbeiteNachricht, U|xNachrichtenTyp, U|xidkundeabe)'  ?  _M|kballe
+?'F|formatstr(U|xVerarbeiteAlleNachrichten, U|xidkundeabe)'               ?  M|kballe
+..
+.continue EORD ? _(M|kborders ; M|kballe)
+.formula U|xmmvvl = "VKAUE"
+.formula U|xvorart = abko
+.input "DFUE.VKAUEMES"
+.input "EDI.EDI2ORDER"
+!EORD
+..
+.continue EEDL ? _(M|kbedl ; M|kballe)
+.formula U|xmmvvl = "VKEDL"
+.formula U|xvorart = "27"
+.input "DFUE.VKEDLMES"
+.input "EDI.EDI2VKEDL"
+!EEDL
+..
+.continue EVKAUV ? _(M|kbabrufe ; M|kballe)
+.formula U|xmmvvl = "VKAUV"
+.formula U|xvorart = abko
+.input "DFUE.VKAUVMES"
+.input "EDI.EDI2VKAUV"
+!EVKAUV
+..
+.continue EVKAUVP  ? _(M|kbpus ; M|kballe)
+.formula U|xmmvvl = "VKAUV"
+.formula U|xvorart = abko
+.input "DFUE.VKAUVMES"
+.input "EDI.EDI2VKAUV"
+!EVKAUVP
+..
+.continue ELAKO  ? _(M|kblako ; M|kballe)
+.input "EDI.EDI2LAKO"
+!ELAKO
+..
+.continue DONE  ?  U|xbprocessSingleCustomer
+.continue NEXT  ?  U|xbprocessSeveralCustomers
+.continue DONE  ?  U|xbprocessAllCustomers
+..
+..
+!DONE: Finish protocolls
+.formula U|xistfehler = U|xistfproterw
+.input "EDIIMPPROCESS.ERZEUGEPOSTB"
+.formula U|xistfehler = U|xistfproterw
+.input "EDIIMPPROCESS.DRUCKEPROTOKOLL"
+.input "EDIIMPPROCESS.ERGAENZEPROTOKOLL"
+..
+..
+.. Unlock EDI-Processing
+.formula U|xaktion = 2
+.continue EESP1 ? _(M|kbabrufe ; M|kballe ; M|kbpus)
+.formula U|xmmvvl = "VKAUV"
+.input "EDIIMPPROCESS.MODULSPERRE"
+!EESP1
+.continue EESP2 ? _(M|kborders ; M|kballe)
+.formula U|xmmvvl = "VKAUE"
+.input "EDIIMPPROCESS.MODULSPERRE"
+!EESP2
+.continue EESP3 ? _(M|kbedl ; M|kballe)
+.formula U|xmmvvl = "VKEDL"
+.input "EDIIMPPROCESS.MODULSPERRE"
+!EESP3
+.end 0
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!LOCKED
+.error Die EDI-Verarbeitung ist gesperrt.
+.end 1

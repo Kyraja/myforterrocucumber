@@ -1,0 +1,108 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           :     PAYMENT.INCOMING.WEEKLY   
+.. Date           :     17/11/2014
+.. Version        :     1.0
+.. Author         :     rasc
+.. Copyright      :     
+.. Functionality  :     Incoming payment weekly
+..
+.. Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    -------------------------------------------------------------------------
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+..
+..*****************************************************************************
+.type text U|xtcmd      ? _F|defined(U|xtcmd)
+.type text U|xtedp      ? _F|defined(U|xtedp)
+.type text U|xtout      ? _F|defined(U|xtout)
+.type text U|xterr      ? _F|defined(U|xterr)
+.type text U|xtref      ? _F|defined(U|xtref)
+.type integer U|ximod   ? _F|defined(U|ximod)
+..
+.file -TEMPNAME U|xtedp
+.file -TEMPNAME U|xtout
+.file -TEMPNAME U|xterr
+..
+.output NEW 'U|xtedp'
+.input DATEI.F
+zaterm;gkonto;kozabetrplus;opladen;
+?.;14600;'G|true';;
+.output
+.formula U|xtcmd        = "edpimport.sh -P -b 101:1 -a NEW -r REF -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " >" + U|xtout + " 2>" + U|xterr
+.system 'U|xtcmd' PASSWORD background
+..
+.continue ERROR         ? F|filesize(U|xterr) > 0
+.select from
+!SELFROM
+.select from 'U|xtout' U|xtref^
+.continue END           ? F|empty(U|xtref) ; 'U|xtref'="(0,0,0)"
+..
+!PAY
+.output NEW 'U|xtout'
+.output NEW 'U|xterr'
+.output NEW 'U|xtedp'
+.input DATEI.F
+#!EDP_LANG=D
+#!database=4:3
+#!action=PAYMENT
+#!menuchoice=Zahlungseing„nge umbuchen
+#!firsttabfld=tabnr
+#!dontchange=-
+id;gkonto;beleg;beldat;budat;bezahlt;tabnr;tophist;
+..
+.load 0 nolock object 'U|xtref'
+.continue ERRZV         ? _G|mehr
+!LOOP
+.load 0 nolock line
+.continue EDP           ? _G|mehr
+..
+..jede 3. Zeile ausschlie en, damit ZahlungsverzÿÂge entstehen
+.formula U|ximod        = '0|aktzeile' // 3
+.continue LOOP          ? _U|ximod = 0
+..
+;'0|gkonto^id';'0|nummer';.;.;'G|true';+'0|aktzeile';'0|ophist^id';
+.continue LOOP
+..
+!EDP
+.output
+.formula U|xtcmd        = "edpimport.sh -P -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " 2>" + U|xterr
+.system 'U|xtcmd' PASSWORD background
+..
+.continue ERROR         ? F|filesize(U|xterr) > 0
+..
+!DELETE: jetzt noch den ZV l”schen
+.output NEW 'U|xtout'
+.output NEW 'U|xterr'
+.output NEW 'U|xtedp'
+id
+'U|xtref'
+.output
+.formula U|xtcmd        = "edpimport.sh -P -b 101:1 -a DELETE -o SHOWNOTES=0 -o SHOWTEXT=0 -I " + U|xtedp
+.formula U|xtcmd        = U|xtcmd + " 2>" + U|xterr
+.system 'U|xtcmd' PASSWORD background
+..
+.continue ERROR         ? F|filesize(U|xterr) > 0
+..
+.continue END
+..
+!ERROR
+.continue END           ? G|edp
+.....edi -READONLY 'U|xterr'
+.continue END
+..
+!ERRZV
+.continue END           ? G|edp
+.....error "Zahlungsvorschlag 'U|xtref' konnte nicht geladen werden!"
+.continue END
+..
+!END
+.continue

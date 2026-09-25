@@ -1,0 +1,79 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : FLEXQTY.BA
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  :
+...Include        :
+.. include  fe/FLEXQTY.BSTART
+..*****************************************************************************
+.set trans -
+..
+.continue MODAL     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "demontage"
+.continue REFRESH   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "demontage2"
+.continue MODAL     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "ausschuss"
+.continue REFRESH   ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "ausschuss2"
+.continue MODAL     ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "mgesetzen"
+.continue SETQTY    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "mgesetzen2"
+.continue END
+..
+!MODAL: Open modal dialog
+.select modificationlock nowait object 'M|tba^id'
+.continue ERROR01 ? _G|mehr
+.continue ERROR02 ? _G|gesperrt
+.select -
+.command -wait 'M|tcommand'
+.continue SETQTY ? G|evtvar = "mgesetzen"
+..
+!REFRESH: Refresh table
+.input "fe/FLEXQTY.BSTART"
+.continue END
+..
+!SETQTY: After setting quantity
+.continue NOTSAVE  ? M|origversionn = M|tid^versionn
+.continue REDUCE0  ? M|mgesetzen = M|icon4 & M|mgeneu = 0.0
+.continue INCREAS  ? M|mgesetzen = M|icon3
+.continue REDUCE   ? M|mgesetzen = M|icon4
+.continue END
+..
+!REDUCE0: Reduce to null
+.continue REDUCE ? M|tba^mge = 0.0 & M|tba^noloesch
+..
+.set trans +
+.formula M|bemerkung = "Mengenreduktion wurde nicht durchgefÅhrt."
+.set trans -
+.continue END
+..
+!INCREAS: Increase quantity
+.formula M|mgesetzen = M|icon5
+.formula M|tmpmge = M|mgeneu - M|ofmge
+.set trans +
+.formula M|bemerkung = F|formatstr("Splitt: Neuer Fertigungsvorschlag mit Menge {1} wurde angelegt.", F|trim('M|tmpmge'))
+.set trans -
+.continue END
+..
+!REDUCE: Reduce quantity
+.formula M|ofmge = M|mgeneu
+.formula M|mgesetzen = M|icon8
+.set trans +
+.formula M|bemerkung = F|formatstr("Menge wurde auf {1} reduziert.", 'M|mgeneu')
+.set trans -
+..*****************************************************************************
+!END
+.continue
+..*****************************************************************************
+..
+!NOTSAVE: Record was not saved
+.set trans +
+.formula M|bemerkung = "Der Vorgang wurde nicht durchgefÅhrt."
+.set trans -
+.continue END
+..
+!ERROR01: Missed
+.error -line 'G|evtzeile' -field M|tba -message Der Betriebsauftrag oder RÅckmeldebeleg wurde nicht gefunden.
+.end 1
+..
+!ERROR02: Already locked
+.error -line 'G|evtzeile' -field M|tba -message Der Betriebsauftrag oder der RÅckmeldebeleg werden gerade bearbeitet. Bitte zuerst schlie·en.
+.end 1

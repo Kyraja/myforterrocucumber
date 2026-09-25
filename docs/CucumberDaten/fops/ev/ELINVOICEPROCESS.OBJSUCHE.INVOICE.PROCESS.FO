@@ -1,0 +1,163 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICEPROCESS.OBJSUCHE.INVOICE.PROCESS.FO
+.. Author         : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+..
+..Supplier/Suppliercontact
+..<META 2|='P3:24'>
+..
+..Customer/Customercontact
+..<META 4|='P4:24'>
+..
+.. Parameter-Variablen vervollstÑndigen
+.type text xsuchnummer ? _F|defined(U|xsuchnummer)
+.type text xsuchfrzeich ? _F|defined(U|xsuchfrzeich)
+.. (optinale) Parameter-Variablen vervollstÑndigen
+.type VP5 xsuchlieferant ? _F|defined(U|xsuchlieferant)
+.type VP5 xsuchresteller ? _F|defined(U|xsuchresteller)
+..
+.. Ergebnis initialisieren
+.type VP23 xgefundenVP24 ? _F|defined(U|xgefundenVP24)
+.formula U|xgefundenVP24 = ""
+..
+.. Fehlerhinweis
+.type text xtsuchfehler ? _F|defined(U|xtsuchfehler)
+.formula U|xtsuchfehler = ""
+..
+..*****************************************************************************
+..
+.. KEINE SUCHPARAMETER = NICHT SUCHEN
+.. xgefundenVP5 und xtsuchfehler bleiben auf ""
+..
+.continue END ? F|empty(U|xsuchnummer) & F|empty(U|xsuchfrzeich)
+.continue END ? F|empty(U|xsuchlieferant) & F|empty(U|xsuchresteller)
+..
+..*****************************************************************************
+..
+.. SKIPP SEARCH, IF CACHE HAS IDENTICAL SEARCH PARAMETERS
+..
+.type bool xvp24empty ?_F|defined(U|xvp24empty)
+.copy U|xvp24empty = G|false
+..
+.input "ev/ELINVOICEPROCESS.CACHE.INVOICE.OUT.FO"
+.continue ENDDNC ? _F|empty(U|xgefundenVP24)
+.continue ENDDNC ?  U|xvp24empty 
+..
+..*****************************************************************************
+..
+.. Hilfsfelder zur Duplikatserkennung
+.type bool  xbgefundenEK ? _F|defined(U|xbgefundenEK)
+.copy U|xbgefundenEK = G|false
+.type bool xbgefundenVK ? _F|defined(U|xbgefundenVK)
+.copy U|xbgefundenVK = G|false
+..
+.. Nur in Einkaufs-Vorgaengen suchen, wenn der xLieferant und/oder xRechnungssteller Lieferanten sind
+.type bool xbsuchEK ? _F|defined(U|xbsuchEK)
+.copy U|xbsuchEK = G|true
+.copy U|xbsuchEK = G|false ? _F|empty(U|xsuchlieferant) & U|xsuchlieferant^dnr<>1
+.copy U|xbsuchEK = G|false ? _F|empty(U|xsuchresteller) & U|xsuchresteller^dnr<>1
+..
+.. Nur in Verkaufs-Vorgaengen suchen, wenn xLieferant und/oder xRechnungssteller Kunden sind
+.type bool xbsuchVK ? _F|defined(U|xbsuchVK)
+.copy U|xbsuchVK = G|true
+.copy U|xbsuchVK = G|false ? _F|empty(U|xsuchlieferant) & U|xsuchlieferant^dnr<>0
+.copy U|xbsuchVK = G|false ? _F|empty(U|xsuchresteller) & U|xsuchresteller^dnr<>0
+..
+..*****************************************************************************
+..
+.. Sprungmarken-Namen, PREFIX
+..  END = Ende 
+..  EVK = Ende Verkauf = Kunden/Kundenkontakte lesen
+..  EEK = Ende Einkauf = Lieferanten/Lieferrantenkontakte lesen
+..  DUP = Dupliatksfehlermeldung
+..
+.. Sprungmarken-Namen, SUFFIX
+..  E = mit ebeleg suchen
+..
+.. Ein Duplikat tritt auch dann auf, wenn ein EK- und ein VK-Vorgang das
+.. selbe FRZEICH/NUMMER haben.
+.. Je mehr Parameter angegeben werden, desto genauer wird gesucht.
+..
+.. Wird mit einer Suche ein eindeutiger treffer gefunden, wird nicht 
+.. mehr mit einer anderen Suche gesucht.
+..
+.. TOOD / ZU KLéREN: passt die aktuelle Such-Priorisierung / Reihenfolge?
+.. 
+..*****************************************************************************
+..
+.. Fehlertexte Åbersetzen; Namen wie SUFFIX, s.o.
+..
+.type text xtdupliFN ? _F|defined(U|xtdupliFN) 
+.type text xtdupliF ? _F|defined(U|xtdupliF) 
+.type text xtdupliN ? _F|defined(U|xtdupliN) 
+..
+.set trans +
+.formula U|xtdupliFN = "Mehrere VorgÑnge mit Ihr Zeichen {1} und Identnummer {2}"
+.formula U|xtdupliF = "Mehrere VorgÑnge mit Ihr Zeichen {1}"
+.formula U|xtdupliN = "Mehrere VorgÑnge mit Identnummer {1}"
+.set trans -
+..
+..*****************************************************************************
+..
+.continue END ? _F|empty(M|bestellung)
+.continue END ? _F|empty(M|liefek)
+.continue END ? _(M|ExchangedDocumentTypeCode = "81" ; M|ExchangedDocumentTypeCode = "381")
+..<BLOCK> Mit EBELEG in Rechnungen suchen
+.continue ENDE ? F|empty(U|xsuchnummer)
+.continue EEKE ? _U|xbsuchEK
+.continue EEKE ? _F|isvalue('U|xsuchnummer', "N4")
+.. Rechnungen  
+.load 2 purchasing 'F|formatstr("$,,;@gruppe=24;ebeleg=={1};lief=={2};lief2=={3};@ablageart=(Both)", U|xsuchnummer, U|xsuchlieferant^id, U|xsuchresteller^id)'
+.continue EEKE ? _G|mehr
+.formula U|xgefundenVP24 = 2|id
+.copy U|xbgefundenEK = G|true
+.assign M|rechnungek = U|xgefundenVP24
+.copy M|bausbe = G|FALSE
+.copy M|bausls = G|FALSE
+.copy M|bbeleganfuegen = G|FALSE
+.copy M|breneu = G|FALSE
+.copy M|bausrlsre = G|TRUE 
+..
+.. fÅr Gutschriften prÅfen, ob es zu dieser RE einen RLS gibt
+.formula U|xsel = "$,,;nummer=;okopf="+'M|rechnungek^id' + ";lief="+'M|lieferant^id'+";lsart=(ReturnPackingSlip);typ=(PackingSlip);@gruppe=23;@ablageart=(Both)"
+.load 2 purchasing 'U|xsel'
+.assign M|vorgang = 2|id               ? G|mehr
+.assign M|rlsek = 2|id ? G|mehr
+..
+!EEKE
+.continue EVKE ? _U|xbsuchVK
+.continue EVKE ? _F|isvalue('U|xsuchnummer', "N3")
+.load 4 sales 'F|formatstr("$,,;@gruppe=24;ebeleg=={1};kunde=={2};kunde2=={3};@ablageart=(Both)", U|xsuchnummer, U|xsuchlieferant^id, U|xsuchresteller^id)'
+.continue EVKE ? _G|mehr
+.formula U|xgefundenVP24 = 4|id
+.copy U|xbgefundenVK = G|true
+.copy M|bausbe = G|FALSE
+.copy M|bausls = G|FALSE
+.copy M|bbeleganfuegen = G|FALSE
+.copy M|breneu = G|FALSE
+.copy M|bausrlsre = G|TRUE
+..
+!EVKE
+.continue DUPE ? U|xbgefundenEK & U|xbgefundenVK
+.continue END  ? U|xbgefundenEK ; U|xbgefundenVK
+.continue ENDE
+..
+!DUPE
+.formula U|xgefundenVP24 = ""
+.formula U|xtsuchfehler = F|formatstr(U|xtdupliN, U|xsuchnummer)
+.continue END
+!ENDE
+..</BLOCK>
+..
+..*****************************************************************************
+!END
+.load 2 ? F|defined(2|id)
+.load 4 ? F|defined(4|id)
+.input "ev/ELINVOICEPROCESS.CACHE.INVOICE.IN.FO"
+!ENDDNC: nicht cachen
+.continue

@@ -1,0 +1,157 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..
+..  Name      : ABEST.LJ2
+..  Datum     : 22.08.05
+..  Vers.     : 2005
+..  Autor     : cl
+..
+..  Verantwortlich : tiwe
+..  Kontrolle      : cl
+..
+..
+..  Funktion  : Upro, wird aufgerufen aus ABEST.TAB
+..
+.end .  ?  G|txname / "*ABEST.LJ2"
+..*****************************************************************************
+.set trans -
+.type integer   xij        ? _F|defined(U|xij)
+.type integer   xij2       ? _F|defined(U|xij2)
+.type integer   xij3       ? _F|defined(U|xij3)
+.type integer   xij4       ? _F|defined(U|xij4)
+.type integer   xbuart     ? _F|defined(U|xbuart)
+.type realx xzumge     ? _F|defined(U|xzumge)
+.type realx xabmge     ? _F|defined(U|xabmge)
+.type realx xabest     ? _F|defined(U|xabest)
+.type realx xebest     ? _F|defined(U|xebest)
+.type realx xaktbest   ? _F|defined(U|xaktbest)
+.type realx xrkorr     ? _F|defined(U|xrkorr)
+.type realx xzuabmge   ? _F|defined(U|xzuabmge)
+.type bool  xbungleich ? _F|defined(U|xbungleich)
+.type bool  xreda      ? _F|defined(U|xreda)
+.type text  xtsel      ? _F|defined(U|xtsel)
+.type GD    x1danf     ? _F|defined(U|x1danf)
+.type GD    x1dend     ? _F|defined(U|x1dend)
+.type text  xtjkey     ? _F|defined(U|xtjkey)
+.type text  x1tnum     ? _F|defined(U|x1tnum)
+.type text  x1tjourn   ? _F|defined(U|x1tjourn)
+..
+!BESTAND: BestÑnde Åber Lagerjournal ermitteln / stock from stock journal
+.reserve
+.formula U|xzuabmge     = 0.00
+.formula U|xzumge       = 0.00
+.formula U|xabmge       = 0.00
+.formula U|xrkorr       = 0.00
+.formula U|xabest       = 0,00
+.formula U|xebest       = 0,00
+.copy U|xbungleich = G|FALSE
+..
+!ENDBESTAND: aktuelle Lagergruppenbestand zum Tagesdatum / warehouse group stock level
+.formula U|xtsel = "$,,artikel==" + U|xid + ";lgruppe=" + 'U|xtlgrid' + ";@ablageart=(Active)"
+..
+.formula U|xebest   = 0
+.formula U|xaktbest = 0
+.. Lagergruppenmenge
+.load 1 group "40:5" 'U|xtsel'
+.continue LMGEEND ? _G|mehr
+!LGLOOP
+.formula U|xebest   = U|xebest + 1|bestand 
+.load 1 squantity
+.continue LGLOOP ? G|mehr
+!LMGEEND: Ende Lagergruppenmenge
+.formula U|xaktbest = U|xebest
+..
+.continue SELEKTION ? M|bis >= G|datum
+..
+.formula U|xbungleich = G|TRUE
+.. ein Tag Åber bis-Grenze
+.formula U|x1danf   = M|bis + 1
+.. aktuelles Datum
+.formula U|x1dend   = G|datum
+.formula U|x1tnum   = U|xnum
+.continue JKEY
+..
+!NEUBESTAND
+.formula U|xebest     = U|xebest - U|xzumge + U|xabmge - U|xrkorr
+.formula U|xzumge     = 0.00
+.formula U|xabmge     = 0.00
+.formula U|xrkorr     = 0.00
+.formula U|xbungleich = G|FALSE
+.select -
+..
+!SELEKTION
+.. von-Datum
+.formula U|x1danf = "19810101"
+.. bis-Datum
+.formula U|x1dend = M|bis
+.formula U|x1tnum = U|xnum
+..
+!JKEY
+.input "JOURN.DAT"
+.formula U|xtjkey = "$,,num10=" + U|x1tjourn
+.formula U|xtjkey = U|xtjkey + ";@ordnung=nummer.(Backwards);@gruppe=1;@ablageart=(Active)"
+.select journal 'U|xtjkey'
+..
+!PRUEF
+.continue ENDE   ? _G|mehr
+.continue HJ0    ?  H|buart = 4 & 'H|lgruppe^id' <> 'U|xtlgrid' & 'H|lgruppe2^id' <> 'U|xtlgrid' & _M|blgruppe
+.continue HJ0    ?  H|buart = 2 & (F|equals(H|detursache, "(PickingQtyPackingSlipS)") ; F|equals(H|detursache, "(PickingQtyPackingSlipP)") ; F|equals(H|detursache, "(ManualTransfer)") ; F|equals(H|detursache,"(ContainerStockAdjustment)"))
+.continue HJ1
+..
+!HJ0
+.select journal
+.continue PRUEF
+..
+!HJ1:
+.formula U|xtjlgrid  = H|lgruppe^id
+.formula U|xtjlgrid2 = H|lgruppe2^id
+..
+!BUART: buart = 5 (Lagerdurchgang), buart = 7 (Aenderung der Lagereinheit) und buart = 8 (Sonderbehandlung Inventur) bleiben unberÅcksichtigt
+.continue HJ0     ?  H|buart = 0 ; H|buart = 5 ; H|buart = 6 ; H|buart = 7 ; H|buart = 8 ; H|buart = 9 ; H|buart = 10
+.formula U|xbuart = H|buart
+..
+!JOURNAL: Zugang (1), Abgang (2), Korrektur (3), Umbuchung (4)
+.continue HJ0      ? 'H|budat:8' < 'M|von:8'
+.continue HJ0      ? U|xbuart = 4 & M|blgruppe
+.continue HJ0      ? U|xbuart = 4 & U|xtjlgrid  = U|xtjlgrid2
+.continue HJ0      ? 'H|lgruppe^id' <> 'U|xtlgrid' & _M|blgruppe & (_F|equals(H|detursache, "(ManualTransfer)") & _F|equals(H|detursache, "(PickingQtyPackingSlipS)") & _F|equals(H|detursache, "(PickingQtyPackingSlipP)") & _F|equals(H|detursache, "(ContainerStockAdjustment)"))
+.type bool xbtreffer ? _F|defined(U|xbtreffer)
+.copy U|xbtreffer = G|FALSE
+.copy U|xbtreffer = G|TRUE ? H|buart = 1 & (F|equals(H|detursache, "(PickingQtyPackingSlipS)") ; F|equals(H|detursache, "(PickingQtyPackingSlipP)") ; F|equals(H|detursache, "(ManualTransfer)") ; F|equals(H|detursache,"(ContainerStockAdjustment)"))
+.. ich kann rausspringen wenn Lagergruppen gleich, dann muss buart = 2 mit detursache=ManualTransfer  nicht verfolgt werden
+.continue HJ0    ? U|xbtreffer & (H|platz^lgruppe^id = H|lj^lgruppe^id)
+.formula U|xzuabmge = H|mge
+.continue BUART2 ? 'H|lgruppe^id' <> 'U|xtlgrid' & U|xbtreffer & (H|platz^lgruppe^id <> H|lj^lgruppe^id)
+.continue MANUAL ? 'H|lgruppe^id' = 'U|xtlgrid' & U|xbtreffer & (H|platz^lgruppe^id <> H|lj^lgruppe^id)
+.continue HJ0    ? H|buart = 1 & _U|xbtreffer & (F|equals(H|detursache, "(PickingQtyPackingSlipS)") ; F|equals(H|detursache, "(PickingQtyPackingSlipP)") ; F|equals(H|detursache, "(ManualTransfer)") ; F|equals(H|detursache,"(ContainerStockAdjustment)"))
+.continue MANUAL
+..
+!TREFFER
+.copy U|xbtreffer = G|FALSE
+..
+!MANUAL 
+.formula U|xzumge = U|xzumge + U|xzuabmge ? U|xbuart = 1
+.formula U|xabmge = U|xabmge + U|xzuabmge ? U|xbuart = 2
+.formula U|xrkorr = U|xrkorr + U|xzuabmge ? U|xbuart = 3
+.formula U|xzumge = U|xzumge + U|xzuabmge ? U|xbuart = 4 & U|xtjlgrid2 = U|xtlgrid
+.formula U|xabmge = U|xabmge + U|xzuabmge ? U|xbuart = 4 & U|xtjlgrid  = U|xtlgrid
+..
+!BUART2
+.continue HJ0 ? _U|xbtreffer
+.type text xtljkey ? _F|defined(U|xtljkey)
+..Abgang finden zu einer 2-zeiligen Umlagerung
+.formula U|xtljkey = "$,,num10=" + U|x1tjourn
+.formula U|xtljkey = U|xtljkey + ";@gruppe=1;@ablageart=(Active)"
+.formula U|xtljkey = U|xtljkey + ";detursache="+'H|detursache'+";buart=2;zuord="+'H|zuord'+";lgruppe=" + 'H|lj^lgruppe^id' +";mge="+'H|mge'
+.load 3 journal 'U|xtljkey'
+..
+.continue HJ0  ? _G|mehr
+.formula U|xbuart = 2 
+.continue TREFFER     ? '3|lgruppe^id' = 'U|xtlgrid' & _M|blgruppe
+.continue HJ0
+..
+!ENDE: Endbestand (bis-Datum) und Anfangsbestand (von-Datum); Artikel wieder holen / closing and opening balance
+.continue NEUBESTAND           ? U|xbungleich
+.formula U|xabest  = U|xebest - U|xzumge + U|xabmge - U|xrkorr
+.select
+.continue

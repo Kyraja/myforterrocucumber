@@ -1,0 +1,125 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : APAPIER.ABASDMS.IDX
+.. Autor          : kop
+.. Verantwortlich : teamreport
+.. Kontrolle      : lei
+.. Funktion       : Erzeugt Indexdatei fuer abas-DMS
+.. Functionality  : Creates index file for abas-DMS
+..*****************************************************************************
+.. includes APAPIER.ABASDMS.IDX.KOPF
+.. includes APAPIER.ABASDMS.IDX.TAB
+..*****************************************************************************
+.set trans -
+.type text xt           ? _F|defined(U|xt)
+.type text xartprefix  ? _F|defined(U|xartprefix)
+.type integer  xi       ? _F|defined(U|xi)
+.type integer  xulpos   ? _F|defined(U|xulpos)
+.type text xanummer     ? _F|defined(U|xanummer)
+.type text xaid         ? _F|defined(U|xaid)
+.type integer  xlaenge  ? _F|defined(U|xlaenge)
+.type text xverw        ? _F|defined(U|xverw)
+.type text xselstring   ? _F|defined(U|xselstring)
+.type VID99 xid         ? _F|defined(U|xid)
+.type VP5  xkuli        ? _F|defined(U|xkuli)
+.type text xkuartnr     ? _F|defined(U|xkuartnr)
+.type P9:1 xba          ? _F|defined(U|xba)
+..
+.input "dms/FIND.CONTEXT"
+.formula U|xkuartnr = ""
+.assign U|xba = U|xid       ? U|xid^dnr = 9 & U|xid^gruppe = 1
+.assign U|xba = U|xid^ba    ? U|xid^dnr = 4 & U|xid^gruppe = 5
+..
+.set trans +
+.formula U|xartprefix = "Alternative"
+.set trans -
+..
+.file -tempname U|xt
+..
+.output new 'U|xt' -encoding "UTF-8"
+.input "DATEI.F"
+..
+.input "STD.ABASDMS.IDX"
+..
+BelDat='U|xid^vom(L="0")'
+.input "APAPIER.ABASDMS.IDX.KOPF"
+..
+.continue ARTIKEL ? U|xid^verw=""
+.formula U|xulpos   = 'F|strindex(U|xid^verw,"_")'
+.continue ARTIKEL ? U|xulpos = 0
+.formula U|xanummer = 'F|substr(U|xid^verw,,U|xulpos - 1)'
+.continue ARTIKEL ? _F|regmatch(U|xanummer, "[0-9].*")
+.formula U|xlaenge  = F|length(U|xid^verw) - F|length(U|xanummer) - 1
+.formula U|xverw=U|xid^verw
+.continue ARTIKEL ? _G|mehr
+..
+.formula U|xselstring = "$,,nummer==" + 'U|xanummer'
+.select group "3:22" 'U|xselstring'
+.continue ARTIKEL ? _G|mehr
+.formula U|xaid = H|id
+..
+.. customner data
+.assign U|xkuli = H|kunde
+.input "st/KULI.ABASDMS.IDX"
+..
+!WRITE
+..
+..load position
+.formula U|xi = 0
+!POSLAD
+.select line
+.continue ARTIKEL ? _G|mehr
+.. find sales order position with the same usage
+.continue POSLAD ? 'U|xverw'<>'H|verw'
+..
+..part details from attached sales order
+POS-ANF
+abasaid='H|artex^id'
+ArtNr='H|artex^nummer'
+ArtSuch='H|artex^such'
+?ArtBez='H|artex^name'                    ? _H|alternativpos
+?ArtBez='U|xartprefix' 'H|artex^name'     ?  H|alternativpos
+..
+.continue NOFART ? H|artex^gruppe <> 1 & H|artex^gruppe <> 5
+.formula U|xselstring = "$,,art==" + H|artex^id + ";kl=`"
+.load 1 group "2:6" 'U|xselstring'
+.copy U|xkuartnr = 1|kuartnr ? G|mehr
+?FArtNr='U|xkuartnr' ? _ F|empty(U|xkuartnr)
+!NOFART
+?VKAngNr='H|okopf^nummer' ? _ F|empty(okopf)
+?AbasVAID='H|okopf^id'    ? _ F|empty(okopf)
+VKAufNr='U|xanummer'
+AbasVBID='U|xaid'
+?AbasPRID='H|projekt^id'             ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+?ProjNr='H|projekt^nummer'           ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+?ProjSuch='H|projekt^such'           ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+?ProjBez='H|projekt^name'            ? F|sysinfo(18)^projekt & F|defined(H|projekt)
+.input "APAPIER.ABASDMS.IDX.TAB"
+POS-END
+.continue ENDE
+..
+..part from work order
+..used only if no sales order has been attached
+!ARTIKEL
+POS-ANF
+abasaid='U|xba^art^id'
+ArtNr='U|xba^art^nummer'
+ArtSuch='U|xba^art^such'
+ArtBez='U|xba^art^name'
+..
+.continue PROJECT ? U|xba^art^gruppe <> 1 & U|xba^art^gruppe <> 5
+.formula U|xselstring = "$,,art==" + U|xba^art^id + ";kl=`"
+.load 2 group "2:6" 'U|xselstring'
+.copy U|xkuartnr = 2|kuartnr ? G|mehr
+?FArtNr='U|xkuartnr'                        ? _ F|empty(U|xkuartnr)
+!PROJECT
+?AbasPRID='U|xba^projekt^id'             ? F|sysinfo(18)^projekt & F|defined(U|xba^projekt)
+?ProjNr='U|xba^projekt^nummer'           ? F|sysinfo(18)^projekt & F|defined(U|xba^projekt)
+?ProjSuch='U|xba^projekt^such'           ? F|sysinfo(18)^projekt & F|defined(U|xba^projekt)
+?ProjBez='U|xba^projekt^name'            ? F|sysinfo(18)^projekt & F|defined(U|xba^projekt)
+.input "APAPIER.ABASDMS.IDX.TAB"
+POS-END
+..
+!ENDE
+.system 'F|expr("crlf+ < " + U|xt + " >" + U|xxmldata)' background
+.continue

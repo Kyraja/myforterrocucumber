@@ -1,0 +1,73 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : ZUGFERDXML.SPECIFIEDTRADESETTLEMENTPAYMENTMEANS
+..  Autor          : saac
+..  Verantwortlich : teamreport
+..  Kontrolle      : cl
+..  Funktion       : XML-Datengenerator des Infosystems ev/EVVORGANG zur Erzeugung
+..                   der Rechnungsdaten im ZUGFeRD-Format
+..  Functionality  : XML data generator for the Infosystem ev/EVVORGANG to build
+..                   invoice date for ZUGFeRD
+..*****************************************************************************
+..
+.type text xTypeCode                ? _F|defined(U|xTypeCode)
+.type text xInformation             ? _F|defined(U|xInformation)
+.type text xPayeeIBANID             ? _F|defined(U|xPayeeIBANID)
+.type text xPayeeName               ? _F|defined(U|xPayeeName)
+.type text xPayeeBIC                ? _F|defined(U|xPayeeBIC)
+.type text xPayerIBANID             ? _F|defined(U|xPayerIBANID)
+.type text xPayerName               ? _F|defined(U|xPayerName)
+.type text xPayerBIC                ? _F|defined(U|xPayerBIC)
+.type text xschemeAgencyID          ? _F|defined(U|xschemeAgencyID)
+.type text xSEPAID                  ? _F|defined(U|xSEPAID)
+..
+.set trans -
+..
+.formula U|xTypeCode = ""
+.formula U|xTypeCode = "10" ? F|equals(M|zaform, "(CashPayment)")
+.formula U|xTypeCode = "20" ? F|equals(M|zaform, "(Check)")
+.formula U|xTypeCode = "31" ? F|equals(M|zaform, "(Transfer)")
+.formula U|xTypeCode = "48" ? F|equals(M|zaform, "(CreditCard)")
+.formula U|xTypeCode = "49" ? F|equals(M|zaform, "(DebitNote)")
+.assign U|xInformation = M|zaform
+.copy U|xPayeeIBANID = F|sysinfo(10)^iban
+.assign U|xPayeeName = ""
+.assign U|xPayeeBIC = ""
+.assign U|xPayerIBANID = M|sepamand^debiban
+.assign U|xPayerName = M|sepamand^debbname
+.assign U|xPayerBIC = M|sepamand^debiident
+.assign U|xschemeAgencyID = M|sepamand^sepacred
+.assign U|xSEPAID = M|sepamand^sepamref
+..
+..*****************************************************************************
+!OUTPUT
+..*****************************************************************************
+..
+.continue ? F|empty(U|xTypeCode)
+             <ram:SpecifiedTradeSettlementPaymentMeans>
+                <ram:TypeCode>'U|xTypeCode'</ram:TypeCode>
+                <ram:Information>'U|xInformation'</ram:Information>
+.continue ENDPAYEE ? U|xTypeCode <> "31"
+                <ram:PayeePartyCreditorFinancialAccount>
+                    <ram:IBANID>'U|xPayeeIBANID'</ram:IBANID>
+                </ram:PayeePartyCreditorFinancialAccount>
+.continue ENDPAYEE ? F|empty(U|xPayeeBIC)
+                <ram:PayeeSpecifiedCreditorFinancialInstitution>
+                    <ram:BICID>'U|xPayeeBIC'</ram:BICID>
+                    <ram:Name>'U|xPayeeName'</ram:Name>? _F|empty(U|xPayeeName)
+                </ram:PayeeSpecifiedCreditorFinancialInstitution>
+!ENDPAYEE
+.continue ENDSECTION ? U|xTypeCode <> "49"
+                <ram:ID schemeAgencyID="'U|xschemeAgencyID'">'U|xSEPAID'</ram:ID>
+                <ram:PayerPartyDebtorFinancialAccount>
+                    <ram:IBANID>'U|xPayerIBANID'</ram:IBANID>
+                </ram:PayerPartyDebtorFinancialAccount>
+.continue ENDSECTION ? F|empty(U|xPayerBIC)
+                <ram:PayerSpecifiedDebtorFinancialInstitution>
+                    <ram:BICID>'U|xPayerBIC'</ram:BICID>
+?                   <ram:Name>'U|xPayerName'</ram:Name>? _F|empty(U|xPayerName)
+                </ram:PayerSpecifiedDebtorFinancialInstitution>
+!ENDSECTION
+            </ram:SpecifiedTradeSettlementPaymentMeans>
+..
+.continue

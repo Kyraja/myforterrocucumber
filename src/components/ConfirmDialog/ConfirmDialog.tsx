@@ -8,14 +8,17 @@
  *
  * @exports ConfirmDialog
  */
+import { createPortal } from 'react-dom';
 import styles from './ConfirmDialog.module.css';
 
 interface ConfirmDialogProps {
   title: string;
   message: string;
   confirmLabel?: string;
+  secondaryLabel?: string;
   cancelLabel?: string;
   onConfirm: () => void;
+  onSecondary?: () => void;
   onCancel: () => void;
 }
 
@@ -23,11 +26,13 @@ export function ConfirmDialog({
   title,
   message,
   confirmLabel = 'Ja',
+  secondaryLabel,
   cancelLabel = 'Nein',
   onConfirm,
+  onSecondary,
   onCancel,
 }: ConfirmDialogProps) {
-  return (
+  return createPortal(
     <div className={styles.overlay} onClick={onCancel}>
       <div className={styles.dialog} onClick={(e) => e.stopPropagation()}>
         <div className={styles.header}>
@@ -40,11 +45,17 @@ export function ConfirmDialog({
           <button className={styles.cancelBtn} onClick={onCancel} type="button">
             {cancelLabel}
           </button>
+          {secondaryLabel && onSecondary && (
+            <button className={styles.secondaryBtn} onClick={onSecondary} type="button">
+              {secondaryLabel}
+            </button>
+          )}
           <button className={styles.confirmBtn} onClick={onConfirm} type="button" autoFocus>
             {confirmLabel}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

@@ -1,0 +1,215 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..
+..  FOP-Name       : RESERVE.BN
+..  Datum          : 07.11.05
+..  Version        : 2005
+..  Autor          : rs
+..  Verantwortlich : cl
+..  Kontrolle      : as
+..
+..  Funktion       : Reservierungen bearbeiten
+..  Functionality  :
+..
+..  Ablauf         :
+..  Program flow   :
+..
+..  includes       :
+..
+..  include is/TABLEEREN
+..
+..include ev/RESERVE.RELEVANT
+..*****************************************************************************
+.set trans -
+.type text   xtvkbez     ? _F|defined(U|xtvkbez)
+.type text   xtkartikel  ? _F|defined(U|xtkartikel)
+.type text   xtartid     ? _F|defined(U|xtartid)
+.type text   xtposid     ? _F|defined(U|xtposid)
+.type text   xid         ? _F|defined(U|xid)
+.type text   xtkom       ? _F|defined(U|xtkom)
+.type I4     xtekvk      ? _F|defined(U|xtekvk)
+.type bool   xbefteil    ? _F|defined(U|xtefteil)
+.type text   xvpos       ? _F|defined(U|xvpos)
+.type ARTR51000   xbmge       ? _F|defined(U|xbmge)
+.type PS39:2 xlaggr      ? _F|defined(U|xlaggr)
+.type PS39:2 xintlg      ? _F|defined(U|xintlg)
+..
+.input "is/TABLEEREN"
+..
+.. interne Lagergruppe bestimmen
+.copy U|xintlg = F|sysinfo(10)^intlgruppe
+..
+..Ein-/Verkaufsposition -> H holen
+.select add M|position
+.continue END                  ? _G|mehr
+.continue END                  ? _M|binres
+..
+.. I-File
+.input "ev/RESERVEKOPF"
+..
+.copy M|kartikel = H|art
+.formula U|xtkartikel = H|art^id
+.formula U|xtekvk     = M|ekvk
+.formula U|xtposid    = H|id
+.formula U|xbefteil   = M|efteil
+..
+.. zugehoerige Bestell-/Auftragsposition -> 9 holen
+.continue NOAB                 ? H|kotyp <> G|ANKO & H|kotyp <> G|ABKO & H|kotyp <> G|SNKO & H|kotyp <> G|SBKO 
+.. ist Angebot/Auftrag/Bestellung
+.load 9 object 'U|xtposid'
+.continue ERES
+..
+!NOAB: ist Rechnung
+.continue NORE                 ? H|kotyp <> G|REKO
+.load 9 add H|orig
+.continue STUELI               ? _G|mehr
+.formula U|xtposid = 9|id      ? 9|kotyp =  G|LIKO
+.load 9 add 9|orig             ? 9|kotyp =  G|LIKO
+.continue STUELI               ? _G|mehr
+.continue STUELI               ? 9|kotyp <> G|ABKO
+.continue ERES
+..
+!NORE: ist Lieferschein
+.continue STUELI               ? H|kotyp <> G|LIKO
+.formula U|xtposid = H|id
+.load 9 add H|orig
+.continue STUELI               ? _G|mehr
+.continue STUELI               ? 9|kotyp <> G|ABKO
+.continue ERES
+..
+!ERES
+.formula U|xbmge     = 9|mge * 9|lehe
+.load 9 add 9|eres
+.continue STUELI               ? _G|mehr
+..
+!LOADLINE
+.formula U|xtvkbez   = ""
+.formula U|xtartid   = ""
+.continue KART                 ?  9|elart <> 1
+.continue KART                 ? _9|relevant
+.add 9|elem
+.continue END                  ? _G|mehr
+.continue KART                 ?  D|gruppe = 3
+.formula U|xtvkbez   = 'D|vkbez.P|ksi'  ? D|gruppe = 1
+.formula U|xtvkbez   =  D|such          ? F|empty(U|xtvkbez)
+.formula U|xtartid   =  D|id
+..
+!ART
+.continue KART ? 9|anzahl <= 0 & 9|amge <= 0
+..
+.make screen line +O
+.formula M|vpos      =  U|xvpos
+.formula M|reserv    =  9|id
+.formula M|artikel   = 'U|xtvkbez'
+.formula M|artikelid = 'U|xtartid' ? _F|empty(U|xtartid)
+.assign M|basisartikel = M|artikelid^basisartikel
+.formula M|lge       =  9|lge
+.formula M|lme       = '9|lme(L=P|spr)' ? _F|empty(9|lge)
+.formula M|breite    =  9|breite
+.formula M|bme       = '9|bme(L=P|spr)' ? _F|empty(9|breite)
+.formula M|anzahl    =  9|anzahl
+.formula M|mge       =  9|mge
+.formula M|limge     =  9|limge
+.formula M|liefermge =  0.0
+.formula M|liefermge =  H|mge * (9|mge / U|xbmge)  ? U|xbmge <> 0
+.formula M|einh      = '9|le(L=P|spr)'
+.formula M|platz     =  9|platz
+.formula U|xid       =  9|id
+.formula M|zeichn    =  D|zeichn
+..
+!DAZU
+.add
+..
+.. I-File
+.input "ev/RESERVEZEILE"
+..
+.continue KART ? M|vtyp = 1; M|vtyp = 2 ; M|vtyp = 3 ; M|vtyp = 33 ; M|vtyp = 34 ; M|vtyp = 37
+..
+.formula U|xtkom = "$,,"
+.formula U|xtkom = U|xtkom + ";artikel=" + 'U|xtartid'
+.formula U|xtkom = U|xtkom + ";einplan=FALSE"
+.formula U|xtkom = U|xtkom + ";zbeweg=" + U|xtposid +";@ordnung=zbeweg,einplan,aktiv,pos"        ? (M|vtyp = 4 ; M|vtyp = 5) & M|ekvk = 4 & M|mge >= 0
+.formula U|xtkom = U|xtkom + ";abeweg=" + U|xtposid +";@ordnung=abeweg,einplan,aktiv,pos,reserv" ? (M|vtyp = 4 ; M|vtyp = 5) & M|ekvk = 3 & M|mge >= 0
+.formula U|xtkom = U|xtkom + ";abeweg=" + U|xtposid +";@ordnung=abeweg,einplan,aktiv,pos,reserv" ? (M|vtyp = 4 ; M|vtyp = 5) & M|ekvk = 4 & M|mge < 0
+.formula U|xtkom = U|xtkom + ";zbeweg=" + U|xtposid +";@ordnung=zbeweg,einplan,aktiv,pos"        ? (M|vtyp = 4 ; M|vtyp = 5) & M|ekvk = 3 & M|mge < 0
+.formula U|xtkom = U|xtkom + ";@ablageart=(Both);@gruppe=0"
+..
+.load 3 mallocation 'U|xtkom'
+..
+.continue KART        ? _G|mehr
+..
+.copy M|mzda  = G|TRUE
+.formula M|imzda = 1 ?  M|mzda
+.formula M|imzda = 0 ? _M|mzda
+..
+!KART
+.load 9 line
+.continue END ? _G|mehr
+.continue LOADLINE
+..
+!STUELI: Es wurde keine Reservierung gefunden also Stckliste prfen
+.input "ev/RESERVE.RELEVANT"
+.continue END ? U|xbend
+..
+!SART
+.load 1 line
+.continue END               ? _G|mehr
+.continue SART              ?  1|elart <> 1
+.continue SART              ? _1|relevant 
+.add 1|elem
+.formula U|xtvkbez = ""
+.formula U|xtartid = ""
+.continue OELEM             ? _G|mehr
+.continue SART              ?  D|gruppe = 3
+.formula U|xtvkbez = ""
+.formula U|xtvkbez = 'D|vkbez.P|ksi'   ? D|gruppe = 1
+.formula U|xtvkbez =  D|such ? F|empty(U|xtvkbez)
+.formula U|xtartid =  D|id
+.formula U|xvpos   =  1|vpos
+..
+!OELEM
+.continue SART ? 1|anzahl <= 0
+.make screen line +O
+.formula M|vpos      =  U|xvpos
+.formula M|reserv    = 'U|xtposid'
+.formula M|artikel   = 'U|xtvkbez'
+.formula M|artikelid = 'U|xtartid' ? _F|empty(U|xtartid)
+.formula M|lge       =  1|lge
+.formula M|lme       = '1|ellme(L=P|spr)' ? _F|empty(1|lge)
+.formula M|breite    =  1|breite
+.formula M|bme       = '1|elbme(L=P|spr)' ? _F|empty(1|breite)
+.formula M|anzahl    =  1|anzahl
+.formula M|mge       =  1|gesamtm ? H|kotyp = 2 ; H|kotyp = 33
+.formula M|liefermge =  1|gesamtm
+.formula M|einh      = 'D|le(L=P|spr)'
+.formula M|zeichn    =  D|zeichn
+.formula M|platz     =  D|abplatz    ? D|gruppe = 1
+.formula M|lgbest    =  D|lgbestand  ? D|gruppe = 1
+..
+.. I-File
+.input "ev/RESERVEZEILE"
+..
+!VTYP
+.continue SART   ? M|vtyp = 1; M|vtyp = 2 ; M|vtyp = 3 ; M|vtyp = 33 ; M|vtyp = 34 ; M|vtyp = 37
+..
+.formula U|xtkom = "$,,"
+.formula U|xtkom = U|xtkom + ";artikel=" + 'U|xtartid' 
+.formula U|xtkom = U|xtkom + ";einplan=FALSE"
+.formula U|xtkom = U|xtkom + ";zbeweg=" + U|xtposid + ";@ordnung=zbeweg,einplan,aktiv,pos"         ? (M|vtyp = 4 ; M|vtyp = 5) & M|ekvk = 4 & M|mge >= 0
+.formula U|xtkom = U|xtkom + ";abeweg=" + U|xtposid + ";@ordnung=abeweg,einplan,aktiv,pos,reserv"  ? (M|vtyp = 4 ; M|vtyp = 5) & M|ekvk = 3 & M|mge >= 0
+.formula U|xtkom = U|xtkom + ";abeweg=" + U|xtposid + ";@ordnung=abeweg,einplan,aktiv,pos,reserv"  ? (M|vtyp = 4 ; M|vtyp = 5) & M|ekvk = 4 & M|mge < 0
+.formula U|xtkom = U|xtkom + ";zbeweg=" + U|xtposid + ";@ordnung=zbeweg,einplan,aktiv,pos"         ? (M|vtyp = 4 ; M|vtyp = 5) & M|ekvk = 3 & M|mge < 0
+.formula U|xtkom = U|xtkom + ";@ablageart=(Both);@gruppe=0"
+..
+.load 3 mallocation 'U|xtkom'
+.continue SART        ? _G|mehr
+..
+.copy M|mzda  = G|TRUE
+.formula M|imzda = 1 ? M|mzda
+.formula M|imzda = 0 ? _M|mzda
+.continue SART
+..
+!END
+.. I-File
+.input "ev/RESERVEENDE"
+.continue

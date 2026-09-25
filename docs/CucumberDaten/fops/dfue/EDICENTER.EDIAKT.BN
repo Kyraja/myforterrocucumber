@@ -1,0 +1,83 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : EDICENTER.EDIAKT.BN
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      :
+.. Funktion       : Reaktieren einer EDI-Nachricht, z.B. fÅr erneutes Senden
+.. Functionality  : Reaktivate an edi message, e.g. to send again
+..*****************************************************************************
+.set trans -
+..
+..<META M|='dfue/EDICENTER' > 
+..<META H|='P55:1' > 
+..
+.. Different actions depending on mesage direction, message framework and
+.. message enumeration type
+.. ----------- ---------- ---------- -------------------------------------------
+.continue FO      ?  F|empty(M|edinr^abmodell)
+.continue ERRJEDI ?  F|equals(M|edinr^imex, "EX") & F|equals(M|tedinachraz, "(ZUGFeRDInvoice)")
+.continue JEDIEX  ?  M|edinr^imex = "EX"
+.continue JEDIIM  ?  M|edinr^imex = "IM"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+..
+!JEDIEX: JEDI-Export is done in one big step, there is only status 0
+.continue ERRJEDI ?  F|empty(M|vorgang)
+.continue ERRJEDI ? _F|defined(M|vorgang^dfuesenden)
+.select lock object 'M|vorgang^id'
+.continue ERRJEDI ? _G|mehr 
+.continue ERRJEDI ? _G|gesperrt
+.copy H|dfuesenden = G|true
+.copy H|dfuedat = G|datum ? F|defined(H|dfuedat)
+.assign H|ediid = "" ? F|defined(H|ediid)
+.assign H|edifact = "" ? F|defined(H|edifact)
+.rewrite
+.continue ERRJEDI ? _G|mehr
+.input "dfue/EDICENTER.EDIDEAKT.BN"
+.continue END
+..
+..
+!JEDIIM: JEDI-Import is done with import and processing in 2 stages, same as FO
+..
+!FO
+.. nothing to do, edi message is active
+.continue END     ?  M|status = 2  &  M|fcode = 0
+..
+.select lock edifact 'M|edinr^id'
+.continue ERREDI  ? _G|mehr
+..
+.. To aktivate set state 2
+.formula H|status =  2       ?  M|edinr^vorart <> 0
+.formula H|status =  0       ?  M|edinr^vorart =  0
+.formula H|edistatusaz = "(New)"
+.formula H|fcode  =  0
+.formula H|ftext = ""
+.rewrite
+.continue ERRBRI  ? _G|mehr
+..
+.. Update infosystem table
+.formula M|status = H|status
+.formula M|fcode  = H|fcode
+.formula M|fotoz  = G|icomessage         ?  H|status =  2
+.formula M|fotoz  = "icon:ok"            ?  H|status =  0
+.formula M|edidruckz = "icon:print"
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+..
+!ERREDI: could not read edi msg with lock
+.error Fehler beim Sperren der Nachricht. Die Nachricht wurde nicht aktiviert.
+.end 1
+..
+!ERRBRI: error when updating edi message
+.error Das Aktivieren der Nachricht ist fehlgeschlagen!
+.end 1
+..
+!ERRJEDI
+.error Der Vorgang zu dieser EDI-Nachricht kann nicht aktiviert werden.
+.end 1

@@ -1,0 +1,159 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : ELINVOICEPROCESS.OBJSUCHE.TBESTELLUNG.FO
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : mh
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text xsel      ? _F|defined(U|xsel)
+.type text xtext     ? _F|defined(U|xtext)
+.type ID4  xmerklsid ? _F|defined(U|xmerklsid)
+.type bool xkenner   ? _F|defined(U|xkenner)
+..
+..<META M|='ev/ELINVOICEPROCESS'>
+..<META 1|='P4:2'>
+..
+.continue END ? F|empty(M|BuyerOrderIssuerAssignedId)
+..
+.type text searchfop ? _F|defined(U|searchfop)
+.formula U|searchfop = "ev/ELINVOICEPROCESS.OBJSUCHE.ORDER.PROCESS.FO"
+..
+.. Parameter-Felder 
+.type text xsuchnummer    ? _F|defined(U|xsuchnummer)
+.type text xsuchfrzeich   ? _F|defined(U|xsuchfrzeich)
+.. bereits ermittelte BusinessPartner
+.type VP5 xsuchlieferant ? _F|defined(U|xsuchlieferant)
+.type VP5 xsuchresteller ? _F|defined(U|xsuchresteller)
+..
+.. Ergebnis-Felder
+.type VP23 xgefundenVP22 ? _F|defined(U|xgefundenVP22)
+.type text xtsuchfehler  ? _F|defined(U|xtsuchfehler)
+..
+.. PARAMETER FUER SUCH-AUFRUF **************************************************
+.formula U|xsuchnummer = M|BuyerOrderIssuerAssignedId 
+.formula U|xgefundenVP22 = M|teigbestell^id ? _F|empty(M|teigbestell)
+.formula U|xsuchfrzeich = M|BuyerOrderIssuerAssignedId
+.formula U|xsuchlieferant = M|lieferant^id 
+.formula U|xsuchresteller = ""
+..
+.input 'U|searchfop'      ?  F|empty(M|tbestellung)  & F|empty(M|teigbestell)
+.println 'U|xtsuchfehler' ? _F|empty(U|xtsuchfehler)
+..
+.continue LIEFERSCHEIN ? F|empty(M|bestellung) & _F|empty(M|DeliveryNoteIssuerAssignedID) & F|empty(U|xgefundenVP22)
+.continue ERROR        ? F|empty(U|xgefundenVP22)
+.assign M|tbestellung = U|xgefundenVP22
+.continue LIEFERSCHEIN ? F|empty(M|tbestellung)
+..
+.formula U|xsel = "$,,;kopf="+'M|tbestellung^id'+";gruppe=2;pnum="+'M|BuyerOrderLineID'+";artikel="+'M|artikel^id'+";@gruppe=2;@ablageart=(Both)"
+.load 9 purchasing 'U|xsel'
+.continue LIEFERSCHEIN  ? _G|mehr
+..
+!PRUEFMGE
+.continue MENGEN ? 9|tzeilen = 1
+.continue MENGEN ? M|BuyerOrderLineID = 9|pnum
+.continue MENGEN ? LineID = 9|pnum
+.load 9 purchasing
+.continue LS ? _G|mehr
+.continue PRUEFMGE
+..
+!MENGEN
+.formula M|tremge = 9|remge
+.formula M|trefrg = 9|refrg
+.formula M|remengevorgang = 9|remge - 9|refrg
+.colour -background -1 -1 -1 'M|aktzeile'
+.colour -foreground 'U|xabaswhite' -background 'U|xabasgreen' remengevorgang 'M|aktzeile'  ? M|BilledQuantity > M|tremge
+.colour -foreground 'U|xabaswhite' -background 'U|xabasred' BilledQuantity 'M|aktzeile'    ? M|BilledQuantity > M|tremge
+.protection bwerteausrechnung 0                                                            ? M|BilledQuantity > M|tremge
+..
+!LS: Gibt es (mindestens) einen  Lieferschein zu dieser Bestellung?
+.formula U|xsel = "$,,;okopf="+'M|tbestellung^id' + ";kopf^ebeleg="+'M|DeliveryNoteIssuerAssignedID'+";tlsart=(PackingSlip);kotyp=4;gruppe=2;artikel="+'M|artikel^id'+";pnum="+'M|DeliveryNoteLineID'+";@gruppe=2;@ablageart=(Both)"
+.load 1 purchasing 'U|xsel'
+.continue EXNUM     ? _G|mehr
+.assign M|lskopfid = 1|kopf
+.assign M|kstelle = 1|kstelle
+.assign M|konto = 1|konto
+.copy M|blsfakt = M|lskopfid^fakt
+.formula M|DeliveryNoteIssuerAssignedID = 1|kopf^ebeleg  ? F|empty(M|DeliveryNoteIssuerAssignedID)
+..
+!PRLSMGE
+.continue LSMENGE   ? 1|tzeilen = 1
+.continue LSMENGE   ? M|DeliveryNoteLineID = 1|pnum
+.continue LSMENGE   ? LineID = 1|pnum
+.load 1 purchasing
+.continue EXNUM     ? _G|mehr
+.continue PRLSMGE
+..
+!LSMENGE
+.formula M|tremge = 1|remge
+.formula M|trefrg = 1|refrg
+.formula M|remengevorgang = 1|remge - 1|refrg
+.colour -background -1 -1 -1 'M|aktzeile'
+.colour -foreground 'U|xabaswhite' -background 'U|xabasgreen' remengevorgang 'M|aktzeile'  ? M|BilledQuantity > M|tremge
+.colour -foreground 'U|xabaswhite' -background 'U|xabasred' BilledQuantity 'M|aktzeile'    ? M|BilledQuantity > M|tremge
+.protection bwerteausrechnung 0                                                            ? M|BilledQuantity > M|tremge
+.continue EXNUM
+..
+!LIEFERSCHEIN: Bestellung leer, es handelt sich eventuell um mehrere Lieferscheine
+.formula U|xsel = "$,,;kopf^ebeleg="+'M|DeliveryNoteIssuerAssignedID'+";tlsart=(PackingSlip);kotyp=4;mge="+'M|BilledQuantity'+";gruppe=2;artikel="+'M|artikel^id'+";pnum="+'M|DeliveryNoteLineID'+";@gruppe=2;@ablageart=(Both)"
+.load 1 purchasing 'U|xsel'
+.continue EXNUM     ? _G|mehr
+.assign M|lskopfid = 1|kopf
+.assign M|kstelle = 1|kstelle
+.assign M|konto = 1|konto
+.assign M|liefek = 1|kopf ? F|empty(M|liefek)
+.assign M|tbestellung = 1|kopf ? F|empty(M|tbestellung)
+.copy M|blsfakt = M|lskopfid^fakt
+.formula U|xmerklsid = M|lskopfid
+..
+!PRNURLSMGE
+.continue NURLSMGE  ? 1|tzeilen = 1
+.continue NURLSMGE  ? M|DeliveryNoteLineID = 1|pnum
+.continue NURLSMGE  ? LineID = 1|pnum
+.load 1 purchasing
+.continue KENNER    ? _G|mehr
+.continue PRNURLSMGE
+..
+!NURLSMGE
+.formula M|tremge = 1|remge
+.formula M|trefrg = 1|refrg
+.formula M|remengevorgang = 1|remge - 1|refrg
+.colour -background -1 -1 -1 'M|aktzeile'
+.colour -foreground 'U|xabaswhite' -background 'U|xabasgreen' remengevorgang 'M|aktzeile'  ? M|BilledQuantity > M|tremge
+.colour -foreground 'U|xabaswhite' -background 'U|xabasred' BilledQuantity 'M|aktzeile'    ? M|BilledQuantity > M|tremge
+.protection bwerteausrechnung 0                                                            ? M|BilledQuantity > M|tremge
+.continue KENNER
+..
+!KENNER
+.copy U|xkenner = TRUE            ? M|lskopfid <> U|xmerklsid & _F|empty(U|xmerklsid)
+.formula U|xmerklsid = M|lskopfid ? U|xkenner
+.copy M|bmehrerelief = G|TRUE     ? U|xkenner
+.continue NEWKENNER               ? U|xkenner
+..
+!SETKENNER
+.copy M|bausbe = G|FALSE
+.copy M|bausls = G|TRUE 
+.copy M|bbeleganfuegen = G|FALSE
+.copy M|breneu = G|FALSE
+.copy M|bausrlsre = G|FALSE
+.continue EXNUM 
+..
+!NEWKENNER
+.copy M|bausls = G|FALSE
+.copy M|bbeleganfuegen = G|TRUE
+..
+!EXNUM: ext Belegnummer im Kopf setzen, falls diese bisher leer war
+.. d.h. die erste gefundene Bestellung gibt die ext. Belegnummer fuer die zu erstellende Rechnung vor
+.formula M|ExchangedDocumentID = M|BuyerOrderIssuerAssignedID ? F|empty(M|ExchangedDocumentID) & _F|empty(M|BuyerOrderIssuerAssignedID)
+.colour -background -1 -1 -1 ExchangedDocumentID 0 ? _F|empty(M|ExchangedDocumentID)
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR
+.formula U|xtext = F|formatstr("Zu {1} konnte keine Bestellung mit dieser Bestellnummer ermittelt werden.", 'M|BuyerOrderIssuerAssignedId') ? _F|empty(M|BuyerOrderIssuerAssignedId)
+.formula M|fctext = 'M|fctext' +";" + 'U|xtext'
+.println 'U|xtsuchfehler' ? _F|empty(U|xtsuchfehler)
+.continue

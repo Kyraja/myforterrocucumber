@@ -1,0 +1,221 @@
+..!interpreter english translate
+..*****************************************************************************
+..
+..  FOP-Name       : INITMPR
+..  Datum          : 28.01.2002
+..  Version        :
+..  Autor          : Bernard Heim
+..  Verantwortlich : cl
+..  Kontrolle      : bheim
+..
+..  Funktion       : Liste der Einkaufsteile die Lieferantenbeistellungen
+..                   enthalten erstellen.
+..
+..                   Mischpreis der Einkaufsteile die Lieferantenbeistellungen
+..                   enthalten auf 0 setzen.
+..
+..                   Kalkulationsbasispreis in diesen Teilen auf
+..                   "mittlerer Rechnungspreis" setzen, wenn vorher
+..                   "Mischpreis" darinnenstand.
+..
+..*****************************************************************************
+.type integer xwahl
+.type text xtzeit ds derr
+.type GD   xdatum
+.formula xfehler = false
+.formula xtzeit = 'zeit'
+.formula xdatum = datum
+.formula ds   = "X" + pid + ".TMP"
+.formula derr = "X" + pid + ".ERR"
+..
+!START:
+.output terminal
+.input BILD.F
+..
+
+                  Einkaufsteile mit Lieferantenbeistellungen
+                  컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴
+
+
+.menu Einkaufsteile mit Lieferantenbeistellungen
+Liste der Einkaufsteile erstellen              >>  .continue LISTE
+Mischpreis der Einkaufsteile auf 0 setzen      >>  .continue MPRAENDERN
+Beenden                                        >>  .end .
+.continue START    ?  F|empty(G|menue)
+..
+..
+!LISTE
+.input DRUCKER
+.output 'geraet'
+.input BLANKO.F
+.page 1
+.up
+'mandant          '    Einkaufsteile mit       '  xdatum'        Seite'  sei'
+'txname           ' Lieferantenbeistellungen    ' xtzeit' / 'bzeichen          '
+
+컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴
+..
+!HTEIL
+.select parts
+.continue ENDLISTE ? _mehr
+.continue HTEIL    ? gruppe <> 1
+.continue HTEIL    ? F|value(H|bsart, "AS79") <> "(ExternalProcurement)"
+!NZ
+.select line
+.continue HTEIL  ? _mehr
+.continue NZ     ? bu <> "L"
+'          num' 'such             ' 'name                                      '
+.continue HTEIL
+..
+!ENDLISTE
+컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴컴
+.output terminal ...  ?   geraet  = ""
+.continue START
+..
+..
+..
+..
+..
+..
+..
+..
+..
+!MPRAENDERN
+..
+.output new 'ds'
+.input "DATEI.F"
+..
+!HTEIL2
+.select parts
+.continue DOIT   ? _mehr
+.continue HTEIL2 ? gruppe <> 1
+.continue HTEIL2 ? F|value(H|bsart, "AS79") <> "(ExternalProcurement)"
+!NZE
+.select line
+.continue HTEIL2 ? _mehr
+.continue NZE    ? bu <> "L"
+.formula xid='id'
+.reserve
+.continue MPR    ? kbpr  <> "Mischpreis"
+.formula xausw="mittlerer Rechnungspreis"
+<Teil> 'xid'
+<aendern>
+`kbpr 'xausw'
+<fertig>
+..
+..
+..
+!MPR:
+.set trans -
+..======================================================
+..Einzelmengen_eines_Artikels
+..======================================================
+.formula xsel"$,;artikel="+'xid'+";pflag=y;@ordnung=artikel,lgruppe,lager,platz;@gruppe=0;@ablagerart=(Both)"
+.select squantity 'xsel'
+!AM
+.continue GESAMTM ? _mehr
+.continue NEXTLM   ? lemge <= 0.0
+..
+LNeu
+`art 'xid'
+`beleg MPR_KORR
+`beldat .
+`
+`platz 'platz'
+`mge   'lemge'
+`mmpr 0
+<fertig>
+<abbruch>
+..
+.select squantity
+.continue AM
+..
+..
+!NEXTLM
+.output addedto 'derr'
+.input "DATEI.F"
+..
+?Dateiname: 'derr'                                            ? xfehler=false
+?Folgende Platzmengen/Gesamtmegen wurden nicht ber갷ksichtigt ? xfehler=false
+..
+Platzmenge f걊 Artikel: 'H|artikel'
+                        'H|platz'
+                        'H|lager'
+                        'H|lgruppe'
+                        'H|lemge'  wurde nicht bearbeitet
+--------------------------------------------------------------
+.output addedto 'ds'
+.input "DATEI.F"
+..
+.formula xfehler = true
+.select squantity
+.continue AM
+..
+..
+..
+!GESAMTM
+..======================================================
+..Gesamtmengen_eines_Artikels
+..======================================================
+.formula xsel"$,;artikel="+'xid'+";pflag=n;@ordnung=artikel,lgruppe,lager;@ablageart=(Both);@gruppe=0"
+.select squantity 'xsel'
+!GM
+.continue NEXTTEIL ? _mehr
+.continue NEXTGM   ? lemge <= 0.0
+..
+LNeu
+`art 'xid'
+`beleg MPR_KORR
+`beldat .
+`
+`lgruppe  'lgruppe'
+`lager    'lager'
+`mge      'lemge'
+`mmpr     0
+<fertig>
+<?> ja
+<abbruch>
+..
+.select squantity
+.continue GM
+..
+..
+!NEXTGM
+.output addedto 'derr'
+.input "DATEI.F"
+..
+?Dateiname: 'derr'                                            ? xfehler=false
+?Folgende Platzmengen/Gesamtmegen wurden nicht ber갷ksichtigt ? xfehler=false
+..
+Gesamtmenge f걊 Artikel: 'H|artikel'
+                         'H|platz'
+                         'H|lager'
+                         'H|lgruppe'
+                         'H|lemge'  wurde nicht bearbeitet
+--------------------------------------------------------------
+.output addedto 'ds'
+.input "DATEI.F"
+..
+.formula xfehler = true
+.select squantity
+.continue GM
+.set trans +
+..
+..
+..
+!NEXTTEIL
+.select
+.continue HTEIL2
+..
+!DOIT
+.continue END ? xfehler = false
+..
+.output terminal
+.input BILD.F
+.set cancel -
+.box(0,0)Hinweis
+Es wurden nicht alle Mischpreise auf 0 gesetzt
+Siehe Fehlerdatei:'derr'
+..
+!END
+.end lesen 'ds'

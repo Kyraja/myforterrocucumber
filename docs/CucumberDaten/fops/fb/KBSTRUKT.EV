@@ -1,0 +1,195 @@
+..!interpreter declaration english translate
+..*****************************************************************************
+..  FOP-Name       : KBSTRUKT.EV
+..  Datum          : 06.06.2005
+..  Version        : 1
+..  Autor          : male
+..  Verantwortlich : cl
+..  Kontrolle      : mh
+..  Funktion       : Allgemeines Event-FOP des Infosystems fb/KBSTRUKT
+..
+..  Schnittstelle (Parameter und ihre Bedeutung)
+..    verwendet Arrayparameter (arg.i)          : nein
+..    verwendet Namensparameter (xpname=wert)   : nein
+..
+..    Parameter    Bedeutung
+..    ---------------------------------------------------------
+..    xp...        ...
+..
+..  Ablauf         :
+..
+..  Functionality  : Common event FOP of the Infosystem fb/KBSTRUKT
+..
+..  Interface (arguments and their meaning)
+..    uses array argument (arg.i)           : no
+..    uses name argument  (xpname=value)    : no
+..
+..    Argument     meaning
+..    ---------------------------------------------------------
+..    xp...        ...
+..
+..  Program flow  :
+... Includes      :
+..*****************************************************************************
+.. current level (used in KBDTRUKT.TAB)
+.type integer  xistufe
+.. if the structure should be kept closed
+.type bool xbclosed
+.. if a form is used or a closed account range is being opened
+.type bool xbform
+..
+.. The defined maximum depth level
+.type integer XIMAXSTUFE
+..
+.. The current account range form
+.type P68:2.4.5 xpaccf
+.. The current account range
+.type P68:1.3.9 xpaccr
+.. The acurrent account
+.type VP6  xpacc
+..
+..*****************************************************************************
+..
+.set trans -
+..
+.formula U|XIMAXSTUFE = 15
+..
+..*****************************************************************************
+..
+.continue SHOWROW ? G|evtartengl = "ROW_CHANGED"
+.continue BOPEN   ? G|evtvar = "tbopen"  & G|evtartengl = "BUTTON_AFTER"
+..
+.make screen line --
+..
+.formula M|maskzeile= 0
+.formula M|baumstufe= 0
+.formula M|formular = ""
+.formula M|kbereich = ""
+.formula M|koobj    = ""
+.formula M|koobjber = ""
+.formula M|konto    = ""
+.formula M|closed   = G|false
+.formula M|objekt   = ""
+.formula M|status   = ""
+..
+.continue START   ? G|evtvar = "bstart" & G|evtartengl = "BUTTON_AFTER"
+.continue END
+..
+..*****************************************************************************
+!BOPEN: The Button "bopen" to open a closed account range has been pressed
+..*****************************************************************************
+.continue END ?  F|empty(M|tkbereich) & F|empty(M|tkoobjber)
+.continue END ? _F|empty(M|tkonto)    & F|empty(M|tkoobjber)
+.continue END ? _F|empty(M|tkoobj)
+..
+.continue BOPEN2  ? M|tzeilen = M|aktzeile
+.select screen line 'F|expr(M|aktzeile+1)'
+.. check if the account range is already open?
+.continue END     ? M|tbaumstufe > M|baumstufe
+.select screen line 'G|evtzeile'
+..
+..*****************************************************************************
+!BOPEN2:
+..*****************************************************************************
+.copy U|xpaccf  = M|tformular
+.copy U|xpaccr  = M|tkbereich
+.copy U|xpacc   = M|tkonto
+.formula   U|xistufe = M|tbaumstufe + 1
+.continue BOPEN3 ? _F|empty(M|tkoobjber)
+.load 9 add M|tkbereich
+.formula U|xbform = G|true
+.continue FORMLOOP
+..
+..*****************************************************************************
+!BOPEN3: Open M|tkoobjber
+..*****************************************************************************
+.load 9 add M|tkoobjber
+!L
+.load 9 line
+.continue END ? _G|mehr
+.make screen line +O
+.formula   M|tbaumstufe = U|xistufe
+.copy M|tformular  = U|xpaccf
+.copy M|tkbereich  = U|xpaccr
+.copy M|tkonto     = U|xpacc
+.assign M|tkoobjber  = 9|id
+.copy M|tkoobj     = 9|koobj
+.input "fb/KBSTRUKT.TAB2"
+.continue L
+..
+..*****************************************************************************
+!START: The start button has been pressed
+..*****************************************************************************
+.continue END  ? F|empty(M|kbobj)
+.formula M|maxstufe = 0
+..
+.input 'M|bkopf' ? _F|empty(M|bkopf)
+..
+.. check if the account range object is a form
+.formula U|xbform   = (M|kbobj^gruppe = 2 ; M|kbobj^gruppe = 4 ; M|kbobj^gruppe = 5)
+.formula U|xbclosed = G|false
+.continue AR   ? _U|xbform
+.continue FORM
+..
+..*****************************************************************************
+!FORM: Account range form
+..*****************************************************************************
+.load 9 add M|kbobj
+.assign U|xpaccf = 9|id
+.formula U|xistufe = 0
+.make screen line +O
+.formula   M|tbaumstufe = U|xistufe
+.assign M|tformular  = 9|id
+.input  "fb/KBSTRUKT.TAB2"
+.formula   U|xistufe = 1
+..
+..*****************************************************************************
+!FORMLOOP
+..*****************************************************************************
+.load 9 line
+.continue REPEND ? _G|mehr
+.formula U|xbclosed = 9|closed
+.select add 9|kbereich ? _F|empty(9|kbereich)
+.select add 9|konto    ? _F|empty(9|konto)
+.continue REPTABLE
+..
+..*****************************************************************************
+!AR
+..*****************************************************************************
+.select add M|kbobj
+.formula U|xistufe  = 0 ? G|evtvar = "bstart"
+..
+..*****************************************************************************
+!REPTABLE: Call report table FOP
+..*****************************************************************************
+.input 'M|tab' ? _F|empty(M|tab)
+.continue FORMLOOP ? U|xbform
+.continue REPEND
+..
+..*****************************************************************************
+!REPEND: Call report footer
+..*****************************************************************************
+.input 'M|bfuss' ? _F|empty(M|bfuss) & G|evtvar = "bstart"
+.continue END
+..
+..*****************************************************************************
+!SHOWROW:
+..*****************************************************************************
+.copy M|maskzeile= M|aktzeile
+.copy M|baumstufe= M|tbaumstufe
+.copy M|formular = M|tformular
+.copy M|kbereich = M|tkbereich
+.copy M|konto    = M|tkonto
+.copy M|koobjber = M|tkoobjber
+.copy M|koobj    = M|tkoobj
+.copy M|closed   = M|tclosed
+.copy M|objekt   = M|tobjekt
+.copy M|status   = M|tbaumicon
+.copy M|reregeln = M|treregeln
+.copy M|fausart  = M|tfausart
+.continue END
+..
+..*****************************************************************************
+!END
+..*****************************************************************************
+.continue

@@ -1,0 +1,102 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : FLEXQTY.BSTART
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text      xtsel        ? _F|defined(U|xtsel)
+.type text      xtersteras   ? _F|defined(U|xtersteras)
+.type text      xtletzteras  ? _F|defined(U|xtletzteras)
+.type ARTR51000 xrgutmge     ? _F|defined(U|xrgutmge)
+.type ARTR51000 xrgutgross   ? _F|defined(U|xrgutgross)
+.type ARTR51002 xminfrgmge   ? _F|defined(U|xminfrgmge)
+..
+.formula U|xtsel = "$,,"
+.formula U|xtsel = U|xtsel + ";id="+ M|ba^id       ? _F|empty(M|ba)
+.formula U|xtsel = U|xtsel + ";art="+ M|artikel^id ? _F|empty(M|artikel)
+.formula U|xtsel = U|xtsel + ";typ=(WorkOrders)"
+.formula U|xtsel = U|xtsel + ";ag=`"
+.formula U|xtsel = U|xtsel + ";@gruppe=1;@ablageart=(Active)"
+.load 2 workorder 'U|xtsel'
+.continue ERROR1 ? _G|mehr
+..
+!FV: 
+.add 2|lres
+.continue ERROR2  ? _G|mehr
+.continue VERWEND ? F|empty(M|betreuer)
+..
+!BETREUER: Betreuer aus FV bestimmen
+.continue NEXTBA ? F|empty(D|betreuer)
+.continue NEXTBA ? 'D|betreuer^id' <> 'M|betreuer^id'
+..
+!VERWEND: Verwendung aus dem FV bestimmen
+.continue BALOOP ? F|empty(kverw)
+.continue NEXTBA ? F|empty(D|verw)
+.continue NEXTBA ? 'D|verw' <> 'M|kverw'
+..
+!BALOOP
+.continue NEXTBA ? _F|empty(M|basisartikel) & 'M|basisartikel^id' <> '2|art^basisartikel^id'
+.make screen line +o
+.colour -background 'M|farbe1' 'M|aktzeile'
+.formula M|vorgang   = D|id
+.formula M|tbetreuer = D|betreuer
+.formula M|verw      = D|verw
+.formula M|kenn      = M|icon10
+.formula M|kenn2     = "+"
+.formula U|xrgutmge  = 0
+.assign M|tba        = 2|id
+.formula M|rueckmge = 2|rgutmge
+.formula M|rueckmge = 2|gutmgeauto ? 2|gutmgeauto > 2|rgutmge
+.assign M|art        = 2|art
+.assign M|tbasisartikel = 2|art^basisartikel
+.formula M|ofmge     = M|tba^mge
+.formula M|mgeneu    = M|tba^mge
+.formula M|prodmge   = M|tba^lres^mge
+.formula M|mgegrenze = D|minfrgmge
+.formula M|verlustmge = 2|rverlust
+..
+.. letzten Arbeitschein ermitteln
+.formula U|xtersteras = 2|nummer + "001"
+.formula U|xtletzteras = 2|nummer + "999"
+.formula U|xtsel = "$,,nummer="+'U|xtersteras'+"!"+'U|xtletzteras'+";gruppe=1;@ablage=(Active);@ordnung=nummer;@richtung=(Backwards)"
+.load 1 workorder 'U|xtsel'
+.. wenn man hier nichts findet, dann hat der BA keine Arbeitscheine, also gibt es auch keine Grenzen
+.continue NEXTBA ? _G|mehr
+.formula U|xtletzteras = 1|nummer
+..
+.. RÅckmeldungen zu diesem BA / AS auswerten 
+.formula U|xrgutgross = 0
+.formula U|xtsel = "$,,nummer="+'U|xtersteras'+"!"+'U|xtletzteras'+";gruppe=2;@ablage=(Filed);@ordnung=nummer;@richtung=(Backwards)"
+.load 1 workorder 'U|xtsel'
+.. RÅckmeldungen auf den letzten AG sind nicht zu selektieren, diese stellen keine Grenze dar, diese RÅckmeldungen reduzieren die
+.. offene Menge -> deswegen Åberlesen
+.continue NEXTBA ? _G|mehr
+.continue LASTRM ? 1|nummer = U|xtletzteras
+.continue ASIDENT
+..
+!LASTRM: hier RÅckmeldung auf letzten Arbeitsschein, diese Åberlesen
+.load 1 workorder
+.continue NEXTBA ? _G|mehr
+..
+!ASIDENT
+.load 1 line
+.load 1 workorder
+.continue ASIDENT ? G|mehr
+..
+!NEXTBA
+.load 2 workorder
+.continue FV   ? G|mehr
+.continue END
+..
+!ERROR1: keine BetriebsauftrÑge
+.error Keinen Betriebsauftrag gefunden.
+.end 1
+..
+!ERROR2: kein Fertigungsvorschlag
+.end 1
+..**********************************
+!END
+.continue

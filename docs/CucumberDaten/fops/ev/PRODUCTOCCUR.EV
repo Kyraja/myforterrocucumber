@@ -1,0 +1,228 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : PRODUCTOCCUR.EV
+.. Author         : cl
+.. Verantwortlich : cl
+.. Kontrolle      : tiwe
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text xtext    ? _F|defined(U|xtext)
+..
+.type text   xtmpfile  ? _F|defined(U|xtmpfile)
+.type text   xtmpfile2 ? _F|defined(U|xtmpfile2)
+.type text   xtout     ? _F|defined(U|xtout)
+.type text   xterr     ? _F|defined(U|xterr)
+.type text   xtsys     ? _F|defined(U|xtsys)
+.type PS2:1  x1        ? _F|defined(U|x1)
+.type text   x2        ? _F|defined(U|x2)
+.type RU     x3        ? _F|defined(U|x3)
+.type PS94:1 x4        ? _F|defined(U|x4)
+..
+.continue EKVK      ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "bverkauf"
+.continue EKVK      ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "beinkauf"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "lief"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "kunde"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "betreuer"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "vertret"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "ablageart"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "ektyp"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "vktyp"
+.continue ARTIKEL   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "artikel"
+.continue BSTART    ? G|evtartengl = "BUTTON_AFTER" & G|evtvar = "bstart"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "adatum"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "edatum"
+.continue ALTPOS    ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "mitaltpos"
+.continue VORJAHR   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "vorjahr"
+.continue SUMSORT   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "sortsumdash"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "rauov"
+.continue TABLEEREN ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "rauoe"
+.continue BASIS     ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "basisartikel"
+.continue EKBASIS   ? G|evtartengl = "FIELD_EXIT"   & G|evtvar = "ekbasisartikel"
+.continue END
+..
+!SUMSORT: Sortieren, summieren und 10 Treffer zurÅckschreiben
+.input "is/TABLEEREN" ? _M|sortsumdash
+.continue END         ? _M|sortsumdash
+.file -tempname U|xtmpfile
+.file -tempname U|xtmpfile2
+.file -tempname U|xtout
+.file -tempname U|xterr
+.select screen header
+.continue END ? _G|mehr
+.output new 'U|xtmpfile'
+.input "DATEI.F"
+..
+!SELLINE
+.select screen line
+.continue END     ?  M|tzeilen=0
+.continue SORT    ? _G|mehr
+.continue SELLINE ?  M|tartikel^gruppe <> 1
+.output addedto 'U|xtmpfile'
+'M|tartikel^id'#'M|tbezartikel'#'M|gesnetto'#'M|twaehr'
+.output
+.continue SELLINE
+..
+!SORT:: nach Artikel sortieren
+.input "is/TABLEEREN"
+.formula U|xtsys = "sort -t# +0n " + U|xtmpfile + " >" + U|xtmpfile2
+.system 'U|xtsys' background
+.continue ERROR3 ? _G|mehr
+..
+!VERD: aufsummieren
+.system 'F|expr("group_by.sh -n4 -k1 -o2 -s3 -o4 " + U|xtmpfile2 + " 1>" + U|xtout + " 2>" + U|xterr)' background
+.continue ERROR4 ? _G|mehr
+..
+!SSORT: nach hîchstem Nettowert sortieren
+.formula U|xtsys = "sort -t# -r +2n " + U|xtout + " >" + U|xtmpfile 
+.system 'U|xtsys' background
+..
+!SSELLINE
+.select from 'U|xtmpfile' x1 # x2 # x3 # x4
+.continue END ? _G|mehr
+.make screen line +O
+.assign M|tartikel = U|x1
+.formula M|gesnetto = U|x3
+.copy M|twaehr = U|x4
+.continue END ? M|zn = 10
+.continue SSELLINE
+..
+!VORJAHR
+.continue DEFAULT ? _M|vorjahr
+.formula M|edatum = M|adatum-1
+.type text xaj 
+.formula U|xaj = F|year(M|edatum)
+.formula M|adatum = U|xaj + "01" + "01"
+.copy M|sortsumdash = G|FALSE
+.formula M|nettosum = 0.00
+.continue TABLEEREN
+..
+!DEFAULT
+.formula M|adatum   = 'F|year(G|datum)' + "0101"
+.formula M|edatum   = G|datum
+.copy M|sortsumdash = G|FALSE
+.formula M|nettosum = 0.00
+.continue TABLEEREN
+..
+!ALTPOS
+.continue TABLEEREN
+..
+!BASIS
+.formula P|maskkontextfop = "Verkauf"         ?  F|empty(M|basisartikel)
+.formula P|maskkontextfop = "Verkauf vkbasis" ? _F|empty(M|basisartikel)
+.formula M|artikel = "" ? _F|empty(M|basisartikel)
+.continue TABLEEREN
+..
+!EKBASIS
+.formula P|maskkontextfop = "Einkauf"         ?  F|empty(M|ekbasisartikel)
+.formula P|maskkontextfop = "Einkauf ekbasis" ? _F|empty(M|ekbasisartikel)
+.formula M|artikel = ""                       ? _F|empty(M|ekbasisartikel)
+.continue TABLEEREN
+..
+!ARTIKEL
+.continue ERROR2 ? M|artikel^gruppe = 4 & _F|equals(M|artikel^zptyp, "(SOPOItemPOS)")
+.formula M|le = M|artikel^le ? _F|empty(M|artikel) & M|artikel^gruppe <> 4
+.assign M|basisartikel   = M|artikel^basisartikel ? _F|empty(M|artikel) & M|bverkauf
+.assign M|ekbasisartikel = M|artikel^basisartikel ? _F|empty(M|artikel) & M|beinkauf
+.continue TABLEEREN
+..
+!BSTART
+.formula M|nettosum = ""
+.formula M|gesmge = ""
+.formula M|altposnettosum = ""
+.formula M|altposgesmge = ""
+.continue ERROR1 ? _F|empty(M|edatum) & M|edatum < M|adatum
+.formula M|select = "$,,"
+.formula M|select = M|select + ";art=" + M|artikel^id    ? _F|empty(M|artikel)
+.formula M|select = M|select + ";kopf^betreuer=" + M|betreuer^id  ? _F|empty(M|betreuer)
+..
+.continue PURCHASING ? M|beinkauf
+.formula M|select = M|select + ";kotyp=" + M|vktyp                  ? _F|empty(M|vktyp)
+.formula M|select = M|select + ";kunde=" + M|kunde^id               ? _F|empty(M|kunde) 
+.formula M|select = M|select + ";kopf^vertret=" + M|vertret^id      ? _F|empty(M|vertret)
+.formula M|select = M|select + ";basisartikel=" + M|basisartikel^id ? _F|empty(M|basisartikel)
+.formula M|select = M|select + ";zrahmen=" + M|rauov^id             ? _F|empty(M|rauov)
+.continue SELECT
+..
+!PURCHASING
+.formula M|select = M|select + ";kotyp=" + M|ektyp                    ? _F|empty(M|ektyp)
+.formula M|select = M|select + ";lief=" + M|lief^id                   ? _F|empty(M|lief)
+.formula M|select = M|select + ";basisartikel=" + M|ekbasisartikel^id ? _F|empty(M|ekbasisartikel)
+.formula M|select = M|select + ";kotyp=" + M|ektyp                    ? _F|empty(M|ektyp)
+.formula M|select = M|select + ";lief=" + M|lief^id                   ? _F|empty(M|lief)
+.formula M|select = M|select + ";zrahmen=" + M|rauoe^id               ? _F|empty(M|rauoe)
+..
+!SELECT
+.formula M|select = M|select + ";kovom=" + 'M|adatum' + "!" + 'M|edatum'
+.formula M|select = M|select + ";ablagef=true"  ? F|equals(M|ablageart, "(Filed)")
+.formula M|select = M|select + ";ablagef=false" ? F|equals(M|ablageart, "(Active)")
+.formula M|select = M|select + ";@ablageart=" + M|ablageart 
+.formula M|select = M|select + ";@richtung=(Forwards)"
+.formula M|select = M|select + ";@gruppe=2;@ordnung=kovom"
+..
+!LOAD
+.load 9 sales 'M|select'      ? M|bverkauf
+.load 9 purchasing 'M|select' ? M|beinkauf
+.continue END        ? _G|mehr
+..
+!BED: nur Artikel der gruppe 1 und 5 und Zusatzpositionen Artikel AUBEPOS
+.continue MORELOAD   ? 9|art^gruppe = 2 ; (9|art^gruppe = 4 & 9|typ <> 7)
+.continue TAB
+..
+!MORELOAD
+.load 9 sales      ? M|bverkauf
+.load 9 purchasing ? M|beinkauf
+.continue END ? _G|mehr
+.continue BED
+..
+!TAB
+.input 'M|tab'     ? _F|empty(M|tab)
+.continue MORELOAD
+..
+!EKVK
+.copy M|beinkauf = G|FALSE           ?  M|beinkauf & G|evtvar = "bverkauf"
+.copy M|bverkauf = G|FALSE           ?  M|bverkauf & G|evtvar = "beinkauf"
+.copy M|bverkauf = G|TRUE            ? _M|beinkauf & _M|bverkauf
+.assign P|maskkontextfop = "Verkauf"         ? _F|sysinfo(18)^verskontr & M|bverkauf
+.assign P|maskkontextfop = "Verkauf vkbasis" ?  F|sysinfo(18)^verskontr & M|bverkauf
+.assign P|maskkontextfop = "Einkauf"         ? _F|sysinfo(18)^verskontreink & M|beinkauf
+.assign P|maskkontextfop = "Einkauf ekbasis" ?  F|sysinfo(18)^verskontreink & M|beinkauf
+.formula M|kunde = ""
+.formula M|betreuer = ""
+.formula M|vertret = ""
+.formula M|rauov = ""
+.formula M|vktyp = ""
+.formula M|lief = ""
+.formula M|rauoe = ""
+.formula M|ektyp = ""
+.continue TABLEEREN
+..
+!TABLEEREN: Summenfelder lîschen
+.formula M|nettosum = ""
+.formula M|gesmge = ""
+.formula M|altposnettosum = ""
+.formula M|altposgesmge = ""
+.input "is/TABLEEREN"
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR1 
+.cursor adatum 0
+.error Untergrenze ist grî·er als Obergrenze.
+.end 1
+..
+!ERROR2
+.cursor artikel
+.error 'M|artikel' ist keine Zusatzposition vom Typ "AU/BE-Position".
+.formula M|artikel = ""
+..
+!ERROR3: Sortieren gescheitert
+.error Sortieren gescheitert!
+.end 1
+..
+!ERROR4: Verdichten gescheitert
+.error Verdichten gescheitert!
+.end 1

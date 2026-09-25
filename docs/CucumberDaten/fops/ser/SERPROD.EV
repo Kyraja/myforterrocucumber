@@ -1,0 +1,103 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. FOP-Name       : SERPROD.EV
+.. Datum          : 19.02.2007
+.. Version        : 2007r1n00
+.. Autor          : mh
+.. Verantwortlich : mh
+.. Kontrolle      : cl
+.. Funktion       : Allgemeines Eventhandling
+..
+.. Schnittstelle (Parameter und ihre Bedeutung)
+..   verwendet Arrayparameter (arg.i)          : nein
+..   verwendet Namensparameter (xpname=wert)   : nein
+..
+.. Ablauf         :
+..
+.. Functionality  : central eventhandling for infosystem
+..
+.. Interface (arguments and their meaning)
+..   uses array argument (arg.i)           : no
+..   uses name argument  (xpname=value)    : no
+..
+.. Program flow   :
+...Includes       :
+..*****************************************************************************
+.set trans -
+..
+.type text xtsel
+..
+.. event evaluation
+.. ----------- ----- Kopfteil ------ -------------------------------------------
+.continue KUNDE   ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kkunde"
+.continue AUKUNDE ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kaukunde"
+.continue SERPROD ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kprodukt"
+.continue ARTIKEL ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kartikel"
+.continue CHARGE  ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kcharge"
+.continue EXNUM   ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "kexnum"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue EIGNR   ? T|evtartengl = "FIELD_EXIT"    & T|evtvar = "keignr"
+.. ----------- ---------- ---------- -------------------------------------------
+.continue END
+..
+!EXNUM: find internal lot id with external lot number / serial number
+.formula M|kcharge   = ""                    ?  F|empty(M|kexnum)
+.continue CHARGE                              ?  F|empty(M|kexnum)
+.formula T|xtsel = "$,,;exnum==" + 'M|kexnum'
+.select lots 'T|xtsel'
+.continue NOLOT   ? _T|mehr
+.assign M|kcharge = H|id
+.select lots
+.continue CHARGE  ? _T|mehr
+.assign M|kcharge = "%,,;exnum==" + 'M|kexnum' + ";nummer=;such=;name=;artikel=;lief=;mge=;@autostart=(1)"
+.continue CHARGE
+!NOLOT
+.assign M|kcharge = "%,,;exnum="  + 'M|kexnum' + ";nummer=;such=;name=;artikel=;lief=;mge=;@autostart=(1)"
+!CHARGE
+.formula M|kexnum    = M|kcharge^exnum
+.formula M|kartikel  = M|kcharge^artikel^id
+.continue TABINIT     ?  M|kprodukt^charge^id = M|kcharge^id
+.formula M|kprodukt  = ""
+.formula M|kprodname  = ""
+.continue TABINIT
+..
+!SERPROD: service product
+.formula M|kartikel  = M|kprodukt^artikel^id
+.formula M|kkunde    = M|kprodukt^kunde^id
+.formula M|kaukunde  = M|kprodukt^aukunde^id
+.assign M|kcharge = M|kprodukt^charge^id
+.assign M|kexnum  = M|kprodukt^charge^exnum
+.assign M|keignr  = M|kprodukt^eignr
+.continue TABINIT
+..
+!KUNDE: customer / location for service product
+.continue TABINIT     ?  M|kprodukt^kunde^id = M|kkunde^id
+.formula M|kprodukt  = ""
+.formula M|kprodname  = ""
+.continue TABINIT
+..
+!AUKUNDE
+.continue TABINIT     ?  M|kprodukt^aukunde^id = M|kaukunde^id
+.formula M|kprodukt  = ""
+.formula M|kprodname  = ""
+.continue TABINIT
+..
+!ARTIKEL: master item for service product
+.continue TABINIT     ?  M|kprodukt^artikel^id = M|kartikel^id
+.formula M|kprodukt  = ""
+.formula M|kprodname  = ""
+.continue TABINIT
+..
+!EIGNR: special serial no in service product
+.continue TABINIT     ?  M|kprodukt^tcharge = M|keignr
+.formula M|kprodukt  = ""
+.formula M|kprodname  = ""
+.continue TABINIT
+..
+..
+!TABINIT: a key field was changed, remove old rows
+.make screen line -- ? M|tzeilen > 0
+.continue END
+..*****************************************************************************
+!END
+.continue

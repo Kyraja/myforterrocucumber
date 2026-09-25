@@ -1,0 +1,138 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+.. Name           : SCHEDOVERVIEW.TAB
+.. Author         : cl
+.. Verantwortlich : tiwe
+.. Kontrolle      : cl
+.. Functionality  :
+..*****************************************************************************
+.set trans -
+.type text    xtmp       ? _F|defined(U|xtmp)
+.type text    xtmp1      ? _F|defined(U|xtmp1)
+.type text    xkom       ? _F|defined(U|xkom)
+.type text    xd         ? _F|defined(U|xd)
+.type text    xteiler    ? _F|defined(U|xteiler)
+.type integer xint       ? _F|defined(U|xint)
+.type text    xtbzeichen ? _F|defined(U|xtbzeichen)
+.type text    xdate      ? _F|defined(U|xdate)
+.type text    xstatus    ? _F|defined(U|xstatus)
+..
+.continue END ? F|empty(M|maxanz)
+..
+!PROT: letzter Dispositionslauf
+.up
+.output terminal
+.input "BILDB.F"
+.formula U|xtmp  = "X" + pid + ".TMP"
+.formula U|xtmp1 = "XX" + pid + ".TMP"
+..
+.continue DATE ? _F|empty(M|dlauf)
+..
+.formula U|xkom= "tail -" + 'M|maxanz' + " la/MTFJ > " + U|xtmp + " 2>${DEVNULL:-/dev/null}"
+.system 'U|xkom' background
+.continue ERROR      ? _G|mehr
+.continue TABLE
+..
+!DATE 
+.formula U|xkom = "grep " + 'M|dlauf:8' + " la/MTFJ > " + U|xtmp1 + " 2>${DEVNULL:-/dev/null}"
+.system 'U|xkom' background
+..
+!DATE2
+.formula U|xkom = "grep " + 'M|dlauf' + " la/MTFJ >> " + U|xtmp1 + " 2>${DEVNULL:-/dev/null}"
+.system 'U|xkom' background
+.continue ERROR2     ? _G|mehr & _F|filenotempty(U|xtmp1)
+..
+.formula U|xkom= "sort -u +1 -o "+U|xtmp1+" "+U|xtmp1
+.system 'U|xkom' background
+.continue ERROR3 ? _G|mehr
+..
+!TAIL
+.formula U|xkom= "tail -" + 'M|maxanz' + " " + U|xtmp1 + " > " + U|xtmp + " 2>${DEVNULL:-/dev/null}"
+.system 'U|xkom' background
+.continue ERROR      ? _G|mehr
+..
+!TABLE
+.select from 'U|xtmp' U|xd ^
+.continue DELETE ? _G|mehr
+.continue TABLE ? F|empty(U|xd)
+..
+.select screen header
+.make screen line +o
+..
+.formula U|xteiler = (U|xd>>"")<<""
+.formula U|xdate = U|xteiler<<" "
+.assign M|startam = U|xteiler<<" "
+.formula U|xteiler = (U|xteiler>>" ")>>""
+.assign M|startum =  U|xteiler<<" "
+.continue DELZEILE ? 'M|startam:8' <> 'M|dlauf:8' & _F|empty(M|dlauf)
+.formula U|xteiler = (U|xteiler>>" ")>>""
+.assign M|endam   = U|xteiler<<" "
+.formula U|xteiler = (U|xteiler>>" ")>>""
+.assign M|endum   = U|xteiler<<" "
+.formula U|xteiler = (U|xteiler>>" ")>>""
+.formula M|dnummer = U|xteiler<<" "
+.formula U|xteiler = (U|xteiler>>" ")>>""
+.formula M|zeichen = U|xteiler<<" "
+.continue DELZEILE ? M|zeichen <> M|bzeichen & _F|empty(M|bzeichen)
+.formula U|xteiler = (U|xteiler>>" ")>>""
+.formula U|xstatus  = U|xteiler<<" "
+.set trans +
+.formula U|xint = 0
+.formula U|xint = 1 ? U|xstatus = "Fertig" ; U|xstatus = "Done"
+.formula U|xint = 2 ? U|xstatus = "Abbruch"   
+.formula U|xint = 3 ? U|xstatus = "Unvollst."
+.formula U|xint = 4 ? U|xstatus = "EFOP-Abbr." ; U|xstatus = "EFOP-Abbruch"
+.formula U|xteiler = (U|xteiler>>" ")>>""
+.formula M|kenner  = U|xteiler<<" "
+.formula M|kenner  = "Alle" ? M|kenner = "*"
+.set trans -
+.formula U|xteiler = (U|xteiler>>" ")>>""
+.assign M|status = U|xteiler<<" "
+.continue WEITER ? _F|empty(M|status)
+.formula M|status = "(SchedulingComplete)"          ? F|empty(M|status) & U|xint = 1
+.formula M|status = "(SchedulingCanceledByUser)"    ? F|empty(M|status) & U|xint = 2
+.formula M|status = "(SchedulingIncomplete)"        ? F|empty(M|status) & U|xint = 3
+.formula M|status = "(SchedulingCanceledByEFOP)"    ? F|empty(M|status) & U|xint = 4
+..
+!WEITER
+.continue DELZEILE ? M|status <> M|kmeldetext & _F|empty(M|kmeldetext)
+.set trans +
+.formula M|bigstatus = ""  ? U|xint = 0
+.formula M|bigstatus = "Die Disposition konnte alle AuftrÑge abarbeiten."  ? U|xint = 1
+.formula M|bigstatus = "Anwender hat Disposition abgebrochen. Planungsergebnis unvollstÑndig." ? U|xint = 2
+.formula M|bigstatus = "Planungsergebnis unvollstÑndig. Nicht abgearbeitete AuftrÑge fÅr nÑchsten Dispositionslauf weiter eingeplant." ? U|xint = 3
+.formula M|bigstatus = "Programm hat die Disposition abgebrochen." ? U|xint = 4
+.set trans -
+..
+.formula U|xtbzeichen = M|zeichen
+.input "is/GET.MITARB.BZEICHEN"
+.formula M|bearb = U|xtmitarb
+.continue TABLE
+..
+!DELZEILE 
+.make screen line -
+.continue TABLE
+..
+!DELETE
+.select from
+.formula U|xkom="rm "+U|xtmp
+.system 'U|xkom' background
+.formula U|xkom="rm "+U|xtmp1
+.system 'U|xkom' background
+.continue END
+..
+..*****************************************************************************
+!END
+.continue
+..
+!ERROR: The log file la/MTFJ could not be found. Please see your administrator.
+.error Die Protokolldatei la/MTFJ konnte nicht gefunden werden. Wenden Sie sich an Ihren Adminstrator.
+.end 1
+..
+!ERROR2
+.error Am angegebenen Tag wurde kein Dispositionslauf gestartet.
+.end 1
+..
+!ERROR3 
+.error Sortierung gescheitert!
+.end 1

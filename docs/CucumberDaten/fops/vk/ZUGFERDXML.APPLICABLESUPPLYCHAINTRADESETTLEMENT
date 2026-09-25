@@ -1,0 +1,80 @@
+..!interpreter english translate noabbrev
+..*****************************************************************************
+..  FOP-Name       : ZUGFERDXML.APPLICABLESUPPLYCHAINTRADESETTLEMENT
+..  Autor          : saac
+..  Verantwortlich : teamreport
+..  Kontrolle      : cl
+..  Funktion       : XML-Datengenerator des Infosystems ev/EVVORGANG zur Erzeugung
+..                   der Rechnungsdaten im ZUGFeRD-Format
+..  Functionality  : XML data generator for the Infosystem ev/EVVORGANG to build
+..                   invoice date for ZUGFeRD
+..*****************************************************************************
+..
+.type text xPaymentReference          ? _F|defined(U|xPaymentReference)
+.type text xcurrencyID                ? _F|defined(U|xcurrencyID)
+.type text xDescription               ? _F|defined(U|xDescription)
+.type date xDueDateDateTime           ? _F|defined(U|xDueDateDateTime)
+.type R13.2 xLineTotalAmount          ? _F|defined(U|xLineTotalAmount)
+..filled in ZUGFERDXML.SPECIFIEDTRADEALLOWANCECHARGE
+.type R13.2 xChargeTotalAmount        ? _F|defined(U|xChargeTotalAmount)
+.type R13.2 xAllowanceTotalAmount     ? _F|defined(U|xAllowanceTotalAmount)
+..
+.type R13.2 xTaxBasisTotalAmount      ? _F|defined(U|xTaxBasisTotalAmount)
+.type R13.2 xTaxTotalAmount           ? _F|defined(U|xTaxTotalAmount)
+.type R13.2 xGrandTotalAmount         ? _F|defined(U|xGrandTotalAmount)
+.type R13.2 xTotalPrepaidAmount       ? _F|defined(U|xTotalPrepaidAmount)
+.. filled in ZUGFERDXML.APPLICABLETRADETAX
+.type R13.2 xDuePayableAmount         ? _F|defined(U|xDuePayableAmount)
+..
+.set trans -
+..
+.select screen header
+..
+.copy U|xPaymentReference = M|vzweck
+.copy U|xDescription = M|zbed
+.assign U|xDueDateDateTime = M|tterm
+.copy U|xLineTotalAmount = M|sumnetto
+.formula U|xChargeTotalAmount = 0.0
+.formula U|xAllowanceTotalAmount = 0.0
+.copy U|xTaxBasisTotalAmount = M|sumnetto
+.formula U|xTaxTotalAmount = M|sumbrutto - M|sumnetto
+.formula U|xGrandTotalAmount = M|sumbrutto
+.formula U|xTotalPrepaidAmount = 0.0
+..
+..*****************************************************************************
+!OUTPUT
+..*****************************************************************************
+        <ram:ApplicableSupplyChainTradeSettlement>
+?            <ram:PaymentReference>'U|xPaymentReference'</ram:PaymentReference> ? _F|empty(U|xPaymentReference)
+            <ram:InvoiceCurrencyCode>'U|xcurrencyID'</ram:InvoiceCurrencyCode>
+..
+.input "ZUGFERDXML.INVOICEETRADEPARTY"
+.input "ZUGFERDXML.SPECIFIEDTRADESETTLEMENTPAYMENTMEANS"
+.input "ZUGFERDXML.APPLICABLETRADETAX"
+.input "ZUGFERDXML.SPECIFIEDTRADEALLOWANCECHARGE"
+.formula U|xDuePayableAmount = U|xGrandTotalAmount
+.formula U|xLineTotalAmount = U|xLineTotalAmount - U|xChargeTotalAmount + U|xAllowanceTotalAmount
+.formula U|xChargeTotalAmount = F|abs(U|xChargeTotalAmount)
+.formula U|xAllowanceTotalAmount = F|abs(U|xAllowanceTotalAmount)
+..
+.continue SUMMATION ? F|empty(U|xDescription)
+            <ram:SpecifiedTradePaymentTerms>
+                <ram:Description>'U|xDescription'</ram:Description>
+                 <ram:DueDateDateTime>
+                    <udt:DateTimeString format="'U|xDateFormat'">'U|xDueDateDateTime:8'</udt:DateTimeString>
+                </ram:DueDateDateTime>
+            </ram:SpecifiedTradePaymentTerms>
+!SUMMATION
+            <ram:SpecifiedTradeSettlementMonetarySummation>
+                <ram:LineTotalAmount currencyID="'U|xcurrencyID'">'U|xLineTotalAmount'</ram:LineTotalAmount>
+                <ram:ChargeTotalAmount currencyID="'U|xcurrencyID'">'U|xChargeTotalAmount'</ram:ChargeTotalAmount>
+                <ram:AllowanceTotalAmount currencyID="'U|xcurrencyID'">'U|xAllowanceTotalAmount'</ram:AllowanceTotalAmount>
+                <ram:TaxBasisTotalAmount currencyID="'U|xcurrencyID'">'U|xTaxBasisTotalAmount'</ram:TaxBasisTotalAmount>
+                <ram:TaxTotalAmount currencyID="'U|xcurrencyID'">'U|xTaxTotalAmount'</ram:TaxTotalAmount>
+                <ram:GrandTotalAmount currencyID="'U|xcurrencyID'">'U|xGrandTotalAmount'</ram:GrandTotalAmount>
+                <ram:TotalPrepaidAmount currencyID="'U|xcurrencyID'">'U|xTotalPrepaidAmount'</ram:TotalPrepaidAmount>
+                <ram:DuePayableAmount currencyID="'U|xcurrencyID'">'U|xDuePayableAmount'</ram:DuePayableAmount>
+            </ram:SpecifiedTradeSettlementMonetarySummation>
+        </ram:ApplicableSupplyChainTradeSettlement>
+..
+.continue
