@@ -41,6 +41,30 @@ export type MappingConfidence = 'high' | 'medium' | 'low';
 export type MappingSource = 'ai' | 'standard' | 'manual';
 export type DataImportMappingMode = 'ai' | 'manual';
 
+/** Field option appended to a column header in ImportIT files, e.g. `nummer@notempty`. */
+export type ImportItFieldOption = 'notempty' | 'modifiable' | 'skip' | 'dontChangeIfEqual';
+
+/** Import options that ImportIT encodes as a bit-sum in the option code (cell C1). */
+export type ImportItImportOption =
+  | 'createNew'
+  | 'disableFop'
+  | 'clearTable'
+  | 'checkModifiable'
+  | 'englishVariables'
+  | 'dontChangeIfEqual'
+  | 'checkForbiddenChars';
+
+/** Header settings written to row 1 of a generated ImportIT file. */
+export interface DataImportItSettings {
+  /** 1-based column where table fields start; 0 when the sheet has no table fields. */
+  tableStartColumn: number;
+  options: ImportItImportOption[];
+  /** Manual option code, used instead of the computed bit-sum when set. */
+  optionCodeOverride: number | null;
+  /** Sachmerkmalsleiste number; empty when unused. */
+  smlNumber: string;
+}
+
 /** One candidate database the Excel-Mapping-Agent considered for the sheet. */
 export interface DataImportDatabaseCandidate {
   tableRef: string;
@@ -70,6 +94,8 @@ export interface DataImportFieldMapping {
   /** Expected type of the selected abas field, assessed from its field definition. */
   fieldDataType: string | null;
   mapped: boolean;
+  /** Field options appended to the ImportIT column header. */
+  importItOptions?: ImportItFieldOption[];
   /** Short AI note on ambiguity/caveats (e.g. "values look numeric but field also accepts text"). */
   note?: string;
 }
@@ -88,8 +114,16 @@ export interface DataImportMappingResult {
   /** All databases the AI considered (highest confidence first), for manual override in the UI. */
   databaseCandidates: DataImportDatabaseCandidate[];
   fieldMapping: DataImportFieldMapping[];
+  /** Header settings for the ImportIT export of this sheet. */
+  importIt: DataImportItSettings;
   unmapped: string[];
   relationships: DataImportRelationship[];
   testData: { database: string; fields: Record<string, string> }[];
+  /** Legacy combined instruction kept for compatibility with older saved mappings. */
+  cleanupInstruction: string;
+  /** Individual issues about columns, field compatibility, and mapping structure. */
+  structuralHints: string[];
+  /** Individual issues about values, formats, and content normalization. */
+  contentHints: string[];
   warnings: string[];
 }

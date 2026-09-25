@@ -10,6 +10,7 @@
 import { chatWithAgentSync, uploadMftFile, getStoredTenantId } from './myforterroApi';
 import { getModel, getStoredAgentId, getTaskModel } from './settings';
 import { chunkRows, type ExcelSheet } from './excelParser';
+import { DEFAULT_IMPORT_IT_SETTINGS } from './importItExport';
 import { ensureWorkspaceFileUpload } from './fileUpload';
 import type { DataImportMappingResult, DataImportDatabaseCandidate } from '../types/dataImport';
 import type { TableDef } from '../types/gherkin';
@@ -19,12 +20,15 @@ import type { TableDef } from '../types/gherkin';
  * anything before or after it (agents sometimes wrap JSON in markdown fences or
  * add trailing commentary, which broke a naive "parse from first brace" approach).
  */
-function extractJson(text: string): unknown {
+function extractJson(text: string, context: string): unknown {
   const trimmed = text.trim();
   const braceStart = trimmed.indexOf('{');
   const bracketStart = trimmed.indexOf('[');
   const candidates = [braceStart, bracketStart].filter((i) => i >= 0);
-  if (candidates.length === 0) throw new Error('Keine JSON-Antwort in der Agent-Response gefunden.');
+  if (candidates.length === 0) {
+    console.error(`[excelAgent] ${context}: keine JSON-Antwort`, text);
+    throw new Error(`${context}: Keine JSON-Antwort erhalten (${trimmed.length} Zeichen). Antwortanfang: ${trimmed.slice(0, 200)}`);
+  }
   const start = Math.min(...candidates);
   const openChar = trimmed[start];
   const closeChar = openChar === '{' ? '}' : ']';
@@ -47,7 +51,11 @@ function extractJson(text: string): unknown {
       if (depth === 0) return JSON.parse(trimmed.slice(start, i + 1));
     }
   }
-  throw new Error('Unvollstaendige JSON-Antwort vom Agent (fehlende schliessende Klammer).');
+  console.error(`[excelAgent] ${context}: abgeschnittene JSON-Antwort`, text);
+  throw new Error(
+    `${context}: Die Antwort wurde abgeschnitten (${trimmed.length} Zeichen, ${depth} offene Klammern). `
+    + `Meist ist das Token-Limit zu niedrig oder die Anfrage zu gross. Antwortende: ...${trimmed.slice(-200)}`,
+  );
 }
 
 function findFieldByTechnicalName(table: TableDef, technicalName: string | null | undefined) {
@@ -64,6 +72,24 @@ export interface TransformProgress {
 export interface DataImportTestContext {
   sheetName: string;
   mapping: DataImportMappingResult | null;
+}
+
+/** abas rules the mapping agent must apply when judging values and proposing a cleanup. */
+const ABAS_MAPPING_CONVENTIONS = [
+  'Beachte diese abas-Konventionen und melde Verstoesse:',
+  '- Verweisfelder werden ueber Identnummer, Suchwort oder Datensatz-ID referenziert. Suchwoerter enthalten keine Leerzeichen.',
+  '- Datumswerte muessen ein einheitliches abas-Datumsformat haben; gemischte Formate (dd.mm.yyyy, yyyy-mm-dd, d.m.yy) vorher vereinheitlichen.',
+  '- Zahl- und Waehrungswerte ohne Waehrungssymbol und ohne Tausendertrennzeichen; Nachkommastellen passend zur Feldart.',
+  '- Textwerte duerfen die Feldlaenge nicht ueberschreiten und keine verbotenen Zeichen (#, ;, Steuerzeichen) enthalten.',
+  '- Schluessel- und Aufzaehlungsfelder muessen exakt einem gueltigen abas-Wert entsprechen.',
+  '- Kombinierte Spalten (z.B. "PLZ/Ort") gehoeren in getrennte abas-Felder und muessen aufgeteilt werden.',
+].join(' ');
+
+function splitLegacyCleanupInstruction(instruction: string): string[] {
+  return instruction
+    .split(/(?=(?:^|\s)\d+[.)]\s)/g)
+    .map((part) => part.replace(/^\s*\d+[.)]\s*/, '').trim())
+    .filter(Boolean);
 }
 
 /** Generates one feature file from all mapped sheets and their current workbook values. */
@@ -108,28 +134,55 @@ export async function transformSheetWithAgent(
   const batches = chunkRows(sheet.rows, 300);
   const resultRows: ExcelSheet['rows'] = [];
   const warnings: string[] = [];
-  let columns = sheet.columns;
 
   for (let i = 0; i < batches.length; i++) {
     const batch = batches[i];
     const message = JSON.stringify({
       task: 'transform-rows',
-      formatInstruction: 'WICHTIG: Ignoriere fuer diese Anfrage jegliche abweichenden Formatvorgaben aus deinen sonst hinterlegten Instructions und folge AUSSCHLIESSLICH diesem Schema. Wende die Anweisung im Feld "instruction" auf die Zeilen im Feld "rows" an. Antworte NUR mit reinem JSON (kein Markdown, kein Codeblock, kein Fliesstext davor/danach): {"rows":[{...}],"_warnings":["..."]}',
+      formatInstruction: 'WICHTIG: Ignoriere fuer diese Anfrage jegliche abweichenden Formatvorgaben aus deinen sonst hinterlegten Instructions und folge AUSSCHLIESSLICH diesem Schema. Wende die Anweisung im Feld "instruction" auf die Zeilen im Feld "rows" an. Du darfst Spalten aufteilen, zusammenfuehren, umbenennen, ergaenzen oder entfernen, wenn die Anweisung das verlangt. Gib in JEDER Zeile exakt dieselben Spalten zurueck und verwende fuer fehlende Werte einen leeren String. Antworte NUR mit reinem JSON (kein Markdown, kein Codeblock, kein Fliesstext davor/danach): {"rows":[{...}],"_warnings":["..."]}',
       instruction,
       columns: sheet.columns,
       rows: batch,
     });
     const details = `Excel-Transform Batch ${i + 1}/${batches.length} (${batch.length} Zeilen)`;
     const { response } = await chatWithAgentSync(agentId, message, 'excel-transform', model, details);
-    const parsed = extractJson(response) as { rows?: ExcelSheet['rows']; _warnings?: string[] };
+    const parsed = extractJson(response, `Excel-Transform Batch ${i + 1}/${batches.length}`) as { rows?: ExcelSheet['rows']; _warnings?: string[] };
     const rows = parsed.rows ?? [];
-    if (rows.length > 0) columns = Object.keys(rows[0]);
+    if (rows.length !== batch.length) {
+      warnings.push(
+        `Batch ${i + 1}/${batches.length}: ${batch.length} Zeilen gesendet, ${rows.length} zurueckerhalten `
+        + '(beabsichtigt bei Filtern/Dubletten, sonst moeglicher Datenverlust).',
+      );
+    }
     resultRows.push(...rows);
     if (parsed._warnings) warnings.push(...parsed._warnings);
     onProgress?.({ batchIndex: i + 1, batchCount: batches.length });
   }
 
-  return { sheet: { name: sheet.name, columns, rows: resultRows }, warnings };
+  if (sheet.rows.length > 0 && resultRows.length === 0) {
+    throw new Error('Die Transformation hat keine Zeilen zurueckgeliefert. Bitte die Anweisung pruefen und erneut ausfuehren.');
+  }
+
+  // Splitting/renaming can leave keys missing in individual rows, so use the union in first-seen order.
+  const columns: string[] = [];
+  const seen = new Set<string>();
+  for (const row of resultRows) {
+    for (const key of Object.keys(row)) {
+      if (seen.has(key)) continue;
+      seen.add(key);
+      columns.push(key);
+    }
+  }
+  const normalizedRows = resultRows.map((row) => {
+    const normalized: ExcelSheet['rows'][number] = {};
+    for (const column of columns) normalized[column] = row[column] ?? '';
+    return normalized;
+  });
+
+  return {
+    sheet: { name: sheet.name, columns: columns.length > 0 ? columns : sheet.columns, rows: normalizedRows },
+    warnings,
+  };
 }
 
 /** Uploads (or reuses a cached) field-list document for one database, referenced by fileId instead of re-sent as text on every mapping call. */
@@ -166,20 +219,22 @@ export async function mapFieldsForDatabase(
   const fieldAttachments = await ensureDatabaseFieldsFile(table, rootHandle);
   const step2Message = JSON.stringify({
     task: 'map-fields',
-    instruction: 'WICHTIG: Ignoriere fuer diese Anfrage jegliche abweichenden Formatvorgaben aus deinen sonst hinterlegten Instructions und folge AUSSCHLIESSLICH diesem Schema. Die Feldliste der Datenbank ist als angehaengte Datei verfuegbar. Ordne jede Spalte einem Feld zu, erkenne Datentypen und Beziehungen zu anderen Datensaetzen, und entwirf JSON-Testdaten. Der Wert field MUSS immer exakt der technische Feldname aus name der angehaengten Feldliste sein (z.B. "nummer"), niemals die Beschreibung (z.B. "Identnummer"). Gib pro Spalte confidence (high|medium|low), confidencePercent (0-100), dataType fuer den in der Excel-Spalte erkannten Typ und fieldDataType fuer den Typ des gewaehlten abas-Felds aus dessen dataType an. Optional: alternativeField als zweitbeste Vermutung und note bei Unstimmigkeiten/heterogenen Werten. Antworte NUR mit reinem JSON (kein Markdown, kein Codeblock, kein Fliesstext davor/danach): {"fieldMapping":[{"column":"...","field":"...","confidence":"high|medium|low","confidencePercent":0,"alternativeField":"...","note":"...","dataType":"text|integer|real|date|bool","fieldDataType":"...","mapped":true}],"unmapped":["..."],"relationships":[{"column":"...","targetDatabase":"...","status":"found|requires_preparation","note":"..."}],"testData":[{"database":"...","fields":{...}}],"warnings":["..."]}',
+    instruction: 'WICHTIG: Ignoriere fuer diese Anfrage jegliche abweichenden Formatvorgaben aus deinen sonst hinterlegten Instructions und folge AUSSCHLIESSLICH diesem Schema. Die Feldliste der Datenbank ist als angehaengte Datei verfuegbar. Ordne jede Spalte einem Feld zu, erkenne Datentypen und Beziehungen zu anderen Datensaetzen, und entwirf JSON-Testdaten. Der Wert field MUSS immer exakt der technische Feldname aus name der angehaengten Feldliste sein (z.B. "nummer"), niemals die Beschreibung (z.B. "Identnummer"). Gib pro Spalte confidence (high|medium|low), confidencePercent (0-100), dataType fuer den in der Excel-Spalte erkannten Typ und fieldDataType fuer den Typ des gewaehlten abas-Felds aus dessen dataType an. Optional: alternativeField als zweitbeste Vermutung und note bei Unstimmigkeiten/heterogenen Werten. Formuliere Hinweise getrennt und einzeln: structuralHints fuer strukturelle Probleme (Spalten passen nicht, kombinierte Spalten, fehlende Felder, Feldtyp passt nicht zum Inhalt) und contentHints fuer inhaltliche/formale Probleme (z.B. fehlerhafte USt-IdNr., gemischte E-Mail-Schreibweisen, Datums- oder Zahlenformate). Jeder Hinweis muss eine eigene, kurze, direkt ausfuehrbare Transformationsanweisung sein. Gib einen Hinweis nur aus, wenn die Beispieldaten den Fehler tatsaechlich zeigen. Verwende in deutschen Hinweisen echte Umlaute (ä, ö, ü, Ä, Ö, Ü), keine Umschreibungen wie "Laenderpraefix". Keine Sammelanweisung und keine Nummerierung innerhalb der Hinweise. Antworte NUR mit reinem JSON (kein Markdown, kein Codeblock, kein Fliesstext davor/danach): {"fieldMapping":[{"column":"...","field":"...","confidence":"high|medium|low","confidencePercent":0,"alternativeField":"...","note":"...","dataType":"text|integer|real|date|bool","fieldDataType":"...","mapped":true}],"unmapped":["..."],"relationships":[{"column":"...","targetDatabase":"...","status":"found|requires_preparation","note":"..."}],"testData":[{"database":"...","fields":{...}}],"structuralHints":["..."],"contentHints":["..."],"cleanupInstruction":"","warnings":["..."]}',
+    rules: ABAS_MAPPING_CONVENTIONS,
     columns: sheet.columns,
     sampleRows,
     database: { tableRef: table.tableRef, name: table.name || table.nameDe || table.nameEn },
   });
   const step2Details = `Excel-Mapping Schritt 2: Feld-Zuordnung (${table.fields.length} Felder, als Datei referenziert)`;
   const step2 = await chatWithAgentSync(agentId, step2Message, 'excel-mapping', model, step2Details, undefined, fieldAttachments);
-  const parsed = extractJson(step2.response) as Partial<DataImportMappingResult> & { _warnings?: string[] };
+  const parsed = extractJson(step2.response, 'Feld-Zuordnung (map-fields)') as Partial<DataImportMappingResult> & { _warnings?: string[] };
   const matchedCandidate = databaseCandidates.find((c) => c.tableRef === table.tableRef);
 
   return {
     mode: 'ai',
     database: { tableRef: table.tableRef, name: table.name || table.nameDe || table.nameEn || table.tableRef, confidence: matchedCandidate?.confidence ?? 'medium', confidencePercent: matchedCandidate?.confidencePercent ?? null },
     databaseCandidates,
+    importIt: { ...DEFAULT_IMPORT_IT_SETTINGS },
     fieldMapping: (parsed.fieldMapping ?? []).map((fieldMapping) => {
       const field = findFieldByTechnicalName(table, fieldMapping.field);
       return {
@@ -198,6 +253,9 @@ export async function mapFieldsForDatabase(
     unmapped: parsed.unmapped ?? [],
     relationships: parsed.relationships ?? [],
     testData: parsed.testData ?? [],
+    cleanupInstruction: parsed.cleanupInstruction?.trim() ?? '',
+    structuralHints: parsed.structuralHints ?? parsed.warnings ?? parsed._warnings ?? [],
+    contentHints: parsed.contentHints ?? splitLegacyCleanupInstruction(parsed.cleanupInstruction?.trim() ?? ''),
     warnings: parsed.warnings ?? parsed._warnings ?? [],
   };
 }
@@ -234,7 +292,7 @@ export async function mapSheetWithAgent(
   });
   const step1Details = `Excel-Mapping Schritt 1: Datenbank-Erkennung (${databaseNames.length} Kandidaten)`;
   const step1 = await chatWithAgentSync(agentId, step1Message, 'excel-mapping', model, step1Details);
-  const step1Parsed = extractJson(step1.response) as { candidates?: DataImportDatabaseCandidate[]; reason?: string };
+  const step1Parsed = extractJson(step1.response, 'Datenbank-Erkennung (identify-database)') as { candidates?: DataImportDatabaseCandidate[]; reason?: string };
   const candidates = (step1Parsed.candidates ?? [])
     .filter((c) => knownTables.some((t) => t.tableRef === c.tableRef))
     .map((candidate) => ({ ...candidate, confidencePercent: candidate.confidencePercent ?? null }));
@@ -246,10 +304,14 @@ export async function mapSheetWithAgent(
       mode: 'ai',
       database: null,
       databaseCandidates: candidates,
+      importIt: { ...DEFAULT_IMPORT_IT_SETTINGS },
       fieldMapping: sheet.columns.map((c) => ({ column: c, field: null, source: 'manual', aiField: null, aiConfidence: null, aiConfidencePercent: null, aiAlternativeField: null, confidence: null, confidencePercent: null, dataType: null, fieldDataType: null, mapped: false })),
       unmapped: [...sheet.columns],
       relationships: [],
       testData: [],
+      cleanupInstruction: '',
+      structuralHints: [step1Parsed.reason ?? 'Keine passende Datenbank gefunden.'],
+      contentHints: [],
       warnings: [step1Parsed.reason ?? 'Keine passende Datenbank gefunden.'],
     };
   }

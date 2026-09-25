@@ -9,16 +9,26 @@
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { FeatureInput, TableDef } from '../../types/gherkin';
-import type { DataImportRecord, DataImportMappingResult, MappingConfidence, MappingSource } from '../../types/dataImport';
+import type { DataImportRecord, DataImportMappingResult, ImportItFieldOption, ImportItImportOption, MappingConfidence, MappingSource } from '../../types/dataImport';
 import type { ExcelSheet } from '../../lib/excelParser';
 import {
   readManifest, createDataImport, updateDataImportOriginal, restoreDataImportBackup, deleteDataImport,
   readOriginalSheets, readTransformedSheets, saveTransformedSheets, readMapping, saveMapping,
 } from '../../lib/dataImportStore';
 import { generateCucumberTestsFromDataImport, transformSheetWithAgent, mapSheetWithAgent, mapFieldsForDatabase } from '../../lib/excelAgent';
+import {
+  DEFAULT_IMPORT_IT_SETTINGS,
+  IMPORT_IT_FIELD_OPTIONS,
+  IMPORT_IT_IMPORT_OPTIONS,
+  buildImportItWorkbook,
+  downloadImportItWorkbook,
+  formatImportItDatabaseRef,
+  getExportableMappings,
+  resolveImportItOptionCode,
+} from '../../lib/importItExport';
 import { parseGherkin } from '../../lib/gherkinParser';
 import { useTranslation } from '../../i18n';
-import { IconUndo } from '../icons';
+import { IconImport, IconUndo } from '../icons';
 import styles from './DataImportTab.module.css';
 
 interface DataImportTabProps {
@@ -28,6 +38,16 @@ interface DataImportTabProps {
 }
 
 const FREE_TEXT_FIELD = '__freitext__';
+
+const IMPORT_IT_OPTION_LABEL_KEYS: Record<ImportItImportOption, 'dataimport.importItOptionCreateNew' | 'dataimport.importItOptionDisableFop' | 'dataimport.importItOptionClearTable' | 'dataimport.importItOptionCheckModifiable' | 'dataimport.importItOptionEnglishVariables' | 'dataimport.importItOptionDontChangeIfEqual' | 'dataimport.importItOptionCheckForbiddenChars'> = {
+  createNew: 'dataimport.importItOptionCreateNew',
+  disableFop: 'dataimport.importItOptionDisableFop',
+  clearTable: 'dataimport.importItOptionClearTable',
+  checkModifiable: 'dataimport.importItOptionCheckModifiable',
+  englishVariables: 'dataimport.importItOptionEnglishVariables',
+  dontChangeIfEqual: 'dataimport.importItOptionDontChangeIfEqual',
+  checkForbiddenChars: 'dataimport.importItOptionCheckForbiddenChars',
+};
 
 type PickerGroup = 'action' | 'ai' | 'standard';
 
@@ -67,6 +87,13 @@ function findFieldByTechnicalName(table: TableDef | undefined, technicalName: st
 function mergeTransformedSheets(originalSheets: ExcelSheet[], transformedSheets: ExcelSheet[]): ExcelSheet[] {
   const transformedByName = new Map(transformedSheets.map((sheet) => [sheet.name, sheet]));
   return originalSheets.map((originalSheet) => transformedByName.get(originalSheet.name) ?? originalSheet);
+}
+
+/** Applies the mapping order to the preview columns; columns missing from the order keep their position at the end. */
+function orderColumns(columns: string[], columnOrder?: string[]): string[] {
+  if (!columnOrder || columnOrder.length === 0) return columns;
+  const ordered = columnOrder.filter((column) => columns.includes(column));
+  return [...ordered, ...columns.filter((column) => !ordered.includes(column))];
 }
 
 function sourceChip(source: MappingSource, lang: 'de' | 'en'): PickerChip {
@@ -188,19 +215,22 @@ function SheetTable({
   originalSheet,
   editable = false,
   onCellChange,
+  columnOrder,
   maxRows = 50,
 }: {
   sheet: ExcelSheet;
   originalSheet?: ExcelSheet;
   editable?: boolean;
   onCellChange?: (rowIndex: number, column: string, value: string) => void;
+  columnOrder?: string[];
   maxRows?: number;
 }) {
   const { t } = useTranslation();
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const columns = orderColumns(sheet.columns, columnOrder);
   const rows = sheet.rows
     .map((row, rowIndex) => ({ row, rowIndex }))
-    .filter(({ row }) => sheet.columns.every((column) => {
+    .filter(({ row }) => columns.every((column) => {
       const filter = columnFilters[column]?.trim().toLocaleLowerCase();
       return !filter || String(row[column] ?? '').toLocaleLowerCase().includes(filter);
     }))
@@ -209,9 +239,9 @@ function SheetTable({
     <div className={styles.tableScroll}>
       <table className={styles.table}>
         <thead>
-          <tr>{sheet.columns.map((c) => <th key={c}>{c}</th>)}</tr>
+          <tr>{columns.map((c) => <th key={c}>{c}</th>)}</tr>
           <tr className={styles.columnFilters}>
-            {sheet.columns.map((column) => (
+            {columns.map((column) => (
               <th key={column}>
                 <input
                   className={styles.columnFilterInput}
@@ -227,7 +257,7 @@ function SheetTable({
         <tbody>
           {rows.map(({ row, rowIndex }) => (
             <tr key={rowIndex}>
-              {sheet.columns.map((c) => {
+              {columns.map((c) => {
                 const value = String(row[c] ?? '');
                 const originalValue = String(originalSheet?.rows[rowIndex]?.[c] ?? '');
                 const changed = editable && value !== originalValue;
@@ -254,7 +284,7 @@ function SheetTable({
 }
 
 export function DataImportTab({ rootHandle, tableDefs, onFeatureGenerated }: DataImportTabProps) {
-  const { lang } = useTranslation();
+  const { lang, t } = useTranslation();
   const [imports, setImports] = useState<DataImportRecord[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [originalSheets, setOriginalSheets] = useState<ExcelSheet[]>([]);
@@ -262,12 +292,16 @@ export function DataImportTab({ rootHandle, tableDefs, onFeatureGenerated }: Dat
   const [mapping, setMapping] = useState<DataImportMappingResult | null>(null);
   const [activeSheetIdx, setActiveSheetIdx] = useState(0);
   const [viewMode, setViewMode] = useState<'original' | 'transformed'>('original');
+  const [mappingTab, setMappingTab] = useState<'mapping' | 'structural' | 'content'>('mapping');
+  const [applyAiMappingsDirectly, setApplyAiMappingsDirectly] = useState(false);
   const [previousTransformedSheets, setPreviousTransformedSheets] = useState<ExcelSheet[] | null>(null);
+  const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
   const [instruction, setInstruction] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
+  const instructionRef = useRef<HTMLTextAreaElement>(null);
 
   const selected = imports.find((i) => i.id === selectedId) ?? null;
   const completeTransformedSheets = transformedSheets ? mergeTransformedSheets(originalSheets, transformedSheets) : null;
@@ -291,7 +325,11 @@ export function DataImportTab({ rootHandle, tableDefs, onFeatureGenerated }: Dat
     unmapped: [...sheet.columns],
     relationships: [],
     testData: [],
+    cleanupInstruction: '',
+    structuralHints: [],
+    contentHints: [],
     warnings: [],
+    importIt: { ...DEFAULT_IMPORT_IT_SETTINGS },
   });
 
   const applyAbasFieldTypes = (result: DataImportMappingResult | null): DataImportMappingResult | null => {
@@ -443,9 +481,30 @@ export function DataImportTab({ rootHandle, tableDefs, onFeatureGenerated }: Dat
       });
       const nextTransformed = (completeTransformedSheets ?? originalSheets).map((entry, index) => index === activeSheetIdx ? transformed : entry);
       setPreviousTransformedSheets((completeTransformedSheets ?? originalSheets).map((entry) => ({ ...entry, rows: entry.rows.map((row) => ({ ...row })) })));
-      await saveTransformedSheets(rootHandle, selected.id, selected.current.version, nextTransformed, instruction.trim());
+      await saveTransformedSheets(rootHandle, selected.id, selected.current.version, nextTransformed, '');
       setTransformedSheets(nextTransformed);
       setViewMode('transformed');
+      setInstruction('');
+      setBusy(lang === 'de' ? 'Ermittle aktuelle Hinweise…' : 'Refreshing current hints…');
+      const refreshedMapping = await mapSheetWithAgent(transformed, tableDefs, rootHandle);
+      const mappingToSave = applyAiMappingsDirectly
+        ? {
+          ...refreshedMapping,
+          fieldMapping: refreshedMapping.fieldMapping.map((fieldMapping) => fieldMapping.aiField
+            ? {
+              ...fieldMapping,
+              field: fieldMapping.aiField,
+              source: 'ai' as const,
+              confidence: fieldMapping.aiConfidence ?? null,
+              confidencePercent: fieldMapping.aiConfidencePercent ?? null,
+              mapped: true,
+            }
+            : fieldMapping),
+          unmapped: refreshedMapping.fieldMapping.filter((fieldMapping) => !fieldMapping.aiField).map((fieldMapping) => fieldMapping.column),
+        }
+        : refreshedMapping;
+      setMapping(mappingToSave);
+      await saveMapping(rootHandle, selected.id, selected.current.version, sheet.name, mappingToSave);
       if (warnings.length > 0) setError(warnings.join(' | '));
       await reloadManifest();
     } catch (err) {
@@ -491,8 +550,24 @@ export function DataImportTab({ rootHandle, tableDefs, onFeatureGenerated }: Dat
     setError(null);
     try {
       const result = await mapSheetWithAgent(activeSheet, tableDefs, rootHandle);
-      await saveMapping(rootHandle, selected.id, selected.current.version, activeSheet.name, result);
-      setMapping(result);
+      const resultToSave = applyAiMappingsDirectly
+        ? {
+          ...result,
+          fieldMapping: result.fieldMapping.map((fieldMapping) => fieldMapping.aiField
+            ? {
+              ...fieldMapping,
+              field: fieldMapping.aiField,
+              source: 'ai' as const,
+              confidence: fieldMapping.aiConfidence ?? null,
+              confidencePercent: fieldMapping.aiConfidencePercent ?? null,
+              mapped: true,
+            }
+            : fieldMapping),
+          unmapped: result.fieldMapping.filter((fieldMapping) => !fieldMapping.aiField).map((fieldMapping) => fieldMapping.column),
+        }
+        : result;
+      await saveMapping(rootHandle, selected.id, selected.current.version, activeSheet.name, resultToSave);
+      setMapping(resultToSave);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -606,6 +681,113 @@ export function DataImportTab({ rootHandle, tableDefs, onFeatureGenerated }: Dat
     await saveMapping(rootHandle, selected.id, selected.current.version, activeSheet.name, updated);
   };
 
+  const persistMapping = async (updated: DataImportMappingResult) => {
+    if (!rootHandle || !selected || !activeSheet) return;
+    setMapping(updated);
+    await saveMapping(rootHandle, selected.id, selected.current.version, activeSheet.name, updated);
+  };
+
+  const appendInstruction = (text: string) => {
+    const addition = text.trim();
+    if (!addition) return;
+    setInstruction((current) => (current.trim() ? `${current.trim()}\n${addition}` : addition));
+    instructionRef.current?.focus();
+    instructionRef.current?.scrollIntoView({ block: 'nearest' });
+  };
+
+  const handleAddColumn = async () => {
+    if (!rootHandle || !selected || !activeSheet) return;
+    const name = (window.prompt(t('dataimport.addColumnPrompt')) ?? '').trim();
+    if (!name) return;
+    if (activeSheet.columns.includes(name)) {
+      setError(t('dataimport.columnExists'));
+      return;
+    }
+    setError(null);
+    const workingCopy = (completeTransformedSheets ?? originalSheets).map((sheet, index) => (
+      index === activeSheetIdx
+        ? { ...sheet, columns: [...sheet.columns, name], rows: sheet.rows.map((row) => ({ ...row, [name]: '' })) }
+        : { ...sheet, rows: sheet.rows.map((row) => ({ ...row })) }
+    ));
+    setTransformedSheets(workingCopy);
+    setPreviousTransformedSheets(null);
+    setViewMode('transformed');
+    await saveTransformedSheets(rootHandle, selected.id, selected.current.version, workingCopy, instruction.trim());
+    if (mapping) {
+      await persistMapping({
+        ...mapping,
+        fieldMapping: [...mapping.fieldMapping, {
+          column: name,
+          field: null,
+          source: 'manual',
+          confidence: null,
+          confidencePercent: null,
+          dataType: null,
+          fieldDataType: null,
+          mapped: false,
+          importItOptions: [],
+        }],
+        unmapped: [...mapping.unmapped, name],
+      });
+    }
+  };
+
+  const handleReorderField = async (fromColumn: string, toColumn: string) => {    if (!mapping || fromColumn === toColumn) return;
+    const reordered = [...mapping.fieldMapping];
+    const fromIndex = reordered.findIndex((entry) => entry.column === fromColumn);
+    const toIndex = reordered.findIndex((entry) => entry.column === toColumn);
+    if (fromIndex < 0 || toIndex < 0) return;
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+    await persistMapping({ ...mapping, fieldMapping: reordered });
+  };
+
+  const handleToggleFieldOption = async (column: string, option: ImportItFieldOption) => {
+    if (!mapping) return;
+    await persistMapping({
+      ...mapping,
+      fieldMapping: mapping.fieldMapping.map((entry) => {
+        if (entry.column !== column) return entry;
+        const current = entry.importItOptions ?? [];
+        return {
+          ...entry,
+          importItOptions: current.includes(option)
+            ? current.filter((existing) => existing !== option)
+            : [...current, option],
+        };
+      }),
+    });
+  };
+
+  const handleImportItSettingChange = async (patch: Partial<DataImportMappingResult['importIt']>) => {
+    if (!mapping) return;
+    await persistMapping({ ...mapping, importIt: { ...mapping.importIt, ...patch } });
+  };
+
+  const handleToggleImportItOption = async (option: ImportItImportOption) => {
+    if (!mapping) return;
+    const current = mapping.importIt.options;
+    await handleImportItSettingChange({
+      options: current.includes(option) ? current.filter((entry) => entry !== option) : [...current, option],
+    });
+  };
+
+  const handleExportImportIt = () => {
+    if (!mapping || !activeSheet) return;
+    if (!mapping.database) {
+      setError(t('dataimport.importItNeedsDatabase'));
+      return;
+    }
+    if (getExportableMappings(mapping.fieldMapping).length === 0) {
+      setError(t('dataimport.importItNeedsFields'));
+      return;
+    }
+    setError(null);
+    const workbook = buildImportItWorkbook(activeSheet, mapping.fieldMapping, mapping.importIt, mapping.database.tableRef);
+    const databaseRef = formatImportItDatabaseRef(mapping.database.tableRef).replace(':', '-');
+    downloadImportItWorkbook(workbook, `ImportIT_${databaseRef}_${activeSheet.name}`);
+  };
+
   const handleRestoreAiField = async (column: string) => {
     if (!rootHandle || !selected || !mapping || !activeSheet) return;
     const selectedTable = tableDefs.find((table) => table.tableRef === mapping.database?.tableRef);
@@ -692,6 +874,14 @@ export function DataImportTab({ rootHandle, tableDefs, onFeatureGenerated }: Dat
                 <button className={styles.secondaryBtn} onClick={() => void handleGenerateTests('active')} disabled={!!busy || !activeSheet} type="button">
                   {lang === 'de' ? 'Tests für dieses Blatt' : 'Generate tests for this sheet'}
                 </button>
+                <button
+                  className={styles.secondaryBtn}
+                  onClick={handleExportImportIt}
+                  disabled={!!busy || !mapping?.database}
+                  type="button"
+                >
+                  {t('dataimport.importItExport')}
+                </button>
                 <button className={styles.secondaryBtn} onClick={() => replaceInputRef.current?.click()} type="button">
                   {lang === 'de' ? 'Datei ersetzen' : 'Replace file'}
                 </button>
@@ -756,11 +946,22 @@ export function DataImportTab({ rootHandle, tableDefs, onFeatureGenerated }: Dat
 
             {activeSheet ? (
               <>
+                <div className={styles.tableToolbar}>
+                  <button
+                    className={styles.secondaryBtn}
+                    type="button"
+                    onClick={() => void handleAddColumn()}
+                    disabled={!!busy}
+                  >
+                    + {t('dataimport.addColumn')}
+                  </button>
+                </div>
                 <SheetTable
                   sheet={activeSheet}
                   originalSheet={originalSheets[activeSheetIdx]}
                   editable={viewMode === 'transformed'}
                   onCellChange={viewMode === 'transformed' ? handleTransformedCellChange : undefined}
+                  columnOrder={mapping?.fieldMapping.map((entry) => entry.column)}
                 />
               </>
             ) : <p className={styles.hint}>—</p>}
@@ -770,6 +971,7 @@ export function DataImportTab({ rootHandle, tableDefs, onFeatureGenerated }: Dat
                 {lang === 'de' ? 'Transformations-Anweisung' : 'Transform instruction'}
               </label>
               <textarea
+                ref={instructionRef}
                 className={styles.textarea}
                 value={instruction}
                 onChange={(e) => setInstruction(e.target.value)}
@@ -801,6 +1003,15 @@ export function DataImportTab({ rootHandle, tableDefs, onFeatureGenerated }: Dat
                   {lang === 'de' ? 'DB/Feld-Zuordnung' : 'DB/field mapping'}
                 </label>
                 <div className={styles.mappingActions}>
+                  <label className={styles.aiMappingToggle}>
+                    <input
+                      type="checkbox"
+                      checked={applyAiMappingsDirectly}
+                      onChange={(event) => setApplyAiMappingsDirectly(event.target.checked)}
+                      disabled={!!busy}
+                    />
+                    <span>{t('dataimport.applyAiMappingsDirectly')}</span>
+                  </label>
                   <button className={styles.secondaryBtn} onClick={() => void handleMap()} disabled={!!busy} type="button">
                     {lang === 'de' ? 'KI-Zuordnung ermitteln' : 'Determine AI mapping'}
                   </button>
@@ -808,6 +1019,30 @@ export function DataImportTab({ rootHandle, tableDefs, onFeatureGenerated }: Dat
               </div>
               {mapping ? (
                 <div className={styles.mappingResult}>
+                  <div className={styles.sheetTabs} role="tablist" aria-label={lang === 'de' ? 'Zuordnungsansichten' : 'Mapping views'}>
+                    {([
+                      ['mapping', t('dataimport.mappingTab')],
+                      ['structural', t('dataimport.structuralHintsTab')],
+                      ['content', t('dataimport.contentHintsTab')],
+                    ] as const).map(([tab, label]) => {
+                      const hintCount = tab === 'structural' ? mapping.structuralHints.length : tab === 'content' ? mapping.contentHints.length : 0;
+                      return (
+                      <button
+                        key={tab}
+                        className={mappingTab === tab ? styles.sheetTabActive : styles.sheetTab}
+                        onClick={() => setMappingTab(tab)}
+                        type="button"
+                        role="tab"
+                        aria-selected={mappingTab === tab}
+                      >
+                        {label}
+                        {hintCount > 0 && <span className={styles.hintTabBadge} title={`${hintCount} ${lang === 'de' ? 'Hinweise' : 'hints'}`} aria-label={`${hintCount} ${lang === 'de' ? 'Hinweise' : 'hints'}`}>⚠ {hintCount}</span>}
+                      </button>
+                      );
+                    })}
+                  </div>
+                  {mappingTab === 'mapping' && (
+                    <>
                   <div className={styles.dbSelectRow}>
                     <label className={styles.sectionLabel}>{lang === 'de' ? 'Datenbank' : 'Database'}</label>
                     <SearchablePicker
@@ -834,11 +1069,66 @@ export function DataImportTab({ rootHandle, tableDefs, onFeatureGenerated }: Dat
                     />
                     {mapping.database && <ConfidenceBadge confidence={mapping.database.confidence} percent={mapping.database.confidencePercent} />}
                   </div>
+
+                  <div className={styles.importItPanel}>
+                    <label className={styles.sectionLabel}>{t('dataimport.importItTitle')}</label>
+                    <div className={styles.importItFields}>
+                      <label className={styles.importItField}>
+                        <span>{t('dataimport.importItTableStart')}</span>
+                        <input
+                          className={styles.importItInput}
+                          type="number"
+                          min={0}
+                          value={mapping.importIt.tableStartColumn}
+                          onChange={(event) => void handleImportItSettingChange({ tableStartColumn: Math.max(0, Number(event.target.value) || 0) })}
+                        />
+                        <small>{t('dataimport.importItTableStartHint')}</small>
+                      </label>
+                      <label className={styles.importItField}>
+                        <span>{t('dataimport.importItSml')}</span>
+                        <input
+                          className={styles.importItInput}
+                          value={mapping.importIt.smlNumber}
+                          onChange={(event) => void handleImportItSettingChange({ smlNumber: event.target.value })}
+                        />
+                      </label>
+                      <label className={styles.importItField}>
+                        <span>{t('dataimport.importItOptionCode')}</span>
+                        <input
+                          className={styles.importItInput}
+                          type="number"
+                          min={0}
+                          value={resolveImportItOptionCode(mapping.importIt)}
+                          onChange={(event) => void handleImportItSettingChange({ optionCodeOverride: Number(event.target.value) || 0 })}
+                        />
+                        <small>
+                          {mapping.importIt.optionCodeOverride === null
+                            ? t('dataimport.importItOptionCodeAuto')
+                            : `A1 = ${formatImportItDatabaseRef(mapping.database?.tableRef ?? '')}`}
+                        </small>
+                      </label>
+                    </div>
+                    <div className={styles.importItOptions}>
+                      {IMPORT_IT_IMPORT_OPTIONS.map((option) => (
+                        <label key={option.key} className={styles.importItOption}>
+                          <input
+                            type="checkbox"
+                            checked={mapping.importIt.options.includes(option.key)}
+                            onChange={() => void handleToggleImportItOption(option.key)}
+                          />
+                          <span>{t(IMPORT_IT_OPTION_LABEL_KEYS[option.key])}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
                   <table className={styles.table}>
                     <thead>
                       <tr>
+                        <th aria-label={t('dataimport.importItReorder')} />
                         <th>{lang === 'de' ? 'Spalte' : 'Column'}</th>
                         <th>{lang === 'de' ? 'Feld' : 'Field'}</th>
+                        <th>{t('dataimport.importItFieldOptions')}</th>
                         <th>{lang === 'de' ? 'Konfidenz' : 'Confidence'}</th>
                         <th>{lang === 'de' ? 'Excel-Typ' : 'Source type'}</th>
                         <th>{lang === 'de' ? 'Feld-Typ' : 'Field type'}</th>
@@ -850,8 +1140,30 @@ export function DataImportTab({ rootHandle, tableDefs, onFeatureGenerated }: Dat
                         const selectedField = findFieldByTechnicalName(currentTable, m.field);
                         const aiField = findFieldByTechnicalName(currentTable, m.aiField);
                         return (
-                          <tr key={m.column}>
-                            <td>{m.column}</td>
+                          <tr
+                            key={m.column}
+                            className={draggedColumn === m.column ? styles.draggedRow : undefined}
+                            onDragOver={(event) => { if (draggedColumn) event.preventDefault(); }}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              if (draggedColumn) void handleReorderField(draggedColumn, m.column);
+                              setDraggedColumn(null);
+                            }}
+                          >
+                            <td
+                              className={styles.dragHandle}
+                              draggable
+                              title={t('dataimport.importItReorder')}
+                              onDragStart={() => setDraggedColumn(m.column)}
+                              onDragEnd={() => setDraggedColumn(null)}
+                            >
+                              ⠿
+                            </td>
+                            <td>
+                              <div className={styles.columnCell}>
+                                <span>{m.column}</span>
+                              </div>
+                            </td>
                             <td>
                               <div className={styles.fieldSelection}>
                                 <SearchablePicker
@@ -933,6 +1245,22 @@ export function DataImportTab({ rootHandle, tableDefs, onFeatureGenerated }: Dat
                               </div>
                               {m.note && <div className={styles.fieldNote}>{m.note}</div>}
                             </td>
+                            <td>
+                              <div className={styles.fieldOptionToggles}>
+                                {IMPORT_IT_FIELD_OPTIONS.map((option) => (
+                                  <button
+                                    key={option}
+                                    type="button"
+                                    className={(m.importItOptions ?? []).includes(option) ? styles.fieldOptionActive : styles.fieldOption}
+                                    onClick={() => void handleToggleFieldOption(m.column, option)}
+                                    disabled={!m.field || !!busy}
+                                    aria-pressed={(m.importItOptions ?? []).includes(option)}
+                                  >
+                                    @{option}
+                                  </button>
+                                ))}
+                              </div>
+                            </td>
                             <td><ConfidenceBadge confidence={m.confidence} percent={m.confidencePercent} /></td>
                             <td>{m.dataType ?? '—'}</td>
                             <td>{m.fieldDataType ?? '—'}</td>
@@ -950,8 +1278,66 @@ export function DataImportTab({ rootHandle, tableDefs, onFeatureGenerated }: Dat
                       ))}
                     </ul>
                   )}
-                  {mapping.warnings.length > 0 && (
-                    <p className={styles.error}>{mapping.warnings.join(' | ')}</p>
+                    </>
+                  )}
+                  {mappingTab === 'structural' && mapping.structuralHints.length > 0 && (
+                    <div className={styles.hintPanel}>
+                      <div className={styles.sectionHeaderRow}>
+                        <label className={styles.sectionLabel}>{t('dataimport.structuralHintsTab')}</label>
+                        <button
+                          className={styles.secondaryBtn}
+                          type="button"
+                          onClick={() => appendInstruction(mapping.structuralHints.join('\n'))}
+                          disabled={!!busy}
+                        >
+                          <IconImport />
+                          {t('dataimport.applyAllHints')}
+                        </button>
+                      </div>
+                      <ul className={styles.hintList}>
+                        {mapping.structuralHints.map((hint, index) => (
+                          <li key={index} className={styles.hintItem}>
+                            <button className={styles.secondaryBtn} type="button" onClick={() => appendInstruction(hint)} disabled={!!busy}>
+                              <IconImport />
+                              {t('dataimport.applyHint')}
+                            </button>
+                            <span>{hint}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {mappingTab === 'content' && mapping.contentHints.length > 0 && (
+                    <div className={styles.hintPanel}>
+                      <div className={styles.sectionHeaderRow}>
+                        <label className={styles.sectionLabel}>{t('dataimport.contentHintsTab')}</label>
+                        <button
+                          className={styles.secondaryBtn}
+                          type="button"
+                          onClick={() => appendInstruction(mapping.contentHints.join('\n'))}
+                          disabled={!!busy}
+                        >
+                          <IconImport />
+                          {t('dataimport.applyAllHints')}
+                        </button>
+                      </div>
+                      <ul className={styles.hintList}>
+                          {mapping.contentHints.map((warning, index) => (
+                          <li key={index} className={styles.hintItem}>
+                            <button
+                              className={styles.secondaryBtn}
+                              type="button"
+                              onClick={() => appendInstruction(warning)}
+                              disabled={!!busy}
+                            >
+                              <IconImport />
+                              {t('dataimport.applyHint')}
+                            </button>
+                            <span>{warning}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                 </div>
               ) : (

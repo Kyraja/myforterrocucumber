@@ -15,6 +15,7 @@
  * previous current becomes the new backup.
  */
 import type { DataImportManifest, DataImportRecord, DataImportVersionMeta, DataImportMappingResult } from '../types/dataImport';
+import { DEFAULT_IMPORT_IT_SETTINGS } from './importItExport';
 import { parseExcelFile, buildWorkbookFromSheets, type ExcelSheet } from './excelParser';
 
 const SETTINGS_DIR = '.cucumbergnerator-settings';
@@ -24,6 +25,13 @@ const MANIFEST_VERSION = 1;
 const ORIGINAL_FILE = 'original.xlsx';
 const TRANSFORMED_FILE = 'transformed.xlsx';
 const MAPPING_FILE = 'mapping.json';
+
+function splitLegacyCleanupInstruction(instruction: string): string[] {
+  return instruction
+    .split(/(?=(?:^|\s)\d+[.)]\s)/g)
+    .map((part) => part.replace(/^\s*\d+[.)]\s*/, '').trim())
+    .filter(Boolean);
+}
 
 function normalizeMapping(mapping: Partial<DataImportMappingResult>): DataImportMappingResult {
   const database = mapping.database
@@ -43,13 +51,18 @@ function normalizeMapping(mapping: Partial<DataImportMappingResult>): DataImport
       aiConfidence: fieldMapping.aiConfidence ?? (fieldMapping.source === 'ai' ? fieldMapping.confidence : null),
       aiConfidencePercent: fieldMapping.aiConfidencePercent ?? (fieldMapping.source === 'ai' ? fieldMapping.confidencePercent : null),
       aiAlternativeField: fieldMapping.aiAlternativeField ?? fieldMapping.alternativeField ?? null,
+      importItOptions: fieldMapping.importItOptions ?? [],
       confidence: fieldMapping.confidence ?? null,
       confidencePercent: fieldMapping.confidencePercent ?? null,
       fieldDataType: fieldMapping.fieldDataType ?? null,
     })),
+    importIt: { ...DEFAULT_IMPORT_IT_SETTINGS, ...mapping.importIt },
     unmapped: mapping.unmapped ?? [],
     relationships: mapping.relationships ?? [],
     testData: mapping.testData ?? [],
+    cleanupInstruction: mapping.cleanupInstruction ?? '',
+    structuralHints: mapping.structuralHints ?? (mapping.warnings ?? []),
+    contentHints: mapping.contentHints ?? splitLegacyCleanupInstruction(mapping.cleanupInstruction ?? ''),
     warnings: mapping.warnings ?? [],
   };
 }

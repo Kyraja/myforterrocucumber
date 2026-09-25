@@ -28,17 +28,6 @@ interface LanguageContextValue {
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
-function normalizeGermanUmlauts(text: string): string {
-  return text
-    .replace(/\bAe/g, 'Ä')
-    .replace(/\bOe/g, 'Ö')
-    .replace(/\bUe/g, 'Ü')
-    .replace(/ae/g, 'ä')
-    .replace(/oe/g, 'ö')
-    // Avoid converting "Que..." patterns that are common in loanwords.
-    .replace(/(?<![Qq])ue/g, 'ü');
-}
-
 function detectBrowserLanguage(): Language {
   const candidates = [...(navigator.languages ?? []), navigator.language];
   for (const candidate of candidates) {
@@ -111,9 +100,6 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
         for (const [k, v] of Object.entries(params)) {
           text = text.replace(`{${k}}`, String(v));
         }
-      }
-      if (lang === 'de') {
-        text = normalizeGermanUmlauts(text);
       }
       return text;
     },
